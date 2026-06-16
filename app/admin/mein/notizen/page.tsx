@@ -33,7 +33,9 @@ interface Note {
   attachments: Attachment[];
   pages: NotePage[];
   shared_with: string[];
+  shared_read: string[];
   is_owner: boolean;
+  can_edit: boolean;
   owner_name: string | null;
   created_at: string;
   updated_at: string;
@@ -135,6 +137,8 @@ export default function MeineNotizenPage() {
         attachments: Array.isArray(n.attachments) ? n.attachments : [],
         pages: Array.isArray(n.pages) ? n.pages : [],
         shared_with: Array.isArray(n.shared_with) ? n.shared_with : [],
+        shared_read: Array.isArray(n.shared_read) ? n.shared_read : [],
+        can_edit: n.can_edit ?? n.is_owner,
       })));
     } finally {
       setLoading(false);
@@ -162,6 +166,7 @@ export default function MeineNotizenPage() {
   }, [notes, search]);
 
   async function handleToggleChecklistItem(note: Note, itemId: string) {
+    if (!note.can_edit) return;
     const nextChecklist = note.checklist.map((it) =>
       it.id === itemId ? { ...it, done: !it.done } : it,
     );
@@ -250,13 +255,15 @@ export default function MeineNotizenPage() {
                 {note.pinned && (
                   <span style={{ position: 'absolute', top: 8, right: 8, background: '#facc15', color: '#0a0a0a', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 700 }}>📌 PIN</span>
                 )}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: (note.owner_name || note.shared_with.length > 0 || note.pages.length > 1) ? 6 : 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: (note.owner_name || note.shared_with.length + note.shared_read.length > 0 || note.pages.length > 1) ? 6 : 0 }}>
                   {note.pages.length > 1 && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#fcd34d' }}>📖 {note.pages.length} Seiten</span>
                   )}
-                  {(note.owner_name || note.shared_with.length > 0) && (
+                  {(note.owner_name || note.shared_with.length + note.shared_read.length > 0) && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#67e8f9' }}>
-                      {note.is_owner ? `👥 Geteilt (${note.shared_with.length})` : `👤 Geteilt von ${note.owner_name}`}
+                      {note.is_owner
+                        ? `👥 Geteilt (${note.shared_with.length + note.shared_read.length})`
+                        : `👤 Geteilt von ${note.owner_name}${note.can_edit ? '' : ' · 👁 nur lesen'}`}
                     </span>
                   )}
                 </div>
@@ -301,8 +308,9 @@ export default function MeineNotizenPage() {
                           <input
                             type="checkbox"
                             checked={it.done}
+                            disabled={!note.can_edit}
                             onChange={() => handleToggleChecklistItem(note, it.id)}
-                            style={{ marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
+                            style={{ marginTop: 2, cursor: note.can_edit ? 'pointer' : 'default', flexShrink: 0 }}
                           />
                           <span style={{ textDecoration: it.done ? 'line-through' : 'none', wordBreak: 'break-word' }}>{it.text}</span>
                         </label>
@@ -316,13 +324,15 @@ export default function MeineNotizenPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 11, color: '#94a3b8' }}>
                   <span>{fmtRelative(note.updated_at)}</span>
                   <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleTogglePin(note)}
-                      title={note.pinned ? 'Pin entfernen' : 'Anpinnen'}
-                      style={{ background: 'transparent', border: 0, color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}
-                    >
-                      {note.pinned ? '📌' : '📍'}
-                    </button>
+                    {note.can_edit && (
+                      <button
+                        onClick={() => handleTogglePin(note)}
+                        title={note.pinned ? 'Pin entfernen' : 'Anpinnen'}
+                        style={{ background: 'transparent', border: 0, color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}
+                      >
+                        {note.pinned ? '📌' : '📍'}
+                      </button>
+                    )}
                     {note.is_owner && (
                       <button
                         onClick={() => handleDelete(note)}
@@ -372,6 +382,8 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   onOpenLightbox: (url: string) => void;
 }) {
   const isOwner = !note || note.is_owner;
+  const canEdit = !note || note.can_edit;
+  const ro = !canEdit; // read-only-Modus (nur-lesend geteilt)
   const [title, setTitle] = useState(note?.title ?? '');
   // Inhalt wird immer als Seiten-Liste geführt. Klassische Einzel-Notizen
   // (pages leer) werden als 1 Seite aus content + attachments synthetisiert.
@@ -394,7 +406,8 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     if (isHexColor(h)) setColor(h.toLowerCase());
   }
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist ?? []);
-  const [sharedWith, setSharedWith] = useState<string[]>(note?.shared_with ?? []);
+  const [sharedWith, setSharedWith] = useState<string[]>(note?.shared_with ?? []); // Lesen + Bearbeiten
+  const [sharedRead, setSharedRead] = useState<string[]>(note?.shared_read ?? []); // nur Lesen
   const [newItemText, setNewItemText] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -455,8 +468,14 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: p.attachments.filter((a) => a.id !== id) } : p)));
   }
 
-  function toggleShare(empId: string) {
-    setSharedWith((prev) => prev.includes(empId) ? prev.filter((x) => x !== empId) : [...prev, empId]);
+  function shareMode(empId: string): 'none' | 'read' | 'edit' {
+    if (sharedWith.includes(empId)) return 'edit';
+    if (sharedRead.includes(empId)) return 'read';
+    return 'none';
+  }
+  function setShareMode(empId: string, mode: 'none' | 'read' | 'edit') {
+    setSharedWith((prev) => (mode === 'edit' ? Array.from(new Set([...prev, empId])) : prev.filter((x) => x !== empId)));
+    setSharedRead((prev) => (mode === 'read' ? Array.from(new Set([...prev, empId])) : prev.filter((x) => x !== empId)));
   }
 
   async function save() {
@@ -479,7 +498,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         color,
         checklist: cleanChecklist,
       };
-      if (isOwner) payload.shared_with = sharedWith;
+      if (isOwner) { payload.shared_with = sharedWith; payload.shared_read = sharedRead; }
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -501,12 +520,18 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
       <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, color: '#f8fafc' }}>
-          {note ? 'Notiz bearbeiten' : 'Neue Notiz'}
+          {!note ? 'Neue Notiz' : ro ? 'Notiz ansehen' : 'Notiz bearbeiten'}
         </h2>
         {note && !isOwner && (
-          <div style={{ background: '#155e75', color: '#cffafe', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
-            👤 Geteilt von {note.owner_name}. Du kannst Inhalt + Anhänge bearbeiten, aber nicht löschen oder die Freigabe ändern.
-          </div>
+          ro ? (
+            <div style={{ background: '#334155', color: '#e2e8f0', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
+              👁 Nur-Lese-Zugriff — geteilt von {note.owner_name}. Du kannst diese Notiz ansehen, aber nicht bearbeiten.
+            </div>
+          ) : (
+            <div style={{ background: '#155e75', color: '#cffafe', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
+              👤 Geteilt von {note.owner_name}. Du kannst Inhalt + Anhänge bearbeiten, aber nicht löschen oder die Freigabe ändern.
+            </div>
+          )
         )}
 
         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, marginTop: 12 }}>Titel</label>
@@ -514,6 +539,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          readOnly={ro}
           placeholder="Titel (optional)"
           maxLength={200}
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, marginBottom: 12 }}
@@ -541,20 +567,24 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                   title="Nächste Seite"
                   style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === pages.length - 1 ? 'default' : 'pointer', opacity: activeIdx === pages.length - 1 ? 0.4 : 1, fontSize: 14 }}
                 >›</button>
-                <button
-                  type="button"
-                  onClick={removePage}
-                  title="Diese Seite löschen"
-                  style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
-                >🗑 Seite</button>
+                {!ro && (
+                  <button
+                    type="button"
+                    onClick={removePage}
+                    title="Diese Seite löschen"
+                    style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
+                  >🗑 Seite</button>
+                )}
               </>
             )}
-            <button
-              type="button"
-              onClick={addPage}
-              title="Neue Seite hinzufügen"
-              style={{ background: '#0e7490', color: '#ecfeff', border: '1px solid #06b6d4', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
-            >+ Seite</button>
+            {!ro && (
+              <button
+                type="button"
+                onClick={addPage}
+                title="Neue Seite hinzufügen"
+                style={{ background: '#0e7490', color: '#ecfeff', border: '1px solid #06b6d4', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+              >+ Seite</button>
+            )}
           </div>
         </div>
         {/* Seiten-Reiter zum Direktsprung */}
@@ -579,8 +609,9 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         <textarea
           value={activePage?.content ?? ''}
           onChange={(e) => updateActivePage({ content: e.target.value })}
+          readOnly={ro}
           rows={8}
-          placeholder={isBook ? `Text für Seite ${activeIdx + 1}…` : 'Was möchtest du dir merken?'}
+          placeholder={ro ? '' : (isBook ? `Text für Seite ${activeIdx + 1}…` : 'Was möchtest du dir merken?')}
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
         />
 
@@ -592,14 +623,16 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             {activePage.attachments.map((a) => (
               <div key={a.id} style={{ position: 'relative', width: 86, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
-                <button
-                  type="button"
-                  onClick={() => removeAttachment(a.id)}
-                  title="Entfernen"
-                  style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: '#fff', border: 0, borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
-                >
-                  ✕
-                </button>
+                {!ro && (
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(a.id)}
+                    title="Entfernen"
+                    style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: '#fff', border: 0, borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
+                  >
+                    ✕
+                  </button>
+                )}
                 {isImage(a.mime) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -629,14 +662,16 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           onChange={(e) => handleFiles(e.target.files)}
           style={{ display: 'none' }}
         />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer', marginBottom: 14, opacity: uploading ? 0.6 : 1 }}
-        >
-          {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
-        </button>
+        {!ro && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer', marginBottom: 14, opacity: uploading ? 0.6 : 1 }}
+          >
+            {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
+          </button>
+        )}
 
         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
           ✓ To-do-Liste {checklist.length > 0 && `(${checklist.filter((it) => it.done).length}/${checklist.length})`}
@@ -647,84 +682,107 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
               <input
                 type="checkbox"
                 checked={it.done}
+                disabled={ro}
                 onChange={() => setChecklist((prev) => prev.map((x) => (x.id === it.id ? { ...x, done: !x.done } : x)))}
-                style={{ cursor: 'pointer', flexShrink: 0 }}
+                style={{ cursor: ro ? 'default' : 'pointer', flexShrink: 0 }}
               />
               <input
                 type="text"
                 value={it.text}
                 onChange={(e) => setChecklist((prev) => prev.map((x) => (x.id === it.id ? { ...x, text: e.target.value } : x)))}
+                readOnly={ro}
                 maxLength={500}
                 style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: it.done ? '#64748b' : '#e2e8f0', fontSize: 15, textDecoration: it.done ? 'line-through' : 'none' }}
               />
-              <button
-                type="button"
-                onClick={() => setChecklist((prev) => prev.filter((x) => x.id !== it.id))}
-                title="Punkt entfernen"
-                style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
-              >
-                ✕
-              </button>
+              {!ro && (
+                <button
+                  type="button"
+                  onClick={() => setChecklist((prev) => prev.filter((x) => x.id !== it.id))}
+                  title="Punkt entfernen"
+                  style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <input
-            type="text"
-            value={newItemText}
-            onChange={(e) => setNewItemText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
-            placeholder="Neuen Punkt hinzufügen…"
-            maxLength={500}
-            style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16 }}
-          />
-          <button
-            type="button"
-            onClick={addItem}
-            disabled={!newItemText.trim()}
-            style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 16px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: newItemText.trim() ? 1 : 0.5 }}
-          >
-            + Hinzufügen
-          </button>
-        </div>
+        {!ro && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <input
+              type="text"
+              value={newItemText}
+              onChange={(e) => setNewItemText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
+              placeholder="Neuen Punkt hinzufügen…"
+              maxLength={500}
+              style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16 }}
+            />
+            <button
+              type="button"
+              onClick={addItem}
+              disabled={!newItemText.trim()}
+              style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 16px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: newItemText.trim() ? 1 : 0.5 }}
+            >
+              + Hinzufügen
+            </button>
+          </div>
+        )}
 
-        {/* Teilen — nur Besitzer */}
+        {/* Teilen — nur Besitzer. Pro Kollege: Aus / Nur lesen / Lesen & Bearbeiten */}
         {isOwner && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
-              👥 Teilen mit Kollegen {sharedWith.length > 0 && `(${sharedWith.length})`}
+              👥 Teilen mit Kollegen {sharedWith.length + sharedRead.length > 0 && `(${sharedWith.length + sharedRead.length})`}
             </label>
             {employees.length === 0 ? (
               <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Keine weiteren Mitarbeiter vorhanden.</p>
             ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {employees.map((emp) => {
-                  const active = sharedWith.includes(emp.id);
+                  const mode = shareMode(emp.id);
+                  const opts: { m: 'none' | 'read' | 'edit'; label: string }[] = [
+                    { m: 'none', label: 'Aus' },
+                    { m: 'read', label: '👁 Nur lesen' },
+                    { m: 'edit', label: '✏ Bearbeiten' },
+                  ];
                   return (
-                    <button
-                      key={emp.id}
-                      type="button"
-                      onClick={() => toggleShare(emp.id)}
-                      style={{
-                        background: active ? '#0e7490' : '#1e293b',
-                        color: active ? '#ecfeff' : '#cbd5e1',
-                        border: `1px solid ${active ? '#06b6d4' : '#475569'}`,
-                        borderRadius: 999, padding: '5px 12px', fontSize: 13, cursor: 'pointer', fontWeight: active ? 700 : 500,
-                      }}
-                    >
-                      {active ? '✓ ' : ''}{emp.name}
-                    </button>
+                    <div key={emp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: '6px 10px' }}>
+                      <span style={{ fontSize: 13, color: '#e2e8f0' }}>{emp.name}</span>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {opts.map((o) => {
+                          const active = mode === o.m;
+                          return (
+                            <button
+                              key={o.m}
+                              type="button"
+                              onClick={() => setShareMode(emp.id, o.m)}
+                              style={{
+                                background: active ? (o.m === 'edit' ? '#0e7490' : o.m === 'read' ? '#334155' : '#7f1d1d') : 'transparent',
+                                color: active ? '#ecfeff' : '#94a3b8',
+                                border: `1px solid ${active ? (o.m === 'edit' ? '#06b6d4' : o.m === 'read' ? '#64748b' : '#b91c1c') : '#475569'}`,
+                                borderRadius: 999, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
             )}
-            {sharedWith.length > 0 && (
-              <p style={{ fontSize: 11, color: '#67e8f9', margin: '6px 0 0' }}>Geteilte Kollegen dürfen die Notiz mitbearbeiten.</p>
+            {(sharedWith.length > 0 || sharedRead.length > 0) && (
+              <p style={{ fontSize: 11, color: '#67e8f9', margin: '6px 0 0' }}>
+                ✏ Bearbeiten = mitbearbeiten · 👁 Nur lesen = nur ansehen. Löschen + Freigabe bleibt bei dir.
+              </p>
             )}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+        <div style={{ display: ro ? 'none' : 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14 }}>
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
             📌 Anpinnen
@@ -785,15 +843,17 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
             disabled={saving}
             style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}
           >
-            Abbrechen
+            {ro ? 'Schließen' : 'Abbrechen'}
           </button>
-          <button
-            onClick={save}
-            disabled={saving || (!title.trim() && checklist.filter((it) => it.text.trim()).length === 0 && pages.every((p) => !p.content.trim() && p.attachments.length === 0))}
-            style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
-          >
-            {saving ? 'Speichert…' : 'Speichern'}
-          </button>
+          {!ro && (
+            <button
+              onClick={save}
+              disabled={saving || (!title.trim() && checklist.filter((it) => it.text.trim()).length === 0 && pages.every((p) => !p.content.trim() && p.attachments.length === 0))}
+              style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+            >
+              {saving ? 'Speichert…' : 'Speichern'}
+            </button>
+          )}
         </div>
       </div>
     </div>

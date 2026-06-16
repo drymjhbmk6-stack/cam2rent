@@ -4066,6 +4066,32 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
         ausführen. Ohne sie laufen Notizen 1:1 wie zuvor (Buch-Seiten werden
         defensiv gestript → bleiben Einzel-Notizen). Bucket
         `employee-note-attachments` wird wiederverwendet (kein neuer Bucket).
+    - **Lese-/Schreibrechte pro Kollege beim Teilen (Stand 2026-06-16):** Beim
+      Teilen kann der Besitzer pro Kollege wählen: **Aus / 👁 Nur lesen / ✏
+      Bearbeiten**. Migration `supabase/supabase-employee-notes-shared-read.sql`
+      (idempotent, additiv): neue Spalte `employee_notes.shared_read UUID[]`
+      (GIN-Index). Modell: `shared_with` = Lesen **+** Bearbeiten (bisheriges
+      Verhalten **unverändert** → kein Backfill, bestehende Freigaben behalten
+      Schreibrecht), `shared_read` = **nur Lesen**. Beide Listen disjunkt
+      (Server dedupliziert `shared_read` gegen `shared_with`).
+      - **Permission-Schichten:** Ansehen = Besitzer ∪ `shared_with` ∪
+        `shared_read`; Bearbeiten (PATCH Inhalt/To-dos/Anhänge/Seiten/Pin) =
+        Besitzer ∪ `shared_with` (Nur-Lese-Empfänger → **403**); Freigabe-Listen
+        ändern + Löschen = nur Besitzer. `normalizeNote` liefert `can_edit`
+        (Besitzer oder in `shared_with`) + `shared_read` ans Frontend. GET +
+        Attachment-GET-`.or` um `shared_read.cs.{me}` erweitert (mit
+        defensivem Fallback ohne die Spalte, falls Migration aussteht).
+      - **UI:** Teilen-Block (nur Besitzer) zeigt pro Mitarbeiter drei Buttons
+        (Aus / 👁 Nur lesen / ✏ Bearbeiten). Nur-Lese-Empfänger öffnen die
+        Notiz im **Read-only-Modus**: graue „👁 Nur-Lese-Zugriff"-Box, alle
+        Felder `readOnly`/disabled, kein Speichern/Upload/+Seite/Pin/Farbe (nur
+        „Schließen" + Seiten-Navigation). Karte: Nur-Lese-Freigaben sind im
+        Geteilt-Badge mitgezählt; geteilte Nicht-Bearbeiter sehen „· 👁 nur
+        lesen" und können Checkliste/Pin auf der Karte nicht togglen.
+      - **Go-Live TODO:** Migration
+        `supabase/supabase-employee-notes-shared-read.sql` ausführen. Ohne sie
+        funktioniert das Teilen 1:1 wie zuvor (alle Freigaben = Bearbeiten;
+        die Nur-Lese-Stufe wird defensiv gestript). Kein neuer Bucket.
   - `/admin/mein/kalender` — Monat/Liste-Toggle. **Monatsansicht** mit
     Montag-Start, 6×7-Raster, heute gelb umrandet, Termine als gefärbte
     Balken (Owner = voll, geteilt = mit weißem Border-Left + 0.85 Opacity),
@@ -4685,6 +4711,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   mehrere Seiten mit je eigenem Text + eigenen Bildern führen (siehe „Notiz als
   Buch"). Bucket `employee-note-attachments` wird wiederverwendet. Empfohlen
   ASAP ausführen.
+- **Notiz-Lese-/Schreibrechte-Migration auszuführen:**
+  `supabase/supabase-employee-notes-shared-read.sql` (idempotent, additiv:
+  `employee_notes.shared_read UUID[]` + GIN-Index). Ohne Migration teilt man
+  Notizen 1:1 wie zuvor (jede Freigabe = Bearbeiten; die neue Nur-Lese-Stufe
+  wird defensiv gestript). Mit Migration kann pro Kollege Aus / Nur lesen /
+  Bearbeiten gewählt werden. Kein Backfill, kein neuer Bucket. Empfohlen ASAP
+  ausführen.
 - **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
   (idempotent). Legt Tabelle `firmware_checks` + Spalte
   `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs

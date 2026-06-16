@@ -103,16 +103,25 @@ export async function GET(req: NextRequest) {
     // Steckt der Pfad in einer Notiz (Anhang ODER Buch-Seite), die mir gehört
     // oder mit mir geteilt ist? Pages-Anhänge sind verschachtelt, daher
     // werden die Kandidaten geladen und in JS geprüft (Menge ist klein).
+    let orStr = `admin_user_id.eq.${me.id},shared_with.cs.{${me.id}},shared_read.cs.{${me.id}}`;
     let { data: notes, error } = await supabase
       .from('employee_notes')
       .select('attachments, pages')
-      .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`);
+      .or(orStr);
+    // Defensiv: shared_read-Spalte fehlt (Migration ausstehend) → ohne sie.
+    if (error && /shared_read/i.test(error.message ?? '')) {
+      orStr = `admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`;
+      ({ data: notes, error } = await supabase
+        .from('employee_notes')
+        .select('attachments, pages')
+        .or(orStr) as unknown as { data: typeof notes; error: typeof error });
+    }
     // Defensiv: pages-Spalte fehlt (Migration ausstehend) → nur attachments.
     if (error && /pages/i.test(error.message ?? '')) {
       ({ data: notes, error } = await supabase
         .from('employee_notes')
         .select('attachments')
-        .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`) as unknown as { data: typeof notes; error: typeof error });
+        .or(orStr) as unknown as { data: typeof notes; error: typeof error });
     }
     const pathInAtts = (atts: unknown): boolean =>
       Array.isArray(atts) && atts.some((a) => a && typeof a === 'object' && (a as { path?: string }).path === path);

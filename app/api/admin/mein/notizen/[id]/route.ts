@@ -24,6 +24,7 @@ interface NoteRow {
   id: string;
   admin_user_id: string;
   shared_with?: string[] | null;
+  shared_read?: string[] | null;
   attachments?: { path: string }[] | null;
 }
 
@@ -35,7 +36,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'ID ungültig.' }, { status: 400 });
 
-  let body: { title?: string; content?: string; pinned?: boolean; color?: string | null; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown };
+  let body: { title?: string; content?: string; pinned?: boolean; color?: string | null; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown; shared_read?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -62,9 +63,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const note = existing as NoteRow;
   const isOwner = note.admin_user_id === me.id;
-  const isShared = Array.isArray(note.shared_with) && note.shared_with.includes(me.id);
-  if (!isOwner && !isShared) {
+  const canEdit = isOwner || (Array.isArray(note.shared_with) && note.shared_with.includes(me.id));
+  const canView = canEdit || (Array.isArray(note.shared_read) && note.shared_read.includes(me.id));
+  if (!canView) {
     return NextResponse.json({ error: 'Keine Berechtigung.' }, { status: 403 });
+  }
+  // Nur-Lese-Empfänger dürfen nichts ändern.
+  if (!canEdit) {
+    return NextResponse.json({ error: 'Nur-Lese-Zugriff — Bearbeiten nicht erlaubt.' }, { status: 403 });
   }
 
   // Inhaltsfelder dürfen Besitzer UND geteilte Bearbeiter ändern.
@@ -76,8 +82,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ('checklist' in body) upd.checklist = sanitizeChecklist(body.checklist);
   if ('attachments' in body) upd.attachments = sanitizeAttachments(body.attachments);
   if ('pages' in body) upd.pages = sanitizePages(body.pages);
-  // Freigabe-Liste darf NUR der Besitzer ändern.
-  if ('shared_with' in body && isOwner) upd.shared_with = sanitizeShared(body.shared_with, me.id);
+  // Freigabe-Listen darf NUR der Besitzer ändern. shared_read wird gegen die
+  // (neue oder bestehende) Bearbeiter-Liste dedupliziert — disjunkt halten.
+  if (isOwner && ('shared_with' in body || 'shared_read' in body)) {
+    const editList = 'shared_with' in body
+      ? sanitizeShared(body.shared_with, me.id)
+      : (Array.isArray(note.shared_with) ? note.shared_with : []);
+    if ('shared_with' in body) upd.shared_with = editList;
+    if ('shared_read' in body) {
+      upd.shared_read = sanitizeShared(body.shared_read, me.id).filter((id) => !editList.includes(id));
+    }
+  }
 
   if (Object.keys(upd).length === 0) {
     return NextResponse.json({ error: 'Nichts zu ändern.' }, { status: 400 });

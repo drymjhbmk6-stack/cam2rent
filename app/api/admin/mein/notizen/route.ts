@@ -129,7 +129,7 @@ export function isMissingOptionalColumn(err: { code?: string; message?: string }
   const code = err.code ?? '';
   const msg = err.message ?? '';
   return code === '42703' || code === 'PGRST204' ||
-    /checklist|shared_with|attachments|pages|column|schema cache/i.test(msg);
+    /checklist|shared_with|shared_read|attachments|pages|column|schema cache/i.test(msg);
 }
 
 export function isMissingSharedColumn(err: { code?: string; message?: string } | null): boolean {
@@ -142,11 +142,11 @@ export function stripOptionalColumns<T extends Record<string, unknown>>(payload:
   const out = { ...payload };
   const msg = (errMsg || '').toLowerCase();
   let stripped = false;
-  for (const k of ['checklist', 'shared_with', 'attachments', 'pages'] as const) {
+  for (const k of ['checklist', 'shared_with', 'shared_read', 'attachments', 'pages'] as const) {
     if (msg.includes(k)) { delete out[k]; stripped = true; }
   }
   if (!stripped) {
-    delete out.checklist; delete out.shared_with; delete out.attachments; delete out.pages;
+    delete out.checklist; delete out.shared_with; delete out.shared_read; delete out.attachments; delete out.pages;
   }
   return out;
 }
@@ -160,6 +160,7 @@ interface NoteRow {
   color: string | null;
   checklist?: ChecklistItem[] | null;
   shared_with?: string[] | null;
+  shared_read?: string[] | null;
   attachments?: NoteAttachment[] | null;
   pages?: NotePage[] | null;
   created_at: string;
@@ -167,6 +168,9 @@ interface NoteRow {
 }
 
 export function normalizeNote(n: NoteRow, meId: string, ownerName: string | null) {
+  const isOwner = n.admin_user_id === meId;
+  const sharedWith = Array.isArray(n.shared_with) ? n.shared_with : [];
+  const sharedRead = Array.isArray(n.shared_read) ? n.shared_read : [];
   return {
     id: n.id,
     title: n.title,
@@ -176,9 +180,12 @@ export function normalizeNote(n: NoteRow, meId: string, ownerName: string | null
     checklist: Array.isArray(n.checklist) ? n.checklist : [],
     attachments: Array.isArray(n.attachments) ? n.attachments : [],
     pages: Array.isArray(n.pages) ? n.pages : [],
-    shared_with: Array.isArray(n.shared_with) ? n.shared_with : [],
-    is_owner: n.admin_user_id === meId,
-    owner_name: n.admin_user_id === meId ? null : ownerName,
+    shared_with: sharedWith,
+    shared_read: sharedRead,
+    is_owner: isOwner,
+    // Bearbeiten darf der Besitzer ODER ein Mitarbeiter mit Schreibrecht.
+    can_edit: isOwner || sharedWith.includes(meId),
+    owner_name: isOwner ? null : ownerName,
     created_at: n.created_at,
     updated_at: n.updated_at,
   };
@@ -195,9 +202,19 @@ export async function GET() {
   let { data, error } = await supabase
     .from('employee_notes')
     .select('*')
-    .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
+    .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}},shared_read.cs.{${me.id}}`)
     .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false });
+
+  // Defensiv: shared_read-Spalte fehlt (Migration ausstehend) → ohne sie laden.
+  if (error && /shared_read/i.test(error.message ?? '')) {
+    ({ data, error } = await supabase
+      .from('employee_notes')
+      .select('*')
+      .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
+      .order('pinned', { ascending: false })
+      .order('updated_at', { ascending: false }) as unknown as { data: typeof data; error: typeof error });
+  }
 
   // Defensiv: shared_with-Spalte fehlt (Migration ausstehend) → nur eigene laden.
   if (error && isMissingSharedColumn(error)) {
@@ -246,7 +263,7 @@ export async function POST(req: NextRequest) {
     }, { status: 403 });
   }
 
-  let body: { title?: string; content?: string; pinned?: boolean; color?: string; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown };
+  let body: { title?: string; content?: string; pinned?: boolean; color?: string; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown; shared_read?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -261,13 +278,15 @@ export async function POST(req: NextRequest) {
   const attachments = sanitizeAttachments(body.attachments);
   const pages = sanitizePages(body.pages);
   const shared_with = sanitizeShared(body.shared_with, me.id);
+  // Nur-Lese-Freigaben: gegen die Bearbeiter-Liste deduplizieren (disjunkt).
+  const shared_read = sanitizeShared(body.shared_read, me.id).filter((id) => !shared_with.includes(id));
 
   if (!title && !content && checklist.length === 0 && attachments.length === 0 && pages.length === 0) {
     return NextResponse.json({ error: 'Titel, Inhalt, To-do oder Anhang erforderlich.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
-  const payload: Record<string, unknown> = { admin_user_id: me.id, title, content, pinned, color, checklist, attachments, pages, shared_with };
+  const payload: Record<string, unknown> = { admin_user_id: me.id, title, content, pinned, color, checklist, attachments, pages, shared_with, shared_read };
   let { data, error } = await supabase
     .from('employee_notes')
     .insert(payload)
