@@ -10,6 +10,8 @@ const CHECKLIST_MAX_ITEMS = 200;
 const CHECKLIST_TEXT_MAX = 500;
 const ATTACH_MAX = 30;
 const SHARE_MAX = 50;
+const PAGES_MAX = 50;
+const PAGE_CONTENT_MAX = 50_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ATTACH_PATH_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.[a-z0-9]{2,5}$/i;
 
@@ -25,6 +27,12 @@ export interface NoteAttachment {
   filename: string;
   mime: string;
   size: number;
+}
+
+export interface NotePage {
+  id: string;
+  content: string;
+  attachments: NoteAttachment[];
 }
 
 export function sanitizeChecklist(input: unknown): ChecklistItem[] {
@@ -64,6 +72,23 @@ export function sanitizeAttachments(input: unknown): NoteAttachment[] {
   return out;
 }
 
+export function sanitizePages(input: unknown): NotePage[] {
+  if (!Array.isArray(input)) return [];
+  const out: NotePage[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const p = raw as Record<string, unknown>;
+    const content = String(p.content ?? '').slice(0, PAGE_CONTENT_MAX);
+    const attachments = sanitizeAttachments(p.attachments);
+    const id = typeof p.id === 'string' && p.id.length <= 64
+      ? p.id
+      : `${Date.now()}-${out.length}-${Math.random().toString(36).slice(2, 8)}`;
+    out.push({ id, content, attachments });
+    if (out.length >= PAGES_MAX) break;
+  }
+  return out;
+}
+
 export function sanitizeShared(input: unknown, excludeId: string): string[] {
   if (!Array.isArray(input)) return [];
   const out: string[] = [];
@@ -92,7 +117,7 @@ export function isMissingOptionalColumn(err: { code?: string; message?: string }
   const code = err.code ?? '';
   const msg = err.message ?? '';
   return code === '42703' || code === 'PGRST204' ||
-    /checklist|shared_with|attachments|column|schema cache/i.test(msg);
+    /checklist|shared_with|attachments|pages|column|schema cache/i.test(msg);
 }
 
 export function isMissingSharedColumn(err: { code?: string; message?: string } | null): boolean {
@@ -105,11 +130,11 @@ export function stripOptionalColumns<T extends Record<string, unknown>>(payload:
   const out = { ...payload };
   const msg = (errMsg || '').toLowerCase();
   let stripped = false;
-  for (const k of ['checklist', 'shared_with', 'attachments'] as const) {
+  for (const k of ['checklist', 'shared_with', 'attachments', 'pages'] as const) {
     if (msg.includes(k)) { delete out[k]; stripped = true; }
   }
   if (!stripped) {
-    delete out.checklist; delete out.shared_with; delete out.attachments;
+    delete out.checklist; delete out.shared_with; delete out.attachments; delete out.pages;
   }
   return out;
 }
@@ -124,6 +149,7 @@ interface NoteRow {
   checklist?: ChecklistItem[] | null;
   shared_with?: string[] | null;
   attachments?: NoteAttachment[] | null;
+  pages?: NotePage[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -137,6 +163,7 @@ export function normalizeNote(n: NoteRow, meId: string, ownerName: string | null
     color: n.color,
     checklist: Array.isArray(n.checklist) ? n.checklist : [],
     attachments: Array.isArray(n.attachments) ? n.attachments : [],
+    pages: Array.isArray(n.pages) ? n.pages : [],
     shared_with: Array.isArray(n.shared_with) ? n.shared_with : [],
     is_owner: n.admin_user_id === meId,
     owner_name: n.admin_user_id === meId ? null : ownerName,
@@ -207,7 +234,7 @@ export async function POST(req: NextRequest) {
     }, { status: 403 });
   }
 
-  let body: { title?: string; content?: string; pinned?: boolean; color?: string; checklist?: unknown; attachments?: unknown; shared_with?: unknown };
+  let body: { title?: string; content?: string; pinned?: boolean; color?: string; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -220,14 +247,15 @@ export async function POST(req: NextRequest) {
   const color = body.color ? String(body.color).slice(0, 32) : null;
   const checklist = sanitizeChecklist(body.checklist);
   const attachments = sanitizeAttachments(body.attachments);
+  const pages = sanitizePages(body.pages);
   const shared_with = sanitizeShared(body.shared_with, me.id);
 
-  if (!title && !content && checklist.length === 0 && attachments.length === 0) {
+  if (!title && !content && checklist.length === 0 && attachments.length === 0 && pages.length === 0) {
     return NextResponse.json({ error: 'Titel, Inhalt, To-do oder Anhang erforderlich.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
-  const payload: Record<string, unknown> = { admin_user_id: me.id, title, content, pinned, color, checklist, attachments, shared_with };
+  const payload: Record<string, unknown> = { admin_user_id: me.id, title, content, pinned, color, checklist, attachments, pages, shared_with };
   let { data, error } = await supabase
     .from('employee_notes')
     .insert(payload)

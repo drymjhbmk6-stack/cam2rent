@@ -4018,6 +4018,46 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
         anlegen (Public OFF, ~50 MB). Ohne Bucket liefert der Upload 503 mit
         klarem Hinweis; ohne Migration laufen Anhänge/Teilen nicht (kein
         Hard-Fail).
+    - **Notiz als Buch — mehrere Seiten mit eigenen Bildern (Stand 2026-06-16):**
+      Eine Notiz kann ein **Buch** mit mehreren Seiten sein; jede Seite hat
+      eigenen Text + eigene Bilder/Dateien, die man auf der jeweiligen Seite
+      hochlädt und direkt sieht. Migration
+      `supabase/supabase-employee-notes-pages.sql` (idempotent, additiv):
+      Spalte `employee_notes.pages JSONB DEFAULT '[]'` mit Shape
+      `[{id, content, attachments:[{id,path,filename,mime,size}]}]`. Die
+      Seiten-Bilder liegen im **selben** Bucket `employee-note-attachments`
+      (gleicher Upload-Endpoint `/api/admin/mein/notizen/attachment`, Pfad
+      `<admin_user_id>/<uuid>.<ext>`).
+      - **Datenmodell / Backward-Compat:** `pages` leer = klassische
+        Einzel-Notiz (Text in `content`, Bilder in `attachments`). Sobald 2+
+        Seiten → voller Inhalt in `pages`; **Seite 1 wird zusätzlich auf
+        `content`/`attachments` gespiegelt**, damit Karten-Vorschau + Suche
+        unverändert funktionieren (kein Doppelzählen, da der Editor `pages`
+        liest, sobald vorhanden). Beim Speichern: 1 Seite → `pages=[]`
+        (Legacy-Modus), 2+ → `pages` voll + `content/attachments` = Seite 1.
+      - **API** (`route.ts` + `[id]/route.ts`): neuer `sanitizePages`
+        (max 50 Seiten, je 50 000 Zeichen, Anhänge je Seite via
+        `sanitizeAttachments`, max 30). `pages` in POST/PATCH (geteilte
+        Bearbeiter dürfen `pages` ändern, da Inhalt). Defensiver
+        Migrations-Fallback: `isMissingOptionalColumn`/`stripOptionalColumns`
+        kennen `pages` → fehlende Spalte wird gestript + Retry, GET nutzt
+        `select('*')` (fehlende Spalte bricht Read nicht).
+      - **Attachment-GET-Autorisierung** prüft jetzt auch `pages[].attachments`
+        (verschachtelt → Kandidaten laden + in JS prüfen statt `.contains`),
+        damit geteilte Kollegen Bilder auf Seite 2+ sehen. Owner passiert
+        weiter den schnellen Pfad-Präfix-Check.
+      - **Editor** (`page.tsx`): Inhalt wird intern immer als Seiten-Liste
+        geführt (Legacy-Notiz → 1 synthetische Seite aus `content`+`attachments`).
+        Seiten-Navigator über dem Textfeld: „📖 Seite X / N" + ‹ ›-Pfeile +
+        „🗑 Seite" + „+ Seite" + Zahlen-Reiter zum Direktsprung. Pro aktiver
+        Seite eigenes Textfeld + eigener Bild-/Datei-Bereich (Upload schreibt
+        in die aktive Seite). Titel/Checkliste/Teilen/Pin/Farbe bleiben auf
+        Notiz-(Buch-)Ebene. Karte zeigt „📖 N Seiten"-Badge bei 2+ Seiten;
+        Suche matcht auch Seiten-Text.
+      - **Go-Live TODO:** Migration `supabase/supabase-employee-notes-pages.sql`
+        ausführen. Ohne sie laufen Notizen 1:1 wie zuvor (Buch-Seiten werden
+        defensiv gestript → bleiben Einzel-Notizen). Bucket
+        `employee-note-attachments` wird wiederverwendet (kein neuer Bucket).
   - `/admin/mein/kalender` — Monat/Liste-Toggle. **Monatsansicht** mit
     Montag-Start, 6×7-Raster, heute gelb umrandet, Termine als gefärbte
     Balken (Owner = voll, geteilt = mit weißem Border-Left + 0.85 Opacity),
@@ -4630,6 +4670,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   (Public OFF, ~50 MB). Ohne Migration laufen Notizen weiter, aber Teilen +
   Anhänge persistieren nicht; ohne Bucket liefert der Anhang-Upload 503.
   Empfohlen ASAP ausführen.
+- **Notiz-Buch-Migration auszuführen:** `supabase/supabase-employee-notes-pages.sql`
+  (idempotent, additiv: `employee_notes.pages JSONB DEFAULT '[]'`). Ohne
+  Migration laufen Notizen 1:1 wie zuvor (Buch-Seiten werden defensiv gestript
+  → bleiben Einzel-Notizen, kein Hard-Fail). Mit Migration kann eine Notiz
+  mehrere Seiten mit je eigenem Text + eigenen Bildern führen (siehe „Notiz als
+  Buch"). Bucket `employee-note-attachments` wird wiederverwendet. Empfohlen
+  ASAP ausführen.
 - **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
   (idempotent). Legt Tabelle `firmware_checks` + Spalte
   `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs

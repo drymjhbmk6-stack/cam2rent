@@ -100,14 +100,28 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const ownsByPrefix = path.startsWith(`${me.id}/`);
   if (!ownsByPrefix) {
-    // Steckt der Pfad in einer Notiz, die mir gehört oder mit mir geteilt ist?
-    const { data: notes } = await supabase
+    // Steckt der Pfad in einer Notiz (Anhang ODER Buch-Seite), die mir gehört
+    // oder mit mir geteilt ist? Pages-Anhänge sind verschachtelt, daher
+    // werden die Kandidaten geladen und in JS geprüft (Menge ist klein).
+    let { data: notes, error } = await supabase
       .from('employee_notes')
-      .select('id')
-      .contains('attachments', JSON.stringify([{ path }]))
-      .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
-      .limit(1);
-    if (!notes || notes.length === 0) {
+      .select('attachments, pages')
+      .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`);
+    // Defensiv: pages-Spalte fehlt (Migration ausstehend) → nur attachments.
+    if (error && /pages/i.test(error.message ?? '')) {
+      ({ data: notes, error } = await supabase
+        .from('employee_notes')
+        .select('attachments')
+        .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`) as unknown as { data: typeof notes; error: typeof error });
+    }
+    const pathInAtts = (atts: unknown): boolean =>
+      Array.isArray(atts) && atts.some((a) => a && typeof a === 'object' && (a as { path?: string }).path === path);
+    const found = (notes ?? []).some((n) => {
+      const row = n as { attachments?: unknown; pages?: unknown };
+      if (pathInAtts(row.attachments)) return true;
+      return Array.isArray(row.pages) && row.pages.some((p) => pathInAtts((p as { attachments?: unknown })?.attachments));
+    });
+    if (!found) {
       return NextResponse.json({ error: 'Keine Berechtigung.' }, { status: 403 });
     }
   }

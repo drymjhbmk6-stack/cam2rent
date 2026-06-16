@@ -17,6 +17,12 @@ interface Attachment {
   size: number;
 }
 
+interface NotePage {
+  id: string;
+  content: string;
+  attachments: Attachment[];
+}
+
 interface Note {
   id: string;
   title: string;
@@ -25,11 +31,22 @@ interface Note {
   color: string | null;
   checklist: ChecklistItem[];
   attachments: Attachment[];
+  pages: NotePage[];
   shared_with: string[];
   is_owner: boolean;
   owner_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+function newPage(content = '', attachments: Attachment[] = []): NotePage {
+  return {
+    id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    content,
+    attachments,
+  };
 }
 
 interface Employee {
@@ -109,6 +126,7 @@ export default function MeineNotizenPage() {
         ...n,
         checklist: Array.isArray(n.checklist) ? n.checklist : [],
         attachments: Array.isArray(n.attachments) ? n.attachments : [],
+        pages: Array.isArray(n.pages) ? n.pages : [],
         shared_with: Array.isArray(n.shared_with) ? n.shared_with : [],
       })));
     } finally {
@@ -131,6 +149,7 @@ export default function MeineNotizenPage() {
     return notes.filter((n) =>
       n.title.toLowerCase().includes(q) ||
       n.content.toLowerCase().includes(q) ||
+      n.pages.some((p) => p.content.toLowerCase().includes(q)) ||
       n.checklist.some((it) => it.text.toLowerCase().includes(q)),
     );
   }, [notes, search]);
@@ -224,11 +243,16 @@ export default function MeineNotizenPage() {
                 {note.pinned && (
                   <span style={{ position: 'absolute', top: 8, right: 8, background: '#facc15', color: '#0a0a0a', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 700 }}>📌 PIN</span>
                 )}
-                {(note.owner_name || note.shared_with.length > 0) && (
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#67e8f9', marginBottom: 6 }}>
-                    {note.is_owner ? `👥 Geteilt (${note.shared_with.length})` : `👤 Geteilt von ${note.owner_name}`}
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: (note.owner_name || note.shared_with.length > 0 || note.pages.length > 1) ? 6 : 0 }}>
+                  {note.pages.length > 1 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fcd34d' }}>📖 {note.pages.length} Seiten</span>
+                  )}
+                  {(note.owner_name || note.shared_with.length > 0) && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#67e8f9' }}>
+                      {note.is_owner ? `👥 Geteilt (${note.shared_with.length})` : `👤 Geteilt von ${note.owner_name}`}
+                    </span>
+                  )}
+                </div>
                 {note.title && (
                   <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#f8fafc', paddingRight: note.pinned ? 56 : 0 }}>
                     {note.title}
@@ -342,17 +366,44 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
 }) {
   const isOwner = !note || note.is_owner;
   const [title, setTitle] = useState(note?.title ?? '');
-  const [content, setContent] = useState(note?.content ?? '');
+  // Inhalt wird immer als Seiten-Liste geführt. Klassische Einzel-Notizen
+  // (pages leer) werden als 1 Seite aus content + attachments synthetisiert.
+  const [pages, setPages] = useState<NotePage[]>(() => {
+    if (note?.pages && note.pages.length > 0) {
+      return note.pages.map((p) => ({ id: p.id, content: p.content, attachments: p.attachments ?? [] }));
+    }
+    return [newPage(note?.content ?? '', note?.attachments ?? [])];
+  });
+  const [activeIdx, setActiveIdx] = useState(0);
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [color, setColor] = useState(note?.color ?? 'default');
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist ?? []);
-  const [attachments, setAttachments] = useState<Attachment[]>(note?.attachments ?? []);
   const [sharedWith, setSharedWith] = useState<string[]>(note?.shared_with ?? []);
   const [newItemText, setNewItemText] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const activePage = pages[activeIdx] ?? pages[0];
+  const isBook = pages.length > 1;
+
+  function updateActivePage(patch: Partial<NotePage>) {
+    setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, ...patch } : p)));
+  }
+
+  function addPage() {
+    setPages((prev) => [...prev, newPage()]);
+    setActiveIdx(pages.length);
+  }
+
+  function removePage() {
+    if (pages.length <= 1) return;
+    const label = `Seite ${activeIdx + 1}`;
+    if (!confirm(`${label} mit Text und Bildern wirklich löschen?`)) return;
+    setPages((prev) => prev.filter((_, i) => i !== activeIdx));
+    setActiveIdx((i) => Math.max(0, Math.min(i, pages.length - 2)));
+  }
 
   function addItem() {
     const t = newItemText.trim();
@@ -365,6 +416,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     if (!files || files.length === 0) return;
     setUploading(true);
     setErr(null);
+    const uploaded: Attachment[] = [];
     try {
       for (const file of Array.from(files)) {
         const fd = new FormData();
@@ -372,7 +424,10 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         const res = await fetch('/api/admin/mein/notizen/attachment', { method: 'POST', body: fd });
         const json = await res.json();
         if (!res.ok) { setErr(json.error ?? 'Upload fehlgeschlagen'); continue; }
-        setAttachments((prev) => [...prev, json.attachment as Attachment]);
+        uploaded.push(json.attachment as Attachment);
+      }
+      if (uploaded.length > 0) {
+        setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: [...p.attachments, ...uploaded] } : p)));
       }
     } finally {
       setUploading(false);
@@ -381,7 +436,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   }
 
   function removeAttachment(id: string) {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
+    setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: p.attachments.filter((a) => a.id !== id) } : p)));
   }
 
   function toggleShare(empId: string) {
@@ -393,9 +448,21 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     setErr(null);
     try {
       const cleanChecklist = checklist.filter((it) => it.text.trim());
+      const cleanPages = pages.map((p) => ({ id: p.id, content: p.content, attachments: p.attachments }));
+      const page1 = cleanPages[0] ?? { content: '', attachments: [] };
       const url = note ? `/api/admin/mein/notizen/${note.id}` : '/api/admin/mein/notizen';
       const method = note ? 'PATCH' : 'POST';
-      const payload: Record<string, unknown> = { title, content, pinned, color, checklist: cleanChecklist, attachments };
+      // Seite 1 wird immer auf content/attachments gespiegelt (Karten-Vorschau).
+      // Ab 2 Seiten lebt der volle Inhalt zusätzlich in pages (Buch-Modus).
+      const payload: Record<string, unknown> = {
+        title,
+        content: page1.content,
+        attachments: page1.attachments,
+        pages: cleanPages.length > 1 ? cleanPages : [],
+        pinned,
+        color,
+        checklist: cleanChecklist,
+      };
       if (isOwner) payload.shared_with = sharedWith;
       const res = await fetch(url, {
         method,
@@ -436,22 +503,78 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, marginBottom: 12 }}
         />
 
-        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Inhalt</label>
+        {/* Seiten-Navigator (Buch-Modus) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+          <label style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+            {isBook ? `📖 Seite ${activeIdx + 1} / ${pages.length}` : 'Inhalt'}
+          </label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {isBook && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+                  disabled={activeIdx === 0}
+                  title="Vorherige Seite"
+                  style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === 0 ? 'default' : 'pointer', opacity: activeIdx === 0 ? 0.4 : 1, fontSize: 14 }}
+                >‹</button>
+                <button
+                  type="button"
+                  onClick={() => setActiveIdx((i) => Math.min(pages.length - 1, i + 1))}
+                  disabled={activeIdx === pages.length - 1}
+                  title="Nächste Seite"
+                  style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === pages.length - 1 ? 'default' : 'pointer', opacity: activeIdx === pages.length - 1 ? 0.4 : 1, fontSize: 14 }}
+                >›</button>
+                <button
+                  type="button"
+                  onClick={removePage}
+                  title="Diese Seite löschen"
+                  style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
+                >🗑 Seite</button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={addPage}
+              title="Neue Seite hinzufügen"
+              style={{ background: '#0e7490', color: '#ecfeff', border: '1px solid #06b6d4', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+            >+ Seite</button>
+          </div>
+        </div>
+        {/* Seiten-Reiter zum Direktsprung */}
+        {isBook && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+            {pages.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setActiveIdx(i)}
+                title={`Zu Seite ${i + 1}`}
+                style={{
+                  width: 28, height: 28, borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  background: i === activeIdx ? '#06b6d4' : '#1e293b',
+                  color: i === activeIdx ? '#0a0a0a' : '#cbd5e1',
+                  border: `1px solid ${i === activeIdx ? '#06b6d4' : '#475569'}`,
+                }}
+              >{i + 1}</button>
+            ))}
+          </div>
+        )}
         <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
+          value={activePage?.content ?? ''}
+          onChange={(e) => updateActivePage({ content: e.target.value })}
           rows={8}
-          placeholder="Was möchtest du dir merken?"
+          placeholder={isBook ? `Text für Seite ${activeIdx + 1}…` : 'Was möchtest du dir merken?'}
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
         />
 
-        {/* Anhänge */}
+        {/* Anhänge der aktiven Seite */}
         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
-          📎 Anhänge (Bilder, PDF, Videos)
+          📎 Bilder &amp; Dateien {isBook ? `auf Seite ${activeIdx + 1}` : ''} (Bilder, PDF, Videos)
         </label>
-        {attachments.length > 0 && (
+        {(activePage?.attachments.length ?? 0) > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-            {attachments.map((a) => (
+            {activePage.attachments.map((a) => (
               <div key={a.id} style={{ position: 'relative', width: 86, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
                 <button
                   type="button"
@@ -619,7 +742,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           </button>
           <button
             onClick={save}
-            disabled={saving || (!title.trim() && !content.trim() && checklist.filter((it) => it.text.trim()).length === 0 && attachments.length === 0)}
+            disabled={saving || (!title.trim() && checklist.filter((it) => it.text.trim()).length === 0 && pages.every((p) => !p.content.trim() && p.attachments.length === 0))}
             style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
           >
             {saving ? 'Speichert…' : 'Speichern'}

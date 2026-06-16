@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
 import {
   sanitizeChecklist,
   sanitizeAttachments,
+  sanitizePages,
   sanitizeShared,
   isMissingOptionalColumn,
   isMissingTable,
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'ID ungültig.' }, { status: 400 });
 
-  let body: { title?: string; content?: string; pinned?: boolean; color?: string | null; checklist?: unknown; attachments?: unknown; shared_with?: unknown };
+  let body: { title?: string; content?: string; pinned?: boolean; color?: string | null; checklist?: unknown; attachments?: unknown; pages?: unknown; shared_with?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -73,6 +74,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if ('color' in body) upd.color = body.color ? String(body.color).slice(0, 32) : null;
   if ('checklist' in body) upd.checklist = sanitizeChecklist(body.checklist);
   if ('attachments' in body) upd.attachments = sanitizeAttachments(body.attachments);
+  if ('pages' in body) upd.pages = sanitizePages(body.pages);
   // Freigabe-Liste darf NUR der Besitzer ändern.
   if ('shared_with' in body && isOwner) upd.shared_with = sanitizeShared(body.shared_with, me.id);
 
