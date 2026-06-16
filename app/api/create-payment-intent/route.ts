@@ -81,11 +81,14 @@ export async function POST(req: NextRequest) {
     // Tester-Konto: ueberspringt Verification, nutzt Test-Stripe-Keys.
     // user.id ist die session-gepinnte Quelle der Wahrheit (siehe oben).
     const tester = await isUserTester(user.id);
-    if (!tester && (!profile || profile.verification_status !== 'verified')) {
-      return NextResponse.json(
-        { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },
-        { status: 403 }
-      );
+    // Neukunden zahlen sofort — kein Zahlungslink-Umweg mehr. Ein noch nicht
+    // verifizierter Account darf bezahlen; die Buchung wird mit
+    // verification_required=true markiert (Status bleibt 'confirmed'), der
+    // VERSAND ist aber bis zur Ausweis-Freigabe gesperrt. Der Ausweis wird
+    // also vor dem Versand geprueft, nicht vor der Zahlung.
+    const verificationRequired = !tester && (!profile || profile.verification_status !== 'verified');
+    if (verificationRequired) {
+      metadata.verification_required = '1';
     }
 
     // ── Harte Ueberbuchungs-Sperre (Server-seitig) ──────────────────────────

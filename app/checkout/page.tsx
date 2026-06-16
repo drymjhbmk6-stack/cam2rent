@@ -260,7 +260,7 @@ function PaymentForm({
 export default function CheckoutPage() {
   const { accessories: ALL_ACCESSORIES } = useAccessories();
   const router = useRouter();
-  const { items, cartTotal, itemCount, clearCart, hydrated } = useCart();
+  const { items, cartTotal, itemCount, hydrated } = useCart();
   const { user } = useAuth();
 
   // Stripe-Promise wird pro User erzeugt — Tester bekommt den Test-Publishable-
@@ -368,8 +368,6 @@ export default function CheckoutPage() {
 
   // Fetch user booking count + verification status
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
-  // Pending-Booking-Erfolg (frueh deklariert, weil weiter oben useEffect drauf zugreift)
-  const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
   useEffect(() => {
     if (!user) { setIsVerified(null); return; }
     const supabase = createAuthBrowserClient();
@@ -441,11 +439,9 @@ export default function CheckoutPage() {
   }, [user]);
 
   // Redirect if cart empty (erst nach Hydratisierung prüfen)
-  // Aber NICHT wenn die Pending-Buchung gerade erfolgreich war — dann haben
-  // wir den Warenkorb bewusst geleert, der Nutzer soll die Bestaetigung sehen.
   useEffect(() => {
-    if (hydrated && itemCount === 0 && !pendingSuccess) router.replace('/warenkorb');
-  }, [hydrated, itemCount, router, pendingSuccess]);
+    if (hydrated && itemCount === 0) router.replace('/warenkorb');
+  }, [hydrated, itemCount, router]);
 
   // Artikel nach Mietzeitraum gruppieren
   const periodGroups = useMemo(() => {
@@ -662,8 +658,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Unverified: Buchung ohne Zahlung anlegen
-  // pendingSuccess-State steht weiter oben (wird vom Empty-Cart-Redirect-Effect gebraucht)
   const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
   const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
@@ -734,69 +728,6 @@ export default function CheckoutPage() {
   const [shipStreet, setShipStreet] = useState('');
   const [shipZip, setShipZip] = useState('');
   const [shipCity, setShipCity] = useState('');
-  const handlePendingBooking = async () => {
-    if (!user) {
-      setIntentError('Bitte melde dich an, um eine Buchung anzufragen.');
-      return;
-    }
-    if (!firstName || !email) {
-      setIntentError('Bitte fülle alle Pflichtfelder aus.');
-      return;
-    }
-    if (deliveryMode === 'versand' && (!street || !zip || !city)) {
-      setIntentError('Bitte gib deine Lieferadresse ein.');
-      return;
-    }
-
-    setIsCreatingIntent(true);
-    setIntentError('');
-
-    // Signatur aus dem Buchungsflow (Step 5 in /kameras/[slug]/buchen) uebernehmen,
-    // sonst landet die Buchung als "Mietvertrag ausstehend" in der DB obwohl der
-    // Kunde bereits unterschrieben hat.
-    let contractSignature: unknown = undefined;
-    try {
-      const sigRaw = sessionStorage.getItem('cam2rent_contract_signature');
-      if (sigRaw) contractSignature = JSON.parse(sigRaw);
-    } catch { /* ignore */ }
-
-    try {
-      const customerName = `${firstName} ${lastName}`.trim();
-      const res = await fetch('/api/create-pending-booking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items,
-          customerName,
-          customerEmail: email,
-          userId: user.id,
-          deliveryMode,
-          shippingMethod,
-          shippingPrice: finalShipping,
-          discountAmount: couponDiscountAmount,
-          couponCode: appliedCoupon?.code ?? '',
-          productDiscount: effectiveProductDiscount,
-          durationDiscount: effectiveDurationDiscount,
-          loyaltyDiscount: effectiveLoyaltyDiscount,
-          earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
-          contractSignature,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Buchung konnte nicht erstellt werden.');
-      }
-      setPendingSuccess(data.booking_id);
-      try { sessionStorage.removeItem('cam2rent_contract_signature'); } catch { /* ignore */ }
-      clearCart();
-    } catch (err) {
-      setIntentError(
-        err instanceof Error ? err.message : 'Buchung konnte nicht erstellt werden.'
-      );
-    } finally {
-      setIsCreatingIntent(false);
-    }
-  };
 
   const inputClass =
     'w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-base';
@@ -1297,62 +1228,6 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
-                {/* Pending Booking Erfolg — Modal mit 3 Stichpunkten "Was passiert jetzt".
-                    Bewusst Modal statt inline, weil clearCart() den Warenkorb leert
-                    und die Seite sonst sofort auf /warenkorb umleiten wuerde. */}
-                {pendingSuccess && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-                    <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl max-w-md w-full p-6 sm:p-8">
-                      <div className="w-14 h-14 rounded-full bg-status-success/10 flex items-center justify-center mx-auto mb-4">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-7 h-7 text-status-success">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <h3 className="font-heading font-bold text-xl text-center text-brand-black dark:text-white mb-2">
-                        Buchung eingereicht!
-                      </h3>
-                      <p className="text-sm font-body text-center text-brand-steel dark:text-gray-400 mb-5">
-                        Buchungsnummer <strong>{pendingSuccess}</strong>
-                      </p>
-
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[10px] p-4 mb-5">
-                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-3">
-                          Was passiert jetzt?
-                        </p>
-                        <ol className="space-y-2.5 text-sm font-body text-brand-steel dark:text-gray-300">
-                          <li className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">1</span>
-                            <span><strong>Wir prüfen deinen Ausweis</strong> — meist innerhalb weniger Stunden.</span>
-                          </li>
-                          <li className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">2</span>
-                            <span>Du bekommst einen <strong>Zahlungslink per E-Mail</strong>.</span>
-                          </li>
-                          <li className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">3</span>
-                            <span>Nach Bezahlung <strong>versenden wir die Kamera</strong> rechtzeitig zu deinem Mietbeginn.</span>
-                          </li>
-                        </ol>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <a
-                          href="/konto/buchungen"
-                          className="flex-1 px-4 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-dark transition-colors"
-                        >
-                          Zu meinen Buchungen
-                        </a>
-                        <Link
-                          href="/"
-                          className="flex-1 px-4 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-bg dark:hover:bg-white/5 transition-colors"
-                        >
-                          Zur Startseite
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Error */}
                 {intentError && (
                   <div className="p-4 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
@@ -1361,7 +1236,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Mietvertrag unterschreiben (Pflicht vor der Zahlung) */}
-                {!pendingSuccess && (
+                {(
                   <div className="mb-4">
                     {contractSignature ? (
                       <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-[10px] flex items-start gap-3">
@@ -1404,7 +1279,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* AGB + Widerrufsrecht Checkboxen */}
-                {!pendingSuccess && (
+                {(
                   <div className="space-y-3 mb-4">
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input type="checkbox" checked={acceptsTerms} onChange={(e) => setAcceptsTerms(e.target.checked)}
@@ -1437,7 +1312,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Verifiziert: Normale Zahlung */}
-                {!pendingSuccess && isVerified && (
+                {isVerified && (
                   <button
                     onClick={handleProceedToPayment}
                     disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
@@ -1454,9 +1329,10 @@ export default function CheckoutPage() {
                   </button>
                 )}
 
-                {/* Nicht verifiziert + verificationDeferred an:
-                    Normale Zahlung, Ausweis-Upload erfolgt nach Buchung. */}
-                {!pendingSuccess && isVerified === false && checkoutCfg?.verificationDeferred && (
+                {/* Nicht verifiziert: Neukunden zahlen sofort. Der Ausweis wird
+                    nach der Zahlung hochgeladen und vor dem Versand geprueft —
+                    kein Zahlungslink-Umweg mehr. */}
+                {isVerified === false && (
                   <div>
                     <div className="p-3 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs font-body text-amber-800 dark:text-amber-300 mb-3 flex gap-2">
                       <svg className="w-4 h-4 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
@@ -1478,29 +1354,6 @@ export default function CheckoutPage() {
                         </>
                       ) : (
                         `Weiter zur Zahlung → ${fmt(total)}`
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                {/* Nicht verifiziert + verificationDeferred AUS: Pending-Booking-Flow */}
-                {!pendingSuccess && isVerified === false && !checkoutCfg?.verificationDeferred && (
-                  <div>
-                    <div className="p-3 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs font-body text-blue-700 dark:text-blue-300 mb-3">
-                      Da dies deine erste Buchung ist, prüfen wir kurz deinen Ausweis. Du erhältst danach einen Zahlungslink per Email.
-                    </div>
-                    <button
-                      onClick={handlePendingBooking}
-                      disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
-                      className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                    >
-                      {isCreatingIntent ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Wird erstellt…
-                        </>
-                      ) : (
-                        `Buchung anfragen → ${fmt(total)}`
                       )}
                     </button>
                   </div>

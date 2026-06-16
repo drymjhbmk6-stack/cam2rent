@@ -642,7 +642,46 @@ damit der Kunde frisch unterschreiben muss.
   ausführen. Ohne sie funktioniert das Zurücksetzen (inkl. Pflicht-Mail)
   bereits; nur die „Alles okay"-Sperre ist erst nach der Migration aktiv.
 
+### Neukunden zahlen immer sofort — Zahlungslink-Pfad entfernt (Stand 2026-06-16)
+Der frühere „erste Buchung → `pending_verification` → Admin gibt frei → Kunde
+bekommt Zahlungslink per E-Mail"-Pfad ist aus dem **Kunden-Flow entfernt**.
+Neuregistrierte/unverifizierte Kunden zahlen jetzt **immer direkt im Checkout**,
+ohne Betrags- oder Vorlauf-Grenze. Der Ausweis wird nach der Zahlung
+hochgeladen und **vor dem Versand** geprüft (Buchung trägt
+`verification_required=true`, Status bleibt `confirmed`, Versand erst nach
+`verification_gate`-Freigabe).
+- **`app/api/checkout-intent`** (Warenkorb): der `!verificationDeferred → 403`
+  und die beiden Schranken (`VERIFICATION_REQUIRED_FOR_AMOUNT` /
+  `_FOR_SHORT_NOTICE`) sind raus. Unverifiziert ⇒ immer erlaubt,
+  `metadata.verification_required='1'`. Der Refund-Loop-Schutz
+  (`TOO_MANY_AUTO_CANCELS`, 2× Auto-Storno) bleibt als Anti-Abuse. `getCheckoutConfig`-
+  Import entfernt (Flag wird nicht mehr gelesen).
+- **`app/api/create-payment-intent`** (Direkt-Buchung): der harte
+  `NOT_VERIFIED`-403 ist raus → unverifizierte Direkt-Buchungen dürfen zahlen,
+  `metadata.verification_required='1'` (confirm-booking liest es). Vorher konnte
+  der Direkt-Flow von Unverifizierten gar nicht bezahlt werden.
+- **`app/checkout/page.tsx`**: die zwei Unverifiziert-Branches sind zu **einem**
+  Sofortzahlungs-Button zusammengeführt (amber „Ausweis nach der Zahlung"-Hinweis).
+  Der „Buchung anfragen"-Button, `handlePendingBooking`, das Pending-Erfolgs-Modal
+  („Zahlungslink per E-Mail") und der `pendingSuccess`-State sind entfernt.
+- **`lib/checkout-config.ts`**: `verificationDeferred` +
+  `maxRentalValueForExpressSignup` + `minHoursBeforeRentalStart` werden NICHT mehr
+  zum Gaten genutzt (nur noch im Typ aus Rückwärts-Kompatibilität). Toter Helper
+  `checkExpressSignupEligibility` gelöscht. `expressSignupEnabled` bleibt aktiv.
+- **`components/admin/CheckoutConfigSection.tsx`**: der „Ausweis-Check erst vor
+  Versand"-Toggle + die beiden Schranken-Eingaben sind durch eine Info-Box
+  ersetzt; der Express-Signup-Toggle bleibt.
+- **Nicht angefasst:** die Admin-Payment-Link-Infrastruktur (`booking-approve`,
+  „Zahlungslink erneut senden" auf der Buchungsdetailseite) bleibt für
+  **bestehende** `awaiting_payment`-/`pending_verification`-Buchungen + manuelle
+  Buchungen erhalten. Die Route `POST /api/create-pending-booking` hat keinen
+  Aufrufer mehr (bewusst nicht gelöscht, harmlos).
+
 ### Express-Signup + verzögerte Verifizierung (Stand 2026-04-21)
+> **Veraltet (siehe Notiz oben, Stand 2026-06-16):** Der `verificationDeferred`-
+> Toggle + die beiden Schranken steuern den Kunden-Flow nicht mehr — Neukunden
+> zahlen immer sofort. Der folgende Abschnitt beschreibt den alten Stand.
+
 Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellungen`:
 
 - **`expressSignupEnabled`**: Neukunde kann direkt im Checkout Konto anlegen (E-Mail + Passwort + Name). Server-Route `/api/auth/express-signup` nutzt Admin-API mit `email_confirm: true`, damit der Client sofort per `signInWithPassword` eine Session bekommt. Rate-Limit 5/h pro IP. Bei bekannter E-Mail schaltet die UI automatisch auf Login um.

@@ -79,8 +79,8 @@ export default function CheckoutConfigSection() {
         <div className="flex-1">
           <h2 className="text-lg font-semibold text-white">Checkout-Verhalten</h2>
           <p className="text-sm text-[#94a3b8] mt-1">
-            Steuert, ob Neukunden sich direkt im Checkout registrieren koennen und ob der Ausweis-Check
-            vor der Zahlung oder vor dem Versand stattfindet.
+            Steuert, ob Neukunden sich direkt im Checkout registrieren koennen. Neukunden zahlen
+            immer sofort — der Ausweis wird vor dem Versand geprueft.
           </p>
         </div>
       </header>
@@ -107,78 +107,25 @@ export default function CheckoutConfigSection() {
           </label>
         </div>
 
-        {/* Verification-Deferred Toggle */}
-        <div className="rounded-lg border border-[#1e293b] bg-[#020617] p-4">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cfg.verificationDeferred}
-              onChange={(e) => save({ verificationDeferred: e.target.checked })}
-              disabled={saving}
-              className="mt-1 w-4 h-4 accent-[#06b6d4]"
-            />
+        {/* Sofortzahlung-Info — Neukunden zahlen immer direkt, kein Zahlungslink */}
+        <div className="rounded-lg border border-[#06b6d4]/30 bg-[#06b6d4]/5 p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-[#06b6d4] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             <div className="flex-1">
-              <div className="font-semibold text-white">Ausweis-Check erst vor Versand</div>
+              <div className="font-semibold text-white">Neukunden zahlen sofort</div>
               <p className="text-xs text-[#94a3b8] mt-1">
-                Wenn aktiv: Neukunden koennen auch ohne verifizierten Ausweis bezahlen. Die Buchung
-                wird mit <code className="text-[#06b6d4]">verification_required=true</code> markiert
-                und erscheint in der Versand-Liste erst nach Freigabe. Der Kunde bekommt per E-Mail
-                den Link zum Ausweis-Upload. Ohne diesen Flag bleibt der bestehende
-                <code className="text-[#06b6d4]"> pending_verification</code>-Pfad aktiv.
-              </p>
-            </div>
-          </label>
-        </div>
-
-        {/* Sub-Regeln — nur sichtbar wenn Express-Signup an */}
-        {cfg.expressSignupEnabled && (
-          <div className="rounded-lg border border-[#06b6d4]/30 bg-[#06b6d4]/5 p-4 space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-white mb-1">
-                Max. Buchungswert fuer Express-Signup (EUR)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={50}
-                value={cfg.maxRentalValueForExpressSignup ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value === '' ? null : Number(e.target.value);
-                  save({ maxRentalValueForExpressSignup: v });
-                }}
-                placeholder="kein Limit"
-                disabled={saving}
-                className="w-full bg-[#020617] border border-[#1e293b] rounded px-3 py-2 text-sm text-white focus:border-[#06b6d4] focus:outline-none"
-              />
-              <p className="text-xs text-[#64748b] mt-1">
-                Groessere Buchungen gehen weiter durch den normalen Verifizierungs-Pfad. Leer = kein Limit.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-white mb-1">
-                Min. Vorlauf vor Mietbeginn (Stunden)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={cfg.minHoursBeforeRentalStart ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value === '' ? null : Number(e.target.value);
-                  save({ minHoursBeforeRentalStart: v });
-                }}
-                placeholder="kein Limit"
-                disabled={saving}
-                className="w-full bg-[#020617] border border-[#1e293b] rounded px-3 py-2 text-sm text-white focus:border-[#06b6d4] focus:outline-none"
-              />
-              <p className="text-xs text-[#64748b] mt-1">
-                Kurzfristige Buchungen werden ausgeschlossen, weil der Ausweis-Check sonst nicht
-                vor dem Versand durchlaeuft. Leer = kein Limit.
+                Auch ohne verifizierten Ausweis kann sofort bezahlt werden — es gibt keinen
+                Zahlungslink-Umweg mehr. Die Buchung wird mit{' '}
+                <code className="text-[#06b6d4]">verification_required=true</code> markiert; der
+                Ausweis wird nach der Zahlung hochgeladen und der <strong>Versand erst nach der
+                Freigabe</strong> in der Versand-Liste durchgefuehrt. Es gibt keine Betrags- oder
+                Vorlauf-Grenze mehr.
               </p>
             </div>
           </div>
-        )}
+        </div>
 
         {success && <p className="text-sm text-emerald-400">{success}</p>}
         {error && <p className="text-sm text-rose-400">{error}</p>}

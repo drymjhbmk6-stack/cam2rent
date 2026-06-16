@@ -5,17 +5,17 @@
  * und unter /admin/einstellungen gepflegt. Default: alles AUS, damit
  * der bestehende Flow 1:1 weiterlaeuft.
  *
- * Zwei orthogonale Flags:
+ * Aktiv genutztes Flag:
  *   - expressSignupEnabled: Erlaubt Kontoanlage direkt im Checkout
  *     (ohne Umweg ueber /registrierung).
- *   - verificationDeferred: Erlaubt Zahlung OHNE vorherigen Ausweis-Check.
- *     Der Ausweis muss dann vor Versand nachgereicht werden (Buchung
- *     bekommt `verification_required=true`).
  *
- * Wichtig: expressSignupEnabled alleine (ohne verificationDeferred) ist
- * moeglich, aber wenig sinnvoll — neu angelegte Accounts sind immer
- * unverifiziert und landen dann im bestehenden `pending_verification`-Pfad.
- * Der echte UX-Gewinn kommt erst, wenn beide Flags an sind.
+ * Neukunden zahlen IMMER sofort — der frueher optionale `pending_verification`-/
+ * Zahlungslink-Pfad ist entfernt. Unverifizierte Buchungen werden mit
+ * `verification_required=true` markiert (Status bleibt 'confirmed'); der Ausweis
+ * wird vor dem Versand geprueft, nicht vor der Zahlung. Die Felder
+ * `verificationDeferred`, `maxRentalValueForExpressSignup` und
+ * `minHoursBeforeRentalStart` werden NICHT mehr zum Gaten verwendet und bleiben
+ * nur aus Rueckwaerts-Kompatibilitaet (gespeicherte Settings) im Typ.
  */
 
 import { createServiceClient } from '@/lib/supabase';
@@ -98,31 +98,4 @@ export async function setCheckoutConfig(next: Partial<CheckoutConfig>): Promise<
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }
-}
-
-/**
- * Prueft ob eine konkrete Buchung die Express-Signup-Regeln erfuellt.
- * Rueckgabe: null = erlaubt; string = Grund fuer Ablehnung.
- */
-export function checkExpressSignupEligibility(
-  cfg: CheckoutConfig,
-  opts: { amountCents: number; earliestRentalFrom?: string | null },
-): string | null {
-  if (!cfg.expressSignupEnabled) return 'Express-Signup deaktiviert';
-  if (cfg.maxRentalValueForExpressSignup !== null) {
-    const maxCents = Math.round(cfg.maxRentalValueForExpressSignup * 100);
-    if (opts.amountCents > maxCents) {
-      return `Buchungswert uebersteigt Express-Limit (${cfg.maxRentalValueForExpressSignup} EUR)`;
-    }
-  }
-  if (cfg.minHoursBeforeRentalStart !== null && opts.earliestRentalFrom) {
-    const start = new Date(opts.earliestRentalFrom);
-    if (!isNaN(start.getTime())) {
-      const diffH = (start.getTime() - Date.now()) / 3_600_000;
-      if (diffH < cfg.minHoursBeforeRentalStart) {
-        return `Mietbeginn zu kurzfristig fuer Express-Signup (${cfg.minHoursBeforeRentalStart}h Vorlauf noetig)`;
-      }
-    }
-  }
-  return null;
 }
