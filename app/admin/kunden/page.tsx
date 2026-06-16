@@ -50,6 +50,21 @@ function agoColor(iso: string | null): string {
   return '#ef4444';
 }
 
+// Vollen Namen in Nachname + Vorname zerlegen (letztes Wort = Nachname)
+function splitName(full: string): { last: string; first: string } {
+  const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { last: '', first: '' };
+  if (parts.length === 1) return { last: parts[0], first: '' };
+  return { last: parts[parts.length - 1], first: parts.slice(0, -1).join(' ') };
+}
+
+// Anzeige "Nachname, Vorname" (ohne Nachname → Vorname/Name pur)
+function displayName(full: string): string {
+  const { last, first } = splitName(full);
+  if (!last) return '';
+  return first ? `${last}, ${first}` : last;
+}
+
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   none: { label: 'Nicht verifiziert', color: '#94a3b8', bg: '#94a3b814' },
   pending: { label: 'Ausstehend', color: '#f59e0b', bg: '#f59e0b14' },
@@ -141,14 +156,14 @@ export default function KundenPage() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // Anfangsbuchstabe für die A–Z-Reiter (Name, sonst E-Mail; nicht A–Z → '#')
+  // Anfangsbuchstabe für die A–Z-Reiter (Nachname, sonst E-Mail; nicht A–Z → '#')
   const firstLetter = (c: Customer): string => {
-    const base = (c.full_name || c.email || '').trim();
+    const base = (splitName(c.full_name).last || c.email || '').trim();
     const ch = base.charAt(0).toUpperCase();
     return ch >= 'A' && ch <= 'Z' ? ch : '#';
   };
 
-  // Status + Suche, dann alphabetisch nach Name (leere Namen ans Ende)
+  // Status + Suche, dann alphabetisch nach Nachname (leere Namen ans Ende)
   const base = customers
     .filter((c) => {
       if (filter === 'active' && c.blacklisted) return false;
@@ -164,12 +179,14 @@ export default function KundenPage() {
       return true;
     })
     .sort((a, b) => {
-      const an = (a.full_name || '').trim();
-      const bn = (b.full_name || '').trim();
-      if (!an && !bn) return (a.email || '').localeCompare(b.email || '', 'de');
-      if (!an) return 1;
-      if (!bn) return -1;
-      return an.localeCompare(bn, 'de', { sensitivity: 'base' });
+      const a1 = splitName(a.full_name);
+      const b1 = splitName(b.full_name);
+      if (!a1.last && !b1.last) return (a.email || '').localeCompare(b.email || '', 'de');
+      if (!a1.last) return 1;
+      if (!b1.last) return -1;
+      const byLast = a1.last.localeCompare(b1.last, 'de', { sensitivity: 'base' });
+      if (byLast !== 0) return byLast;
+      return a1.first.localeCompare(b1.first, 'de', { sensitivity: 'base' });
     });
 
   // Vorhandene Anfangsbuchstaben (für aktive/disabled Reiter)
@@ -365,7 +382,7 @@ export default function KundenPage() {
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                     >
                       <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
-                        {c.full_name || '—'}
+                        {displayName(c.full_name) || '—'}
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
                         {c.email}
