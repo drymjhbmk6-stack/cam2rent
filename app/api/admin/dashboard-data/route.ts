@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { computeCameraUtilization } from '@/lib/camera-utilization';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * GET /api/admin/dashboard-data
@@ -9,6 +10,12 @@ import { computeCameraUtilization } from '@/lib/camera-utilization';
 export async function GET() {
   try {
     const supabase = createServiceClient();
+
+    // Test-/Live-Isolation: im Live-Modus nur echte Buchungen (is_test=false),
+    // im Test-Modus nur Test-Buchungen. Gilt für alle bookings-basierten
+    // Kennzahlen (Umsatz, Counts, Listen, Aufgaben) — Test-Bestellungen dürfen
+    // nie in die Live-Zahlen einfließen (gleiche Konvention wie Analytics/Reports).
+    const testMode = await isTestMode();
 
     // Date helpers — alles in Berlin-Zeit berechnen, damit "heute"/"Woche"/
     // "Monat" dem Nutzer entspricht und nicht dem UTC-Tag des Servers.
@@ -73,6 +80,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
+        .eq('is_test', testMode)
         .gte('created_at', todayStart)
         .lt('created_at', tomorrowStart),
 
@@ -80,12 +88,14 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
+        .eq('is_test', testMode)
         .eq('status', 'confirmed'),
 
       // upcoming_returns: shipped/delivered bookings with rental_to in next 3 days
       supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
+        .eq('is_test', testMode)
         .in('status', ['shipped', 'delivered'])
         .gte('rental_to', todayStart)
         .lte('rental_to', threeDaysLater),
@@ -107,6 +117,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('price_total')
+        .eq('is_test', testMode)
         .gte('created_at', todayStart)
         .lt('created_at', tomorrowStart)
         .not('status', 'eq', 'cancelled'),
@@ -115,6 +126,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('price_total')
+        .eq('is_test', testMode)
         .gte('created_at', weekStart)
         .not('status', 'eq', 'cancelled'),
 
@@ -122,6 +134,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('price_total')
+        .eq('is_test', testMode)
         .gte('created_at', monthStart)
         .not('status', 'eq', 'cancelled'),
 
@@ -129,6 +142,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
+        .eq('is_test', testMode)
         .in('status', ['confirmed', 'shipped']),
 
       // total_customers
@@ -146,6 +160,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id, product_name, customer_name, customer_email, price_total, status, created_at, rental_from, rental_to')
+        .eq('is_test', testMode)
         .order('created_at', { ascending: false })
         .limit(10),
 
@@ -153,6 +168,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id, product_name, customer_name, rental_to, status, tracking_number')
+        .eq('is_test', testMode)
         .eq('status', 'shipped')
         .gte('rental_to', todayStart)
         .order('rental_to', { ascending: true })
@@ -186,6 +202,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('id, product_name, customer_name, status, created_at')
+        .eq('is_test', testMode)
         .order('created_at', { ascending: false })
         .limit(20),
 
@@ -196,6 +213,7 @@ export async function GET() {
       supabase
         .from('bookings')
         .select('*')
+        .eq('is_test', testMode)
         .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'damaged'])
         .order('rental_from', { ascending: true })
         .limit(50),
