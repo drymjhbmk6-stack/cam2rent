@@ -3957,6 +3957,14 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
     nicht-pinned) + 6 Farb-Presets + Editor-Modal (Titel + Markdown-Textarea +
     Pin-Checkbox + Farb-Picker). Karten zeigen relatives Datum
     („vor 5 Min", „vor 3 Tagen") + Pin/Löschen-Quick-Actions.
+    - **Eigene Farbe per Hex (Stand 2026-06-16):** Zusätzlich zu den 6 Presets
+      kann eine Notiz eine **individuelle Hex-Farbe** bekommen — nativer
+      `<input type="color">`-Picker + Hex-Textfeld (`#RRGGBB`) neben den
+      Preset-Swatches. `employee_notes.color` (TEXT, keine Migration) hält
+      entweder einen Preset-Key oder eine Hex-Farbe. Server-Sanitizer
+      `sanitizeColor()` (`route.ts`) akzeptiert nur bekannte Preset-Keys ODER
+      `#rgb`/`#rrggbb` (sonst null = Standard), genutzt in POST + PATCH.
+      `colorBg()` (Frontend) rendert Hex-Werte direkt, Presets über die Map.
     - **To-do-Liste pro Notiz (Stand 2026-05-31):** Jede Notiz kann zusätzlich
       zum Freitext-Inhalt eine abhakbare Checkliste führen. Migration
       `supabase/supabase-employee-notes-checklist.sql` (idempotent, additiv):

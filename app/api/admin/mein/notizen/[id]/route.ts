@@ -5,6 +5,7 @@ import {
   sanitizeChecklist,
   sanitizeAttachments,
   sanitizePages,
+  sanitizeColor,
   sanitizeShared,
   isMissingOptionalColumn,
   isMissingTable,
@@ -71,7 +72,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (typeof body.title === 'string') upd.title = body.title.trim().slice(0, TITLE_MAX);
   if (typeof body.content === 'string') upd.content = body.content.slice(0, CONTENT_MAX);
   if (typeof body.pinned === 'boolean') upd.pinned = body.pinned;
-  if ('color' in body) upd.color = body.color ? String(body.color).slice(0, 32) : null;
+  if ('color' in body) upd.color = sanitizeColor(body.color);
   if ('checklist' in body) upd.checklist = sanitizeChecklist(body.checklist);
   if ('attachments' in body) upd.attachments = sanitizeAttachments(body.attachments);
   if ('pages' in body) upd.pages = sanitizePages(body.pages);

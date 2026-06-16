@@ -89,6 +89,18 @@ export function sanitizePages(input: unknown): NotePage[] {
   return out;
 }
 
+const COLOR_KEYS = new Set(['default', 'amber', 'cyan', 'pink', 'emerald', 'violet']);
+
+/** Akzeptiert einen bekannten Preset-Key ODER eine Hex-Farbe (#rgb / #rrggbb). */
+export function sanitizeColor(input: unknown): string | null {
+  if (input == null) return null;
+  const v = String(input).trim().slice(0, 32);
+  if (!v) return null;
+  if (COLOR_KEYS.has(v)) return v;
+  if (/^#[0-9a-f]{6}$/i.test(v) || /^#[0-9a-f]{3}$/i.test(v)) return v.toLowerCase();
+  return null;
+}
+
 export function sanitizeShared(input: unknown, excludeId: string): string[] {
   if (!Array.isArray(input)) return [];
   const out: string[] = [];
@@ -244,7 +256,7 @@ export async function POST(req: NextRequest) {
   const title = String(body.title ?? '').trim().slice(0, TITLE_MAX);
   const content = String(body.content ?? '').slice(0, CONTENT_MAX);
   const pinned = !!body.pinned;
-  const color = body.color ? String(body.color).slice(0, 32) : null;
+  const color = sanitizeColor(body.color);
   const checklist = sanitizeChecklist(body.checklist);
   const attachments = sanitizeAttachments(body.attachments);
   const pages = sanitizePages(body.pages);

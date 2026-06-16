@@ -74,9 +74,16 @@ const COLOR_PRESETS: { value: string; label: string; bg: string }[] = [
   { value: 'violet', label: 'Lila', bg: '#4c1d95' },
 ];
 
+function isHexColor(color: string | null | undefined): color is string {
+  return !!color && (/^#[0-9a-f]{6}$/i.test(color) || /^#[0-9a-f]{3}$/i.test(color));
+}
+
 function colorBg(color: string | null): string {
   if (!color || color === 'default') return '#1e293b';
-  return COLOR_PRESETS.find((c) => c.value === color)?.bg ?? '#1e293b';
+  const preset = COLOR_PRESETS.find((c) => c.value === color);
+  if (preset) return preset.bg;
+  if (isHexColor(color)) return color;
+  return '#1e293b';
 }
 
 function attachmentUrl(path: string): string {
@@ -377,6 +384,15 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   const [activeIdx, setActiveIdx] = useState(0);
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [color, setColor] = useState(note?.color ?? 'default');
+  const [customHex, setCustomHex] = useState(isHexColor(note?.color) ? (note!.color as string) : '');
+  const customActive = isHexColor(color);
+
+  function applyHex(v: string) {
+    let h = v.trim();
+    if (h && !h.startsWith('#')) h = `#${h}`;
+    setCustomHex(h);
+    if (isHexColor(h)) setColor(h.toLowerCase());
+  }
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist ?? []);
   const [sharedWith, setSharedWith] = useState<string[]>(note?.shared_with ?? []);
   const [newItemText, setNewItemText] = useState('');
@@ -713,7 +729,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
             📌 Anpinnen
           </label>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             {COLOR_PRESETS.map((c) => (
               <button
                 key={c.value}
@@ -727,6 +743,37 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                 }}
               />
             ))}
+            <span style={{ width: 1, height: 20, background: '#475569', margin: '0 2px' }} />
+            {/* Eigene Farbe (Hex) */}
+            <label
+              title="Eigene Farbe wählen"
+              style={{
+                position: 'relative', width: 24, height: 24, borderRadius: 12, cursor: 'pointer',
+                background: customActive ? color : 'conic-gradient(#f87171,#fbbf24,#34d399,#22d3ee,#a78bfa,#f87171)',
+                border: customActive ? '2px solid #06b6d4' : '1px solid #475569',
+                display: 'inline-block', flexShrink: 0,
+              }}
+            >
+              <input
+                type="color"
+                value={customActive ? color : (isHexColor(customHex) ? customHex : '#06b6d4')}
+                onChange={(e) => applyHex(e.target.value)}
+                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', padding: 0, border: 0 }}
+              />
+            </label>
+            <input
+              type="text"
+              value={customHex}
+              onChange={(e) => applyHex(e.target.value)}
+              placeholder="#RRGGBB"
+              maxLength={7}
+              spellCheck={false}
+              style={{
+                width: 96, padding: '5px 8px', borderRadius: 6, fontSize: 13, fontFamily: 'monospace',
+                border: `1px solid ${customActive ? '#06b6d4' : '#475569'}`,
+                background: '#1e293b', color: '#e2e8f0',
+              }}
+            />
           </div>
         </div>
 
