@@ -4020,6 +4020,14 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
         zeigen Bild-Thumbnails + 📎-Anzahl + „👥 Geteilt" / „👤 Geteilt von X".
         Reine Anzeige bleibt sonst 1:1. Ohne Migration: Read funktioniert,
         Teilen/Anhänge persistieren nicht (defensiv gestript).
+      - **Eigener Name pro Anhang (Stand 2026-06-16):** Jeder Anhang kann einen
+        frei wählbaren Namen bekommen — Texteingabe „Name…" unter dem Thumbnail
+        (max 120 Zeichen). Optionales Feld `label` im Attachment-JSON
+        (`{id,path,filename,mime,size,label?}`), **keine Migration** (lebt im
+        bestehenden `attachments`/`pages[].attachments`-JSONB).
+        `sanitizeAttachments` trimmt/kappt `label` und lässt es bei leer weg.
+        Read-only-Empfänger sehen `label || filename` (nicht editierbar); der
+        Original-Dateiname + Größe stehen weiter klein darunter.
       - **Go-Live TODO:** (1) Migration
         `supabase/supabase-employee-notes-sharing-attachments.sql` ausführen.
         (2) Storage-Bucket `employee-note-attachments` im Supabase-Dashboard

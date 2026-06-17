@@ -27,6 +27,7 @@ export interface NoteAttachment {
   filename: string;
   mime: string;
   size: number;
+  label?: string;
 }
 
 export interface NotePage {
@@ -66,7 +67,8 @@ export function sanitizeAttachments(input: unknown): NoteAttachment[] {
     const mime = String(a.mime ?? '').slice(0, 100);
     const sizeNum = Number(a.size);
     const size = Number.isFinite(sizeNum) ? Math.max(0, Math.floor(sizeNum)) : 0;
-    out.push({ id, path, filename, mime, size });
+    const label = a.label == null ? '' : String(a.label).trim().slice(0, 120);
+    out.push({ id, path, filename, mime, size, ...(label ? { label } : {}) });
     if (out.length >= ATTACH_MAX) break;
   }
   return out;

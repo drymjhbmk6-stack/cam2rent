@@ -15,6 +15,7 @@ interface Attachment {
   filename: string;
   mime: string;
   size: number;
+  label?: string;
 }
 
 interface NotePage {
@@ -468,6 +469,10 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: p.attachments.filter((a) => a.id !== id) } : p)));
   }
 
+  function updateAttachmentLabel(id: string, label: string) {
+    setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: p.attachments.map((a) => (a.id === id ? { ...a, label } : a)) } : p)));
+  }
+
   function shareMode(empId: string): 'none' | 'read' | 'edit' {
     if (sharedWith.includes(empId)) return 'edit';
     if (sharedRead.includes(empId)) return 'read';
@@ -622,7 +627,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         {(activePage?.attachments.length ?? 0) > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             {activePage.attachments.map((a) => (
-              <div key={a.id} style={{ position: 'relative', width: 86, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
+              <div key={a.id} style={{ position: 'relative', width: 120, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
                 {!ro && (
                   <button
                     type="button"
@@ -637,19 +642,33 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={attachmentUrl(a.path)}
-                    alt={a.filename}
+                    alt={a.label || a.filename}
                     onClick={() => onOpenLightbox(attachmentUrl(a.path))}
-                    style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                    style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
                   />
                 ) : (
-                  <a href={attachmentUrl(a.path)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 60, fontSize: 28, textDecoration: 'none' }}>
+                  <a href={attachmentUrl(a.path)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, fontSize: 28, textDecoration: 'none' }}>
                     {fileIcon(a.mime)}
                   </a>
                 )}
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.filename}>
-                  {a.filename}
+                {ro ? (
+                  <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.label || a.filename}>
+                    {a.label || a.filename}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={a.label ?? ''}
+                    onChange={(e) => updateAttachmentLabel(a.id, e.target.value)}
+                    placeholder="Name…"
+                    maxLength={120}
+                    title="Name für dieses Bild"
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '4px 6px', fontSize: 11, borderRadius: 4, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0' }}
+                  />
+                )}
+                <div style={{ fontSize: 9, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.filename}>
+                  {a.filename} · {fmtBytes(a.size)}
                 </div>
-                <div style={{ fontSize: 9, color: '#64748b' }}>{fmtBytes(a.size)}</div>
               </div>
             ))}
           </div>
