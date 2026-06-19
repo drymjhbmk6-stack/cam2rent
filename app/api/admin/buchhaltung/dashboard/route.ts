@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { getProducts } from '@/lib/get-products';
+import { getPriceForDays, type Product } from '@/data/products';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -40,13 +42,16 @@ export async function GET(req: NextRequest) {
       price_total: number | null;
       status: string | null;
       created_at: string | null;
+      days?: number | null;
+      rental_from?: string | null;
+      rental_to?: string | null;
       cameras?: unknown;
     }> | null = null;
     let bookingsError: { message: string } | null = null;
     {
       const withCameras = await supabase
         .from('bookings')
-        .select('id, product_name, price_total, status, created_at, cameras')
+        .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, cameras')
         .eq('is_test', false)
         .gte('created_at', fromIso)
         .lte('created_at', toIso)
@@ -54,7 +59,7 @@ export async function GET(req: NextRequest) {
       if (withCameras.error && /cameras|column|schema cache|PGRST/i.test(withCameras.error.message)) {
         const retry = await supabase
           .from('bookings')
-          .select('id, product_name, price_total, status, created_at')
+          .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to')
           .eq('is_test', false)
           .gte('created_at', fromIso)
           .lte('created_at', toIso)
@@ -185,27 +190,68 @@ export async function GET(req: NextRequest) {
     // Top 5 Produkte — jede Kamera EINZELN zaehlen. Multi-Kamera-Buchungen
     // (product_name = Komma-String wie "OSMO Action 5 Pro , DJI Osmo Nano",
     // auch zweimal dasselbe Modell) werden ueber resolveBookingCameras in
-    // einzelne Kameras aufgeteilt; der Umsatz wird gleichmaessig auf die
-    // Kameras der Buchung verteilt.
+    // einzelne Kameras aufgeteilt. Der Umsatz wird NICHT gleichmaessig, sondern
+    // gemaess dem tatsaechlich gebuchten Mietpreis pro Kamera verteilt: pro
+    // Kamera wird der Katalog-Mietpreis (getPriceForDays je Modell × Mietdauer)
+    // berechnet und price_total proportional zu diesem Anteil zugeordnet. So
+    // bekommt jede Kamera den Umsatz, mit dem sie gebucht wurde (das teurere
+    // Modell mehr), inkl. anteilig Zubehoer/Versand/Haftung.
+    let productCatalog: Product[] = [];
+    try {
+      productCatalog = await getProducts();
+    } catch {
+      productCatalog = [];
+    }
+    const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const productByName = new Map<string, Product>();
+    const productById = new Map<string, Product>();
+    for (const p of productCatalog) {
+      productByName.set(normName(p.name), p);
+      productById.set(p.id, p);
+    }
+
     const productRevenue: Record<string, { name: string; revenue: number; count: number }> = {};
     for (const b of activeBookings) {
       const cameras = resolveBookingCameras(b);
+      const total = b.price_total || 0;
       if (cameras.length === 0) {
         // Keine Kamera ableitbar (z.B. Verkauf ohne product_name) — als
         // Sammelposten zaehlen, damit der Umsatz nicht verschwindet.
         const name = b.product_name || 'Unbekannt';
         if (!productRevenue[name]) productRevenue[name] = { name, revenue: 0, count: 0 };
-        productRevenue[name].revenue += b.price_total || 0;
+        productRevenue[name].revenue += total;
         productRevenue[name].count += 1;
         continue;
       }
-      const revenuePerCamera = (b.price_total || 0) / cameras.length;
-      for (const cam of cameras) {
+
+      // Mietdauer in Tagen (booking.days bevorzugt, sonst aus rental_from/to).
+      let days = typeof b.days === 'number' && b.days > 0 ? b.days : 0;
+      if (!days && b.rental_from && b.rental_to) {
+        const dFrom = new Date(b.rental_from).getTime();
+        const dTo = new Date(b.rental_to).getTime();
+        if (!isNaN(dFrom) && !isNaN(dTo)) days = Math.max(1, Math.round((dTo - dFrom) / 86400000) + 1);
+      }
+      if (!days) days = 1;
+
+      // Mietpreis-Anteil pro Kamera (gebuchter Katalogpreis je Modell).
+      const weights = cameras.map((cam) => {
+        const prod =
+          (cam.product_id ? productById.get(cam.product_id) : undefined) ??
+          (cam.product_name ? productByName.get(normName(cam.product_name)) : undefined);
+        const price = prod ? getPriceForDays(prod, days) : 0;
+        return price > 0 ? price : 0;
+      });
+      const weightSum = weights.reduce((s, w) => s + w, 0);
+
+      cameras.forEach((cam, i) => {
         const name = cam.product_name || 'Unbekannt';
         if (!productRevenue[name]) productRevenue[name] = { name, revenue: 0, count: 0 };
-        productRevenue[name].revenue += revenuePerCamera;
+        // Anteil am Gesamtumsatz: nach Mietpreis gewichtet; ohne bekannten
+        // Preis (kein Katalog-Match) Fallback auf gleichmaessige Verteilung.
+        const share = weightSum > 0 ? weights[i] / weightSum : 1 / cameras.length;
+        productRevenue[name].revenue += total * share;
         productRevenue[name].count += 1;
-      }
+      });
     }
     const topProducts = Object.values(productRevenue)
       .map((p) => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }))

@@ -1,5 +1,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { getProducts } from '@/lib/get-products';
+import { getPriceForDays, type Product } from '@/data/products';
 
 /**
  * Sammelt alle Daten für den Wochenbericht.
@@ -115,7 +117,7 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
     // Wenn das gerissen wird (Filter-Bug oder Datenexplosion), soll der
     // Wochenbericht nicht den Server in OOM treiben.
     supabase.from('bookings')
-      .select('id, product_name, price_total, status')
+      .select('id, product_name, price_total, status, days, rental_from, rental_to')
       .eq('is_test', false)
       .gte('created_at', iso(periodStart))
       .lte('created_at', iso(periodEnd))
@@ -202,8 +204,20 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
 
   // Top-Produkte nach Anzahl + Umsatz — jede Kamera EINZELN zaehlen.
   // Multi-Kamera-Buchungen (product_name = Komma-String, auch zweimal
-  // dasselbe Modell) werden ueber resolveBookingCameras aufgeteilt, der
-  // Umsatz gleichmaessig auf die Kameras der Buchung verteilt.
+  // dasselbe Modell) werden ueber resolveBookingCameras aufgeteilt. Der
+  // Umsatz wird NICHT gleichmaessig, sondern gemaess dem tatsaechlich
+  // gebuchten Mietpreis pro Kamera verteilt (Katalogpreis je Modell ×
+  // Mietdauer, price_total proportional dazu).
+  let productCatalog: Product[] = [];
+  try {
+    productCatalog = await getProducts();
+  } catch {
+    productCatalog = [];
+  }
+  const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const productByName = new Map<string, Product>();
+  for (const p of productCatalog) productByName.set(normName(p.name), p);
+
   const productMap = new Map<string, { count: number; revenue: number }>();
   for (const b of currBookings) {
     const cameras = resolveBookingCameras(b);
@@ -216,14 +230,30 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
       productMap.set(key, entry);
       continue;
     }
-    const revenuePerCamera = total / cameras.length;
-    for (const cam of cameras) {
+
+    // Mietdauer in Tagen (booking.days bevorzugt, sonst aus rental_from/to).
+    let days = typeof b.days === 'number' && b.days > 0 ? b.days : 0;
+    if (!days && b.rental_from && b.rental_to) {
+      const dFrom = new Date(b.rental_from).getTime();
+      const dTo = new Date(b.rental_to).getTime();
+      if (!isNaN(dFrom) && !isNaN(dTo)) days = Math.max(1, Math.round((dTo - dFrom) / 86400000) + 1);
+    }
+    if (!days) days = 1;
+
+    const weights = cameras.map((cam) => {
+      const prod = cam.product_name ? productByName.get(normName(cam.product_name)) : undefined;
+      const price = prod ? getPriceForDays(prod, days) : 0;
+      return price > 0 ? price : 0;
+    });
+    const weightSum = weights.reduce((s, w) => s + w, 0);
+
+    cameras.forEach((cam, i) => {
       const key = cam.product_name || 'Unbekannt';
       const entry = productMap.get(key) ?? { count: 0, revenue: 0 };
       entry.count += 1;
-      entry.revenue += revenuePerCamera;
+      entry.revenue += weightSum > 0 ? total * (weights[i] / weightSum) : total / cameras.length;
       productMap.set(key, entry);
-    }
+    });
   }
   const topProducts: TopProduct[] = Array.from(productMap.entries())
     .map(([name, { count, revenue }]) => ({ name, count, revenue: Math.round(revenue * 100) / 100 }))

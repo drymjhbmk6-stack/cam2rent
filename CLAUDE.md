@@ -1459,16 +1459,23 @@ Kameras ein Komma-String (z.B. „OSMO Action 5 Pro , DJI Osmo Nano 128 GB" oder
 zweimal dasselbe Modell „OSMO Action 5 Pro , OSMO Action 5 Pro") und wurde 1:1
 als Produktname verbucht. Fix: beide Stellen splitten jede Buchung jetzt über
 `resolveBookingCameras` (`lib/booking-cameras.ts`) in einzelne Kameras —
-**jede Kamera zählt einzeln** (auch zwei gleiche → +2 für dasselbe Modell), der
-Umsatz (`price_total`) wird gleichmäßig auf die Kameras der Buchung verteilt.
+**jede Kamera zählt einzeln** (auch zwei gleiche → +2 für dasselbe Modell).
+Der Umsatz wird **nicht gleichmäßig**, sondern **gemäß dem tatsächlich
+gebuchten Mietpreis pro Kamera** verteilt: pro Kamera wird der Katalog-Mietpreis
+(`getPriceForDays(product, days)` je Modell × Mietdauer) berechnet und
+`price_total` proportional zu diesem Anteil zugeordnet (das teurere Modell
+bekommt mehr; Zubehör/Versand/Haftung anteilig mit). Modell-Match per
+`product_id` bzw. case-insensitivem Namens-Match gegen `getProducts()`.
+Mietdauer = `booking.days` (sonst aus `rental_from`/`rental_to`). Ohne
+Katalog-Match (Preis unbekannt) Fallback auf gleichmäßige Verteilung.
 - `app/api/admin/buchhaltung/dashboard/route.ts`: lädt `bookings.cameras`
   defensiv mit (Multi-Kamera-Migration evtl. noch offen → Select-Retry ohne
-  `cameras`, dann greift der `product_name`-Komma-Split-Fallback des Resolvers).
-  Kameras mit `resolveBookingCameras`, Umsatz `price_total / Kamera-Anzahl`,
-  auf 2 Dezimalstellen gerundet. `cameras.length===0` (z.B. Verkauf ohne
+  `cameras`, dann greift der `product_name`-Komma-Split-Fallback des Resolvers)
+  + `days, rental_from, rental_to`. `cameras.length===0` (z.B. Verkauf ohne
   `product_name`) bleibt Sammelposten, damit kein Umsatz verschwindet.
-- `lib/weekly-report.ts`: gleiche Logik im `productMap`-Aggregat (Select hat
-  kein `cameras` → reiner Komma-Split, identisch zum Legacy-Fallback).
+- `lib/weekly-report.ts`: gleiche Gewichtungs-Logik im `productMap`-Aggregat
+  (Select um `days, rental_from, rental_to` erweitert; `cameras` nicht geladen
+  → reiner Komma-Split, identisch zum Legacy-Fallback).
 - Reine Anzeige-/Aggregations-Änderung — kein Schema, keine Migration. Greift
   beim nächsten Dashboard-Reload bzw. Wochenbericht.
 
