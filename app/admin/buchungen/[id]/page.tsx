@@ -81,6 +81,8 @@ interface BookingDetail {
   return_due_date_override?: string | null;
   invoice_name?: string | null;
   invoice_address?: string | null;
+  paid?: boolean | null;
+  paid_via?: 'stripe' | 'invoice' | 'derived' | null;
 }
 
 interface LiabilityLine {
@@ -256,6 +258,7 @@ export default function BuchungDetailPage() {
   const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean; agb: boolean; widerruf: boolean; haftung: boolean; datenschutz: boolean; impressum: boolean }>({ rechnung: true, vertrag: true, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht');
   const [wbwGateStatus, setWbwGateStatus] = useState<string | null>(null);
+  const [markingPaid, setMarkingPaid] = useState(false);
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -408,6 +411,36 @@ export default function BuchungDetailPage() {
     } finally {
       setEmailSending(false);
       setTimeout(() => setEmailToast(null), 4000);
+    }
+  }
+
+  async function handleMarkPaid(paid: boolean) {
+    if (!booking) return;
+    if (paid) {
+      if (!confirm('Diese Buchung als bezahlt markieren? Die Rechnung wird in der Buchhaltung auf „bezahlt" gesetzt.')) return;
+    } else {
+      if (!confirm('Bezahlt-Markierung aufheben und Rechnung wieder als offen setzen?')) return;
+    }
+    setMarkingPaid(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/mark-paid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Fehler');
+      if (!paid && data.stripeMatched) {
+        setEmailToast({ msg: 'Rechnung auf offen gesetzt. Achtung: ein echter Stripe-Zahlungseingang bleibt zugeordnet — Status kann weiterhin „bezahlt" zeigen.', type: 'err' });
+      } else {
+        setEmailToast({ msg: paid ? 'Als bezahlt markiert' : 'Bezahlt-Markierung aufgehoben', type: 'ok' });
+      }
+      fetchBooking();
+    } catch (err) {
+      setEmailToast({ msg: `Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`, type: 'err' });
+    } finally {
+      setMarkingPaid(false);
+      setTimeout(() => setEmailToast(null), 5000);
     }
   }
 
@@ -1075,6 +1108,40 @@ export default function BuchungDetailPage() {
                   <DepositBadge status={booking.deposit_status} />
                 </div>
               )}
+
+              {/* Zahlungsstatus + „Als bezahlt markieren" */}
+              <div className="mt-4 pt-4 border-t border-brand-border flex flex-wrap items-center gap-3">
+                <span className="text-sm font-body text-brand-steel">Zahlung:</span>
+                {booking.paid === true ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-green-100 text-green-700">
+                      ✓ Bezahlt{booking.paid_via === 'stripe' ? ' (Stripe)' : ''}
+                    </span>
+                    {booking.paid_via !== 'stripe' && (
+                      <button
+                        onClick={() => handleMarkPaid(false)}
+                        disabled={markingPaid}
+                        className="text-xs font-body text-brand-muted underline hover:text-brand-black disabled:opacity-50"
+                      >
+                        {markingPaid ? '…' : 'Bezahlt-Markierung aufheben'}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-amber-100 text-amber-700">
+                      Zahlung ausstehend
+                    </span>
+                    <button
+                      onClick={() => handleMarkPaid(true)}
+                      disabled={markingPaid}
+                      className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {markingPaid ? 'Wird gespeichert…' : '✓ Als bezahlt markieren'}
+                    </button>
+                  </>
+                )}
+              </div>
             </Section>
 
             {/* Zubehör */}

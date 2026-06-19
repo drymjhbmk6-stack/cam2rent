@@ -394,6 +394,41 @@ export async function GET(
   // Wiederbeschaffungswert + Haftungsgrenze (intern fuer Admin)
   booking.liability_summary = await computeLiabilitySummary(supabase, booking, resolved);
 
+  // Zahlungsstatus — gleiche Logik wie der Bezahlt-Haken im Dashboard:
+  //  1. Stripe-Abgleich (echter Zahlungseingang),
+  //  2. Buchhaltung (invoices auf bezahlt),
+  //  3. Fallback aus payment_intent_id-Prefix + Status.
+  try {
+    const piId = String(booking.payment_intent_id ?? '');
+    const stLower = String(booking.status ?? '').toLowerCase();
+    const isUnpaidDerived =
+      /MANUAL-UNPAID/i.test(piId) ||
+      /^PENDING-/i.test(piId) ||
+      stLower === 'awaiting_payment' ||
+      stLower === 'pending_verification';
+    const [stripeRes, invRes] = await Promise.all([
+      supabase
+        .from('stripe_transactions')
+        .select('id')
+        .eq('booking_id', id)
+        .in('match_status', ['matched', 'manual'])
+        .limit(1),
+      supabase
+        .from('invoices')
+        .select('id')
+        .eq('booking_id', id)
+        .or('status.eq.paid,payment_status.eq.paid')
+        .limit(1),
+    ]);
+    const paidViaStripe = (stripeRes.data?.length ?? 0) > 0;
+    const paidViaInvoice = (invRes.data?.length ?? 0) > 0;
+    booking.paid = paidViaStripe || paidViaInvoice || !isUnpaidDerived;
+    booking.paid_via = paidViaStripe ? 'stripe' : paidViaInvoice ? 'invoice' : !isUnpaidDerived ? 'derived' : null;
+  } catch {
+    booking.paid = null;
+    booking.paid_via = null;
+  }
+
   return NextResponse.json({ booking, customer, agreement, emails: emails ?? [] });
 }
 

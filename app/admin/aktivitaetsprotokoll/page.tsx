@@ -29,6 +29,8 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.lock_contract': 'Mietvertrag freigegeben („Alles okay", endgültig)',
   'booking.verification_gate': 'Verifizierungs-Gate',
   'booking.resend_payment_link': 'Zahlungs-Link erneut gesendet',
+  'booking.mark_paid': 'Als bezahlt markiert',
+  'booking.mark_unpaid': 'Als unbezahlt markiert',
   'booking.wbw_finalize': 'Wiederbeschaffungswerte finalisiert',
   'booking.wbw_resend': 'WBW-E-Mail erneut gesendet',
   'booking.invoice_version': 'Rechnungsfassung archiviert',
