@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -30,13 +31,41 @@ export async function GET(req: NextRequest) {
     const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
     // Buchungen im Zeitraum — Test-Daten ausgeschlossen (GoBD-konform)
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('id, product_name, price_total, status, created_at')
-      .eq('is_test', false)
-      .gte('created_at', fromIso)
-      .lte('created_at', toIso)
-      .order('created_at', { ascending: false });
+    // `cameras` (JSONB) defensiv mitladen: Multi-Kamera-Migration ist evtl.
+    // noch nicht durch → bei fehlender Spalte Retry ohne `cameras`. Der
+    // Top-Produkte-Resolver faellt dann auf den product_name-Komma-Split.
+    let bookings: Array<{
+      id: string;
+      product_name: string | null;
+      price_total: number | null;
+      status: string | null;
+      created_at: string | null;
+      cameras?: unknown;
+    }> | null = null;
+    let bookingsError: { message: string } | null = null;
+    {
+      const withCameras = await supabase
+        .from('bookings')
+        .select('id, product_name, price_total, status, created_at, cameras')
+        .eq('is_test', false)
+        .gte('created_at', fromIso)
+        .lte('created_at', toIso)
+        .order('created_at', { ascending: false });
+      if (withCameras.error && /cameras|column|schema cache|PGRST/i.test(withCameras.error.message)) {
+        const retry = await supabase
+          .from('bookings')
+          .select('id, product_name, price_total, status, created_at')
+          .eq('is_test', false)
+          .gte('created_at', fromIso)
+          .lte('created_at', toIso)
+          .order('created_at', { ascending: false });
+        bookings = retry.data;
+        bookingsError = retry.error;
+      } else {
+        bookings = withCameras.data;
+        bookingsError = withCameras.error;
+      }
+    }
 
     if (bookingsError) {
       return NextResponse.json({ error: `Buchungen: ${bookingsError.message}` }, { status: 500 });
@@ -153,15 +182,33 @@ export async function GET(req: NextRequest) {
       revenueChart.push({ month: monthName, revenue, net: revenue });
     }
 
-    // Top 5 Produkte
+    // Top 5 Produkte — jede Kamera EINZELN zaehlen. Multi-Kamera-Buchungen
+    // (product_name = Komma-String wie "OSMO Action 5 Pro , DJI Osmo Nano",
+    // auch zweimal dasselbe Modell) werden ueber resolveBookingCameras in
+    // einzelne Kameras aufgeteilt; der Umsatz wird gleichmaessig auf die
+    // Kameras der Buchung verteilt.
     const productRevenue: Record<string, { name: string; revenue: number; count: number }> = {};
     for (const b of activeBookings) {
-      const name = b.product_name || 'Unbekannt';
-      if (!productRevenue[name]) productRevenue[name] = { name, revenue: 0, count: 0 };
-      productRevenue[name].revenue += b.price_total || 0;
-      productRevenue[name].count += 1;
+      const cameras = resolveBookingCameras(b);
+      if (cameras.length === 0) {
+        // Keine Kamera ableitbar (z.B. Verkauf ohne product_name) — als
+        // Sammelposten zaehlen, damit der Umsatz nicht verschwindet.
+        const name = b.product_name || 'Unbekannt';
+        if (!productRevenue[name]) productRevenue[name] = { name, revenue: 0, count: 0 };
+        productRevenue[name].revenue += b.price_total || 0;
+        productRevenue[name].count += 1;
+        continue;
+      }
+      const revenuePerCamera = (b.price_total || 0) / cameras.length;
+      for (const cam of cameras) {
+        const name = cam.product_name || 'Unbekannt';
+        if (!productRevenue[name]) productRevenue[name] = { name, revenue: 0, count: 0 };
+        productRevenue[name].revenue += revenuePerCamera;
+        productRevenue[name].count += 1;
+      }
     }
     const topProducts = Object.values(productRevenue)
+      .map((p) => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
 

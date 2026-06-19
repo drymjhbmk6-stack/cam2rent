@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 /**
  * Sammelt alle Daten für den Wochenbericht.
@@ -199,17 +200,33 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
   const revenue = currBookings.reduce((s, b) => s + Number(b.price_total ?? 0), 0);
   const prevRevenue = prevBookings.reduce((s, b) => s + Number(b.price_total ?? 0), 0);
 
-  // Top-Produkte nach Anzahl + Umsatz
+  // Top-Produkte nach Anzahl + Umsatz — jede Kamera EINZELN zaehlen.
+  // Multi-Kamera-Buchungen (product_name = Komma-String, auch zweimal
+  // dasselbe Modell) werden ueber resolveBookingCameras aufgeteilt, der
+  // Umsatz gleichmaessig auf die Kameras der Buchung verteilt.
   const productMap = new Map<string, { count: number; revenue: number }>();
   for (const b of currBookings) {
-    const key = b.product_name ?? 'Unbekannt';
-    const entry = productMap.get(key) ?? { count: 0, revenue: 0 };
-    entry.count += 1;
-    entry.revenue += Number(b.price_total ?? 0);
-    productMap.set(key, entry);
+    const cameras = resolveBookingCameras(b);
+    const total = Number(b.price_total ?? 0);
+    if (cameras.length === 0) {
+      const key = b.product_name ?? 'Unbekannt';
+      const entry = productMap.get(key) ?? { count: 0, revenue: 0 };
+      entry.count += 1;
+      entry.revenue += total;
+      productMap.set(key, entry);
+      continue;
+    }
+    const revenuePerCamera = total / cameras.length;
+    for (const cam of cameras) {
+      const key = cam.product_name || 'Unbekannt';
+      const entry = productMap.get(key) ?? { count: 0, revenue: 0 };
+      entry.count += 1;
+      entry.revenue += revenuePerCamera;
+      productMap.set(key, entry);
+    }
   }
   const topProducts: TopProduct[] = Array.from(productMap.entries())
-    .map(([name, { count, revenue }]) => ({ name, count, revenue }))
+    .map(([name, { count, revenue }]) => ({ name, count, revenue: Math.round(revenue * 100) / 100 }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 

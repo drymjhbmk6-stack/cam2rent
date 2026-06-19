@@ -1451,6 +1451,27 @@ Planungs-/Auftragskalender — zeigt **alle Aufträge** mit Mietzeitraum + Versa
 - **Auto-Scroll zum heutigen Tag (Stand 2026-05-22):** Nach dem Laden scrollt die Seite automatisch zum heutigen Tag, sofern der aktuelle Monat angezeigt wird. Das Heute-Element trägt `id="ak-today"` (Agenda: die Heute-Karte; Monat: die Woche mit heute) → `scrollIntoView({block:'center'})`. Agenda-Fallback: hat heute keine Aufgaben/Notiz (also keine Karte), wird zur ersten Karte ab heute gescrollt (`data-ak-day`-Attribut). Greift erneut bei jedem Lade-/Ansichts-/Monatswechsel zurück auf den aktuellen Monat.
 - **Go-Live TODO:** Migration `supabase/supabase-calendar-notes.sql` ausführen — ohne sie funktioniert der Kalender weiter (Buchungen + Feiertage), nur die Notiz-Funktion ist inaktiv (Anlegen liefert 503).
 
+### Top 5 Produkte zählt jede Kamera einzeln (Stand 2026-06-19)
+Das „Top 5 Produkte"-Widget im Buchhaltungs-Dashboard (`/admin/buchhaltung`,
+`DashboardTab`) und die „Top-Produkte" im Wochenbericht zählten Multi-Kamera-
+Buchungen als EINEN Sammelposten: `bookings.product_name` ist bei mehreren
+Kameras ein Komma-String (z.B. „OSMO Action 5 Pro , DJI Osmo Nano 128 GB" oder
+zweimal dasselbe Modell „OSMO Action 5 Pro , OSMO Action 5 Pro") und wurde 1:1
+als Produktname verbucht. Fix: beide Stellen splitten jede Buchung jetzt über
+`resolveBookingCameras` (`lib/booking-cameras.ts`) in einzelne Kameras —
+**jede Kamera zählt einzeln** (auch zwei gleiche → +2 für dasselbe Modell), der
+Umsatz (`price_total`) wird gleichmäßig auf die Kameras der Buchung verteilt.
+- `app/api/admin/buchhaltung/dashboard/route.ts`: lädt `bookings.cameras`
+  defensiv mit (Multi-Kamera-Migration evtl. noch offen → Select-Retry ohne
+  `cameras`, dann greift der `product_name`-Komma-Split-Fallback des Resolvers).
+  Kameras mit `resolveBookingCameras`, Umsatz `price_total / Kamera-Anzahl`,
+  auf 2 Dezimalstellen gerundet. `cameras.length===0` (z.B. Verkauf ohne
+  `product_name`) bleibt Sammelposten, damit kein Umsatz verschwindet.
+- `lib/weekly-report.ts`: gleiche Logik im `productMap`-Aggregat (Select hat
+  kein `cameras` → reiner Komma-Split, identisch zum Legacy-Fallback).
+- Reine Anzeige-/Aggregations-Änderung — kein Schema, keine Migration. Greift
+  beim nächsten Dashboard-Reload bzw. Wochenbericht.
+
 ### Rechnungs-Status spiegelt Buchungs-Status (Stand 2026-05-20)
 Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `awaiting_payment` (Stripe-Payment-Link noch nicht bezahlt) wurden in der Buchhaltungs-Welt faelschlich als „bezahlt" gefuehrt. Im Dashboard-Cockpit „Letzte 10 Rechnungen" sowie in `/admin/buchhaltung/rechnungen` standen sie mit gruenem **Bezahlt**-Badge, obwohl der Kunde noch keinen Cent ueberwiesen hatte. Drei aufeinander aufbauende Ursachen, alle gefixt:
 
