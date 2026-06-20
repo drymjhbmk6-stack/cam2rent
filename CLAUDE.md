@@ -1786,6 +1786,8 @@ validity-gefilterte `getDiscountMatchesForItem`).
 - Übergabeprotokoll: Vermieter/Mieter nebeneinander, Checkboxen kompakt
 - Packliste: Info-Blöcke nebeneinander, Zustand+Verpackung zusammengefasst
 
+**Auto-Status „abgeholt" nach Abschluss (Stand 2026-06-20):** Sobald das Übergabeprotokoll erfolgreich gespeichert ist (beide Signaturen + Foto), setzt `POST /api/admin/handover/[bookingId]` den Buchungsstatus automatisch auf **`picked_up`** („abgeholt"). Atomarer Guard `.in('status', ['confirmed','awaiting_pickup'])` — überschreibt also NICHT einen bereits weiter fortgeschrittenen Status (picked_up/completed/returned/cancelled/damaged/shipped/delivered). Best-effort (Fehler lässt das gespeicherte Protokoll unberührt). Antwort + Audit (`booking.handover_completed`) enthalten `statusUpdated`/`statusSetToPickedUp`. Kein neuer Spalten-Timestamp (`bookings.status` ist plain TEXT, es gibt kein `picked_up_at`).
+
 ### Übergabeprotokoll-Wizard mit Scanner (Stand 2026-05-16)
 Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard: Zustand → Vermieter → Mieter → Fertig) nutzt in Schritt 1 jetzt denselben Scanner-Workflow wie das Versand-Packen. Statt der reinen Checkbox-Liste: `<ScannerBar>` + `<ItemList>` (gruppiert, Mengen-Counter) + `<SerialScanner continuous>` + `<ScannerLiveList>` aus `components/admin/scan-workflow.tsx`. Kamera-Seriennummer / Zubehör-Exemplar-Code wird gescannt → Slot automatisch abgehakt, Toast-Feedback (grün/amber/rot), Auto-Close wenn alle scanbaren Stücke erfasst sind, Substitution erlaubt (analog Pack-Schritt 1). `bookingToScanInput()` setzt `skipReturnLabel: true` (Abholung → kein Rücksendeetikett). Manuelles Abhaken per Klick auf die Item-Zeile bleibt parallel möglich.
 

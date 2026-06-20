@@ -191,6 +191,26 @@ export async function POST(
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  // Status automatisch auf "abgeholt" (picked_up) setzen, sobald das
+  // Übergabeprotokoll abgeschlossen ist. Atomar + nur aus den Vor-Abhol-
+  // Zuständen (confirmed / awaiting_pickup) — überschreibt also NICHT einen
+  // bereits weiter fortgeschrittenen Status (picked_up/completed/returned/
+  // cancelled/damaged/shipped/delivered). Best-effort: schlägt es fehl, bleibt
+  // das gespeicherte Protokoll erhalten.
+  let statusUpdated = false;
+  try {
+    const { data: flipped } = await supabase
+      .from('bookings')
+      .update({ status: 'picked_up' })
+      .eq('id', bookingId)
+      .in('status', ['confirmed', 'awaiting_pickup'])
+      .select('id')
+      .maybeSingle();
+    statusUpdated = !!flipped;
+  } catch (e) {
+    console.error('[handover/save] Status-Flip auf picked_up fehlgeschlagen:', e);
+  }
+
   // Audit-Log (Admin-User wird im Helper auto-resolved)
   try {
     await logAudit({
@@ -202,6 +222,7 @@ export async function POST(
         renterName,
         location: handoverData.location || null,
         photoPath: storagePath,
+        statusSetToPickedUp: statusUpdated,
       },
       request: req,
     });
@@ -209,5 +230,5 @@ export async function POST(
     // non-critical
   }
 
-  return NextResponse.json({ success: true, completedAt: now });
+  return NextResponse.json({ success: true, completedAt: now, statusUpdated });
 }
