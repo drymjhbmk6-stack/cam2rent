@@ -12,7 +12,7 @@ const S = {
   input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
   select: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
   label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  row: { background: '#0a0f1e', borderRadius: 8, padding: '10px 12px', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 12 } as React.CSSProperties,
+  row: { background: '#0a0f1e', borderRadius: 8, padding: '10px 12px', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } as React.CSSProperties,
   section: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 } as React.CSSProperties,
   cyan: '#06b6d4',
 };
@@ -280,15 +280,15 @@ export default function AdminRabattePage() {
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_days}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], min_days: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Tagen</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], label: e.target.value }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, flex: 1 }} />
+                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setDurationDiscounts((p) => p.filter((_, j) => j !== i))}
                     style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
@@ -324,15 +324,15 @@ export default function AdminRabattePage() {
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_bookings}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], min_bookings: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Buchungen</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], label: e.target.value }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, flex: 1 }} />
+                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setLoyaltyDiscounts((p) => p.filter((_, j) => j !== i))}
                     style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
@@ -368,15 +368,15 @@ export default function AdminRabattePage() {
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_weeks}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], min_weeks: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Wochen voraus</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], label: e.target.value }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, flex: 1 }} />
+                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setEarlyBirdDiscounts((p) => p.filter((_, j) => j !== i))}
                     style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
