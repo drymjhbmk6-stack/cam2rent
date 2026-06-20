@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
@@ -655,8 +655,38 @@ interface QueueRow {
   action: QueueAction;
   /** Datum für die Sortierung (YYYY-MM-DD). Was als nächstes ansteht zuerst. */
   sortDate: string;
+  /** Fälligkeits-Bucket: 0=Heute/überfällig, 1=in 3 Tagen, 2=in 7 Tagen, 3=später. */
+  bucket: number;
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
+}
+
+// Fälligkeits-Buckets für die Gruppierung im Aufgaben-Widget.
+const BUCKET_LABELS = ['Heute', 'In 3 Tagen', 'In 7 Tagen', 'Später (mehr als 7 Tage)'];
+
+// Heutiges Datum in Berlin-Zeit als YYYY-MM-DD (en-CA liefert genau dieses Format).
+function berlinTodayStr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+// Tage bis zum Fälligkeitsdatum (negativ = überfällig). Akzeptiert
+// YYYY-MM-DD oder ISO-Timestamps (erste 10 Zeichen zählen).
+function daysUntilDue(dateStr: string, today: string): number {
+  const d = (dateStr || '').slice(0, 10);
+  const a = Date.parse(`${today}T00:00:00Z`);
+  const b = Date.parse(`${d}T00:00:00Z`);
+  if (Number.isNaN(b)) return Number.POSITIVE_INFINITY;
+  return Math.round((b - a) / 86_400_000);
+}
+
+// Bucket-Index aus den Tagen bis zur Fälligkeit.
+function bucketForDays(days: number): number {
+  if (days <= 0) return 0;       // heute oder überfällig
+  if (days <= 3) return 1;       // in 1–3 Tagen
+  if (days <= 7) return 2;       // in 4–7 Tagen
+  return 3;                      // später
 }
 
 // Maßgebliches "fällig"-Datum pro Buchung: Rückgabe-Aufgaben richten sich nach
@@ -715,13 +745,17 @@ export function ActionQueueWidget({ data, loading }: {
   data: { items: QueueBooking[]; verifications?: VerificationTask[] } | null;
   loading: boolean;
 }) {
-  // Kunden-Verifizierungen (höchste Priorität — Versand haengt daran)
+  const today = berlinTodayStr();
+
+  // Kunden-Verifizierungen (höchste Priorität — Versand haengt daran).
+  // Ohne Fälligkeitsdatum → Bucket "Heute" (sind sofort zu erledigen).
   const verificationRows: QueueRow[] = (data?.verifications ?? []).map((v) => ({
     key: `verif-${v.id}`,
     title: v.name || 'Kunde',
     subtitle: `Ausweis hochgeladen · ${formatDate(v.created_at)}`,
     action: { label: '✅ Verifizieren', href: `/admin/kunden/${v.id}`, color: C.purple, weight: 0 },
     sortDate: '',
+    bucket: 0,
   }));
 
   const bookingRows: QueueRow[] = (data?.items ?? [])
@@ -734,6 +768,7 @@ export function ActionQueueWidget({ data, loading }: {
       subtitle: b.product_name || 'Buchung',
       action,
       sortDate: dueDateForBooking(b),
+      bucket: bucketForDays(daysUntilDue(dueDateForBooking(b), today)),
       checks: {
         verified: b.verified ?? false,
         signed: b.contract_signed ?? false,
@@ -767,13 +802,17 @@ export function ActionQueueWidget({ data, loading }: {
     }
   }
 
-  // Verifizierungen bleiben oben (blockieren alles), danach die Buchungen
-  // nach Fälligkeitsdatum aufsteigend — was als nächstes ansteht zuerst.
-  const sortedBookingRows = [...bookingRows].sort((x, y) =>
-    x.sortDate < y.sortDate ? -1 : x.sortDate > y.sortDate ? 1 : 0,
-  );
-  const rows: QueueRow[] = [...verificationRows, ...sortedBookingRows]
-    .filter((r) => !doneIds.has(r.key));
+  // Nach Fälligkeits-Bucket gruppieren (Heute → 3 Tage → 7 Tage → später),
+  // innerhalb eines Buckets nach Datum, dann nach Dringlichkeit (weight).
+  // Verifizierungen haben leeres sortDate + weight 0 → stehen im Heute-Bucket
+  // ganz oben.
+  const rows: QueueRow[] = [...verificationRows, ...bookingRows]
+    .filter((r) => !doneIds.has(r.key))
+    .sort((x, y) =>
+      x.bucket - y.bucket ||
+      (x.sortDate < y.sortDate ? -1 : x.sortDate > y.sortDate ? 1 : 0) ||
+      x.action.weight - y.action.weight,
+    );
 
   return (
     <div style={{
@@ -822,10 +861,22 @@ export function ActionQueueWidget({ data, loading }: {
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
           {rows.map((row, idx) => {
+            // Gruppen-Kopf einfügen, sobald sich der Fälligkeits-Bucket ändert.
+            const showHeader = idx === 0 || rows[idx - 1].bucket !== row.bucket;
+            const header = showHeader ? (
+              <div style={{
+                fontSize: 10, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
+                color: C.textDim, padding: '10px 8px 4px', marginTop: idx === 0 ? 0 : 4,
+              }}>
+                {BUCKET_LABELS[row.bucket]}
+              </div>
+            ) : null;
+            const lastInList = idx === rows.length - 1;
+            const lastInBucket = lastInList || rows[idx + 1].bucket !== row.bucket;
             const rowStyle = {
               display: 'flex' as const, alignItems: 'center' as const, gap: 10,
               padding: '10px 8px',
-              borderBottom: idx < rows.length - 1 ? `1px solid ${C.border}` : 'none',
+              borderBottom: lastInBucket ? 'none' : `1px solid ${C.border}`,
               borderLeft: `3px solid ${row.action.color}`,
               borderRadius: 6,
             };
@@ -846,44 +897,49 @@ export function ActionQueueWidget({ data, loading }: {
             if (row.action.kind === 'mark-shipped') {
               const busy = busyId === row.key;
               return (
-                <div key={row.key} style={rowStyle}>
-                  <Link href={row.action.href} style={{ display: 'flex', minWidth: 0, flex: 1, textDecoration: 'none' }}>
-                    {textBlock}
-                  </Link>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => markShipped(row.key)}
-                    style={{
-                      fontSize: 11, fontWeight: 700, color: row.action.color,
-                      background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
-                      padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
-                      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
-                    }}
-                  >
-                    {busy ? 'Wird gesetzt…' : row.action.label}
-                  </button>
-                </div>
+                <Fragment key={row.key}>
+                  {header}
+                  <div style={rowStyle}>
+                    <Link href={row.action.href} style={{ display: 'flex', minWidth: 0, flex: 1, textDecoration: 'none' }}>
+                      {textBlock}
+                    </Link>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => markShipped(row.key)}
+                      style={{
+                        fontSize: 11, fontWeight: 700, color: row.action.color,
+                        background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
+                        padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
+                        cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+                      }}
+                    >
+                      {busy ? 'Wird gesetzt…' : row.action.label}
+                    </button>
+                  </div>
+                </Fragment>
               );
             }
 
             return (
-              <Link
-                key={row.key}
-                href={row.action.href}
-                style={{ ...rowStyle, textDecoration: 'none', transition: 'background 0.12s' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                {textBlock}
-                <span style={{
-                  fontSize: 11, fontWeight: 700, color: row.action.color,
-                  background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
-                  padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
-                }}>
-                  {row.action.label}
-                </span>
-              </Link>
+              <Fragment key={row.key}>
+                {header}
+                <Link
+                  href={row.action.href}
+                  style={{ ...rowStyle, textDecoration: 'none', transition: 'background 0.12s' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  {textBlock}
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: row.action.color,
+                    background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
+                    padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
+                  }}>
+                    {row.action.label}
+                  </span>
+                </Link>
+              </Fragment>
             );
           })}
         </div>
