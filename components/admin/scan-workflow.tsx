@@ -899,3 +899,166 @@ export function ScannerLiveList({
     </div>
   );
 }
+
+// ─── Manueller Exemplar-Picker ───────────────────────────────────────────────
+// Fallback wenn Scannen nicht klappt: zeigt pro Zubehoer-Position die echten
+// physischen Exemplare (Exemplar-Codes) zur Auswahl. Datenquelle:
+// GET /api/admin/booking/[id]/accessory-exemplars?accessory_id=X — liefert nur
+// die Exemplare GENAU dieses Zubehoers (also nur die zur gebuchten Kamera
+// passenden, z.B. nur GoPro-Akkus). Bereits gescannte/reservierte Exemplare
+// werden vorausgewaehlt, damit Scan + Handauswahl dasselbe Ergebnis liefern.
+
+export type ExemplarUnit = { id: string; exemplar_code: string; status: string; reserved: boolean };
+
+export function ManualExemplarPicker({
+  bookingId, group, currentScannedUnitIds, currentCheckedCount,
+  onApplyUnits, onApplyQuantity, onClose,
+}: {
+  bookingId: string;
+  group: GroupedItem;
+  currentScannedUnitIds: string[];
+  currentCheckedCount: number;
+  onApplyUnits: (allUnitIds: string[], selectedUnitIds: string[]) => void;
+  onApplyQuantity: (n: number) => void;
+  onClose: () => void;
+}) {
+  const maxQty = group.slotKeys.length;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isBulk, setIsBulk] = useState(false);
+  const [units, setUnits] = useState<ExemplarUnit[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [qty, setQty] = useState(currentCheckedCount);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/booking/${bookingId}/accessory-exemplars?accessory_id=${encodeURIComponent(group.groupKey)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d?.error) { setError(d.error); return; }
+        const us: ExemplarUnit[] = Array.isArray(d.units) ? d.units : [];
+        setIsBulk(!!d.is_bulk);
+        setUnits(us);
+        // Vorauswahl: bereits gescannte Exemplare dieser Position, sonst die
+        // fuer diese Buchung reservierten (auf benoetigte Menge gedeckelt).
+        const alreadyScanned = us.filter((u) => currentScannedUnitIds.includes(u.id)).map((u) => u.id);
+        if (alreadyScanned.length > 0) {
+          setSelected(new Set(alreadyScanned.slice(0, maxQty)));
+        } else {
+          setSelected(new Set(us.filter((u) => u.reserved).map((u) => u.id).slice(0, maxQty)));
+        }
+      })
+      .catch(() => { if (!cancelled) setError('Konnte Exemplare nicht laden.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [bookingId, group.groupKey, maxQty, currentScannedUnitIds]);
+
+  function toggle(unitId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(unitId)) {
+        next.delete(unitId);
+      } else {
+        if (next.size >= maxQty) return prev; // Cap auf benoetigte Menge
+        next.add(unitId);
+      }
+      return next;
+    });
+  }
+
+  const useQuantityMode = !loading && !error && (isBulk || units.length === 0);
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-slate-900 border border-slate-700 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
+        style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+      >
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <h3 className="text-base font-bold text-slate-100">{group.label}</h3>
+          <button type="button" onClick={onClose} aria-label="Schließen" className="text-slate-400 hover:text-slate-100 text-xl leading-none">✕</button>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">Benötigt: {maxQty} Stück</p>
+
+        {loading && <p className="text-sm text-slate-400">Lädt…</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
+
+        {!loading && !error && !useQuantityMode && (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-500 uppercase tracking-wider">Exemplare anhaken</span>
+              <span className="text-xs font-mono text-cyan-300">{selected.size}/{maxQty}</span>
+            </div>
+            <div className="border border-slate-800 rounded-lg divide-y divide-slate-800 mb-4">
+              {units.map((u) => {
+                const isSel = selected.has(u.id);
+                const atCap = !isSel && selected.size >= maxQty;
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => toggle(u.id)}
+                    disabled={atCap}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left ${atCap ? 'opacity-40' : 'hover:bg-slate-800/60'}`}
+                  >
+                    <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'border-cyan-500 bg-cyan-500 text-slate-950' : 'border-slate-600'}`}>
+                      {isSel && <span className="text-xs font-bold">✓</span>}
+                    </span>
+                    <span className="flex-1 min-w-0 font-mono text-sm text-slate-100 truncate">
+                      {u.exemplar_code || u.id.slice(0, 8)}
+                    </span>
+                    <ExemplarStatusPill status={u.status} reserved={u.reserved} />
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => onApplyUnits(units.map((u) => u.id), [...selected])}
+              className="w-full bg-cyan-500 text-slate-950 font-bold py-2.5 rounded-lg"
+            >
+              Übernehmen ({selected.size})
+            </button>
+          </>
+        )}
+
+        {useQuantityMode && (
+          <>
+            <p className="text-sm text-slate-300 mb-3">
+              {isBulk ? 'Sammel-Zubehör — keine Einzel-Exemplare.' : 'Keine einzeln erfassten Exemplare hinterlegt.'} Wie viele packst du ein?
+            </p>
+            <div className="flex items-center justify-center gap-4 mb-2">
+              <button type="button" onClick={() => setQty((q) => Math.max(0, q - 1))} className="w-12 h-12 rounded-lg border border-slate-700 text-slate-200 text-2xl leading-none">−</button>
+              <span className="text-2xl font-bold tabular-nums w-16 text-center">{qty}</span>
+              <button type="button" onClick={() => setQty((q) => Math.min(maxQty, q + 1))} className="w-12 h-12 rounded-lg border border-slate-700 text-slate-200 text-2xl leading-none">+</button>
+            </div>
+            <p className="text-xs text-slate-500 text-center mb-4">von {maxQty} benötigt</p>
+            <button
+              type="button"
+              onClick={() => onApplyQuantity(qty)}
+              className="w-full bg-cyan-500 text-slate-950 font-bold py-2.5 rounded-lg"
+            >
+              Übernehmen ({qty})
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExemplarStatusPill({ status, reserved }: { status: string; reserved: boolean }) {
+  const label = reserved ? 'reserviert' : status === 'available' ? 'verfügbar' : status;
+  const cls = reserved
+    ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+    : status === 'available'
+      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+      : 'bg-slate-700/40 text-slate-300 border-slate-600';
+  return <span className={`flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{label}</span>;
+}

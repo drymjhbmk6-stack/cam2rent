@@ -14,6 +14,7 @@ import {
   ItemList,
   ScannerBar,
   ScannerLiveList,
+  ManualExemplarPicker,
   type ResolvedItem,
   type UnitCode,
   type GroupedItem,
@@ -130,6 +131,9 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   // geschickt (Übergabe speichert nur Name + ok pro Position).
   const [scannedCameraUnitIds, setScannedCameraUnitIds] = useState<string[]>([]);
   const [scannedAccessoryUnitIds, setScannedAccessoryUnitIds] = useState<string[]>([]);
+  // Manueller Exemplar-Picker (Fallback wenn Scannen nicht klappt) — welche
+  // Zubehoer-Gruppe ist gerade offen.
+  const [pickerGroup, setPickerGroup] = useState<GroupedItem | null>(null);
 
   // Step 2 + 3 state
   const [landlordName, setLandlordName] = useState('');
@@ -161,6 +165,40 @@ function Wizard({ booking }: { booking: BookingDetail }) {
         return;
       }
     }
+  }
+
+  // Manuelle Exemplar-Auswahl auf eine Zubehoer-Gruppe anwenden: checkt so
+  // viele Slots wie Exemplare gewaehlt wurden und schreibt die Unit-IDs in
+  // scannedAccessoryUnitIds (exakt wie ein Scan → applyScannedUnits erfasst
+  // sie beim Submit ueber das scannedUnits-Feld der Handover-API).
+  function applyManualUnits(g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) {
+    const slotKeys = g.slotKeys;
+    const sel = selectedUnitIds.slice(0, slotKeys.length);
+    setChecked((prev) => {
+      const next = { ...prev };
+      slotKeys.forEach((k, i) => { next[k] = i < sel.length; });
+      checkedRef.current = next;
+      return next;
+    });
+    setScannedAccessoryUnitIds((prev) => {
+      const allSet = new Set(allUnitIds);
+      const next = [...prev.filter((id) => !allSet.has(id)), ...sel];
+      scannedAccessoryUnitIdsRef.current = next;
+      return next;
+    });
+  }
+
+  // Sammel-/untracked-Zubehoer: nur Menge (anonym, kein Unit-Recording — wie
+  // der Bulk-Scan, der ebenfalls keine Unit-ID erfasst).
+  function applyManualQuantity(g: GroupedItem, n: number) {
+    const slotKeys = g.slotKeys;
+    const count = Math.max(0, Math.min(n, slotKeys.length));
+    setChecked((prev) => {
+      const next = { ...prev };
+      slotKeys.forEach((k, i) => { next[k] = i < count; });
+      checkedRef.current = next;
+      return next;
+    });
   }
 
   // Refs spiegeln den State synchron — handleScan wird im Continuous-
@@ -345,6 +383,8 @@ function Wizard({ booking }: { booking: BookingDetail }) {
             tested, setTested, noDamage, setNoDamage,
             photoFile, setPhotoFile, photoPreview, setPhotoPreview,
             otherNote, setOtherNote,
+            pickerGroup, setPickerGroup,
+            scannedAccessoryUnitIds, applyManualUnits, applyManualQuantity,
             canProceed: canProceedFromStep1,
             onNext: () => setStep('landlord'),
           }} />
@@ -496,6 +536,11 @@ function Step1(props: {
   setPhotoPreview: (u: string | null) => void;
   otherNote: string;
   setOtherNote: (v: string) => void;
+  pickerGroup: GroupedItem | null;
+  setPickerGroup: (g: GroupedItem | null) => void;
+  scannedAccessoryUnitIds: string[];
+  applyManualUnits: (g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) => void;
+  applyManualQuantity: (g: GroupedItem, n: number) => void;
   canProceed: boolean;
   onNext: () => void;
 }) {
@@ -541,7 +586,26 @@ function Step1(props: {
           checked={props.checked}
           onIncrement={props.incGroup}
           onDecrement={props.decGroup}
+          onManualPick={(g) => props.setPickerGroup(g)}
         />
+
+        <p className="text-xs text-slate-500 mt-2">
+          Kannst du nicht scannen? Tippe bei einer Zubehör-Position auf
+          <span className="text-cyan-400 font-semibold"> 📋 Wählen</span> und hake
+          das passende Exemplar aus der Liste an.
+        </p>
+
+        {props.pickerGroup && (
+          <ManualExemplarPicker
+            bookingId={props.bookingId}
+            group={props.pickerGroup}
+            currentScannedUnitIds={props.scannedAccessoryUnitIds}
+            currentCheckedCount={props.pickerGroup.slotKeys.filter((k) => props.checked[k]).length}
+            onApplyUnits={(allIds, selIds) => { props.applyManualUnits(props.pickerGroup!, allIds, selIds); props.setPickerGroup(null); }}
+            onApplyQuantity={(n) => { props.applyManualQuantity(props.pickerGroup!, n); props.setPickerGroup(null); }}
+            onClose={() => props.setPickerGroup(null)}
+          />
+        )}
 
         <SerialScanner
           open={props.scannerOpen}
