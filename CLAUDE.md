@@ -1695,6 +1695,43 @@ neue Migration nötig. NPS-/Sterne-/Choice-Auswertungen ignorieren Konto-Feedbac
 ### Preise
 30-Tage-Preistabelle pro Produkt + Formel für 31+ Tage, alles in admin_config
 
+### Frühbucherrabatt — frei staffelbarer Vorlauf-Rabatt (Stand 2026-06-20)
+Neuer Kundenrabatt-Typ auf `/admin/rabatte`: Bucht ein Kunde X Wochen vor
+Mietbeginn, bekommt er X % Rabatt. Frei staffelbar (mehrere Stufen `ab N Wochen
+→ P %`, höchste passende gewinnt) — exakt das Muster der Mengenrabatte/
+Treuerabatte. Stapelt sequenziell mit den anderen Auto-Rabatten.
+- **Config-Key** `admin_config.early_bird_discounts` =
+  `EarlyBirdDiscount[]` (`{ min_weeks, discount_percent, label }`), Default
+  leer = aus. Verwaltet im neuen Abschnitt „Frühbucherrabatte" auf
+  `/admin/rabatte` (gleiches „+ Stufe hinzufügen"-Muster).
+- **Helper** in `lib/price-config.ts` (dependency-frei): `weeksUntil(rentalFrom,
+  now?)` (volle Wochen Vorlauf, Berlin-Tagesgrenze, negativ→0) +
+  `calcEarlyBirdDiscount(weeksBefore, discounts)` (höchste passende Stufe).
+  `/api/prices` liefert `earlyBirdDiscounts` mit (no-store).
+- **Stacking-Reihenfolge:** `Produktaktion → Mengenrabatt → Frühbucher →
+  Treuerabatt → Coupon` — jeweils Prozent vom laufenden Restbetrag. Eine
+  `not_combinable`-Aktion bzw. ein `not_combinable`-Coupon nullt Frühbucher
+  mit (wie duration/loyalty).
+- **Geltungsbereich:** Warenkorb-Checkout (`app/checkout/page.tsx`,
+  kleinster Vorlauf aller Positionen; fließt in die kombinierte „Rabatt"-
+  Zeile) UND Einzel-Buchungsflow (`app/kameras/[slug]/buchen/page.tsx`
+  `calcBreakdown`, eigene „Frühbucherrabatt"-Zeile; im Angebots-Modus aus,
+  Basis Miete+Zubehör abzgl. Produktrabatt — Haftung/Versand außen vor). Die
+  Warenkorb-Übersichtsseite (`/warenkorb`) zeigt wie bisher nur Produktrabatte.
+- **Server-Persistenz** in eigener Spalte `bookings.early_bird_discount`
+  (Migration `supabase/supabase-bookings-early-bird-discount.sql`, additiv,
+  KEINE neue Tabelle): confirm-cart (pro Periode skaliert, im per-Feld-95%-Cap),
+  confirm-booking (aus Stripe-Metadata `early_bird_discount`), stripe-webhook
+  (beide Pfade, Race/Fallback). Alle Inserts haben defensiven Retry ohne die
+  Spalte, falls Migration noch nicht durch ist (Buchung bleibt erhalten, Wert
+  nur nicht separat). checkout-intent reicht den Kontext verbatim durch.
+  `create-payment-intent` reicht die Metadata wie `product_discount` durch
+  (geschützt durch den bestehenden 50%-Plausibilitäts-Floor; exakter
+  Server-Recompute der Wochen ist — wie bei product_discount im Einzelflow —
+  künftige Härtung).
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-early-bird-discount.sql`
+  ausführen + unter `/admin/rabatte` Stufen anlegen (sonst Feature inaktiv).
+
 ### Gutschein-Gültigkeit tag-genau + relative Dauer (Stand 2026-06-15)
 `/admin/gutscheine`: „Gültig ab" / „Gültig bis" sind jetzt **reine
 Datumsfelder** (`type="date"`, keine Uhrzeit mehr — vorher `datetime-local`).
@@ -4670,6 +4707,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Frühbucherrabatt-Migration auszuführen:**
+  `supabase/supabase-bookings-early-bird-discount.sql` (idempotent, additiv:
+  `bookings.early_bird_discount NUMERIC DEFAULT 0`, KEINE neue Tabelle). Ohne
+  sie funktioniert der Frühbucherrabatt im Checkout + Buchungsflow bereits
+  (Preis wird korrekt reduziert, Inserts retryen defensiv ohne die Spalte);
+  nur die separate Spaltenführung fürs Reporting fehlt bis zur Migration.
+  Danach unter `/admin/rabatte` Stufen anlegen (sonst Feature inaktiv).
+  Empfohlen ASAP ausführen.
 - **Vertrag-Freigabe-Migration auszuführen:**
   `supabase/supabase-bookings-contract-locked.sql` (idempotent, additiv:
   `bookings.contract_locked BOOLEAN DEFAULT false`). Ohne sie läuft das

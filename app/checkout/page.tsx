@@ -16,8 +16,8 @@ import { createAuthBrowserClient } from '@/lib/supabase-auth';
 import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
-import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount } from '@/lib/price-config';
+import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -56,6 +56,7 @@ function PaymentForm({
   couponCode,
   productDiscount,
   durationDiscount,
+  earlyBirdDiscount,
   loyaltyDiscount,
   referralCode,
   street,
@@ -79,6 +80,7 @@ function PaymentForm({
   couponCode: string;
   productDiscount: number;
   durationDiscount: number;
+  earlyBirdDiscount: number;
   loyaltyDiscount: number;
   referralCode: string;
   street: string;
@@ -123,6 +125,7 @@ function PaymentForm({
           couponCode,
           productDiscount,
           durationDiscount,
+          earlyBirdDiscount,
           loyaltyDiscount,
           referralCode,
           street,
@@ -314,6 +317,7 @@ export default function CheckoutPage() {
   // Auto-discounts config (fetched from /api/prices)
   const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscount[]>([]);
   const [loyaltyDiscounts, setLoyaltyDiscounts] = useState<LoyaltyDiscount[]>([]);
+  const [earlyBirdDiscounts, setEarlyBirdDiscounts] = useState<EarlyBirdDiscount[]>([]);
   const [productDiscounts, setProductDiscounts] = useState<ProductDiscount[]>([]);
   const [userBookingCount, setUserBookingCount] = useState(0);
 
@@ -328,6 +332,7 @@ export default function CheckoutPage() {
         if (d.shipping) setDynShipping(d.shipping);
         if (d.durationDiscounts) setDurationDiscounts(d.durationDiscounts);
         if (d.loyaltyDiscounts) setLoyaltyDiscounts(d.loyaltyDiscounts);
+        if (d.earlyBirdDiscounts) setEarlyBirdDiscounts(d.earlyBirdDiscounts);
         if (d.productDiscounts) setProductDiscounts(d.productDiscounts);
       })
       .catch(() => {});
@@ -499,8 +504,21 @@ export default function CheckoutPage() {
     ? Math.round((cartTotal - productDiscountAmount) * durationMatch.discount_percent) / 100
     : 0;
 
-  // Loyalty discount: applied on remainder after product + duration discount
-  const afterPrevDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount;
+  // Frühbucherrabatt: kleinster Vorlauf aller Positionen (konservativ),
+  // angewandt auf den Restbetrag nach Produkt- + Mengenrabatt.
+  const earlyBirdWeeks = items.reduce(
+    (min, it) => Math.min(min, weeksUntil(it.rentalFrom)),
+    items.length ? Infinity : 0,
+  );
+  const earlyBirdMatch = !actionBlocksAutoDiscounts && Number.isFinite(earlyBirdWeeks)
+    ? calcEarlyBirdDiscount(earlyBirdWeeks, earlyBirdDiscounts)
+    : null;
+  const earlyBirdDiscountAmount = earlyBirdMatch
+    ? Math.round((cartTotal - productDiscountAmount - durationDiscountAmount) * earlyBirdMatch.discount_percent) / 100
+    : 0;
+
+  // Loyalty discount: applied on remainder after product + duration + early-bird discount
+  const afterPrevDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount - earlyBirdDiscountAmount;
   const loyaltyMatch = !actionBlocksAutoDiscounts && user
     ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts)
     : null;
@@ -508,7 +526,7 @@ export default function CheckoutPage() {
     ? Math.round(afterPrevDiscounts * loyaltyMatch.discount_percent) / 100
     : 0;
 
-  const afterAutoDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount - loyaltyDiscountAmount;
+  const afterAutoDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount - earlyBirdDiscountAmount - loyaltyDiscountAmount;
 
   // ── Coupon discount (on remainder after auto-discounts) ───────────────────
 
@@ -552,9 +570,10 @@ export default function CheckoutPage() {
   const isNotCombinable = appliedCoupon?.not_combinable && couponDiscountAmount > 0;
   const effectiveProductDiscount = productDiscountAmount; // Produktrabatte gelten immer
   const effectiveDurationDiscount = isNotCombinable ? 0 : durationDiscountAmount;
+  const effectiveEarlyBirdDiscount = isNotCombinable ? 0 : earlyBirdDiscountAmount;
   const effectiveLoyaltyDiscount = isNotCombinable ? 0 : loyaltyDiscountAmount;
 
-  const totalDiscount = effectiveProductDiscount + effectiveDurationDiscount + effectiveLoyaltyDiscount + couponDiscountAmount;
+  const totalDiscount = effectiveProductDiscount + effectiveDurationDiscount + effectiveEarlyBirdDiscount + effectiveLoyaltyDiscount + couponDiscountAmount;
   const discountedSubtotal = cartTotal - totalDiscount;
   // Versand wird auf ORIGINAL-Warenwert geprüft (vor Rabatten) — kundenfreundlich
   const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping);
@@ -630,6 +649,7 @@ export default function CheckoutPage() {
             couponCode: appliedCoupon?.code ?? '',
             productDiscount: effectiveProductDiscount,
             durationDiscount: effectiveDurationDiscount,
+            earlyBirdDiscount: effectiveEarlyBirdDiscount,
             loyaltyDiscount: effectiveLoyaltyDiscount,
             referralCode: referralCode ?? '',
             street,
@@ -1399,6 +1419,7 @@ export default function CheckoutPage() {
                       couponCode={appliedCoupon?.code ?? ''}
                       productDiscount={effectiveProductDiscount}
                       durationDiscount={effectiveDurationDiscount}
+                      earlyBirdDiscount={effectiveEarlyBirdDiscount}
                       loyaltyDiscount={effectiveLoyaltyDiscount}
                       referralCode={referralCode}
                       street={street}

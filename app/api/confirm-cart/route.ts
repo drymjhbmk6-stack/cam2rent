@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       couponCode,
       productDiscount,
       durationDiscount,
+      earlyBirdDiscount,
       loyaltyDiscount,
       referralCode,
       shippingAddress,
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       couponCode?: string;
       productDiscount?: number;
       durationDiscount?: number;
+      earlyBirdDiscount?: number;
       loyaltyDiscount?: number;
       referralCode?: string;
       shippingAddress?: string | null;
@@ -354,6 +356,7 @@ export async function POST(req: NextRequest) {
     let r_couponCode = couponCode;
     let r_productDiscount = productDiscount;
     let r_durationDiscount = durationDiscount;
+    let r_earlyBirdDiscount = earlyBirdDiscount;
     let r_loyaltyDiscount = loyaltyDiscount;
     let r_referralCode = referralCode;
     let r_shippingAddress = shippingAddress;
@@ -389,6 +392,7 @@ export async function POST(req: NextRequest) {
           r_couponCode = ctx.couponCode ?? r_couponCode;
           r_productDiscount = ctx.productDiscount ?? r_productDiscount;
           r_durationDiscount = ctx.durationDiscount ?? r_durationDiscount;
+          r_earlyBirdDiscount = ctx.earlyBirdDiscount ?? r_earlyBirdDiscount;
           r_loyaltyDiscount = ctx.loyaltyDiscount ?? r_loyaltyDiscount;
           r_referralCode = ctx.referralCode ?? r_referralCode;
           if (ctx.street) {
@@ -517,6 +521,7 @@ export async function POST(req: NextRequest) {
           const perFieldCapEur = Math.floor((expectedMinCents * 0.95) / 100);
           r_productDiscount = Math.max(0, Math.min(Number(r_productDiscount ?? 0), perFieldCapEur));
           r_durationDiscount = Math.max(0, Math.min(Number(r_durationDiscount ?? 0), perFieldCapEur));
+          r_earlyBirdDiscount = Math.max(0, Math.min(Number(r_earlyBirdDiscount ?? 0), perFieldCapEur));
           r_loyaltyDiscount = Math.max(0, Math.min(Number(r_loyaltyDiscount ?? 0), perFieldCapEur));
           // Total-Discount: Coupon-Wert (server-validiert) + bis zu 95 % aus
           // den client-Discounts kombiniert; insgesamt nicht mehr als 95 %.
@@ -659,6 +664,7 @@ export async function POST(req: NextRequest) {
         Number(r_discountAmount ?? 0) +
         Number(r_productDiscount ?? 0) +
         Number(r_durationDiscount ?? 0) +
+        Number(r_earlyBirdDiscount ?? 0) +
         Number(r_loyaltyDiscount ?? 0);
       const scale = bodyDiscountSum > 0 ? effectiveDiscount / bodyDiscountSum : 0;
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
@@ -666,6 +672,7 @@ export async function POST(req: NextRequest) {
       const groupProductDiscount = Math.round((r_productDiscount ?? 0) * ratio * scale * 100) / 100;
       const groupDiscount = groupCouponDiscount + groupProductDiscount;
       const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupEarlyBirdDiscount = Math.round((r_earlyBirdDiscount ?? 0) * ratio * scale * 100) / 100;
       const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
 
       // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt mehr
@@ -755,7 +762,7 @@ export async function POST(req: NextRequest) {
       }
 
       // is_test wurde oben bereits einmal berechnet (siehe vor der Loop).
-      const buildInsertPayload = (id: string) => ({
+      const buildInsertPayload = (id: string, dropEarlyBird = false) => ({
         id,
         payment_intent_id: piId,
         is_test: testMode,
@@ -789,6 +796,9 @@ export async function POST(req: NextRequest) {
         discount_amount: groupDiscount,
         duration_discount: groupDurationDiscount,
         loyalty_discount: groupLoyaltyDiscount,
+        // Nur wenn Migration `supabase-bookings-early-bird-discount.sql` durch
+        // ist — sonst bei 42703/PGRST204 unten ohne die Spalte erneut versuchen.
+        ...(dropEarlyBird ? {} : { early_bird_discount: groupEarlyBirdDiscount }),
         early_service_consent_at: r_earlyServiceConsentAt,
         early_service_consent_ip: r_earlyServiceConsentIp,
         // Signatur direkt persistieren (s. confirm-booking) — Recovery-Pfad
@@ -805,13 +815,21 @@ export async function POST(req: NextRequest) {
       // (COUNT-basiert) zu rufen — der wuerde wegen Race auf die gleiche
       // Nummer fallen, wenn parallele Aufrufer in derselben Sekunde laufen.
       let insertError: { code?: string; message?: string } | null = null;
+      let dropEarlyBird = false;
       const MAX_ID_COLLISION_RETRIES = 30;
       for (let idAttempt = 0; idAttempt < MAX_ID_COLLISION_RETRIES; idAttempt++) {
-        const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId));
+        const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId, dropEarlyBird));
         if (!insErr) {
           insertError = null;
           freshlyInsertedIds.add(bookingId);
           break;
+        }
+        // Migration `supabase-bookings-early-bird-discount.sql` noch nicht durch
+        // → Spalte early_bird_discount fehlt. Einmal ohne sie erneut versuchen,
+        // damit der Buchungsflow nicht bricht (Wert landet dann nur nicht separat).
+        if (!dropEarlyBird && /early_bird_discount/i.test(insErr.message ?? '') && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+          dropEarlyBird = true;
+          continue;
         }
         if (insErr.code !== '23505') {
           insertError = insErr;
@@ -1232,6 +1250,7 @@ export async function POST(req: NextRequest) {
               - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
               - Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
               - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+              - Math.round((r_earlyBirdDiscount ?? 0) * ratio * 100) / 100
               - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
               + emailShipping;
 
@@ -1312,6 +1331,7 @@ export async function POST(req: NextRequest) {
                 Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
                 + Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+                + Math.round((r_earlyBirdDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100,
               couponCode: r_couponCode || undefined,
               taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',

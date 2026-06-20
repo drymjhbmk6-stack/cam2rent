@@ -205,6 +205,50 @@ export function calcLoyaltyDiscount(
   return sorted.find((d) => bookingCount >= d.min_bookings) ?? null;
 }
 
+// ─── Frühbucherrabatte (Vorlauf-basiert) ─────────────────────────────────────
+
+export interface EarlyBirdDiscount {
+  /** Mindest-Vorlauf in vollen Wochen zwischen Buchung und Mietbeginn */
+  min_weeks: number;
+  discount_percent: number;
+  label: string;
+}
+
+export const DEFAULT_EARLY_BIRD_DISCOUNTS: EarlyBirdDiscount[] = []; // leer = aus
+
+/** YYYY-MM-DD aus String (slice) oder Date (Berlin-Tag). Dependency-frei. */
+function toBerlinDateOnly(d: string | Date): string {
+  if (typeof d === 'string') return d.slice(0, 10);
+  return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+}
+
+/**
+ * Vorlauf in vollen Wochen zwischen jetzt (Berlin-Tag) und Mietbeginn.
+ * Client-Vorschau und Server-Recompute liefern denselben Wert, weil beide
+ * auf die Berlin-Tagesgrenze normalisieren. Negativer Vorlauf → 0.
+ */
+export function weeksUntil(rentalFrom: string | Date, now: Date = new Date()): number {
+  const from = toBerlinDateOnly(rentalFrom);
+  const today = toBerlinDateOnly(now);
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  if (!fy || !ty) return 0;
+  const days = Math.round(
+    (Date.UTC(fy, fm - 1, fd) - Date.UTC(ty, tm - 1, td)) / 86_400_000,
+  );
+  if (days <= 0) return 0;
+  return Math.floor(days / 7);
+}
+
+/** Gibt die höchste passende Frühbucher-Stufe zurück (oder null) */
+export function calcEarlyBirdDiscount(
+  weeksBefore: number,
+  discounts: EarlyBirdDiscount[],
+): EarlyBirdDiscount | null {
+  const sorted = [...discounts].sort((a, b) => b.min_weeks - a.min_weeks);
+  return sorted.find((d) => weeksBefore >= d.min_weeks) ?? null;
+}
+
 // ─── Produktrabatte (z.B. Black Friday) ──────────────────────────────────────
 
 export type DiscountType = 'percent' | 'fixed' | 'free';

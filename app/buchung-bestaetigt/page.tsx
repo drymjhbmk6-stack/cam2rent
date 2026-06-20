@@ -184,6 +184,7 @@ function CartBookingConfirmed({
           couponCode: context?.couponCode ?? '',
           productDiscount: context?.productDiscount ?? 0,
           durationDiscount: context?.durationDiscount ?? 0,
+          earlyBirdDiscount: context?.earlyBirdDiscount ?? 0,
           loyaltyDiscount: context?.loyaltyDiscount ?? 0,
           referralCode: context?.referralCode ?? '',
           shippingAddress,

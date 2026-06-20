@@ -435,7 +435,8 @@ async function handleSingleBooking(
   // den globalen Modus — sonst landet eine Tester-Buchung, die der Webhook
   // (Race vor confirm-booking) anlegt, mit is_test=false und blockiert den
   // Live-Kalender. testModeForIdSingle = isTesterSingle || isTestMode().
-  const { error } = await supabase.from('bookings').insert({
+  const singleEarlyBird = Math.max(0, parseFloat(meta.early_bird_discount ?? '0') || 0);
+  const singleInsert: Record<string, unknown> = {
     id: bookingId,
     payment_intent_id: intent.id,
     is_test: testModeForIdSingle,
@@ -477,7 +478,15 @@ async function handleSingleBooking(
             : {}),
         }
       : {}),
-  });
+    // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
+    ...(singleEarlyBird > 0 ? { early_bird_discount: singleEarlyBird } : {}),
+  };
+
+  let { error } = await supabase.from('bookings').insert(singleInsert);
+  if (error && singleEarlyBird > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
+    delete singleInsert.early_bird_discount;
+    ({ error } = await supabase.from('bookings').insert(singleInsert));
+  }
 
   if (error) {
     console.error(`[Webhook] Einzelbuchung ${bookingId} Fehler:`, error);
@@ -643,6 +652,7 @@ async function handleCartBooking(
   const discountAmount = (ctx.discountAmount as number) ?? 0;
   const couponCode = (ctx.couponCode as string) ?? '';
   const durationDiscount = (ctx.durationDiscount as number) ?? 0;
+  const earlyBirdDiscount = (ctx.earlyBirdDiscount as number) ?? 0;
   const loyaltyDiscount = (ctx.loyaltyDiscount as number) ?? 0;
 
   // Liefer- + Rechnungsadresse: Per-Order-Eingabe aus dem Checkout-Kontext (ctx)
@@ -695,7 +705,7 @@ async function handleCartBooking(
   // is_test tester-bewusst setzen (siehe handleSingleBooking) — sonst blockiert
   // eine vom Webhook-Race angelegte Tester-Cart-Buchung den Live-Kalender.
   // testModeForIdCart = isTesterCart || isTestMode().
-  const { error } = await supabase.from('bookings').insert({
+  const cartInsert: Record<string, unknown> = {
     id: bookingId,
     payment_intent_id: intent.id,
     is_test: testModeForIdCart,
@@ -727,7 +737,15 @@ async function handleCartBooking(
     discount_amount: discountAmount,
     duration_discount: durationDiscount,
     loyalty_discount: loyaltyDiscount,
-  });
+    // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
+    ...(earlyBirdDiscount > 0 ? { early_bird_discount: earlyBirdDiscount } : {}),
+  };
+
+  let { error } = await supabase.from('bookings').insert(cartInsert);
+  if (error && earlyBirdDiscount > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
+    delete cartInsert.early_bird_discount;
+    ({ error } = await supabase.from('bookings').insert(cartInsert));
+  }
 
   if (error) {
     console.error(`[Webhook] Cart-Buchung ${bookingId} Fehler:`, error);
@@ -740,6 +758,7 @@ async function handleCartBooking(
       shippingPrice -
       discountAmount -
       durationDiscount -
+      earlyBirdDiscount -
       loyaltyDiscount) * 100,
   );
   await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);

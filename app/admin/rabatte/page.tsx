@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
+import type { DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ProductOption { id: string; name: string; }
@@ -83,6 +83,11 @@ export default function AdminRabattePage() {
   const [loyaltySaving, setLoyaltySaving] = useState(false);
   const [loyaltySuccess, setLoyaltySuccess] = useState('');
 
+  const [earlyBirdDiscounts, setEarlyBirdDiscounts] = useState<EarlyBirdDiscount[]>([]);
+  const [earlyBirdLoading, setEarlyBirdLoading] = useState(true);
+  const [earlyBirdSaving, setEarlyBirdSaving] = useState(false);
+  const [earlyBirdSuccess, setEarlyBirdSuccess] = useState('');
+
   // ─── Produktrabatte ────────────────────────────────────────────────────────
   const [productDiscounts, setProductDiscounts] = useState<ProductDiscount[]>([]);
   const [productLoading, setProductLoading] = useState(true);
@@ -112,6 +117,10 @@ export default function AdminRabattePage() {
     fetch('/api/admin/config?key=loyalty_discounts').then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setLoyaltyDiscounts(d); setLoyaltyLoading(false); })
       .catch(() => setLoyaltyLoading(false));
+
+    fetch('/api/admin/config?key=early_bird_discounts').then((r) => r.json())
+      .then((d) => { if (Array.isArray(d)) setEarlyBirdDiscounts(d); setEarlyBirdLoading(false); })
+      .catch(() => setEarlyBirdLoading(false));
 
     fetch('/api/admin/config?key=product_discounts').then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setProductDiscounts(d); setProductLoading(false); })
@@ -338,6 +347,50 @@ export default function AdminRabattePage() {
                   {loyaltySaving ? 'Speichern...' : 'Speichern'}
                 </button>
                 {loyaltySuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{loyaltySuccess}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Frühbucherrabatte */}
+        <div style={S.section}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <svg width="18" height="18" fill="none" stroke="#10b981" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Frühbucherrabatte</h3>
+            <span style={{ fontSize: 11, color: '#64748b' }}>Bei Vorlauf vor Mietbeginn</span>
+          </div>
+          {earlyBirdLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {earlyBirdDiscounts.map((d, i) => (
+                <div key={i} style={S.row}>
+                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
+                  <input type="number" min="1" value={d.min_weeks}
+                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], min_weeks: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
+                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Wochen voraus</span>
+                  <input type="number" min="0" max="100" value={d.discount_percent}
+                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
+                    style={{ ...S.input, width: 60, textAlign: 'center' }} />
+                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
+                  <input type="text" value={d.label}
+                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], label: e.target.value }; setEarlyBirdDiscounts(a); }}
+                    style={{ ...S.input, flex: 1 }} />
+                  <button onClick={() => setEarlyBirdDiscounts((p) => p.filter((_, j) => j !== i))}
+                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => setEarlyBirdDiscounts((p) => [...p, { min_weeks: p.length ? Math.max(...p.map((d) => d.min_weeks)) + 2 : 2, discount_percent: 5, label: 'Neuer Frühbucherrabatt' }])}
+                style={{ fontSize: 12, fontWeight: 600, color: '#10b981', background: 'none', border: '1px dashed #10b98144', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>
+                + Stufe hinzufügen
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                <button onClick={() => saveConfig('early_bird_discounts', earlyBirdDiscounts, setEarlyBirdSaving, setEarlyBirdSuccess)} disabled={earlyBirdSaving}
+                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: earlyBirdSaving ? 0.5 : 1 }}>
+                  {earlyBirdSaving ? 'Speichern...' : 'Speichern'}
+                </button>
+                {earlyBirdSuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{earlyBirdSuccess}</span>}
               </div>
             </div>
           )}

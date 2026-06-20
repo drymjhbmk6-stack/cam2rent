@@ -360,6 +360,10 @@ export async function POST(req: NextRequest) {
     // Rechnung + Buchungsdetail die Aufschluesselung zeigen.
     const productDiscountFromMeta = Math.max(0, parseFloat(meta.product_discount ?? '0') || 0);
     const productDiscountLabel = (meta.product_discount_label ?? '').toString().trim();
+    // Frühbucherrabatt aus Metadata — Frontend zieht ihn bereits vom Stripe-
+    // Betrag ab; hier landet er in der eigenen Spalte bookings.early_bird_discount
+    // (analog duration_discount/loyalty_discount im Cart-Flow).
+    const earlyBirdFromMeta = Math.max(0, parseFloat(meta.early_bird_discount ?? '0') || 0);
 
     // Server-seitige Plausibilitaets-Pruefung der Zubehoer-Preise.
     // Wenn das Frontend ein Item in accessory_items mitgegeben hat, dessen
@@ -434,6 +438,9 @@ export async function POST(req: NextRequest) {
             ...(productDiscountLabel ? { coupon_code: productDiscountLabel } : {}),
           }
         : {}),
+      // Eigene Spalte (Migration supabase-bookings-early-bird-discount.sql) —
+      // defensiver Insert-Retry unten entfernt sie bei fehlender Migration.
+      ...(earlyBirdFromMeta > 0 ? { early_bird_discount: earlyBirdFromMeta } : {}),
       // Signatur direkt persistieren — ohne das geht sie bei Container-Restart
       // verloren und der after()-Block kann den Vertrag nicht mehr erzeugen.
       // Mit Persistenz kann der Admin den Vertrag jederzeit ueber den Recovery-
@@ -450,6 +457,12 @@ export async function POST(req: NextRequest) {
     // Defensiv: fehlt die offer_id-Spalte (Migration ausstehend), Insert ohne sie wiederholen.
     if (insertRes.error && offerIdToStore && /offer_id|column|schema cache|PGRST/i.test(insertRes.error.message)) {
       delete bookingInsert.offer_id;
+      insertRes = await supabase.from('bookings').insert(bookingInsert);
+    }
+    // Defensiv: fehlt die early_bird_discount-Spalte (Migration ausstehend),
+    // Insert ohne sie wiederholen — Buchung bleibt erhalten, Wert nur nicht separat.
+    if (insertRes.error && earlyBirdFromMeta > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(insertRes.error.message)) {
+      delete bookingInsert.early_bird_discount;
       insertRes = await supabase.from('bookings').insert(bookingInsert);
     }
     if (insertRes.error) {

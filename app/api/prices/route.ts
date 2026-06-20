@@ -6,10 +6,12 @@ import {
   DEFAULT_PRODUCT_PRICES,
   DEFAULT_DURATION_DISCOUNTS,
   DEFAULT_LOYALTY_DISCOUNTS,
+  DEFAULT_EARLY_BIRD_DISCOUNTS,
   DEFAULT_PRODUCT_DISCOUNTS,
   type PriceConfig,
   type DurationDiscount,
   type LoyaltyDiscount,
+  type EarlyBirdDiscount,
   type ProductDiscount,
   type AdminProducts,
 } from '@/lib/price-config';
@@ -17,6 +19,7 @@ import {
 type PriceConfigExtended = PriceConfig & {
   durationDiscounts: DurationDiscount[];
   loyaltyDiscounts: LoyaltyDiscount[];
+  earlyBirdDiscounts: EarlyBirdDiscount[];
   productDiscounts: ProductDiscount[];
   adminProducts?: AdminProducts;
 };
@@ -35,7 +38,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('admin_config')
       .select('key, value')
-      .in('key', ['shipping', 'haftung', 'product_prices', 'duration_discounts', 'loyalty_discounts', 'product_discounts', 'products']);
+      .in('key', ['shipping', 'haftung', 'product_prices', 'duration_discounts', 'loyalty_discounts', 'early_bird_discounts', 'product_discounts', 'products']);
 
     if (error || !data) {
       return NextResponse.json(defaultConfig());
@@ -49,6 +52,7 @@ export async function GET() {
       products: map.product_prices ?? DEFAULT_PRODUCT_PRICES,
       durationDiscounts: map.duration_discounts ?? DEFAULT_DURATION_DISCOUNTS,
       loyaltyDiscounts: map.loyalty_discounts ?? DEFAULT_LOYALTY_DISCOUNTS,
+      earlyBirdDiscounts: map.early_bird_discounts ?? DEFAULT_EARLY_BIRD_DISCOUNTS,
       productDiscounts: map.product_discounts ?? DEFAULT_PRODUCT_DISCOUNTS,
       adminProducts: map.products ?? undefined,
     };
@@ -73,6 +77,7 @@ function defaultConfig(): PriceConfigExtended {
     products: DEFAULT_PRODUCT_PRICES,
     durationDiscounts: DEFAULT_DURATION_DISCOUNTS,
     loyaltyDiscounts: DEFAULT_LOYALTY_DISCOUNTS,
+    earlyBirdDiscounts: DEFAULT_EARLY_BIRD_DISCOUNTS,
     productDiscounts: DEFAULT_PRODUCT_DISCOUNTS,
   };
 }

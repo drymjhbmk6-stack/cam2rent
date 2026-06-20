@@ -16,7 +16,7 @@ import { isAngebotActive, getAngebotCameraOption, type Angebot } from '@/data/an
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, hasActiveNotCombinableDiscount, calcEarlyBirdDiscount, weeksUntil, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount, type EarlyBirdDiscount } from '@/lib/price-config';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
@@ -156,6 +156,10 @@ interface Breakdown {
   productDiscount: number;
   /** Name der angewandten Aktion (z.B. "Release50") fuer UI/Rechnung. */
   productDiscountLabel: string | null;
+  /** Frühbucherrabatt (Vorlauf vor Mietbeginn) — bereits vom Total abgezogen. */
+  earlyBirdDiscount: number;
+  /** Label des Frühbucherrabatts (z.B. "ab 4 Wochen: 10%") fuer UI/Rechnung. */
+  earlyBirdLabel: string | null;
   total: number;
 }
 
@@ -228,6 +232,8 @@ function calcBreakdown(
     : undefined) ?? [];
   let productDiscount = 0;
   let productDiscountLabel: string | null = null;
+  let itemDisc = 0;
+  let cartLevel = 0;
   if (productDiscounts.length > 0 && !offerOverride) {
     const matches = getDiscountMatchesForItem(
       product.id,
@@ -236,8 +242,8 @@ function calcBreakdown(
       accessories,
       productDiscounts,
     );
-    const itemDisc = calcItemDiscountTotal(matches, rentalPrice, accessoryPrice);
-    const cartLevel = calcCartLevelDiscount(rentalPrice + accessoryPrice - itemDisc, productDiscounts);
+    itemDisc = calcItemDiscountTotal(matches, rentalPrice, accessoryPrice);
+    cartLevel = calcCartLevelDiscount(rentalPrice + accessoryPrice - itemDisc, productDiscounts);
     productDiscount = Math.round((itemDisc + cartLevel) * 100) / 100;
     // Label = Name des hoechsten Discount-Match (fuer UI/Rechnung)
     if (matches.length > 0) {
@@ -251,8 +257,30 @@ function calcBreakdown(
     }
   }
 
+  // Frühbucherrabatt (Vorlauf vor Mietbeginn) — gilt auch im Einzel-Buchungsflow.
+  // Basis = Miete + Zubehör abzgl. Produktrabatt (Haftung + Versand bleiben außen
+  // vor, analog manuelle Buchung). Eine `not_combinable`-Aktion deaktiviert ihn.
+  const earlyBirdDiscounts: EarlyBirdDiscount[] = ((dynPrices && 'earlyBirdDiscounts' in dynPrices)
+    ? (dynPrices as { earlyBirdDiscounts?: EarlyBirdDiscount[] }).earlyBirdDiscounts
+    : undefined) ?? [];
+  let earlyBirdDiscount = 0;
+  let earlyBirdLabel: string | null = null;
+  if (earlyBirdDiscounts.length > 0 && !offerOverride) {
+    const blocked = hasActiveNotCombinableDiscount(
+      rentalPrice + accessoryPrice - itemDisc,
+      itemDisc,
+      cartLevel,
+      productDiscounts,
+    );
+    const ebMatch = blocked ? null : calcEarlyBirdDiscount(weeksUntil(from), earlyBirdDiscounts);
+    if (ebMatch) {
+      earlyBirdDiscount = Math.round((rentalPrice + accessoryPrice - productDiscount) * ebMatch.discount_percent) / 100;
+      earlyBirdLabel = ebMatch.label;
+    }
+  }
+
   const totalBeforeDiscount = subtotal + shipping.price;
-  const total = Math.max(0, totalBeforeDiscount - productDiscount);
+  const total = Math.max(0, totalBeforeDiscount - productDiscount - earlyBirdDiscount);
 
   return {
     days,
@@ -263,6 +291,8 @@ function calcBreakdown(
     shippingIsFree: shipping.isFree,
     productDiscount,
     productDiscountLabel,
+    earlyBirdDiscount,
+    earlyBirdLabel,
     total,
   };
 }
@@ -967,6 +997,14 @@ export default function BuchenPage() {
               ? {
                   product_discount: String(breakdown.productDiscount),
                   product_discount_label: breakdown.productDiscountLabel ?? '',
+                }
+              : {}),
+            // Frühbucherrabatt — server-seitig in create-payment-intent neu aus
+            // rental_from verifiziert (Manipulationsschutz), Metadata nur Beleg.
+            ...(breakdown.earlyBirdDiscount > 0
+              ? {
+                  early_bird_discount: String(breakdown.earlyBirdDiscount),
+                  early_bird_label: breakdown.earlyBirdLabel ?? '',
                 }
               : {}),
             user_id: user?.id ?? '',
@@ -2436,6 +2474,19 @@ export default function BuchenPage() {
                       </span>
                       <span className="font-semibold text-status-success">
                         -{fmt(breakdown.productDiscount)} €
+                      </span>
+                    </div>
+                  )}
+
+                  {breakdown.earlyBirdDiscount > 0 && (
+                    <div className="flex justify-between items-center text-sm font-body">
+                      <span className="text-status-success">
+                        {breakdown.earlyBirdLabel
+                          ? `Frühbucherrabatt (${breakdown.earlyBirdLabel})`
+                          : 'Frühbucherrabatt'}
+                      </span>
+                      <span className="font-semibold text-status-success">
+                        -{fmt(breakdown.earlyBirdDiscount)} €
                       </span>
                     </div>
                   )}
