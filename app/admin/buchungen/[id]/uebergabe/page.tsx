@@ -579,11 +579,20 @@ function Step1(props: {
       <div className="mb-5">
         <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Foto der Übergabe *</label>
         <p className="text-xs text-slate-500 mb-2">Pflicht: mindestens ein Foto vom Mietgegenstand bei der Übergabe (Zustand dokumentieren).</p>
+        {/* Kamera (öffnet direkt die Rückkamera auf Mobile) */}
         <input
-          id="handover-photo"
+          id="handover-photo-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={onFile}
+          className="hidden"
+        />
+        {/* Galerie / Datei (ohne capture → Foto-Mediathek bzw. Datei-Dialog) */}
+        <input
+          id="handover-photo-gallery"
           type="file"
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-          capture="environment"
           onChange={onFile}
           className="hidden"
         />
@@ -600,14 +609,25 @@ function Step1(props: {
             </button>
           </div>
         ) : (
-          <label htmlFor="handover-photo" className="flex flex-col items-center justify-center w-full p-8 rounded-lg bg-slate-950 border-2 border-dashed border-slate-700 cursor-pointer hover:border-cyan-500 transition-colors">
-            <svg className="w-8 h-8 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-200">Foto aufnehmen / hochladen</span>
-            <span className="text-xs text-slate-500 mt-1">JPEG, PNG, WebP, HEIC · max 10 MB</span>
-          </label>
+          <div className="w-full p-6 rounded-lg bg-slate-950 border-2 border-dashed border-slate-700">
+            <div className="flex flex-col items-center justify-center mb-4">
+              <svg className="w-8 h-8 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="text-xs text-slate-500">JPEG, PNG, WebP, HEIC · max 10 MB</span>
+            </div>
+            <div className="flex gap-2">
+              <label htmlFor="handover-photo-camera" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-medium cursor-pointer transition-colors">
+                <span>📷</span>
+                <span>Foto aufnehmen</span>
+              </label>
+              <label htmlFor="handover-photo-gallery" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-sm font-medium cursor-pointer transition-colors">
+                <span>🖼</span>
+                <span>Galerie</span>
+              </label>
+            </div>
+          </div>
         )}
       </div>
 
