@@ -188,6 +188,25 @@ function Wizard({ booking }: { booking: BookingDetail }) {
     });
   }
 
+  // Wie applyManualUnits, aber fuer Kamera-Slots → schreibt in
+  // scannedCameraUnitIds (applyScannedUnits erfasst sie als Kamera-Units).
+  function applyManualUnitsCamera(g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) {
+    const slotKeys = g.slotKeys;
+    const sel = selectedUnitIds.slice(0, slotKeys.length);
+    setChecked((prev) => {
+      const next = { ...prev };
+      slotKeys.forEach((k, i) => { next[k] = i < sel.length; });
+      checkedRef.current = next;
+      return next;
+    });
+    setScannedCameraUnitIds((prev) => {
+      const allSet = new Set(allUnitIds);
+      const next = [...prev.filter((id) => !allSet.has(id)), ...sel];
+      scannedCameraUnitIdsRef.current = next;
+      return next;
+    });
+  }
+
   // Sammel-/untracked-Zubehoer: nur Menge (anonym, kein Unit-Recording — wie
   // der Bulk-Scan, der ebenfalls keine Unit-ID erfasst).
   function applyManualQuantity(g: GroupedItem, n: number) {
@@ -384,7 +403,8 @@ function Wizard({ booking }: { booking: BookingDetail }) {
             photoFile, setPhotoFile, photoPreview, setPhotoPreview,
             otherNote, setOtherNote,
             pickerGroup, setPickerGroup,
-            scannedAccessoryUnitIds, applyManualUnits, applyManualQuantity,
+            scannedAccessoryUnitIds, scannedCameraUnitIds,
+            applyManualUnits, applyManualUnitsCamera, applyManualQuantity,
             canProceed: canProceedFromStep1,
             onNext: () => setStep('landlord'),
           }} />
@@ -539,7 +559,9 @@ function Step1(props: {
   pickerGroup: GroupedItem | null;
   setPickerGroup: (g: GroupedItem | null) => void;
   scannedAccessoryUnitIds: string[];
+  scannedCameraUnitIds: string[];
   applyManualUnits: (g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) => void;
+  applyManualUnitsCamera: (g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) => void;
   applyManualQuantity: (g: GroupedItem, n: number) => void;
   canProceed: boolean;
   onNext: () => void;
@@ -590,22 +612,32 @@ function Step1(props: {
         />
 
         <p className="text-xs text-slate-500 mt-2">
-          Kannst du nicht scannen? Tippe bei einer Zubehör-Position auf
-          <span className="text-cyan-400 font-semibold"> 📋 Wählen</span> und hake
-          das passende Exemplar aus der Liste an.
+          Kannst du nicht scannen? Tippe bei einer Kamera- oder Zubehör-Position
+          auf <span className="text-cyan-400 font-semibold">📋 Wählen</span> und
+          hake das passende Exemplar (Seriennummer/Code) aus der Liste an.
         </p>
 
-        {props.pickerGroup && (
-          <ManualExemplarPicker
-            bookingId={props.bookingId}
-            group={props.pickerGroup}
-            currentScannedUnitIds={props.scannedAccessoryUnitIds}
-            currentCheckedCount={props.pickerGroup.slotKeys.filter((k) => props.checked[k]).length}
-            onApplyUnits={(allIds, selIds) => { props.applyManualUnits(props.pickerGroup!, allIds, selIds); props.setPickerGroup(null); }}
-            onApplyQuantity={(n) => { props.applyManualQuantity(props.pickerGroup!, n); props.setPickerGroup(null); }}
-            onClose={() => props.setPickerGroup(null)}
-          />
-        )}
+        {props.pickerGroup && (() => {
+          const isCamera = props.pickerGroup.type === 'camera';
+          return (
+            <ManualExemplarPicker
+              bookingId={props.bookingId}
+              group={props.pickerGroup}
+              fetchUrl={isCamera
+                ? `/api/admin/booking/${props.bookingId}/camera-exemplars?product_name=${encodeURIComponent(props.pickerGroup.label)}`
+                : undefined}
+              currentScannedUnitIds={isCamera ? props.scannedCameraUnitIds : props.scannedAccessoryUnitIds}
+              currentCheckedCount={props.pickerGroup.slotKeys.filter((k) => props.checked[k]).length}
+              onApplyUnits={(allIds, selIds) => {
+                if (isCamera) props.applyManualUnitsCamera(props.pickerGroup!, allIds, selIds);
+                else props.applyManualUnits(props.pickerGroup!, allIds, selIds);
+                props.setPickerGroup(null);
+              }}
+              onApplyQuantity={(n) => { props.applyManualQuantity(props.pickerGroup!, n); props.setPickerGroup(null); }}
+              onClose={() => props.setPickerGroup(null)}
+            />
+          );
+        })()}
 
         <SerialScanner
           open={props.scannerOpen}

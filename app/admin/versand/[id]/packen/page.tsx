@@ -322,6 +322,25 @@ function PackStep({
     });
   }
 
+  // Wie applyManualUnits, aber fuer Kamera-Slots → schreibt in
+  // scannedCameraUnitIds (applyScannedUnits erfasst sie als Kamera-Units).
+  function applyManualUnitsCamera(g: GroupedItem, allUnitIds: string[], selectedUnitIds: string[]) {
+    const slotKeys = g.slotKeys;
+    const sel = selectedUnitIds.slice(0, slotKeys.length);
+    setChecked((prev) => {
+      const next = { ...prev };
+      slotKeys.forEach((k, i) => { next[k] = i < sel.length; });
+      checkedRef.current = next;
+      return next;
+    });
+    setScannedCameraUnitIds((prev) => {
+      const allSet = new Set(allUnitIds);
+      const next = [...prev.filter((id) => !allSet.has(id)), ...sel];
+      scannedCameraUnitIdsRef.current = next;
+      return next;
+    });
+  }
+
   // Sammel-/untracked-Zubehoer: nur Menge (anonym, kein Unit-Recording — wie
   // der Bulk-Scan, der ebenfalls keine Unit-ID erfasst).
   function applyManualQuantity(g: GroupedItem, n: number) {
@@ -470,22 +489,32 @@ function PackStep({
       />
 
       <p className="text-xs text-slate-500 mt-2">
-        Kannst du nicht scannen? Tippe bei einer Zubehör-Position auf
-        <span className="text-cyan-400 font-semibold"> 📋 Wählen</span> und hake
-        die Exemplare an, die du einpackst.
+        Kannst du nicht scannen? Tippe bei einer Kamera- oder Zubehör-Position
+        auf <span className="text-cyan-400 font-semibold">📋 Wählen</span> und
+        hake das passende Exemplar (Seriennummer/Code) an.
       </p>
 
-      {pickerGroup && (
-        <ManualExemplarPicker
-          bookingId={booking.id}
-          group={pickerGroup}
-          currentScannedUnitIds={scannedAccessoryUnitIds}
-          currentCheckedCount={pickerGroup.slotKeys.filter((k) => checked[k]).length}
-          onApplyUnits={(allIds, selIds) => { applyManualUnits(pickerGroup, allIds, selIds); setPickerGroup(null); }}
-          onApplyQuantity={(n) => { applyManualQuantity(pickerGroup, n); setPickerGroup(null); }}
-          onClose={() => setPickerGroup(null)}
-        />
-      )}
+      {pickerGroup && (() => {
+        const isCamera = pickerGroup.type === 'camera';
+        return (
+          <ManualExemplarPicker
+            bookingId={booking.id}
+            group={pickerGroup}
+            fetchUrl={isCamera
+              ? `/api/admin/booking/${booking.id}/camera-exemplars?product_name=${encodeURIComponent(pickerGroup.label)}`
+              : undefined}
+            currentScannedUnitIds={isCamera ? scannedCameraUnitIds : scannedAccessoryUnitIds}
+            currentCheckedCount={pickerGroup.slotKeys.filter((k) => checked[k]).length}
+            onApplyUnits={(allIds, selIds) => {
+              if (isCamera) applyManualUnitsCamera(pickerGroup, allIds, selIds);
+              else applyManualUnits(pickerGroup, allIds, selIds);
+              setPickerGroup(null);
+            }}
+            onApplyQuantity={(n) => { applyManualQuantity(pickerGroup, n); setPickerGroup(null); }}
+            onClose={() => setPickerGroup(null)}
+          />
+        );
+      })()}
 
       <SerialScanner
         open={scannerOpen}

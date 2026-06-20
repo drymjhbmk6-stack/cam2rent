@@ -716,7 +716,7 @@ export function ItemList({
                     )}
                   </div>
                 )}
-                {onManualPick && g.type === 'accessory' && (
+                {onManualPick && (g.type === 'accessory' || g.type === 'camera') && (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onManualPick(g); }}
@@ -912,7 +912,7 @@ export type ExemplarUnit = { id: string; exemplar_code: string; status: string; 
 
 export function ManualExemplarPicker({
   bookingId, group, currentScannedUnitIds, currentCheckedCount,
-  onApplyUnits, onApplyQuantity, onClose,
+  onApplyUnits, onApplyQuantity, onClose, fetchUrl,
 }: {
   bookingId: string;
   group: GroupedItem;
@@ -921,6 +921,12 @@ export function ManualExemplarPicker({
   onApplyUnits: (allUnitIds: string[], selectedUnitIds: string[]) => void;
   onApplyQuantity: (n: number) => void;
   onClose: () => void;
+  /**
+   * Lese-Endpoint für die wählbaren Exemplare. Default = accessory-exemplars
+   * (Zubehör). Für Kameras übergibt der Aufrufer die camera-exemplars-URL.
+   * Muss `{ is_bulk, units: [{id, exemplar_code, status, reserved}] }` liefern.
+   */
+  fetchUrl?: string;
 }) {
   const maxQty = group.slotKeys.length;
   const [loading, setLoading] = useState(true);
@@ -933,7 +939,9 @@ export function ManualExemplarPicker({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/admin/booking/${bookingId}/accessory-exemplars?accessory_id=${encodeURIComponent(group.groupKey)}`)
+    const url = fetchUrl
+      ?? `/api/admin/booking/${bookingId}/accessory-exemplars?accessory_id=${encodeURIComponent(group.groupKey)}`;
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
@@ -953,7 +961,7 @@ export function ManualExemplarPicker({
       .catch(() => { if (!cancelled) setError('Konnte Exemplare nicht laden.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [bookingId, group.groupKey, maxQty, currentScannedUnitIds]);
+  }, [bookingId, group.groupKey, maxQty, currentScannedUnitIds, fetchUrl]);
 
   function toggle(unitId: string) {
     setSelected((prev) => {

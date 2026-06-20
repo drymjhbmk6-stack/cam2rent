@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { lookupProdukteId } from '@/lib/legacy-bridge';
 
 /**
  * GET /api/admin/booking/[id]/accessory-exemplars?accessory_id=X
@@ -9,10 +10,13 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
  * Buchung — für den manuellen Exemplar-Picker im Pack-Workflow (Fallback wenn
  * der Packer nicht scannen kann).
  *
- * Quelle ist bewusst die Legacy-Tabelle `accessory_units`: nur deren IDs
+ * Primärquelle ist die Legacy-Tabelle `accessory_units`: nur deren IDs
  * versteht `applyScannedUnits` (lib/scan-substitutions.ts), und der
  * Inventar-Mirror (lib/inventar-mirror.ts) hält die Tabelle auch für
- * Neue-Welt-Stücke (individual tracking) gefüllt.
+ * Neue-Welt-Stücke (individual tracking) gefüllt. Ist der Mirror aber leer
+ * (Zubehör lebt nur in `inventar_units`), fällt der Endpoint auf die
+ * Neue-Welt-Enumeration zurück (siehe unten) — dieselben Codes, die der
+ * Scanner über scan-lookup auflöst.
  *
  * Security: `accessory_id` muss zur set-expandierten Zubehörliste der Buchung
  * gehören — sonst 403. Wählbar = Status `available` ODER für DIESE Buchung
@@ -107,6 +111,59 @@ export async function GET(
       }));
   } catch {
     units = [];
+  }
+
+  // Neue-Welt-Fallback: hat die Legacy-Tabelle keine Exemplare (typischer Fall
+  // bei Zubehör, das nur in `inventar_units` lebt und dessen Mirror leer ist),
+  // enumerieren wir die individuellen Stücke direkt aus `inventar_units` —
+  // exakt dieselben Codes, die der Scanner über scan-lookup auflöst. Jedes
+  // Stück wird (wenn vorhanden) über `migration_audit` auf die Legacy-
+  // `accessory_units.id` gemappt, sonst dient die Inventar-ID als Unit-ID —
+  // identisch zu dem, was ein Scan desselben Codes in `accessory_unit_ids`
+  // schreibt. So bleibt die manuelle Auswahl 1:1 zum Scan-Ergebnis.
+  if (units.length === 0 && !isBulk) {
+    try {
+      const produktId = await lookupProdukteId(supabase, 'accessories', accessoryId);
+      if (produktId) {
+        const { data: invRows } = await supabase
+          .from('inventar_units')
+          .select('id, inventar_code, seriennummer, bezeichnung, status')
+          .eq('produkt_id', produktId)
+          .in('typ', ['zubehoer', 'verbrauch'])
+          .eq('tracking_mode', 'individual')
+          .order('inventar_code', { ascending: true });
+        const invList = (invRows ?? []) as {
+          id: string; inventar_code: string | null; seriennummer: string | null;
+          bezeichnung: string; status: string;
+        }[];
+        const mapped = await Promise.all(invList.map(async (inv) => {
+          let legacyId: string | null = null;
+          try {
+            const { data: audit } = await supabase
+              .from('migration_audit')
+              .select('alte_id')
+              .eq('alte_tabelle', 'accessory_units')
+              .eq('neue_tabelle', 'inventar_units')
+              .eq('neue_id', inv.id)
+              .maybeSingle();
+            legacyId = (audit as { alte_id?: string } | null)?.alte_id ?? null;
+          } catch { /* migration_audit fehlt — Inventar-ID nutzen */ }
+          const unitId = legacyId ?? inv.id;
+          const reserved = reservedIds.has(unitId) || reservedIds.has(inv.id);
+          const available = inv.status === 'verfuegbar' || inv.status === 'available';
+          return {
+            id: unitId,
+            exemplar_code: inv.inventar_code ?? inv.seriennummer ?? inv.bezeichnung ?? '',
+            status: available ? 'available' : inv.status,
+            reserved,
+            selectable: available || reserved,
+          };
+        }));
+        units = mapped
+          .filter((u) => u.selectable)
+          .map((u) => ({ id: u.id, exemplar_code: u.exemplar_code, status: u.status, reserved: u.reserved }));
+      }
+    } catch { /* neue Welt nicht vorhanden — Mengen-Modus bleibt */ }
   }
 
   return NextResponse.json({ is_bulk: isBulk, units });
