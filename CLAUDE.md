@@ -1633,8 +1633,8 @@ Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nu
   aus User-Agent geparst / IP) + Stat-Karte „Letzter Login" im Profil-Tab.
 - **Wichtig:** Historie beginnt ab Migration — vergangene Logins können NICHT
   rückwirkend importiert werden (Supabase hält sie nicht vor).
-- **Go-Live TODO:** Migration `supabase/supabase-customer-login-history.sql`
-  ausführen. Ohne sie läuft alles weiter (Track-Endpoint No-Op, Admin-Tab leer).
+- **Migration ausgeführt** (2026-06-21): `supabase-customer-login-history.sql`
+  nach `erledigte supabase/` verschoben. Login-Verlauf wird ab jetzt erfasst.
 
 ### Abweichende Liefer- + Rechnungsadresse pro Kunde (Standard + pro Buchung, Stand 2026-06-10)
 Privatkunden können eine abweichende **Lieferadresse** und/oder
@@ -4409,6 +4409,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-customer-login-history.sql`~~ (Login-Verlauf pro Kundenkonto — am 2026-06-21 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-invoice-address.sql`~~ (Abweichende Rechnungsadresse pro Buchung — am 2026-05-28 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-content-coupon-counter.sql`~~ (UGC-Content-Coupon-Counter `C2R-CONTENT-NNN` — am 2026-05-23 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
