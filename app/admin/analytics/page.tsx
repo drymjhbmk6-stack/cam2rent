@@ -29,6 +29,8 @@ interface LiveData {
   total_views: number;
   unique_visitors: number;
   avg_pages_per_session: number;
+  cookieless_total?: number;
+  cookieless_today?: number;
 }
 interface TodayData {
   total_views: number; unique_visitors: number; sessions: number;
@@ -1228,6 +1230,19 @@ export default function AnalyticsPage() {
               value={liveData?.avg_pages_per_session ?? '–'}
               sub="Durchschnitt"
               tooltip="Durchschnittliche Anzahl der Seiten, die ein Besucher pro Sitzung aufruft. Je höher, desto interessierter sind die Besucher."
+            />
+            <StatCard
+              label="Besucher gesamt (mit/ohne Cookies)"
+              value={liveData?.cookieless_total ?? '–'}
+              sub="cookieloser Zähler"
+              color={C.cyanLight}
+              tooltip="Cookieloser Besucherzähler: zählt jeden Besuch (eine Sitzung = ein Besuch), egal ob der Cookie-Banner akzeptiert wurde oder nicht. Speichert keinen Personenbezug — unabhängig vom Zeitraum-Filter."
+            />
+            <StatCard
+              label="Besucher heute (mit/ohne Cookies)"
+              value={liveData?.cookieless_today ?? '–'}
+              sub="cookieloser Zähler"
+              tooltip="Cookielose Besuche von heute (Berlin-Zeit), unabhängig vom Cookie-Consent."
             />
           </div>
 

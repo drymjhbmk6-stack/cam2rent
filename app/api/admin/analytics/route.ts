@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
-import { getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
+import { getBerlinHour, getBerlinDateKey, getBerlinDateString } from '@/lib/timezone';
 import { parseAnalyticsRange, applyRange, type ParsedRange } from '@/lib/analytics-range';
 import { isTestMode } from '@/lib/env-mode';
 import { computeCameraUtilization } from '@/lib/camera-utilization';
@@ -149,12 +149,31 @@ export async function GET(req: NextRequest) {
     const uniqueVisitors = new Set(rangeData.map((r) => r.visitor_id)).size;
     const sessions = new Set(rangeData.map((r) => r.session_id)).size;
 
+    // Cookieloser Besucherzähler (consent-unabhängig, aus `site_visits`).
+    // Zählt jeden Besuch — auch ohne akzeptierten Cookie-Banner. Defensiv bei
+    // fehlender Migration → 0/0.
+    let cookielessTotal = 0;
+    let cookielessToday = 0;
+    {
+      const { data: cv } = await supabase.from('site_visits').select('day, visits');
+      if (cv) {
+        const today = getBerlinDateString();
+        for (const row of cv) {
+          const v = Number(row.visits) || 0;
+          cookielessTotal += v;
+          if (row.day === today) cookielessToday = v;
+        }
+      }
+    }
+
     return NextResponse.json({
       active_count: visitors.length,
       visitors,
       total_views: totalViews,
       unique_visitors: uniqueVisitors,
       avg_pages_per_session: sessions > 0 ? +(totalViews / sessions).toFixed(1) : 0,
+      cookieless_total: cookielessTotal,
+      cookieless_today: cookielessToday,
       range: parsed.range,
     });
   }

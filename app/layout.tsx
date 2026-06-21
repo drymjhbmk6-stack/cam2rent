@@ -9,6 +9,7 @@ import { ProductImagesProvider } from '@/components/ProductImagesProvider';
 import { ProductsProvider } from '@/components/ProductsProvider';
 import { AccessoriesProvider } from '@/components/AccessoriesProvider';
 import PageTracker from '@/components/PageTracker';
+import VisitTracker from '@/components/VisitTracker';
 import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
@@ -112,6 +113,7 @@ export default function RootLayout({
                   <Suspense fallback={null}>
                     <PageTracker />
                   </Suspense>
+                  <VisitTracker />
                   <ShopShell>{children}</ShopShell>
                   <CookieBanner />
                   <ServiceWorkerRegistration />
