@@ -1676,9 +1676,10 @@ Buchung im Checkout überschreibbar.
   `customerAddress = invoice_address ?? shipping_address ?? Profil`) — siehe
   „Abweichende Rechnungsadresse pro Buchung". Lieferadresse (Etikett/Packliste)
   bleibt `shipping_address`.
-- **Go-Live TODO:** Migration `supabase/supabase-profiles-deviating-addresses.sql`
-  ausführen. Ohne sie läuft alles weiter (Profil-UI zeigt die Felder, speichert
-  sie aber nicht; Buchungen nutzen die Hauptadresse wie zuvor).
+- **Go-Live TODO:** ~~Migration `supabase/supabase-profiles-deviating-addresses.sql`
+  ausführen~~ ✓ (am 2026-06-10 ausgeführt, Datei nach `erledigte supabase/`
+  verschoben). Default-Verhalten ohne sie wäre: Profil-UI zeigt die Felder,
+  speichert sie aber nicht; Buchungen nutzen die Hauptadresse.
 
 ### Konto-Feedback schreibt in `beta_feedback` (Fix, Stand 2026-06-10)
 `/konto/feedback` → „Feedback senden" lieferte „Feedback konnte nicht gesendet
@@ -4410,6 +4411,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 
 ### Ausgeführte Migrationen (erledigt)
 - ~~`supabase-customer-login-history.sql`~~ (Login-Verlauf pro Kundenkonto — am 2026-06-21 ausgeführt, Datei nach `erledigte supabase/` verschoben)
+- ~~`supabase-profiles-deviating-addresses.sql`~~ (Abweichende Liefer-/Rechnungsadresse pro Kunde — am 2026-06-10 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-invoice-address.sql`~~ (Abweichende Rechnungsadresse pro Buchung — am 2026-05-28 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-content-coupon-counter.sql`~~ (UGC-Content-Coupon-Counter `C2R-CONTENT-NNN` — am 2026-05-23 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -4738,12 +4740,6 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Mietvertrag-Zurücksetzen inkl. Pflicht-Mail bereits; nur die „Alles okay"-
   Sperre (Lock-Endpoint liefert sonst 503) ist erst nach der Migration aktiv.
   Empfohlen ASAP ausführen.
-- **Abweichende-Adressen-Migration auszuführen:**
-  `supabase/supabase-profiles-deviating-addresses.sql` (idempotent, additiv:
-  8 Spalten `delivery_*`/`billing_*` auf `profiles` + Column-Level-GRANT).
-  Ohne sie zeigt das Profil die Felder, speichert sie aber nicht (defensiver
-  Retry ohne die Spalten), und Buchungen nutzen die Hauptadresse wie zuvor.
-  Empfohlen ASAP ausführen. Siehe „Abweichende Liefer- + Rechnungsadresse".
 - **Persönlicher-Bereich-Migration + Cron:** Migration
   `supabase/supabase-employee-personal.sql` (idempotent, legt
   `employee_notes` + `employee_appointments` an) ausführen, sonst zeigt die
