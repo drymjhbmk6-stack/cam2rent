@@ -258,8 +258,9 @@ function calcBreakdown(
   }
 
   // Frühbucherrabatt (Vorlauf vor Mietbeginn) — gilt auch im Einzel-Buchungsflow.
-  // Basis = Miete + Zubehör abzgl. Produktrabatt (Haftung + Versand bleiben außen
-  // vor, analog manuelle Buchung). Eine `not_combinable`-Aktion deaktiviert ihn.
+  // ADDITIV zur Produktaktion: Basis = Miete + Zubehör (Originalpreis, NICHT der
+  // Restbetrag nach Produktrabatt) → Aktion 25% + Frühbucher 5% = 30%. Haftung +
+  // Versand bleiben außen vor. Eine `not_combinable`-Aktion deaktiviert ihn.
   const earlyBirdDiscounts: EarlyBirdDiscount[] = ((dynPrices && 'earlyBirdDiscounts' in dynPrices)
     ? (dynPrices as { earlyBirdDiscounts?: EarlyBirdDiscount[] }).earlyBirdDiscounts
     : undefined) ?? [];
@@ -274,7 +275,7 @@ function calcBreakdown(
     );
     const ebMatch = blocked ? null : calcEarlyBirdDiscount(weeksUntil(from), earlyBirdDiscounts);
     if (ebMatch) {
-      earlyBirdDiscount = Math.round((rentalPrice + accessoryPrice - productDiscount) * ebMatch.discount_percent) / 100;
+      earlyBirdDiscount = Math.round((rentalPrice + accessoryPrice) * ebMatch.discount_percent) / 100;
       earlyBirdLabel = ebMatch.label;
     }
   }

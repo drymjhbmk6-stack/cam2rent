@@ -1708,15 +1708,31 @@ Treuerabatte. Stapelt sequenziell mit den anderen Auto-Rabatten.
   now?)` (volle Wochen Vorlauf, Berlin-Tagesgrenze, negativ→0) +
   `calcEarlyBirdDiscount(weeksBefore, discounts)` (höchste passende Stufe).
   `/api/prices` liefert `earlyBirdDiscounts` mit (no-store).
-- **Stacking-Reihenfolge:** `Produktaktion → Mengenrabatt → Frühbucher →
-  Treuerabatt → Coupon` — jeweils Prozent vom laufenden Restbetrag. Eine
-  `not_combinable`-Aktion bzw. ein `not_combinable`-Coupon nullt Frühbucher
-  mit (wie duration/loyalty).
+- **Stacking — ADDITIV auf den Originalpreis (Stand 2026-06-20):** Alle
+  Auto-Rabatte (Produktaktion + Mengenrabatt + Frühbucher + Treuerabatt) werden
+  **jeweils als Prozent des Originalpreises** gerechnet und **summiert** — NICHT
+  mehr sequenziell auf dem Restbetrag. Beispiel: Aktion 25% + Frühbucher 5% =
+  **30%** (vorher 28,75%). In `app/checkout/page.tsx` ist die Basis von Mengen-/
+  Frühbucher-/Treuerabatt auf `cartTotal` umgestellt; Summe der Auto-Rabatte +
+  Coupon ist auf `cartTotal` gedeckelt (Prozente könnten sonst >100% ergeben).
+  Im Einzel-Buchungsflow (`calcBreakdown`) ist die Frühbucher-Basis
+  `rentalPrice + accessoryPrice` (Originalpreis, additiv zur Produktaktion). Der
+  Coupon bleibt die letzte Schicht auf dem Restbetrag (`afterAutoDiscounts`).
+  Eine `not_combinable`-Aktion (`actionBlocksAutoDiscounts`) bzw. ein
+  `not_combinable`-Coupon nullt weiterhin ALLE Auto-Rabatte (Mengen/Frühbucher/
+  Treue) — zum Kombinieren darf die Aktion das Exklusiv-Häkchen nicht haben.
+  ⚠️ Diese Umstellung ändert auch das bestehende Mengen-/Treuerabatt-Verhalten
+  (vorher Restbetrag, jetzt additiv) — bewusst so gewählt.
+- **Server-Floors discount-aware:** `checkout-intent` + `create-payment-intent`
+  prüfen nicht mehr pauschal „amount ≥ 50% Liste", sondern
+  `floor = max(5% Liste, Liste − gemeldete Rabatte − 1 €)` — sonst würde ein
+  additiver Gesamtrabatt >50% die Zahlung fälschlich ablehnen. confirm-cart
+  (95%-Per-Feld-Cap + Stripe-verbindliche Skalierung) bleibt der finale Guard.
 - **Geltungsbereich:** Warenkorb-Checkout (`app/checkout/page.tsx`,
   kleinster Vorlauf aller Positionen; fließt in die kombinierte „Rabatt"-
   Zeile) UND Einzel-Buchungsflow (`app/kameras/[slug]/buchen/page.tsx`
   `calcBreakdown`, eigene „Frühbucherrabatt"-Zeile; im Angebots-Modus aus,
-  Basis Miete+Zubehör abzgl. Produktrabatt — Haftung/Versand außen vor). Die
+  Basis Miete+Zubehör — Haftung/Versand außen vor). Die
   Warenkorb-Übersichtsseite (`/warenkorb`) zeigt wie bisher nur Produktrabatte.
 - **Server-Persistenz** in eigener Spalte `bookings.early_bird_discount`
   (Migration `supabase/supabase-bookings-early-bird-discount.sql`, additiv,

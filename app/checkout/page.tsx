@@ -497,15 +497,20 @@ export default function CheckoutPage() {
     productDiscounts,
   );
 
+  // Auto-Rabatte stapeln ADDITIV auf den Originalpreis (cartTotal): jeder
+  // Prozentsatz wird auf den vollen Betrag gerechnet und summiert, z.B.
+  // Aktion 25% + Frühbucher 5% + Mengen 10% = 40% vom Originalpreis. Eine
+  // `not_combinable`-Aktion blockt weiterhin alle Auto-Rabatte.
+
   // Duration discount: based on max rental days across all items
   const maxDays = items.reduce((m, it) => Math.max(m, it.days), 0);
   const durationMatch = calcDurationDiscount(maxDays, durationDiscounts);
   const durationDiscountAmount = !actionBlocksAutoDiscounts && durationMatch
-    ? Math.round((cartTotal - productDiscountAmount) * durationMatch.discount_percent) / 100
+    ? Math.round(cartTotal * durationMatch.discount_percent) / 100
     : 0;
 
   // Frühbucherrabatt: kleinster Vorlauf aller Positionen (konservativ),
-  // angewandt auf den Restbetrag nach Produkt- + Mengenrabatt.
+  // additiv auf den Originalpreis.
   const earlyBirdWeeks = items.reduce(
     (min, it) => Math.min(min, weeksUntil(it.rentalFrom)),
     items.length ? Infinity : 0,
@@ -514,19 +519,22 @@ export default function CheckoutPage() {
     ? calcEarlyBirdDiscount(earlyBirdWeeks, earlyBirdDiscounts)
     : null;
   const earlyBirdDiscountAmount = earlyBirdMatch
-    ? Math.round((cartTotal - productDiscountAmount - durationDiscountAmount) * earlyBirdMatch.discount_percent) / 100
+    ? Math.round(cartTotal * earlyBirdMatch.discount_percent) / 100
     : 0;
 
-  // Loyalty discount: applied on remainder after product + duration + early-bird discount
-  const afterPrevDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount - earlyBirdDiscountAmount;
+  // Loyalty discount: additiv auf den Originalpreis
   const loyaltyMatch = !actionBlocksAutoDiscounts && user
     ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts)
     : null;
   const loyaltyDiscountAmount = loyaltyMatch
-    ? Math.round(afterPrevDiscounts * loyaltyMatch.discount_percent) / 100
+    ? Math.round(cartTotal * loyaltyMatch.discount_percent) / 100
     : 0;
 
-  const afterAutoDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount - earlyBirdDiscountAmount - loyaltyDiscountAmount;
+  // Safety-Cap: Summe der Auto-Rabatte darf den Originalpreis nicht übersteigen
+  // (additive Prozente könnten sonst >100% ergeben). Coupon danach auf Rest.
+  const autoDiscountRaw = productDiscountAmount + durationDiscountAmount + earlyBirdDiscountAmount + loyaltyDiscountAmount;
+  const autoDiscountCapped = Math.min(autoDiscountRaw, cartTotal);
+  const afterAutoDiscounts = Math.max(0, cartTotal - autoDiscountCapped);
 
   // ── Coupon discount (on remainder after auto-discounts) ───────────────────
 
@@ -573,7 +581,12 @@ export default function CheckoutPage() {
   const effectiveEarlyBirdDiscount = isNotCombinable ? 0 : earlyBirdDiscountAmount;
   const effectiveLoyaltyDiscount = isNotCombinable ? 0 : loyaltyDiscountAmount;
 
-  const totalDiscount = effectiveProductDiscount + effectiveDurationDiscount + effectiveEarlyBirdDiscount + effectiveLoyaltyDiscount + couponDiscountAmount;
+  // Additive Auto-Rabatte + Coupon, gedeckelt auf den Originalpreis (Summe der
+  // Prozente könnte sonst >100% ergeben → negativer Betrag).
+  const totalDiscount = Math.min(
+    effectiveProductDiscount + effectiveDurationDiscount + effectiveEarlyBirdDiscount + effectiveLoyaltyDiscount + couponDiscountAmount,
+    cartTotal,
+  );
   const discountedSubtotal = cartTotal - totalDiscount;
   // Versand wird auf ORIGINAL-Warenwert geprüft (vor Rabatten) — kundenfreundlich
   const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping);

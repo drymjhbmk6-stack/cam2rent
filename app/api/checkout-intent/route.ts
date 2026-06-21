@@ -134,13 +134,24 @@ export async function POST(req: NextRequest) {
           }
 
           if (hasData) {
-            // Tighter floor — der frueher 30% generelle Pauschalrabatt-Puffer
-            // wurde durch einen Coupon-Lookup + 30%-Cap fuer duration/loyalty
-            // ersetzt. Die finale, harte Pruefung passiert in confirm-cart
-            // (siehe dort) — hier reicht 50% als grobes Pre-Check, damit
-            // erkennbar abwegige Werte schon vor PaymentIntent-Erzeugung
-            // abgelehnt werden.
-            const floorCents = Math.floor(expectedMinCents * 0.5);
+            // Discount-aware Floor: Rabatte stapeln additiv (Aktion + Mengen +
+            // Frühbucher + Treue + Coupon) und koennen >50% erreichen. Wir
+            // ziehen die vom Client gemeldeten Rabatte vom Erwartungswert ab und
+            // verlangen, dass der Kunde mindestens (Liste − Rabatte) zahlt — mit
+            // 5%-Hard-Floor gegen grobe "1 EUR statt 500 EUR"-Manipulation. Die
+            // finale, harte Pruefung passiert weiterhin in confirm-cart.
+            const ctxDisc = (k: string): number => {
+              const v = (checkoutContext as Record<string, unknown> | undefined)?.[k];
+              return typeof v === 'number' && v > 0 ? v : 0;
+            };
+            const claimedCents = Math.round(
+              (ctxDisc('discountAmount') + ctxDisc('productDiscount') + ctxDisc('durationDiscount')
+                + ctxDisc('earlyBirdDiscount') + ctxDisc('loyaltyDiscount')) * 100,
+            );
+            const floorCents = Math.max(
+              Math.floor(expectedMinCents * 0.05),
+              expectedMinCents - claimedCents - 100,
+            );
             if (amountCents < floorCents) {
               console.error('[checkout-intent] Preis-Plausibilität verletzt:', {
                 userId,

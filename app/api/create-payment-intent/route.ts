@@ -168,9 +168,18 @@ export async function POST(req: NextRequest) {
             if (product && Array.isArray(product.priceTable)) {
               const expectedMinCents = Math.round(calcPriceFromTable(product, days) * 100);
               if (expectedMinCents > 0) {
-                // 50% Floor — locker genug fuer Coupons + Loyalty + Rabatte,
-                // strikt genug fuer "1 EUR statt 500 EUR"-Manipulationen.
-                const floorCents = Math.floor(expectedMinCents * 0.5);
+                // Discount-aware Floor: Produktaktion + Frühbucher stapeln additiv
+                // (z.B. 25% + 5% = 30%) und koennen >50% erreichen. Wir ziehen die
+                // gemeldeten Rabatte vom Erwartungswert ab und verlangen mind.
+                // (Liste − Rabatte), mit 5%-Hard-Floor gegen "1 EUR statt 500 EUR".
+                const claimedCents = Math.round(
+                  ((parseFloat(metadata.product_discount ?? '0') || 0)
+                    + (parseFloat(metadata.early_bird_discount ?? '0') || 0)) * 100,
+                );
+                const floorCents = Math.max(
+                  Math.floor(expectedMinCents * 0.05),
+                  expectedMinCents - claimedCents - 100,
+                );
                 if (amountCents < floorCents) {
                   console.error('[create-payment-intent] Preis-Plausibilitaet verletzt:', {
                     userId: user.id,
