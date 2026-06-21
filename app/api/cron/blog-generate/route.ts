@@ -136,15 +136,20 @@ export async function POST(req: NextRequest) {
             message: `Generierung läuft bereits (seit ${Math.floor(ageMs / 1000)}s).`,
           });
         }
-        // Stale Lock — alten generating-Schedule-Eintrag aufräumen,
-        // damit das Thema wieder in die Auswahl rein kann.
-        await supabase
-          .from('blog_schedule')
-          .update({ status: 'planned' })
-          .eq('status', 'generating');
       }
     } catch { /* ungültiger JSON — ignoriere alten Status */ }
   }
+
+  // Verwaiste 'generating'-Schedule-Einträge freigeben. Wenn wir bis hier
+  // kommen, läuft KEINE aktive Generierung (sonst wären wir oben mit
+  // "läuft bereits" rausgesprungen). Alles, was trotzdem noch auf
+  // 'generating' steht, stammt aus einem abgebrochenen/fehlgeschlagenen
+  // Lauf, dessen Eintrag nie auf 'planned' zurückgesetzt wurde — sonst
+  // bliebe das Thema für immer hängen und käme nie wieder in die Auswahl.
+  await supabase
+    .from('blog_schedule')
+    .update({ status: 'planned' })
+    .eq('status', 'generating');
 
   // Status-Flag: Generierung läuft
   async function setGenerationStatus(status: 'generating' | 'idle', topic?: string) {
@@ -153,6 +158,18 @@ export async function POST(req: NextRequest) {
       value: JSON.stringify({ status, topic: topic ?? '', started_at: status === 'generating' ? new Date().toISOString() : null, finished_at: status === 'idle' ? new Date().toISOString() : null }),
       updated_at: new Date().toISOString(),
     });
+  }
+
+  // Bei einem Fehlschlag den beanspruchten Schedule-Eintrag wieder auf
+  // 'planned' setzen, damit das Thema beim nächsten Cron-Lauf erneut
+  // drankommt und nicht für immer auf 'generating' hängen bleibt.
+  async function releaseClaimedSchedule(id: string | null) {
+    if (!id) return;
+    await supabase
+      .from('blog_schedule')
+      .update({ status: 'planned' })
+      .eq('id', id)
+      .eq('status', 'generating');
   }
 
   // ── Priorität 0: Redaktionsplan prüfen ────────────────────────
@@ -287,7 +304,11 @@ export async function POST(req: NextRequest) {
     } catch {
       const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (match) parsed = JSON.parse(match[1]);
-      else return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.' }, { status: 500 });
+      else {
+        await releaseClaimedSchedule(scheduleId);
+        await setGenerationStatus('idle');
+        return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.' }, { status: 500 });
+      }
     }
 
     const wordCount = (parsed.content || '').split(/\s+/).length;
@@ -374,6 +395,8 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
       .single();
 
     if (postError) {
+      await releaseClaimedSchedule(scheduleId);
+      await setGenerationStatus('idle');
       return NextResponse.json({ error: postError.message }, { status: 500 });
     }
 
@@ -461,6 +484,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
     return NextResponse.json({ success: true, post, imageError, series: seriesContext ? { id: seriesContext.id, part: seriesContext.part_number } : null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
+    await releaseClaimedSchedule(scheduleId);
     await setGenerationStatus('idle');
     return NextResponse.json({ error: `Auto-Generierung fehlgeschlagen: ${message}` }, { status: 500 });
   }

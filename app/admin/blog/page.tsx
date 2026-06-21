@@ -137,6 +137,11 @@ export default function BlogDashboardPage() {
   // Generierung dauert normal 1-3 Min. Über 10 Min ist das ein Stale-Lock —
   // der Cron-Prozess wurde abgebrochen, ohne den Status auf idle zu setzen.
   const isStuck = isGenerating && elapsedSeconds > 600;
+  // Einträge, die auf "Wird generiert" hängen, obwohl gerade nichts läuft —
+  // ein abgebrochener früherer Lauf. Der Cron überspringt sie (nimmt nur
+  // 'planned'), deshalb anbieten, sie manuell freizugeben.
+  const orphanedCount = !isGenerating ? schedule.filter(e => e.status === 'generating').length : 0;
+  const hasOrphanedGenerating = orphanedCount > 0;
 
   async function handleResetGeneration() {
     if (!confirm('Generator-Status zurücksetzen? Der nächste Cron-Lauf startet eine neue Generierung.')) return;
@@ -225,7 +230,19 @@ export default function BlogDashboardPage() {
               </>
             ) : autoEnabled ? (
               <>
-                <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf nächsten Slot</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf nächsten Slot</span>
+                  {hasOrphanedGenerating && (
+                    <button
+                      onClick={handleResetGeneration}
+                      className="text-xs px-2 py-1 rounded-md font-heading font-semibold transition-colors"
+                      style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                      title="Einträge hängen im Status „Wird generiert“ fest und werden vom Cron übersprungen. Zurücksetzen gibt sie wieder frei."
+                    >
+                      {orphanedCount} hängende{orphanedCount === 1 ? 'r' : ''} Eintrag zurücksetzen
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-3 mt-0.5">
                   <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} Artikel im Zeitplan</span>
                   {genStatus.finished_at && (
