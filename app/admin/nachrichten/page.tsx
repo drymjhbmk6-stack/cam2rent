@@ -64,6 +64,9 @@ export default function AdminNachrichtenPage() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  // "Neue Nachricht"-Modal: Kunde auswaehlen (oder E-Mail eingeben) + schreiben.
+  const [composeOpen, setComposeOpen] = useState(false);
+
   // Mobile-Layout-Switch: unter 768px nur Liste ODER Detail anzeigen, dazwischen
   // per Zurueck-Button wechseln. Auf Desktop bleibt das alte Side-by-Side.
   const [isMobile, setIsMobile] = useState(false);
@@ -76,12 +79,15 @@ export default function AdminNachrichtenPage() {
     return () => mql.removeEventListener('change', update);
   }, []);
 
-  useEffect(() => {
-    fetch('/api/admin/nachrichten')
+  const loadConversations = () => {
+    return fetch('/api/admin/nachrichten')
       .then((r) => r.json())
       .then((d) => setConversations(d.conversations || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadConversations().finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -235,21 +241,36 @@ export default function AdminNachrichtenPage() {
           </p>
         </div>
 
-        {/* Filter pills */}
-        <div style={{ display: 'flex', gap: 4, background: '#0f172a', borderRadius: 10, padding: 3 }}>
-          {(['all', 'unread', 'closed'] as FilterType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{
-                padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                background: filter === f ? '#1e293b' : 'transparent',
-                color: filter === f ? '#22d3ee' : '#64748b',
-              }}
-            >
-              {f === 'all' ? 'Alle' : f === 'unread' ? 'Ungelesen' : 'Geschlossen'}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Neue Nachricht */}
+          <button
+            type="button"
+            onClick={() => setComposeOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 700, background: '#06b6d4', color: '#fff',
+            }}
+          >
+            ✏️ Neue Nachricht
+          </button>
+
+          {/* Filter pills */}
+          <div style={{ display: 'flex', gap: 4, background: '#0f172a', borderRadius: 10, padding: 3 }}>
+            {(['all', 'unread', 'closed'] as FilterType[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  background: filter === f ? '#1e293b' : 'transparent',
+                  color: filter === f ? '#22d3ee' : '#64748b',
+                }}
+              >
+                {f === 'all' ? 'Alle' : f === 'unread' ? 'Ungelesen' : 'Geschlossen'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -618,6 +639,270 @@ export default function AdminNachrichtenPage() {
               Wähle eine Konversation aus der Liste.
             </div>
           )}
+        </div>
+      </div>
+
+      {composeOpen && (
+        <ComposeModal
+          onClose={() => setComposeOpen(false)}
+          onSent={async (newConvId) => {
+            setComposeOpen(false);
+            await loadConversations();
+            if (newConvId) setSelectedId(newConvId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface Customer {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+function ComposeModal({
+  onClose,
+  onSent,
+}: {
+  onClose: () => void;
+  onSent: (newConvId: string | null) => void | Promise<void>;
+}) {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [custLoading, setCustLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Customer | null>(null);
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/kunden')
+      .then((r) => r.json())
+      .then((d) => setCustomers((d.customers || []).filter((c: Customer) => c.email)))
+      .catch(() => {})
+      .finally(() => setCustLoading(false));
+  }, []);
+
+  const filtered = (() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? customers.filter(
+          (c) =>
+            c.full_name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
+        )
+      : customers;
+    return list.slice(0, 50);
+  })();
+
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(manualEmail.trim());
+  const hasRecipient = !!selected || emailValid;
+  const canSend =
+    hasRecipient && subject.trim().length >= 3 && body.trim().length >= 1 && !sending;
+
+  const handleSend = async () => {
+    if (!canSend) return;
+    setSending(true);
+    setError(null);
+    try {
+      const payload: Record<string, string> = {
+        subject: subject.trim(),
+        body: body.trim(),
+      };
+      if (selected) {
+        payload.customer_id = selected.id;
+      } else {
+        payload.customer_email = manualEmail.trim();
+        if (manualName.trim()) payload.customer_name = manualName.trim();
+      }
+      const res = await fetch('/api/admin/nachrichten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || 'Senden fehlgeschlagen.');
+        return;
+      }
+      const newId: string | null = data.conversation?.id ?? data.conversation_id ?? null;
+      await onSent(newId);
+    } catch {
+      setError('Senden fehlgeschlagen.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    background: '#0f172a', border: '1px solid #334155', borderRadius: 10,
+    color: '#e2e8f0', padding: '10px 14px', fontSize: 14, outline: 'none', width: '100%',
+  };
+  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6, display: 'block' };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: '40px 16px', overflowY: 'auto',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 520, background: '#111827', border: '1px solid #1e293b',
+          borderRadius: 14, padding: 24,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#e2e8f0' }}>Neue Nachricht</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Empfaenger */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Empfänger</label>
+          {selected ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '10px 14px',
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selected.full_name || selected.email}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{selected.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                style={{ background: 'transparent', border: '1px solid #334155', color: '#cbd5e1', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '4px 10px', cursor: 'pointer', flexShrink: 0 }}
+              >
+                Ändern
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Kunde suchen (Name oder E-Mail)…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={inputStyle}
+                autoFocus
+              />
+              <div style={{
+                marginTop: 8, maxHeight: 200, overflowY: 'auto',
+                border: '1px solid #1e293b', borderRadius: 10,
+              }}>
+                {custLoading ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Lädt…</div>
+                ) : filtered.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                    {search.trim() ? 'Kein Treffer.' : 'Keine Kunden gefunden.'}
+                  </div>
+                ) : (
+                  filtered.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setSelected(c); setManualEmail(''); setManualName(''); }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
+                        background: 'transparent', border: 'none', borderBottom: '1px solid #1e293b',
+                        cursor: 'pointer', color: '#e2e8f0',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{c.full_name || c.email}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>{c.email}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* Gast / freie E-Mail */}
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #1e293b' }}>
+                <label style={labelStyle}>…oder E-Mail-Adresse eingeben (Gast)</label>
+                <input
+                  type="email"
+                  placeholder="kunde@beispiel.de"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  placeholder="Name (optional)"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  style={{ ...inputStyle, marginTop: 8 }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Betreff */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Betreff</label>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={200}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Nachricht */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Nachricht</label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            maxLength={5000}
+            rows={6}
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+        </div>
+
+        {error && (
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: '#fca5a5' }}>{error}</p>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '10px 16px', background: 'transparent', color: '#cbd5e1', border: '1px solid #334155', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!canSend}
+            style={{
+              padding: '10px 18px', background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 10,
+              fontSize: 13, fontWeight: 700, cursor: canSend ? 'pointer' : 'not-allowed', opacity: canSend ? 1 : 0.45,
+            }}
+          >
+            {sending ? 'Sendet…' : 'Senden'}
+          </button>
         </div>
       </div>
     </div>

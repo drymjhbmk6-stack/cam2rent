@@ -512,6 +512,18 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   HTML-Mailinhalt per Button in sandboxed `<iframe sandbox="">` (kein JS),
   Anhänge als Download-Links über `GET /api/admin/message-attachment-url?id=`
   (Permission `kunden`, Signed-URL 5 Min).
+- **„Neue Nachricht"-Button (Stand 2026-06-22):** Button oben rechts im Header
+  von `/admin/nachrichten` öffnet ein Compose-Modal (`ComposeModal` lokal in
+  `app/admin/nachrichten/page.tsx`): Kunde aus der Liste suchen/wählen (lädt
+  `GET /api/admin/kunden`, nur Einträge mit E-Mail) ODER freie E-Mail-Adresse +
+  Name für Gäste eingeben, dann Betreff + Nachricht. Sendet an das bereits
+  bestehende `POST /api/admin/nachrichten` (Konto-Pfad via `customer_id` →
+  `source=account` + Benachrichtigung; Gast-Pfad via `customer_email` →
+  `source=email` + echte E-Mail). Nach Erfolg wird die Konversationsliste neu
+  geladen und die neu angelegte Konversation (sofern `conversation.id`/
+  `conversation_id` zurückkommt) automatisch geöffnet. Reine UI-Ergänzung — die
+  POST-Route ist unverändert (kam mit „Kunde direkt aus Buchungsdetails
+  anschreiben").
 - **E-Mail-Typen:** `inbound_received` + `inbound_reply` in `email_log` +
   `/admin/emails`-Katalog. Audit: `inbound_email.received`, `nachricht.email_reply`.
 - **Pro-Mitarbeiter-Zuordnung** (Migration `supabase/supabase-inbound-email-per-employee.sql`):
