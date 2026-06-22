@@ -259,6 +259,10 @@ export default function BuchungDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht');
   const [wbwGateStatus, setWbwGateStatus] = useState<string | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [messageSending, setMessageSending] = useState(false);
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -379,6 +383,57 @@ export default function BuchungDetailPage() {
       setEmailToast({ msg: 'Netzwerkfehler beim Senden', type: 'err' });
     } finally {
       setEmailSending(false);
+      setTimeout(() => setEmailToast(null), 4000);
+    }
+  }
+
+  async function handleSendCustomerMessage() {
+    if (!booking) return;
+    const subject = messageSubject.trim();
+    const body = messageBody.trim();
+    if (subject.length < 3) {
+      setEmailToast({ msg: 'Betreff zu kurz (min. 3 Zeichen)', type: 'err' });
+      setTimeout(() => setEmailToast(null), 4000);
+      return;
+    }
+    if (body.length < 1) {
+      setEmailToast({ msg: 'Nachricht darf nicht leer sein', type: 'err' });
+      setTimeout(() => setEmailToast(null), 4000);
+      return;
+    }
+    setMessageSending(true);
+    try {
+      // Konto-Kunde → conversations (Kunde sieht es im Konto + Mail-Hinweis).
+      // Gast/nur E-Mail → echte E-Mail mit Volltext.
+      const payload: Record<string, unknown> = {
+        subject,
+        body,
+        booking_id: booking.id,
+      };
+      if (booking.user_id) {
+        payload.customer_id = booking.user_id;
+      } else {
+        payload.customer_email = booking.customer_email || '';
+        payload.customer_name = booking.customer_name || '';
+      }
+      const res = await fetch('/api/admin/nachrichten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEmailToast({ msg: 'Nachricht an den Kunden gesendet', type: 'ok' });
+        setShowMessageModal(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setEmailToast({ msg: err.error || 'Fehler beim Senden', type: 'err' });
+      }
+    } catch {
+      setEmailToast({ msg: 'Netzwerkfehler beim Senden', type: 'err' });
+    } finally {
+      setMessageSending(false);
       setTimeout(() => setEmailToast(null), 4000);
     }
   }
@@ -1681,6 +1736,22 @@ export default function BuchungDetailPage() {
                 )}
                 {customer?.blacklisted && <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">GESPERRT</span>}
                 {customer?.verification_status && <InfoRow label="Verifizierung" value={customer.verification_status} />}
+
+                {/* Nachricht an den Kunden schreiben */}
+                <div className="pt-2 border-t border-brand-border dark:border-slate-700">
+                  {(booking.user_id || booking.customer_email || customer?.email) ? (
+                    <button
+                      onClick={() => { setMessageSubject(`Deine Buchung ${booking.id}`); setMessageBody(''); setShowMessageModal(true); }}
+                      className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-violet-600 text-white rounded-btn hover:bg-violet-700 transition-colors"
+                    >
+                      💬 Nachricht an Kunden schreiben
+                    </button>
+                  ) : (
+                    <p className="text-xs font-body text-brand-muted">
+                      Keine Kunden-E-Mail hinterlegt — Nachricht nicht möglich.
+                    </p>
+                  )}
+                </div>
               </div>
             </Section>
 
@@ -2027,6 +2098,58 @@ export default function BuchungDetailPage() {
                   className="px-5 py-2 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors disabled:opacity-40"
                 >
                   {emailSending ? 'Sende...' : '✉ Senden'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ Nachricht-an-Kunden-Modal ═══ */}
+        {showMessageModal && booking && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowMessageModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Nachricht an Kunden</h3>
+              {booking.user_id ? (
+                <p className="text-sm font-body text-brand-muted mb-4">
+                  {booking.customer_name || customer?.full_name || 'Der Kunde'} sieht die Nachricht im Kundenkonto und bekommt eine E-Mail-Benachrichtigung. Antworten erscheinen unter &bdquo;Kundenanfragen&ldquo;.
+                </p>
+              ) : (
+                <p className="text-sm font-body text-brand-muted mb-4">
+                  Wird als E-Mail an <span className="font-semibold text-brand-black dark:text-white">{booking.customer_email || customer?.email}</span> gesendet. Antworten landen unter &bdquo;Kundenanfragen&ldquo;.
+                </p>
+              )}
+
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Betreff</label>
+              <input
+                type="text"
+                value={messageSubject}
+                onChange={(e) => setMessageSubject(e.target.value)}
+                placeholder="Betreff"
+                maxLength={200}
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-400 mb-4"
+              />
+
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Nachricht</label>
+              <textarea
+                value={messageBody}
+                onChange={(e) => setMessageBody(e.target.value)}
+                placeholder="Deine Nachricht an den Kunden…"
+                rows={6}
+                maxLength={5000}
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-400 mb-4 resize-y"
+              />
+
+              <div className="flex justify-end gap-2 mt-2">
+                <button onClick={() => setShowMessageModal(false)}
+                  className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSendCustomerMessage}
+                  disabled={messageSending || messageSubject.trim().length < 3 || messageBody.trim().length < 1}
+                  className="px-5 py-2 text-sm font-heading font-semibold bg-violet-600 text-white rounded-btn hover:bg-violet-700 transition-colors disabled:opacity-40"
+                >
+                  {messageSending ? 'Sende…' : '💬 Senden'}
                 </button>
               </div>
             </div>

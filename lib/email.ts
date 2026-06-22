@@ -1436,9 +1436,12 @@ export async function sendInboundReply(data: {
   inReplyToMessageId?: string | null;
   /** Postfach-Adresse des zustaendigen Mitarbeiters (Absender der Antwort). */
   fromAddress?: string;
+  /** Bei einer ERSTEN (vom Admin initiierten) Mail kein "Re:"-Prefix setzen. Default true. */
+  prefixRe?: boolean;
 }): Promise<string | null | undefined> {
   const cleanSubject = stripSubject(data.subject) || '(kein Betreff)';
-  const subject = /^re:/i.test(cleanSubject) ? cleanSubject : `Re: ${cleanSubject}`;
+  const prefixRe = data.prefixRe !== false;
+  const subject = !prefixRe || /^re:/i.test(cleanSubject) ? cleanSubject : `Re: ${cleanSubject}`;
   const safeBody = h(data.body).replace(/\n/g, '<br>');
 
   const html = `<!DOCTYPE html>
