@@ -96,6 +96,9 @@ export async function buildCreditNotePdfDataFromRow(
     booking = data ?? null;
   }
   const ref = await loadRecipientAndInvoiceRef(supabase, booking, (cn.invoice_id as string) ?? null);
+  // Tatsaechlich erstatteter Betrag steht auf der Buchung (Cash/Stripe), NICHT
+  // im credit_notes.gross_amount (= voller Stornobetrag).
+  const refundedAmount = booking ? Math.max(0, Number(booking.refund_amount ?? 0)) : 0;
   return {
     creditNoteNumber: cn.credit_note_number as string,
     creditNoteDate: deToDate(cn.created_at),
@@ -112,15 +115,16 @@ export async function buildCreditNotePdfDataFromRow(
     taxMode: (cn.tax_mode as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
     taxRate: Number(cn.tax_rate) || 19,
     ustId: ref.ustId,
+    refundedAmount,
     refunded: cn.refund_status === 'succeeded',
   };
 }
 
-/** Baut die PDF-Daten als Vorschau aus Buchung + Betrag (noch keine CN). */
+/** Baut die PDF-Daten als Vorschau aus Buchung + Betraegen (noch keine CN). */
 export async function buildCreditNotePreviewData(
   supabase: SupabaseClient,
   booking: Record<string, unknown>,
-  args: { grossAmount: number; reason?: string },
+  args: { grossAmount: number; refundedAmount?: number; reason?: string },
 ): Promise<CreditNotePdfData> {
   const { taxMode, taxRate } = await loadTaxConfig(supabase);
   const taxCalc = calculateTax(args.grossAmount, taxMode, taxRate, 'gross');
@@ -141,6 +145,7 @@ export async function buildCreditNotePreviewData(
     taxMode,
     taxRate,
     ustId: ref.ustId,
+    refundedAmount: args.refundedAmount,
     refunded: false,
   };
 }
@@ -179,6 +184,7 @@ export async function dispatchCreditNoteDocument(
         customerName: pdfData.customerName,
         customerEmail: pdfData.customerEmail,
         grossAmount: pdfData.grossAmount,
+        refundedAmount: pdfData.refundedAmount,
         reason: pdfData.reason,
         refunded: pdfData.refunded,
         pdfBuffer,

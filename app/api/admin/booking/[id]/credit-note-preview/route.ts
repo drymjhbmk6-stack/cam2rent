@@ -44,14 +44,20 @@ export async function GET(
     .maybeSingle();
 
   const url = new URL(req.url);
-  const amount = Math.max(0, Number(url.searchParams.get('amount') || '0') || 0);
+  // Stornobetrag = voller Buchungsbetrag. `refunded` = tatsaechlich erstattet
+  // (fuer die "davon erstattet"-Zeile in der Vorschau).
+  const refunded = Math.max(0, Number(url.searchParams.get('refunded') || '0') || 0);
   const reason = url.searchParams.get('reason') || undefined;
   const priceTotal = Number(booking.price_total ?? 0);
-  const grossAmount = priceTotal > 0 ? Math.min(priceTotal, amount) : amount;
+  const refundedClamped = priceTotal > 0 ? Math.min(priceTotal, refunded) : refunded;
 
   const data = cn
     ? await buildCreditNotePdfDataFromRow(supabase, cn)
-    : await buildCreditNotePreviewData(supabase, booking, { grossAmount, reason });
+    : await buildCreditNotePreviewData(supabase, booking, {
+        grossAmount: priceTotal,
+        refundedAmount: refundedClamped,
+        reason,
+      });
 
   const pdf = await renderCreditNotePdfBuffer(data);
 

@@ -75,7 +75,7 @@ export default function CancellationPreviewModal({
       inner = `/api/admin/booking/${bookingId}/credit-note-preview`;
       if (creditNoteUsesAmount) {
         const params = new URLSearchParams();
-        if (refundAmount != null) params.set('amount', String(refundAmount));
+        if (refundAmount != null) params.set('refunded', String(refundAmount));
         if (reason) params.set('reason', reason);
         const qs = params.toString();
         if (qs) inner += `?${qs}`;

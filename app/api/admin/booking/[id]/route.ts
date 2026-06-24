@@ -2153,17 +2153,21 @@ export async function PATCH(
         console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
       }
 
-      // ── Stornierungsbeleg (Gutschrift) bei Rueckerstattung ───────────────
-      // Auto-Anlage einer Gutschrift + Stornierungsbeleg-PDF an den Kunden.
-      // Best-effort/non-blocking: schlaegt es fehl, bleibt Storno + Refund +
-      // Storno-Mail bestehen.
-      if (requestedRefund > 0 && refundStatus !== 'failed_pending_admin') {
+      // ── Stornierungsbeleg (Gutschrift) ──────────────────────────────────
+      // Echte Stornorechnung: hebt die komplette Originalrechnung auf (voller
+      // Buchungsbetrag), unabhaengig vom tatsaechlich erstatteten Betrag. Der
+      // erstattete Betrag (requestedRefund) steht als "davon erstattet"-Zeile
+      // auf dem Beleg (gelesen aus bookings.refund_amount). Wird erzeugt, wenn
+      // die Buchung einen Betrag hatte UND eine Mail rausgeht ODER erstattet
+      // wurde. Best-effort/non-blocking. (refundDone nur fuer Doku referenziert.)
+      void refundDone;
+      if (priceTotal > 0 && refundStatus !== 'failed_pending_admin' && (wantEmail || requestedRefund > 0)) {
         (async () => {
           const cnId = await createCancellationCreditNote(supabase, {
             bookingId: id,
-            grossAmount: requestedRefund,
+            grossAmount: priceTotal,
             reason: cancellation_reason || 'Stornierung der Buchung',
-            refundStatus: refundDone ? refundStatus : 'manual',
+            refundStatus,
             stripeRefundId,
           });
           if (cnId) {

@@ -26,12 +26,16 @@ export interface CreditNotePdfData {
   customerAddress?: string;
   /** Grund der Stornierung (frei, vom Admin). */
   reason?: string;
+  /** Stornobetrag = voller Buchungsbetrag (Aufhebung der Originalrechnung). */
   grossAmount: number;
   netAmount: number;
   taxAmount: number;
   taxMode?: 'kleinunternehmer' | 'regelbesteuerung';
   taxRate?: number;
   ustId?: string;
+  /** Tatsaechlich erstatteter Betrag (Bar/Stripe). Kann kleiner als der
+   *  Stornobetrag sein (z.B. keine Rueckerstattung bei Spaet-Storno). */
+  refundedAmount?: number;
   /** true = Betrag wurde bereits erstattet, false = wird erstattet. */
   refunded?: boolean;
 }
@@ -244,6 +248,14 @@ export function CreditNotePDF({ data }: { data: CreditNotePdfData }) {
           <Text style={s.totalValue}>{neg(data.grossAmount)}</Text>
         </View>
 
+        {/* ── Tatsaechlich erstatteter Betrag (informativ) ── */}
+        {data.refundedAmount != null && (
+          <View style={s.sumRow} wrap={false}>
+            <Text style={s.sumLabel}>Davon erstattet:</Text>
+            <Text style={s.sumValue}>{fmtEuro(Math.abs(data.refundedAmount))}</Text>
+          </View>
+        )}
+
         {/* ── Steuer-Hinweis ── */}
         <Text style={{ fontSize: 9, color: C.grayMid, marginTop: 6 }}>
           {isRegel
@@ -254,9 +266,18 @@ export function CreditNotePDF({ data }: { data: CreditNotePdfData }) {
         <View style={s.divider} />
 
         <Text style={{ fontSize: 10, color: C.dark, lineHeight: 1.5 }}>
-          {data.refunded
-            ? `Der Betrag von ${fmtEuro(Math.abs(data.grossAmount))} wurde auf dein ursprüngliches Zahlungsmittel zurückerstattet.`
-            : `Der Betrag von ${fmtEuro(Math.abs(data.grossAmount))} wird auf dein ursprüngliches Zahlungsmittel zurückerstattet.`}
+          {(() => {
+            const refunded = data.refundedAmount != null ? Math.abs(data.refundedAmount) : Math.abs(data.grossAmount);
+            const full = Math.abs(data.grossAmount);
+            const verb = data.refunded ? 'wurde' : 'wird';
+            if (refunded <= 0) {
+              return 'Diese Buchung wurde storniert. Es erfolgt keine Rückzahlung dieses Betrags.';
+            }
+            if (refunded + 0.005 < full) {
+              return `Diese Buchung wurde storniert. Davon ${verb} ein Betrag von ${fmtEuro(refunded)} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+            }
+            return `Der Betrag von ${fmtEuro(refunded)} ${verb} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+          })()}
         </Text>
 
         {/* ── Footer ── */}

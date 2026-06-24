@@ -979,7 +979,10 @@ export interface CreditNoteEmailData {
   creditNoteNumber: string;
   customerName: string;
   customerEmail: string;
+  /** Stornobetrag (voller Buchungsbetrag). */
   grossAmount: number;
+  /** Tatsaechlich erstatteter Betrag (kann < grossAmount sein). */
+  refundedAmount?: number;
   reason?: string;
   /** true = Betrag bereits erstattet, false = wird erstattet. */
   refunded?: boolean;
@@ -989,9 +992,11 @@ export interface CreditNoteEmailData {
 export async function sendCreditNote(data: CreditNoteEmailData) {
   const subject = stripSubject(`Stornierungsbeleg ${data.creditNoteNumber} – ${BUSINESS.name}`);
   const firstName = (data.customerName || '').trim().split(/\s+/)[0] || 'dort';
-  const refundLine = data.refunded
-    ? `Der Betrag von <strong>${fmtEuro(Math.abs(data.grossAmount))}</strong> wurde auf dein ursprüngliches Zahlungsmittel zurückerstattet.`
-    : `Der Betrag von <strong>${fmtEuro(Math.abs(data.grossAmount))}</strong> wird auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+  const refunded = data.refundedAmount != null ? Math.abs(data.refundedAmount) : Math.abs(data.grossAmount);
+  const verb = data.refunded ? 'wurde' : 'wird';
+  const refundLine = refunded <= 0
+    ? 'Diese Buchung wurde storniert. Eine Rückzahlung erfolgt nicht.'
+    : `Ein Betrag von <strong>${fmtEuro(refunded)}</strong> ${verb} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
   const html = `
 <!DOCTYPE html>
 <html lang="de">

@@ -1009,14 +1009,21 @@ erzeugten weder ein PDF noch eine E-Mail.
   `refund_note` werden in `bookings` persistiert (defensiver Skip ohne die
   Spalten aus `supabase-bookings-refund.sql`). Kunden-/Admin-Storno-Mail nur
   wenn `send_email !== false`, mit **echtem** `refundAmount` + `refundPercentage`.
-- **Stornierungsbeleg (Kopplung „Beides"):** Bei `refund_amount > 0` (und Refund
-  nicht fehlgeschlagen) legt `createCancellationCreditNote`
-  (`lib/buchhaltung/credit-note-document.ts`) automatisch eine `credit_notes`-Zeile
-  an (`status='sent'`, `reason_category='cancellation'`, `gross_amount=refund`,
-  `refund_status` aus dem bereits ausgelösten Refund — **kein** doppelter Stripe-
-  Refund), sichert idempotent die Originalrechnung via `storeInvoiceForBooking`,
-  setzt sie auf `cancelled`, dann `dispatchCreditNoteDocument` → PDF + Mail (nur
-  wenn `send_email`). Erscheint auch im Gutschriften-Tab der Buchhaltung.
+- **Stornierungsbeleg (Kopplung „Beides"):** Wenn die Buchung einen Betrag hatte
+  (`price_total > 0`) UND eine Storno-Mail rausgeht ODER erstattet wird, legt
+  `createCancellationCreditNote` (`lib/buchhaltung/credit-note-document.ts`)
+  automatisch eine `credit_notes`-Zeile an. **`gross_amount` = voller
+  Buchungsbetrag** (echte Stornorechnung, die die Originalrechnung aufhebt —
+  NICHT der erstattete Betrag). Der tatsächlich erstattete Betrag steht als
+  „Davon erstattet"-Zeile auf dem Beleg (gelesen aus `bookings.refund_amount`).
+  `status='sent'`, `reason_category='cancellation'`, `refund_status` aus dem
+  bereits ausgelösten Refund (**kein** doppelter Stripe-Refund). Sichert
+  idempotent die Originalrechnung via `storeInvoiceForBooking`, setzt sie auf
+  `cancelled`, dann `dispatchCreditNoteDocument` → PDF + Mail (nur wenn
+  `send_email`). Erscheint auch im Gutschriften-Tab der Buchhaltung.
+  **Wichtig:** Stornobetrag (Beleg) und Rückerstattung (Stripe) sind getrennt —
+  der Beleg hebt immer den vollen Rechnungsbetrag auf, wie viel Geld zurückgeht
+  steuert das Refund-Feld separat.
 - **Gutschriften-Tab eigenständig:** `POST /api/admin/buchhaltung/credit-notes/[id]/approve`
   ruft nach erfolgreichem Refund/`sent` ebenfalls `dispatchCreditNoteDocument`
   (best-effort) → manuell angestoßene Gutschriften bekommen jetzt auch PDF + Mail.
@@ -1049,9 +1056,10 @@ erzeugten weder ein PDF noch eine E-Mail.
     liefert die Anhang-Liste (`invoice` wenn angehakt, `creditnote` wenn
     Rückerstattung > 0 ODER bereits eine Gutschrift existiert). `refund_amount`
     fehlt im Body → Server nutzt den gespeicherten Wert (Resend-Fall).
-  - `GET /api/admin/booking/[id]/credit-note-preview?amount=&reason=` liefert
-    das Stornierungsbeleg-PDF inline: existiert eine Gutschrift → deren echte
-    Fassung, sonst eine Vorschau aus Buchung + `amount` (Nummer „Vorschau").
+  - `GET /api/admin/booking/[id]/credit-note-preview?refunded=&reason=` liefert
+    das Stornierungsbeleg-PDF inline (Stornobetrag = voller Buchungsbetrag,
+    `refunded` = „davon erstattet"-Zeile): existiert eine Gutschrift → deren
+    echte Fassung, sonst eine Vorschau aus der Buchung (Nummer „Vorschau").
   - **Rechnungs-Anhang:** `sendCancellationConfirmation(data, { attachments })`
     nimmt jetzt optionale Anhänge. Bei `attach_invoice=true` hängt der
     Storno-/Resend-Pfad die echte Rechnung an (`renderInvoicePdfBuffer` in

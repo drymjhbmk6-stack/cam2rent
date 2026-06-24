@@ -70,9 +70,9 @@ export async function POST(
   if (attachInvoice && priceTotal > 0) {
     attachments.push({ key: 'invoice', label: 'Rechnung' });
   }
-  // Stornierungsbeleg wird angehaengt, wenn eine Rueckerstattung erfolgt
-  // (Storno-Fall) ODER bereits eine Gutschrift existiert (Resend-Fall).
-  if (refundAmount > 0 || creditNoteExists) {
+  // Stornierungsbeleg (= voller Buchungsbetrag) wird angehaengt, sobald die
+  // Buchung einen Betrag hatte ODER bereits eine Gutschrift existiert (Resend).
+  if (priceTotal > 0 || creditNoteExists) {
     attachments.push({ key: 'creditnote', label: 'Stornierungsbeleg' });
   }
 
