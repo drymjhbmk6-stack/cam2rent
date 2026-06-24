@@ -2690,6 +2690,22 @@ Neue Section „Bestellung bearbeiten" auf `/admin/buchungen/[id]` (über der
 schlankeren „Zubehör der Buchung bearbeiten"-Section, die für reine
 Zubehör-Quick-Edits bleibt). Ändert **Mietzeitraum, Kamera, Set/Zubehör und
 Haftungsschutz** in einem Vorgang; Preisdifferenz wird abgewickelt.
+- **Manueller Rabatt (Stand 2026-06-24):** Die Edit-Maske hat jetzt — wie das
+  Manuelle-Buchung-Formular (`/admin/buchungen/neu`) — einen **Rabatt-Block**
+  (Modus `Kein Rabatt / Prozent (%) / Festbetrag (€)` + Wert + optionaler
+  Grund), platziert zwischen „Set/Zubehör" und „Grund der Änderung". Basis =
+  Miete + Zubehör/Sets (ohne Haftung & Versand, analog Neu-Formular). Backend
+  `booking_edit` (`app/api/admin/booking/[id]/route.ts`) nimmt
+  `discount_mode`/`discount_value`/`discount_reason` entgegen: ein gesetzter
+  manueller Rabatt **ersetzt** alle Auto-Rabatte (`discount_amount` = manuell,
+  `duration_discount`/`loyalty_discount` → 0). Wird **kein** manueller Rabatt
+  gesendet (Modus „Kein Rabatt"), bleibt das bisherige Verhalten: bestehende
+  Auto-Rabatte werden proportional zum neuen Subtotal skaliert (`discScale`).
+  Der Grund wandert in `bookings.notes` (keine eigene Spalte — wie im
+  Neu-Formular; `bookings` hat nur `discount_amount`/`duration_discount`/
+  `loyalty_discount`). Preview liefert zusätzlich `discount_manual` (UI-Label
+  „Rabatt" vs. „Rabatte (anteilig)"). Differenz-Abwicklung (Zahlungslink /
+  Erstattung) unverändert; keine Migration.
 - **Wirksamkeit:** Änderung greift SOFORT auf die echte Buchung (Packliste,
   Vertragsdaten-Quelle, Verfügbarkeit, WBW). Zahlung wird separat verfolgt
   (nicht blockierend) — robust auch für bereits versendete Buchungen.

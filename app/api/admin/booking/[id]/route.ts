@@ -1025,6 +1025,9 @@ export async function PATCH(
       items?: { id?: string; accessory_id?: string; qty?: number }[] | null;
       reason?: string;
       new_price_total?: number | null;
+      discount_mode?: 'none' | 'percent' | 'fixed' | null;
+      discount_value?: number | null;
+      discount_reason?: string | null;
       settle?: 'auto' | 'none';
       dry_run?: boolean;
     };
@@ -1268,19 +1271,55 @@ export async function PATCH(
       ? Math.round((shipOverrideVal as number) * 100) / 100
       : Math.round(calcShipping(subtotal, shipMethod, deliveryMode, shipCfg).price * 100) / 100;
 
-    // Rabatt proportional zum neuen Subtotal skalieren — sonst bliebe ein
-    // absoluter Rabatt stehen, wenn die Bestellung kleiner wird
-    // (verzerrte Differenz / Ueber-Erstattung).
-    const oldSubtotal =
-      Number(booking.price_rental ?? 0) +
-      Number(booking.price_accessories ?? 0) +
-      Number(booking.price_haftung ?? 0);
-    const discScale = oldSubtotal > 0 ? Math.min(1, Math.max(0, subtotal / oldSubtotal)) : 1;
-    const scaledDiscountAmount = Math.round(Number(booking.discount_amount ?? 0) * discScale * 100) / 100;
-    const scaledDurationDiscount = Math.round(Number(booking.duration_discount ?? 0) * discScale * 100) / 100;
-    const scaledLoyaltyDiscount = Math.round(Number(booking.loyalty_discount ?? 0) * discScale * 100) / 100;
-    let discountTotal =
-      Math.round((scaledDiscountAmount + scaledDurationDiscount + scaledLoyaltyDiscount) * 100) / 100;
+    // Rabatt-Behandlung:
+    //  - Setzt der Admin einen manuellen Rabatt (Prozent/Festbetrag), ERSETZT
+    //    dieser alle bestehenden Auto-Rabatte (duration/loyalty -> 0).
+    //  - Ohne manuellen Rabatt bleibt das bisherige Verhalten: bestehende
+    //    Rabatte proportional zum neuen Subtotal skalieren, damit ein absoluter
+    //    Rabatt nicht stehen bleibt, wenn die Bestellung kleiner wird
+    //    (verzerrte Differenz / Ueber-Erstattung).
+    const discMode = bookingEdit.discount_mode;
+    const discValue = Number(bookingEdit.discount_value);
+    const manualDiscountActive =
+      (discMode === 'percent' || discMode === 'fixed') &&
+      Number.isFinite(discValue) && discValue > 0;
+
+    // Rabatt-Basis wie im Manuelle-Buchung-Formular: nur Miete + Zubehör/Sets
+    // (Haftung + Versand bleiben aussen vor).
+    const discountBase = priceRental + priceAccessories;
+
+    let scaledDiscountAmount: number;
+    let scaledDurationDiscount: number;
+    let scaledLoyaltyDiscount: number;
+    let discountTotal: number;
+    let discountIsManual = false;
+
+    if (manualDiscountActive) {
+      let manual = 0;
+      if (discMode === 'percent') {
+        manual = Math.round(discountBase * Math.min(100, discValue)) / 100;
+      } else {
+        manual = Math.min(discountBase, Math.round(discValue * 100) / 100);
+      }
+      if (!(manual > 0)) manual = 0;
+      scaledDiscountAmount = manual;
+      scaledDurationDiscount = 0;
+      scaledLoyaltyDiscount = 0;
+      discountTotal = Math.round(manual * 100) / 100;
+      discountIsManual = true;
+    } else {
+      const oldSubtotal =
+        Number(booking.price_rental ?? 0) +
+        Number(booking.price_accessories ?? 0) +
+        Number(booking.price_haftung ?? 0);
+      const discScale = oldSubtotal > 0 ? Math.min(1, Math.max(0, subtotal / oldSubtotal)) : 1;
+      scaledDiscountAmount = Math.round(Number(booking.discount_amount ?? 0) * discScale * 100) / 100;
+      scaledDurationDiscount = Math.round(Number(booking.duration_discount ?? 0) * discScale * 100) / 100;
+      scaledLoyaltyDiscount = Math.round(Number(booking.loyalty_discount ?? 0) * discScale * 100) / 100;
+      discountTotal =
+        Math.round((scaledDiscountAmount + scaledDurationDiscount + scaledLoyaltyDiscount) * 100) / 100;
+      discountIsManual = false;
+    }
     if (discountTotal > subtotal) discountTotal = subtotal;
     const computedTotal = Math.max(0, Math.round((subtotal + shippingPrice - discountTotal) * 100) / 100);
 
@@ -1311,7 +1350,8 @@ export async function PATCH(
           delivery_mode: deliveryMode,
           shipping_method: shipMethod,
           discount_total: Math.round(discountTotal * 100) / 100,
-          discount_scaled: discScale < 0.9995,
+          discount_scaled: !discountIsManual && discountTotal > 0,
+          discount_manual: discountIsManual,
           computed_total: computedTotal,
           final_total: finalTotal,
           old_total: oldTotal,
@@ -1350,6 +1390,16 @@ export async function PATCH(
       parts.push(`Versand → ${deliveryMode === 'abholung' ? 'Abholung' : `${shipMethod === 'express' ? 'Express' : 'Standard'} ${shippingPrice.toFixed(2).replace('.', ',')} €`}`);
     }
     if (itemsProvided) parts.push('Zubehör/Set angepasst');
+    if (discountIsManual) {
+      const discReason = typeof bookingEdit.discount_reason === 'string'
+        ? bookingEdit.discount_reason.trim().slice(0, 120)
+        : '';
+      parts.push(
+        `Rabatt → −${discountTotal.toFixed(2).replace('.', ',')} €`
+        + (discMode === 'percent' ? ` (${Math.min(100, discValue)}%)` : '')
+        + (discReason ? ` – ${discReason}` : ''),
+      );
+    }
     let noteLine = `Bestellbearbeitung (${dateStr}): ${reason}`;
     if (parts.length > 0) noteLine += ` [${parts.join(', ')}]`;
     noteLine += ` — Gesamt ${oldTotal.toFixed(2).replace('.', ',')} € → ${finalTotal.toFixed(2).replace('.', ',')} €`;

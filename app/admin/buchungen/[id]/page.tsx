@@ -2437,6 +2437,7 @@ interface EditPreview {
   shipping_method?: 'standard' | 'express';
   discount_total: number;
   discount_scaled?: boolean;
+  discount_manual?: boolean;
   computed_total: number;
   final_total: number;
   old_total: number;
@@ -2499,6 +2500,9 @@ function BookingEditSection({
   const [haftung, setHaftung] = useState<'none' | 'standard' | 'premium'>(curHaftung);
   const [rows, setRows] = useState<{ id: string; qty: number }[]>(initRows);
   const [accChanged, setAccChanged] = useState(false);
+  const [discountMode, setDiscountMode] = useState<'none' | 'percent' | 'fixed'>('none');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
   const [reason, setReason] = useState('');
   const [settle, setSettle] = useState<'auto' | 'none'>('auto');
   const [overrideOn, setOverrideOn] = useState(false);
@@ -2519,6 +2523,9 @@ function BookingEditSection({
     setHaftung(curHaftung);
     setRows(initRows);
     setAccChanged(false);
+    setDiscountMode('none');
+    setDiscountValue('');
+    setDiscountReason('');
     setReason('');
     setSettle('auto');
     setOverrideOn(false);
@@ -2549,6 +2556,16 @@ function BookingEditSection({
     // Server die aktuelle Komposition (Set bleibt als Set bepreist).
     if (accChanged) {
       body.items = rows.filter((r) => r.id).map((r) => ({ id: r.id, qty: r.qty }));
+    }
+    // Manueller Rabatt: nur senden wenn gesetzt — sonst behält der Server die
+    // bestehenden (anteilig skalierten) Auto-Rabatte.
+    if (discountMode !== 'none') {
+      const v = parseFloat(discountValue.replace(',', '.'));
+      if (Number.isFinite(v) && v > 0) {
+        body.discount_mode = discountMode;
+        body.discount_value = v;
+        body.discount_reason = discountReason.trim() || null;
+      }
     }
     if (overrideOn) {
       const n = Number(overrideVal.replace(',', '.'));
@@ -2814,6 +2831,49 @@ function BookingEditSection({
         </div>
 
         <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rabatt</label>
+          <select
+            value={discountMode}
+            onChange={(e) => { setDiscountMode(e.target.value as 'none' | 'percent' | 'fixed'); setPreview(null); }}
+            className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+          >
+            <option value="none">Kein Rabatt</option>
+            <option value="percent">Prozent (%)</option>
+            <option value="fixed">Festbetrag (€)</option>
+          </select>
+          {discountMode !== 'none' && (
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <div>
+                <label className="block text-xs text-brand-muted mb-1">Wert ({discountMode === 'percent' ? '%' : '€'})</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={discountValue}
+                  onChange={(e) => { setDiscountValue(e.target.value); setPreview(null); }}
+                  placeholder={discountMode === 'percent' ? '10' : '5,00'}
+                  className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-brand-muted mb-1">Grund (optional)</label>
+                <input
+                  type="text"
+                  value={discountReason}
+                  onChange={(e) => { setDiscountReason(e.target.value); setPreview(null); }}
+                  placeholder="z.B. Stammkunde, Kulanz"
+                  className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+                />
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-brand-muted mt-1">
+            Basis: Miete + Zubehör/Sets (ohne Haftung & Versand). Leer lassen =
+            bestehende Rabatte bleiben anteilig erhalten; ein manueller Rabatt
+            ersetzt vorhandene Mietdauer-/Stammkunden-Rabatte.
+          </p>
+        </div>
+
+        <div>
           <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">
             Grund der Änderung (Pflicht, min. 10 Zeichen)
           </label>
@@ -2869,7 +2929,11 @@ function BookingEditSection({
             </div>
             {preview.discount_total > 0 && (
               <div className="flex justify-between text-green-600">
-                <span>Rabatte{preview.discount_scaled ? ' (anteilig)' : ''}</span>
+                <span>
+                  {preview.discount_manual ? 'Rabatt' : 'Rabatte'}
+                  {preview.discount_scaled && !preview.discount_manual ? ' (anteilig)' : ''}
+                  {preview.discount_manual && discountReason.trim() ? ` (${discountReason.trim()})` : ''}
+                </span>
                 <span>-{fmtEuro(preview.discount_total)}</span>
               </div>
             )}
