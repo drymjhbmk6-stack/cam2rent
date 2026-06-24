@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
+import { ReturnChecklistPDF } from '@/lib/return-checklist-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
@@ -1704,6 +1705,109 @@ export async function sendReviewRequest(data: {
 </body></html>`;
 
   await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'review_request' });
+}
+
+// ─── Rückgabe-Checkliste (letzter Miettag) ───────────────────────────────────
+
+export interface ReturnChecklistEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  productName: string;
+  rentalFrom: string;          // 'YYYY-MM-DD'
+  rentalTo: string;            // 'YYYY-MM-DD'
+  deliveryMode: string;        // 'versand' | 'abholung'
+  cameras: { product_name: string; serial_number: string | null }[];
+  items: { name: string; qty: number; included_parts?: string[] }[];
+}
+
+/**
+ * Erinnerung am letzten Miettag (Cron `return-checklist`, ~08:00 Berlin) —
+ * für Versand UND persönliche Rückgabe. Die eigentliche Checkliste (Kamera +
+ * Seriennr. + Zubehör) liegt ausschließlich im PDF-Anhang; die Mail verweist
+ * nur darauf. Versand → „zurücksenden", Abholung → „zurückbringen".
+ */
+export async function sendReturnChecklist(data: ReturnChecklistEmailData) {
+  const BASE_URL = await getSiteUrl();
+  const isAbholung = data.deliveryMode === 'abholung';
+  const url = `${BASE_URL}/konto/buchungen`;
+
+  const subject = stripSubject(
+    isAbholung
+      ? `Heute zurückgeben: ${data.productName} – Checkliste im Anhang`
+      : `Heute zurücksenden: ${data.productName} – Checkliste im Anhang`,
+  );
+
+  // Checkliste-PDF erzeugen. Im Preview-Modus (renderEmailPreview) wird das
+  // PDF zwar gerendert, aber nach dem sendAndLog-Capture wieder verworfen.
+  const pdfBuffer = await renderToBuffer(
+    createElement(ReturnChecklistPDF, {
+      data: {
+        bookingId: data.bookingId,
+        customerName: data.customerName,
+        rentalFrom: data.rentalFrom,
+        rentalTo: data.rentalTo,
+        deliveryMode: data.deliveryMode,
+        cameras: data.cameras,
+        items: data.items,
+      },
+    }) as ReactElement<DocumentProps>,
+  );
+
+  const actionLine = isAbholung
+    ? 'Bitte bring heute das komplette Equipment zu uns zurück.'
+    : 'Bitte sende heute das komplette Equipment an uns zurück. Das Rücksendeetikett liegt deinem Paket bei.';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Heute ist Rückgabetag 📦</h1>
+          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            heute endet dein Mietzeitraum für <strong style="color:#0a0a0a;">${h(data.productName)}</strong>.
+            ${h(actionLine)}
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+            <tr><td style="padding:18px 22px;">
+              <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#1e3a8a;">📋 Rückgabe-Checkliste im Anhang</p>
+              <p style="margin:0;font-size:13px;color:#1e40af;line-height:1.6;">
+                Im PDF-Anhang findest du eine vollständige Liste aller Teile (Kamera, Seriennummer und Zubehör),
+                die zurück müssen. Hake jede Position ab, damit nichts vergessen wird.
+              </p>
+            </td></tr>
+          </table>
+          <a href="${url}" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Meine Buchung ansehen
+          </a>
+          <p style="margin:22px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+            Falls du bereits ${isAbholung ? 'zurückgegeben' : 'zurückgesendet'} hast, kannst du diese E-Mail ignorieren.<br>
+            Buchung: ${h(data.bookingId)}
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; Action-Cam Verleih &middot; <a href="${h(BUSINESS.url)}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'return_checklist',
+    attachments: [
+      { filename: `Rueckgabe-Checkliste-${data.bookingId}.pdf`, content: pdfBuffer },
+    ],
+  });
 }
 
 // ─── Abschluss-Bestätigung ───────────────────────────────────────────────────

@@ -72,6 +72,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   abandoned_cart: { label: 'Warenkorbabbruch', color: '#94a3b8', bg: '#94a3b814' },
   return_reminder_2d: { label: 'Rückgabe-Erinnerung (2T)', color: '#f59e0b', bg: '#f59e0b14' },
   return_reminder_0d: { label: 'Rückgabe heute', color: '#f97316', bg: '#f9731614' },
+  return_checklist: { label: 'Rückgabe-Checkliste (letzter Tag)', color: '#f97316', bg: '#f9731614' },
   overdue_1d: { label: 'Überfällig (1T)', color: '#ef4444', bg: '#ef444414' },
   overdue_3d: { label: 'Überfällig (3T)', color: '#dc2626', bg: '#dc262614' },
   payment_link: { label: 'Zahlungs-Link', color: '#0ea5e9', bg: '#0ea5e914' },

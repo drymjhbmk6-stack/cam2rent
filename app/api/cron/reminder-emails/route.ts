@@ -4,7 +4,6 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import {
   sendReturnReminder,
-  sendReturnDueToday,
   sendOverdueNotice,
   sendSecondOverdueNotice,
   sendReviewRequest,
@@ -13,9 +12,11 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+// 'return_reminder_0d' (Rückgabe heute) ist in den eigenständigen Cron
+// `return-checklist-reminder` umgezogen — dort mit Checklisten-PDF + breiterer
+// Status-Abdeckung (auch delivered/picked_up).
 type EmailType =
   | 'return_reminder_2d'
-  | 'return_reminder_0d'
   | 'overdue_1d'
   | 'overdue_3d'
   | 'review_request';
@@ -58,7 +59,6 @@ export async function GET(req: NextRequest) {
   const results: SendResult[] = [];
 
   // Date targets
-  const today = dateOffset(0);
   const in2Days = dateOffset(2);
   const yesterday = dateOffset(-1);
   const threeDaysAgo = dateOffset(-3);
@@ -76,12 +76,6 @@ export async function GET(req: NextRequest) {
       targetDate: in2Days,
       statuses: ['confirmed', 'shipped'],
       sendFn: sendReturnReminder,
-    },
-    {
-      emailType: 'return_reminder_0d',
-      targetDate: today,
-      statuses: ['confirmed', 'shipped'],
-      sendFn: sendReturnDueToday,
     },
     {
       emailType: 'overdue_1d',

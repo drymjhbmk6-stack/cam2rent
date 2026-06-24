@@ -117,45 +117,9 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
   return result.data?.id ?? null;
 }
 
-// ─── 2. Return Due Today ─────────────────────────────────────────────────────
-
-export async function sendReturnDueToday(data: ReminderEmailData): Promise<string | null> {
-  const baseUrl = await getSiteUrl();
-  const fromEmail = await getResendFromEmail();
-  const url = buildBookingUrl(data.bookingId, data.bookingUrl, baseUrl);
-  const subject = `Heute bitte zurücksenden: ${h(data.productName)}`;
-
-  const html = wrapLayout(`
-    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Heute ist Rückgabetag!</h1>
-    <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${h(data.customerName)},<br><br>
-      heute endet dein Mietzeitraum für <strong>${h(data.productName)}</strong>.
-      Bitte sende den Artikel heute noch zurück.
-    </p>
-    <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
-      Falls du den Artikel bereits zurückgesendet hast, kannst du diese E-Mail ignorieren.
-    </p>
-    ${ctaButton(url, 'Buchung ansehen')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
-  `, baseUrl);
-
-  const result = await resend.emails.send({
-    from: `cam2rent <${fromEmail}>`,
-    replyTo: REPLY_TO,
-    to: data.customerEmail,
-    subject,
-    html,
-  });
-
-  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
-  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
-  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
-  if (result.error) {
-    throw new Error(result.error.message ?? 'resend send failed');
-  }
-
-  return result.data?.id ?? null;
-}
+// Hinweis: Die frühere „Rückgabe heute"-Mail (sendReturnDueToday) ist in den
+// eigenständigen Cron `return-checklist` umgezogen — dort mit Checklisten-PDF
+// (siehe lib/email.ts → sendReturnChecklist).
 
 // ─── 3. Overdue – 1 day after ────────────────────────────────────────────────
 

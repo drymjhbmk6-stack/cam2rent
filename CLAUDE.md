@@ -938,6 +938,48 @@ CTA auf `/konto/buchungen/[id]/material`). Bei `condition='beschaedigt'` (→ St
   Übersicht `lib/email-previews.ts` (`EMAIL_TEMPLATE_CATALOG` → vorab ansehbar +
   per Override anpassbar unter `/admin/emails/vorlagen`).
 
+### Rückgabe-Checkliste am letzten Miettag (Stand 2026-06-24)
+Am **letzten Miettag** (`rental_to == heute`) bekommt der Kunde ~08:00 Berlin
+eine Erinnerungsmail mit einer **Rückgabe-Checkliste als PDF-Anhang** (Kamera +
+Seriennr. + Zubehör/Sets) — generisch für **Versand UND persönliche
+Rückgabe/Abholung**. **Ersetzt** die frühere schlichte „Rückgabe heute"-Mail
+(`return_reminder_0d`) und deckt zusätzlich die Status `delivered` + `picked_up`
+ab (die alte Mail lief nur auf `confirmed`/`shipped`).
+- **Cron `GET/POST /api/cron/return-checklist-reminder`** (`verifyCronAuth` +
+  `acquireCronLock('return-checklist-reminder')`, `maxDuration=300`): lädt
+  Buchungen mit `rental_to == getBerlinDateString()` und Status in
+  `['confirmed','shipped','delivered','picked_up']`, dedupliziert über
+  `email_log` (`email_type='return_checklist'`, `status='sent'`, `booking_id`),
+  löst pro Buchung die Rückgabe-Positionen auf und schickt die Mail
+  (`Promise.allSettled`, ein Fehler killt nicht die Schleife). Buchungen ohne
+  hinterlegte `customer_email` werden übersprungen.
+- **Mail-Funktion** `sendReturnChecklist()` in `lib/email.ts`, emailType
+  `return_checklist`. Nutzt `sendAndLog` → automatisches `email_log`-Logging
+  (Quelle der Dedupe), Admin-Overrides + **Test-Modus-E-Mail-Redirect**
+  (`getTestModeEmailRedirect`). Die Checkliste steht **nur im PDF**; die Mail
+  verweist darauf (CTA „Meine Buchung ansehen" → `/konto/buchungen`). Subject/
+  Wortlaut versand- vs. abholungsspezifisch („zurücksenden" / „zurückgeben").
+- **PDF** `lib/return-checklist-pdf.tsx` → `ReturnChecklistPDF` (A4, gleiches
+  Navy/Cyan-Design wie die Packliste): Kamera(s) mit Seriennr. + Zubehör als
+  Abhak-Liste (leere Checkboxen zum Ankreuzen) + Hinweise (Rücksendeetikett bei
+  Versand / Original­verpackung / Speicherkarte zurücksetzen).
+- **Item-Auflösung** `lib/booking-return-items.ts` →
+  `resolveBookingReturnItems(supabase, booking)`: reused `resolveBookingCameras`
+  (Multi-Kamera + Seriennr. via `product_units`) + `resolveAccessoryItems`
+  (Set-Expansion + Upgrade-Gruppen-Skip wie Packliste), filtert Set-Container-
+  Zeilen raus (flache Liste).
+- **Registriert** in `app/admin/emails/page.tsx` (`TYPE_LABELS`) +
+  `lib/email-previews.ts` (Katalog → Vorschau + Override unter
+  `/admin/emails/vorlagen`).
+- **Go-Live TODO:** Hetzner-Crontab (täglich 08:00 Berlin, `--resolve` umgeht
+  Cloudflare — siehe „Cloudflare-Vollintegration"):
+  ```
+  0 8 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/return-checklist-reminder
+  ```
+  Keine Migration nötig (`email_log` existiert). Ohne den Crontab-Eintrag wird
+  am letzten Miettag gar keine Rückgabe-Erinnerung mehr verschickt (die alte
+  `return_reminder_0d` ist entfernt) — der Eintrag sollte also gesetzt werden.
+
 ### Storno mit Rückerstattungswahl + echter Stornierungsbeleg (Stand 2026-06-24)
 Beim Stornieren einer Buchung hat der Admin jetzt die volle Kontrolle über
 Rückerstattung und Kunden-Mail; bei einer Rückerstattung wird automatisch ein
