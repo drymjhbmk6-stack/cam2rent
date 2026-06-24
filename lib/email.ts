@@ -993,10 +993,9 @@ export async function sendCreditNote(data: CreditNoteEmailData) {
   const subject = stripSubject(`Stornierungsbeleg ${data.creditNoteNumber} – ${BUSINESS.name}`);
   const firstName = (data.customerName || '').trim().split(/\s+/)[0] || 'dort';
   const refunded = data.refundedAmount != null ? Math.abs(data.refundedAmount) : Math.abs(data.grossAmount);
-  const verb = data.refunded ? 'wurde' : 'wird';
   const refundLine = refunded <= 0
     ? 'Diese Buchung wurde storniert. Eine Rückzahlung erfolgt nicht.'
-    : `Ein Betrag von <strong>${fmtEuro(refunded)}</strong> ${verb} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+    : `Ein Betrag von <strong>${fmtEuro(refunded)}</strong> wurde auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
   const html = `
 <!DOCTYPE html>
 <html lang="de">

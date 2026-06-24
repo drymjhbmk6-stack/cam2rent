@@ -11,8 +11,14 @@ import { renderInvoicePdfBuffer } from '@/lib/invoice-pdf-buffer';
  *
  * Schickt fuer eine bereits stornierte Buchung die Storno-Mail erneut und —
  * falls eine Gutschrift existiert — den Stornierungsbeleg (PDF) erneut.
- * Loest KEINEN Stripe-Refund aus und legt KEINE neue Gutschrift an. Nutzt den
- * bereits gespeicherten Rueckerstattungsbetrag (`bookings.refund_amount`).
+ * Loest KEINEN Stripe-Refund aus und legt KEINE neue Gutschrift an.
+ *
+ * Optional kann der **tatsaechlich erstattete Betrag** nachgetragen werden
+ * (`refund_amount` im Body) — z.B. wenn manuell in Stripe erstattet wurde.
+ * Dieser wird auf der Buchung gespeichert (`bookings.refund_amount`), als
+ * `refund_status='manual'` auf der Gutschrift markiert und erscheint dann als
+ * „Davon erstattet"-Zeile auf dem Beleg. Ohne `refund_amount` bleibt der
+ * gespeicherte Wert.
  */
 export async function POST(
   req: NextRequest,
@@ -51,7 +57,26 @@ export async function POST(
   const attachInvoice = body.attach_invoice === true;
 
   const priceTotal = Number(booking.price_total ?? 0);
-  const refundAmount = Math.max(0, Math.min(priceTotal, Number(booking.refund_amount ?? 0)));
+
+  // Optional: tatsaechlich erstatteten Betrag nachtragen (z.B. manueller
+  // Stripe-Refund). Wird auf der Buchung gespeichert + auf der Gutschrift als
+  // `manual` markiert, damit der Beleg „Davon erstattet" korrekt zeigt.
+  let refundAmount = Math.max(0, Math.min(priceTotal, Number(booking.refund_amount ?? 0)));
+  if (body.refund_amount != null) {
+    refundAmount = Math.max(0, Math.min(priceTotal, Number(body.refund_amount) || 0));
+    const noteEntry = `Rueckerstattung erfasst: ${refundAmount.toFixed(2)} EUR (manuell)`;
+    const existingNote = (booking.refund_note ?? '') as string;
+    const { error: refUpdErr } = await supabase
+      .from('bookings')
+      .update({
+        refund_amount: refundAmount,
+        refund_note: existingNote ? `${existingNote} | ${noteEntry}` : noteEntry,
+      })
+      .eq('id', id);
+    if (refUpdErr && /refund_amount|refund_note/i.test(refUpdErr.message || '')) {
+      console.warn('[resend-cancellation] refund_amount/refund_note Migration steht aus.');
+    }
+  }
 
   // Storno-Bestaetigung an den Kunden (mit dem gespeicherten Refund-Betrag),
   // optional mit Rechnungs-PDF-Anhang.
@@ -93,6 +118,10 @@ export async function POST(
     .limit(1)
     .maybeSingle();
   if (cn?.id) {
+    // Erfassten Refund auf der Gutschrift markieren (informativ).
+    if (body.refund_amount != null && refundAmount > 0) {
+      await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
+    }
     await dispatchCreditNoteDocument(supabase, cn.id, { sendEmail: true });
     creditNoteResent = true;
   }

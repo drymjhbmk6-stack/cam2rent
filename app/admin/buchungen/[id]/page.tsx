@@ -675,7 +675,7 @@ export default function BuchungDetailPage() {
     finally { setStatusUpdating(false); }
   }
 
-  async function handleResendCancellation(attachInvoice = false) {
+  async function handleResendCancellation(attachInvoice = false, refundAmount?: number) {
     if (!booking) return;
     setResendStornoBusy(true);
     setResendStornoMsg(null);
@@ -683,7 +683,10 @@ export default function BuchungDetailPage() {
       const res = await fetch(`/api/admin/booking/${bookingId}/resend-cancellation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attach_invoice: attachInvoice }),
+        body: JSON.stringify({
+          attach_invoice: attachInvoice,
+          ...(refundAmount != null ? { refund_amount: refundAmount } : {}),
+        }),
       });
       const d = await res.json();
       if (!res.ok) { setResendStornoMsg(d.error ?? 'Fehler beim Senden.'); return; }
@@ -2097,7 +2100,6 @@ export default function BuchungDetailPage() {
             busy={statusUpdating}
             refundAmount={cancelRefundValue()}
             reason={cancelReason.trim()}
-            creditNoteUsesAmount
             onConfirm={(attachInvoice) => handleCancel(attachInvoice)}
             onClose={() => setShowCancelPreview(false)}
             closeLabel="Zurück"
@@ -2111,8 +2113,9 @@ export default function BuchungDetailPage() {
             title="Storno-Doku erneut senden"
             confirmLabel="Erneut senden"
             busy={resendStornoBusy}
-            creditNoteUsesAmount={false}
-            onConfirm={(attachInvoice) => handleResendCancellation(attachInvoice)}
+            editableRefund
+            priceTotal={booking.price_total ?? 0}
+            onConfirm={(attachInvoice, refundAmount) => handleResendCancellation(attachInvoice, refundAmount)}
             onClose={() => setShowResendPreview(false)}
             closeLabel="Abbrechen"
           />

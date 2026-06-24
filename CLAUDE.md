@@ -1043,7 +1043,19 @@ erzeugten weder ein PDF noch eine E-Mail.
   falls eine Gutschrift zur Buchung existiert — den Stornierungsbeleg per
   `dispatchCreditNoteDocument` erneut. **Löst KEINEN Stripe-Refund aus und legt
   KEINE neue Gutschrift an.** Audit `booking.resend_cancellation`.
-- **Vorschau vor dem Senden + optionaler Rechnungs-Anhang (Stand 2026-06-24):**
+  - **Rückerstattung nachtragen (Stand 2026-06-25):** Wurde manuell in Stripe
+    erstattet (außerhalb der App), kennt die Buchung den Betrag nicht
+    (`refund_amount=0`) → Beleg zeigt „Davon erstattet: 0,00 €". Daher hat das
+    Resend-Vorschau-Fenster (`editableRefund`) jetzt eine Rückerstattungs-
+    Erfassung (Keine / Voller Betrag / Teilbetrag, vorbelegt aus dem
+    gespeicherten Wert über die `refundAmount`-Antwort von
+    `cancellation-preview`). Der gewählte Betrag geht als `refund_amount` an
+    `resend-cancellation` → wird in `bookings.refund_amount`/`refund_note`
+    gespeichert + auf der Gutschrift `refund_status='manual'` gesetzt; der
+    bestehende Stornierungsbeleg zeigt dann „Davon erstattet: X €". Weiterhin
+    KEIN Stripe-Refund (nur Erfassung). `credit-note-preview` akzeptiert einen
+    `refunded`-Query-Override für die Live-Vorschau vor dem Speichern. Beleg-/
+    Mail-Schlusssatz immer Vergangenheit („wurde erstattet").
   Vor jedem Versand einer Storno-Mail (Stornieren MIT E-Mail **und** erneut
   Senden) erscheint ein Vorschau-Fenster (`components/admin/CancellationPreviewModal.tsx`):
   zeigt die gerenderte Kunden-E-Mail in einem sandboxed `<iframe>` + Buttons,

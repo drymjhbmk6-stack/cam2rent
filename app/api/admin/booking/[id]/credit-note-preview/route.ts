@@ -59,6 +59,13 @@ export async function GET(
         reason,
       });
 
+  // Wenn ein `refunded`-Wert mitgegeben wird, ueberschreibt er die
+  // „Davon erstattet"-Zeile (auch bei bestehender Gutschrift) — fuer die
+  // Live-Vorschau, bevor der Betrag gespeichert ist.
+  if (url.searchParams.has('refunded')) {
+    data.refundedAmount = refundedClamped;
+  }
+
   const pdf = await renderCreditNotePdfBuffer(data);
 
   return new NextResponse(new Uint8Array(pdf), {

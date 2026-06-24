@@ -269,14 +269,13 @@ export function CreditNotePDF({ data }: { data: CreditNotePdfData }) {
           {(() => {
             const refunded = data.refundedAmount != null ? Math.abs(data.refundedAmount) : Math.abs(data.grossAmount);
             const full = Math.abs(data.grossAmount);
-            const verb = data.refunded ? 'wurde' : 'wird';
             if (refunded <= 0) {
               return 'Diese Buchung wurde storniert. Es erfolgt keine Rückzahlung dieses Betrags.';
             }
             if (refunded + 0.005 < full) {
-              return `Diese Buchung wurde storniert. Davon ${verb} ein Betrag von ${fmtEuro(refunded)} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+              return `Diese Buchung wurde storniert. Davon wurde ein Betrag von ${fmtEuro(refunded)} auf das ursprüngliche Zahlungsmittel zurückerstattet.`;
             }
-            return `Der Betrag von ${fmtEuro(refunded)} ${verb} auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+            return `Der Betrag von ${fmtEuro(refunded)} wurde vollständig auf das ursprüngliche Zahlungsmittel zurückerstattet.`;
           })()}
         </Text>
 
