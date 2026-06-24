@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
+import CancellationPreviewModal from '@/components/admin/CancellationPreviewModal';
 import PriceInput from '@/components/admin/PriceInput';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
@@ -239,6 +240,8 @@ export default function BuchungDetailPage() {
   const [cancelSendEmail, setCancelSendEmail] = useState(true);
   const [resendStornoBusy, setResendStornoBusy] = useState(false);
   const [resendStornoMsg, setResendStornoMsg] = useState<string | null>(null);
+  const [showCancelPreview, setShowCancelPreview] = useState(false);
+  const [showResendPreview, setShowResendPreview] = useState(false);
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -633,13 +636,17 @@ export default function BuchungDetailPage() {
     }
   }
 
-  async function handleCancel() {
-    if (!booking || !cancelReason.trim()) return;
+  function cancelRefundValue(): number {
+    if (!booking) return 0;
     const total = booking.price_total ?? 0;
-    const refundAmount =
-      cancelRefundMode === 'full' ? total
+    return cancelRefundMode === 'full' ? total
       : cancelRefundMode === 'partial' ? Math.max(0, Math.min(total, cancelRefundAmount))
       : 0;
+  }
+
+  async function handleCancel(attachInvoice = false) {
+    if (!booking || !cancelReason.trim()) return;
+    const refundAmount = cancelRefundValue();
     setStatusUpdating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}`, {
@@ -651,11 +658,13 @@ export default function BuchungDetailPage() {
           refund_amount: refundAmount,
           stripe_refund: cancelStripeRefund,
           send_email: cancelSendEmail,
+          attach_invoice: attachInvoice,
         }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
       setBooking((prev) => prev ? { ...prev, status: 'cancelled' } : prev);
       setNewStatus('cancelled');
+      setShowCancelPreview(false);
       setShowCancelModal(false);
       setCancelReason('');
       setCancelRefundMode('none');
@@ -666,12 +675,16 @@ export default function BuchungDetailPage() {
     finally { setStatusUpdating(false); }
   }
 
-  async function handleResendCancellation() {
+  async function handleResendCancellation(attachInvoice = false) {
     if (!booking) return;
     setResendStornoBusy(true);
     setResendStornoMsg(null);
     try {
-      const res = await fetch(`/api/admin/booking/${bookingId}/resend-cancellation`, { method: 'POST' });
+      const res = await fetch(`/api/admin/booking/${bookingId}/resend-cancellation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attach_invoice: attachInvoice }),
+      });
       const d = await res.json();
       if (!res.ok) { setResendStornoMsg(d.error ?? 'Fehler beim Senden.'); return; }
       setResendStornoMsg(
@@ -679,6 +692,7 @@ export default function BuchungDetailPage() {
           ? 'Storno-E-Mail + Stornierungsbeleg erneut gesendet.'
           : 'Storno-E-Mail erneut gesendet (keine Gutschrift hinterlegt).',
       );
+      setShowResendPreview(false);
     } catch { setResendStornoMsg('Netzwerkfehler.'); }
     finally { setResendStornoBusy(false); }
   }
@@ -1945,7 +1959,7 @@ export default function BuchungDetailPage() {
                   <>
                     <div className="border-t border-brand-border dark:border-slate-700 my-2" />
                     <button
-                      onClick={handleResendCancellation}
+                      onClick={() => { setResendStornoMsg(null); setShowResendPreview(true); }}
                       disabled={resendStornoBusy}
                       className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40"
                     >
@@ -2063,13 +2077,45 @@ export default function BuchungDetailPage() {
                   className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                   Abbrechen
                 </button>
-                <button onClick={handleCancel} disabled={!cancelReason.trim() || statusUpdating}
+                <button
+                  onClick={() => { if (cancelSendEmail) { setShowCancelPreview(true); } else { handleCancel(false); } }}
+                  disabled={!cancelReason.trim() || statusUpdating}
                   className="px-5 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40">
-                  {statusUpdating ? 'Wird storniert...' : 'Stornieren'}
+                  {statusUpdating ? 'Wird storniert...' : (cancelSendEmail ? 'Weiter: Vorschau' : 'Stornieren')}
                 </button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* ═══ Storno-Vorschau-Modal ═══ */}
+        {showCancelPreview && booking && (
+          <CancellationPreviewModal
+            bookingId={booking.id}
+            title="Stornieren & senden"
+            confirmLabel="Stornieren & senden"
+            busy={statusUpdating}
+            refundAmount={cancelRefundValue()}
+            reason={cancelReason.trim()}
+            creditNoteUsesAmount
+            onConfirm={(attachInvoice) => handleCancel(attachInvoice)}
+            onClose={() => setShowCancelPreview(false)}
+            closeLabel="Zurück"
+          />
+        )}
+
+        {/* ═══ Resend-Vorschau-Modal ═══ */}
+        {showResendPreview && booking && (
+          <CancellationPreviewModal
+            bookingId={booking.id}
+            title="Storno-Doku erneut senden"
+            confirmLabel="Erneut senden"
+            busy={resendStornoBusy}
+            creditNoteUsesAmount={false}
+            onConfirm={(attachInvoice) => handleResendCancellation(attachInvoice)}
+            onClose={() => setShowResendPreview(false)}
+            closeLabel="Abbrechen"
+          />
         )}
 
         {/* ═══ WBW-Gate-Modal (Statuswechsel auf Abholung/Versand) ═══ */}

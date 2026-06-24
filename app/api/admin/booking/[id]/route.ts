@@ -781,6 +781,7 @@ export async function PATCH(
     refund_amount,
     stripe_refund,
     send_email,
+    attach_invoice,
     customer_email,
     verification_gate,
     liability_override,
@@ -796,6 +797,7 @@ export async function PATCH(
     refund_amount?: number;
     stripe_refund?: boolean;
     send_email?: boolean;
+    attach_invoice?: boolean;
     customer_email?: string;
     verification_gate?: 'approve' | 'revoke';
     liability_override?: {
@@ -2113,6 +2115,7 @@ export async function PATCH(
 
       // ── Stornierungs-Mails (non-blocking, nur wenn send_email !== false) ──
       const wantEmail = send_email !== false;
+      const wantInvoiceAttachment = attach_invoice === true;
       if (wantEmail && booking.customer_email) {
         const emailData = {
           bookingId: booking.id,
@@ -2127,17 +2130,23 @@ export async function PATCH(
           refundAmount: requestedRefund,
           refundPercentage: priceTotal > 0 ? requestedRefund / priceTotal : 0,
         };
-        Promise.allSettled([
-          sendCancellationConfirmation(emailData),
-          sendAdminCancellationNotification(emailData),
-        ]).then((results) => {
-          results.forEach((r, i) => {
-            if (r.status === 'rejected') {
-              const which = i === 0 ? 'customer' : 'admin';
-              console.error(`[booking-cancel] ${which} cancellation mail failed:`, r.reason);
+        // Kunden-Mail mit optionalem Rechnungs-PDF-Anhang (async, damit das
+        // PDF-Rendern die Response nicht blockiert).
+        (async () => {
+          const attachments: { filename: string; content: Buffer }[] = [];
+          if (wantInvoiceAttachment && priceTotal > 0) {
+            try {
+              const { renderInvoicePdfBuffer } = await import('@/lib/invoice-pdf-buffer');
+              attachments.push({ filename: `Rechnung-${booking.id}.pdf`, content: await renderInvoicePdfBuffer(supabase, booking) });
+            } catch (e) {
+              console.error('[booking-cancel] Rechnungs-Anhang fehlgeschlagen:', e);
             }
-          });
-        });
+          }
+          await sendCancellationConfirmation(emailData, { attachments });
+        })().catch((err) => console.error('[booking-cancel] customer cancellation mail failed:', err));
+        sendAdminCancellationNotification(emailData).catch((err) =>
+          console.error('[booking-cancel] admin cancellation mail failed:', err),
+        );
       } else if (!wantEmail) {
         console.info(`[booking-cancel] Buchung ${id} storniert ohne Kunden-E-Mail (Admin-Wahl).`);
       } else {

@@ -40,6 +40,117 @@ async function loadTaxConfig(
   };
 }
 
+/** Lädt Empfaengerdaten (Name/E-Mail/Adresse) + Bezug zur Originalrechnung. */
+async function loadRecipientAndInvoiceRef(
+  supabase: SupabaseClient,
+  booking: Record<string, unknown> | null,
+  invoiceId?: string | null,
+): Promise<{
+  customerName: string; customerEmail: string; customerAddress: string; ustId: string;
+  invoiceNumber?: string; invoiceDate?: string;
+}> {
+  let customerName = '';
+  let customerEmail = '';
+  let customerAddress = '';
+  let ustId = '';
+  if (booking) {
+    const inv = await buildInvoiceData(supabase, booking);
+    customerName = inv.customerName || '';
+    customerEmail = inv.customerEmail || '';
+    customerAddress = inv.customerAddress || '';
+    ustId = inv.ustId || '';
+  }
+
+  // Bezug Originalrechnung: explizite invoice_id (CN) ODER neueste der Buchung.
+  let invRow: { invoice_number?: string; invoice_date?: string } | null = null;
+  if (invoiceId) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_number, invoice_date')
+      .eq('id', invoiceId)
+      .maybeSingle();
+    invRow = data;
+  } else if (booking?.id) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_number, invoice_date')
+      .eq('booking_id', booking.id as string)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    invRow = data;
+  }
+  const invoiceNumber = invRow?.invoice_number ?? undefined;
+  const invoiceDate = invRow?.invoice_date ? deToDate(invRow.invoice_date) : undefined;
+  return { customerName, customerEmail, customerAddress, ustId, invoiceNumber, invoiceDate };
+}
+
+/** Baut die PDF-Daten aus einer bestehenden credit_notes-Zeile. */
+export async function buildCreditNotePdfDataFromRow(
+  supabase: SupabaseClient,
+  cn: Record<string, unknown>,
+): Promise<CreditNotePdfData> {
+  let booking: Record<string, unknown> | null = null;
+  if (cn.booking_id) {
+    const { data } = await supabase.from('bookings').select('*').eq('id', cn.booking_id as string).maybeSingle();
+    booking = data ?? null;
+  }
+  const ref = await loadRecipientAndInvoiceRef(supabase, booking, (cn.invoice_id as string) ?? null);
+  return {
+    creditNoteNumber: cn.credit_note_number as string,
+    creditNoteDate: deToDate(cn.created_at),
+    bookingId: (cn.booking_id as string) || undefined,
+    invoiceNumber: ref.invoiceNumber,
+    invoiceDate: ref.invoiceDate,
+    customerName: ref.customerName || ((cn.customer_name as string) ?? ''),
+    customerEmail: ref.customerEmail,
+    customerAddress: ref.customerAddress,
+    reason: (cn.reason as string) || undefined,
+    grossAmount: Number(cn.gross_amount) || 0,
+    netAmount: Number(cn.net_amount) || 0,
+    taxAmount: Number(cn.tax_amount) || 0,
+    taxMode: (cn.tax_mode as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+    taxRate: Number(cn.tax_rate) || 19,
+    ustId: ref.ustId,
+    refunded: cn.refund_status === 'succeeded',
+  };
+}
+
+/** Baut die PDF-Daten als Vorschau aus Buchung + Betrag (noch keine CN). */
+export async function buildCreditNotePreviewData(
+  supabase: SupabaseClient,
+  booking: Record<string, unknown>,
+  args: { grossAmount: number; reason?: string },
+): Promise<CreditNotePdfData> {
+  const { taxMode, taxRate } = await loadTaxConfig(supabase);
+  const taxCalc = calculateTax(args.grossAmount, taxMode, taxRate, 'gross');
+  const ref = await loadRecipientAndInvoiceRef(supabase, booking, null);
+  return {
+    creditNoteNumber: 'Vorschau',
+    creditNoteDate: deToDate(new Date().toISOString()),
+    bookingId: (booking.id as string) || undefined,
+    invoiceNumber: ref.invoiceNumber,
+    invoiceDate: ref.invoiceDate,
+    customerName: ref.customerName,
+    customerEmail: ref.customerEmail,
+    customerAddress: ref.customerAddress,
+    reason: args.reason,
+    grossAmount: taxCalc.gross,
+    netAmount: taxCalc.net,
+    taxAmount: taxCalc.tax,
+    taxMode,
+    taxRate,
+    ustId: ref.ustId,
+    refunded: false,
+  };
+}
+
+export async function renderCreditNotePdfBuffer(data: CreditNotePdfData): Promise<Buffer> {
+  return Buffer.from(
+    await renderToBuffer(createElement(CreditNotePDF, { data }) as ReactElement<DocumentProps>),
+  );
+}
+
 /**
  * Erzeugt das Stornierungsbeleg-PDF einer bestehenden Gutschrift und schickt
  * es (optional) per E-Mail an den Kunden der zugehoerigen Buchung.
@@ -58,74 +169,18 @@ export async function dispatchCreditNoteDocument(
       .maybeSingle();
     if (!cn) return;
 
-    // Zugehoerige Buchung (fuer Empfaengeradresse, Steuer-Config, E-Mail).
-    let booking: Record<string, unknown> | null = null;
-    if (cn.booking_id) {
-      const { data } = await supabase.from('bookings').select('*').eq('id', cn.booking_id).maybeSingle();
-      booking = data ?? null;
-    }
+    const pdfData = await buildCreditNotePdfDataFromRow(supabase, cn);
+    const pdfBuffer = await renderCreditNotePdfBuffer(pdfData);
 
-    // Bezug Originalrechnung.
-    let invoiceNumber: string | undefined;
-    let invoiceDate: string | undefined;
-    if (cn.invoice_id) {
-      const { data: inv } = await supabase
-        .from('invoices')
-        .select('invoice_number, invoice_date')
-        .eq('id', cn.invoice_id)
-        .maybeSingle();
-      invoiceNumber = inv?.invoice_number ?? undefined;
-      invoiceDate = inv?.invoice_date ? deToDate(inv.invoice_date) : undefined;
-    }
-
-    let customerName = (cn.customer_name as string) ?? '';
-    let customerEmail = '';
-    let customerAddress = '';
-    let ustId = '';
-    if (booking) {
-      const inv = await buildInvoiceData(supabase, booking);
-      customerName = inv.customerName || customerName;
-      customerEmail = inv.customerEmail || '';
-      customerAddress = inv.customerAddress || '';
-      ustId = inv.ustId || '';
-    }
-
-    const refunded = cn.refund_status === 'succeeded';
-
-    const pdfData: CreditNotePdfData = {
-      creditNoteNumber: cn.credit_note_number,
-      creditNoteDate: deToDate(cn.created_at),
-      bookingId: (cn.booking_id as string) || undefined,
-      invoiceNumber,
-      invoiceDate,
-      customerName,
-      customerEmail,
-      customerAddress,
-      reason: (cn.reason as string) || undefined,
-      grossAmount: Number(cn.gross_amount) || 0,
-      netAmount: Number(cn.net_amount) || 0,
-      taxAmount: Number(cn.tax_amount) || 0,
-      taxMode: (cn.tax_mode as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-      taxRate: Number(cn.tax_rate) || 19,
-      ustId,
-      refunded,
-    };
-
-    const pdfBuffer = Buffer.from(
-      await renderToBuffer(
-        createElement(CreditNotePDF, { data: pdfData }) as ReactElement<DocumentProps>,
-      ),
-    );
-
-    if (opts?.sendEmail !== false && customerEmail) {
+    if (opts?.sendEmail !== false && pdfData.customerEmail) {
       await sendCreditNote({
         bookingId: (cn.booking_id as string) || null,
         creditNoteNumber: cn.credit_note_number,
-        customerName,
-        customerEmail,
+        customerName: pdfData.customerName,
+        customerEmail: pdfData.customerEmail,
         grossAmount: pdfData.grossAmount,
         reason: pdfData.reason,
-        refunded,
+        refunded: pdfData.refunded,
         pdfBuffer,
       });
     }

@@ -994,6 +994,30 @@ erzeugten weder ein PDF noch eine E-Mail.
   falls eine Gutschrift zur Buchung existiert — den Stornierungsbeleg per
   `dispatchCreditNoteDocument` erneut. **Löst KEINEN Stripe-Refund aus und legt
   KEINE neue Gutschrift an.** Audit `booking.resend_cancellation`.
+- **Vorschau vor dem Senden + optionaler Rechnungs-Anhang (Stand 2026-06-24):**
+  Vor jedem Versand einer Storno-Mail (Stornieren MIT E-Mail **und** erneut
+  Senden) erscheint ein Vorschau-Fenster (`components/admin/CancellationPreviewModal.tsx`):
+  zeigt die gerenderte Kunden-E-Mail in einem sandboxed `<iframe>` + Buttons,
+  um die anzuhängenden PDFs (Rechnung / Stornierungsbeleg) im PDF-Viewer zu
+  öffnen, + Häkchen **„Rechnung als PDF anhängen"** (Default aus). Beim
+  Stornieren wird der Button zu **„Weiter: Vorschau"** (wenn E-Mail an), bei
+  E-Mail aus bleibt es direktes Stornieren ohne Vorschau.
+  - `POST /api/admin/booking/[id]/cancellation-preview` rendert die E-Mail via
+    `renderEmailPreview(sendCancellationConfirmation, …)` (kein Versand) +
+    liefert die Anhang-Liste (`invoice` wenn angehakt, `creditnote` wenn
+    Rückerstattung > 0 ODER bereits eine Gutschrift existiert). `refund_amount`
+    fehlt im Body → Server nutzt den gespeicherten Wert (Resend-Fall).
+  - `GET /api/admin/booking/[id]/credit-note-preview?amount=&reason=` liefert
+    das Stornierungsbeleg-PDF inline: existiert eine Gutschrift → deren echte
+    Fassung, sonst eine Vorschau aus Buchung + `amount` (Nummer „Vorschau").
+  - **Rechnungs-Anhang:** `sendCancellationConfirmation(data, { attachments })`
+    nimmt jetzt optionale Anhänge. Bei `attach_invoice=true` hängt der
+    Storno-/Resend-Pfad die echte Rechnung an (`renderInvoicePdfBuffer` in
+    `lib/invoice-pdf-buffer.ts`, gleiche Quelle wie `/api/invoice/[id]`). Im
+    Storno-Pfad läuft das Rendern in einem non-blocking async-Wrapper.
+  - PDF-Daten-Builder extrahiert in `lib/buchhaltung/credit-note-document.ts`:
+    `buildCreditNotePdfDataFromRow` (bestehende CN), `buildCreditNotePreviewData`
+    (Vorschau aus Betrag), `renderCreditNotePdfBuffer`.
 - **Keine neue Migration:** `credit_notes`, `invoices`, `bookings.refund_amount/
   refund_note` existieren bereits. GoBD: Rechnungsnummern bleiben unangetastet,
   Storno läuft über separate `GS-`-Gutschriftnummer.

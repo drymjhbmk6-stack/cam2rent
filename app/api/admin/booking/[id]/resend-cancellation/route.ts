@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation } from '@/lib/email';
 import { dispatchCreditNoteDocument } from '@/lib/buchhaltung/credit-note-document';
+import { renderInvoicePdfBuffer } from '@/lib/invoice-pdf-buffer';
 
 /**
  * POST /api/admin/booking/[id]/resend-cancellation
@@ -46,12 +47,24 @@ export async function POST(
     );
   }
 
+  const body = await req.json().catch(() => ({}));
+  const attachInvoice = body.attach_invoice === true;
+
   const priceTotal = Number(booking.price_total ?? 0);
   const refundAmount = Math.max(0, Math.min(priceTotal, Number(booking.refund_amount ?? 0)));
 
-  // Storno-Bestaetigung an den Kunden (mit dem gespeicherten Refund-Betrag).
+  // Storno-Bestaetigung an den Kunden (mit dem gespeicherten Refund-Betrag),
+  // optional mit Rechnungs-PDF-Anhang.
   let emailSent = false;
   try {
+    const attachments: { filename: string; content: Buffer }[] = [];
+    if (attachInvoice && priceTotal > 0) {
+      try {
+        attachments.push({ filename: `Rechnung-${booking.id}.pdf`, content: await renderInvoicePdfBuffer(supabase, booking) });
+      } catch (e) {
+        console.error('[resend-cancellation] Rechnungs-Anhang fehlgeschlagen:', e);
+      }
+    }
     await sendCancellationConfirmation({
       bookingId: booking.id,
       customerName: booking.customer_name ?? '',
@@ -64,7 +77,7 @@ export async function POST(
       priceTotal,
       refundAmount,
       refundPercentage: priceTotal > 0 ? refundAmount / priceTotal : 0,
-    });
+    }, { attachments });
     emailSent = true;
   } catch (err) {
     console.error('[resend-cancellation] Storno-Mail fehlgeschlagen:', err);

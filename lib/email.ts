@@ -370,9 +370,19 @@ export interface CancellationEmailData {
   refundNote?: string;
 }
 
-export async function sendCancellationConfirmation(data: CancellationEmailData) {
+export async function sendCancellationConfirmation(
+  data: CancellationEmailData,
+  opts?: { attachments?: { filename: string; content: Buffer }[] },
+) {
   const { html, subject } = buildCancellationCustomerEmail(data);
-  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'cancellation_customer' });
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'cancellation_customer',
+    attachments: opts?.attachments,
+  });
 }
 
 export async function sendAdminCancellationNotification(data: CancellationEmailData) {
