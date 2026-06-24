@@ -19,6 +19,7 @@ interface AuditEntry {
 const ACTION_LABELS: Record<string, string> = {
   // Buchungen
   'booking.cancel': 'Buchung storniert',
+  'booking.resend_cancellation': 'Storno-Doku erneut gesendet',
   'booking.update': 'Buchung aktualisiert',
   'booking.accessory_edit': 'Zubehör der Buchung bearbeitet',
   'booking.edit': 'Bestellung bearbeitet (Zeitraum/Kamera/Zubehör/Haftung)',

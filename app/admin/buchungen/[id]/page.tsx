@@ -237,6 +237,8 @@ export default function BuchungDetailPage() {
   const [cancelRefundAmount, setCancelRefundAmount] = useState(0);
   const [cancelStripeRefund, setCancelStripeRefund] = useState(true);
   const [cancelSendEmail, setCancelSendEmail] = useState(true);
+  const [resendStornoBusy, setResendStornoBusy] = useState(false);
+  const [resendStornoMsg, setResendStornoMsg] = useState<string | null>(null);
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -662,6 +664,23 @@ export default function BuchungDetailPage() {
       setCancelSendEmail(true);
     } catch { alert('Netzwerkfehler.'); }
     finally { setStatusUpdating(false); }
+  }
+
+  async function handleResendCancellation() {
+    if (!booking) return;
+    setResendStornoBusy(true);
+    setResendStornoMsg(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/resend-cancellation`, { method: 'POST' });
+      const d = await res.json();
+      if (!res.ok) { setResendStornoMsg(d.error ?? 'Fehler beim Senden.'); return; }
+      setResendStornoMsg(
+        d.creditNoteResent
+          ? 'Storno-E-Mail + Stornierungsbeleg erneut gesendet.'
+          : 'Storno-E-Mail erneut gesendet (keine Gutschrift hinterlegt).',
+      );
+    } catch { setResendStornoMsg('Netzwerkfehler.'); }
+    finally { setResendStornoBusy(false); }
   }
 
   async function handleDelete() {
@@ -1921,6 +1940,24 @@ export default function BuchungDetailPage() {
                   </p>
                 )}
                 <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
+
+                {booking.status === 'cancelled' && (
+                  <>
+                    <div className="border-t border-brand-border dark:border-slate-700 my-2" />
+                    <button
+                      onClick={handleResendCancellation}
+                      disabled={resendStornoBusy}
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40"
+                    >
+                      {resendStornoBusy ? 'Wird gesendet…' : '↻ Storno-E-Mail + Beleg erneut senden'}
+                    </button>
+                    {resendStornoMsg && (
+                      <p className="text-xs font-body text-brand-muted bg-brand-bg dark:bg-slate-700/40 border border-brand-border dark:border-slate-700 rounded-lg p-2">
+                        {resendStornoMsg}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </Section>
 

@@ -987,6 +987,13 @@ erzeugten weder ein PDF noch eine E-Mail.
   `/admin/emails` `TYPE_LABELS` registriert). `CancellationEmailData` hat ein
   optionales `refundNote` (freier Zusatzsatz), der „Keine Rückerstattung"-Text
   ist neutral (kein „< 7 Tage"-Grund mehr).
+- **Erneut senden bei bereits stornierten Buchungen:** Reiter „Dokumente &
+  E-Mail" zeigt bei `status==='cancelled'` einen Button **„↻ Storno-E-Mail +
+  Beleg erneut senden"** → `POST /api/admin/booking/[id]/resend-cancellation`.
+  Schickt die Storno-Mail erneut (mit dem gespeicherten `refund_amount`) und —
+  falls eine Gutschrift zur Buchung existiert — den Stornierungsbeleg per
+  `dispatchCreditNoteDocument` erneut. **Löst KEINEN Stripe-Refund aus und legt
+  KEINE neue Gutschrift an.** Audit `booking.resend_cancellation`.
 - **Keine neue Migration:** `credit_notes`, `invoices`, `bookings.refund_amount/
   refund_note` existieren bereits. GoBD: Rechnungsnummern bleiben unangetastet,
   Storno läuft über separate `GS-`-Gutschriftnummer.
