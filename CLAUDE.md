@@ -948,14 +948,20 @@ auch wenn aus Kulanz erstattet wurde. Und Gutschriften (`credit_notes`)
 erzeugten weder ein PDF noch eine E-Mail.
 - **Storno-Modal** (`/admin/buchungen/[id]`, Reiter „Status & Verlauf"):
   Stornogrund (Pflicht) + Block **Rückerstattung** (Radio „Keine" / „Voller
-  Betrag" / „Teilbetrag" + `PriceInput`, gedeckelt auf `price_total`) + Checkbox
-  **„E-Mail an Kunden senden"** (Default an). `handleCancel` schickt zusätzlich
-  `refund_amount` (Zahl) + `send_email` (bool) im PATCH-Body.
+  Betrag" / „Teilbetrag" + `PriceInput`, gedeckelt auf `price_total`) + bei
+  Stripe-Buchung Checkbox **„Rückerstattung automatisch über Stripe auslösen"**
+  (Default an — aus = stornieren ohne dass Stripe etwas auslöst, z. B. weil
+  bereits manuell/Kulanz erstattet) + Checkbox **„E-Mail an Kunden senden"**
+  (Default an). `handleCancel` schickt zusätzlich `refund_amount` (Zahl),
+  `stripe_refund` (bool) + `send_email` (bool) im PATCH-Body.
 - **Backend `PATCH /api/admin/booking/[id]`** (Storno-Branch, non-blocking
   Post-Processing): sanitisiert `refund_amount` (`max(0, min(price_total, …))`).
-  Bei `> 0` und echtem `pi_`-PaymentIntent → automatischer Stripe-Refund
-  (`idempotencyKey: cancel-refund:<id>:<cents>`); Fehler → `refund_status`-Notiz
-  `failed_pending_admin` + `payment_failed`-Notification, Storno bleibt bestehen.
+  Bei `> 0` und echtem `pi_`-PaymentIntent **und `stripe_refund !== false`** →
+  automatischer Stripe-Refund (`idempotencyKey: cancel-refund:<id>:<cents>`);
+  Fehler → `refund_status`-Notiz `failed_pending_admin` + `payment_failed`-
+  Notification, Storno bleibt bestehen. Bei `stripe_refund=false` löst Stripe
+  NICHTS aus (`refund_status='manual'`), der Betrag fließt aber trotzdem in Mail
+  + Stornierungsbeleg.
   Manuelle Buchungen (`MANUAL-`/`PENDING-`) → `refund_status='manual'` (Admin
   erstattet selbst), Betrag wird trotzdem dokumentiert. `refund_amount`/
   `refund_note` werden in `bookings` persistiert (defensiver Skip ohne die

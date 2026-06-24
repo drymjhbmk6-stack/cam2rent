@@ -235,6 +235,7 @@ export default function BuchungDetailPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelRefundMode, setCancelRefundMode] = useState<'none' | 'full' | 'partial'>('none');
   const [cancelRefundAmount, setCancelRefundAmount] = useState(0);
+  const [cancelStripeRefund, setCancelStripeRefund] = useState(true);
   const [cancelSendEmail, setCancelSendEmail] = useState(true);
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
@@ -646,6 +647,7 @@ export default function BuchungDetailPage() {
           status: 'cancelled',
           cancellation_reason: cancelReason.trim(),
           refund_amount: refundAmount,
+          stripe_refund: cancelStripeRefund,
           send_email: cancelSendEmail,
         }),
       });
@@ -656,6 +658,7 @@ export default function BuchungDetailPage() {
       setCancelReason('');
       setCancelRefundMode('none');
       setCancelRefundAmount(0);
+      setCancelStripeRefund(true);
       setCancelSendEmail(true);
     } catch { alert('Netzwerkfehler.'); }
     finally { setStatusUpdating(false); }
@@ -1986,10 +1989,23 @@ export default function BuchungDetailPage() {
                   <p className="text-xs text-brand-muted mt-1">Max. {fmtEuro(booking.price_total ?? 0)}</p>
                 </div>
               )}
+              {cancelRefundMode !== 'none' && booking.payment_intent_id?.startsWith('pi_') && (
+                <label className="flex items-start gap-2 mt-2 text-sm font-body text-brand-black dark:text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cancelStripeRefund}
+                    onChange={(e) => setCancelStripeRefund(e.target.checked)}
+                    className="accent-red-600 mt-0.5"
+                  />
+                  <span>Rückerstattung automatisch über Stripe auslösen</span>
+                </label>
+              )}
               {cancelRefundMode !== 'none' && (
                 <p className="text-xs mt-2 text-brand-muted">
                   {booking.payment_intent_id?.startsWith('pi_')
-                    ? 'Der Betrag wird automatisch über Stripe zurückerstattet, ein Stornierungsbeleg (PDF) wird erzeugt.'
+                    ? (cancelStripeRefund
+                        ? 'Der Betrag wird automatisch über Stripe zurückerstattet, ein Stornierungsbeleg (PDF) wird erzeugt.'
+                        : 'Stripe löst KEINE Rückerstattung aus — bitte selbst erstatten. Der Betrag erscheint trotzdem in Mail + Stornierungsbeleg (PDF).')
                     : 'Keine Stripe-Zahlung hinterlegt — bitte den Betrag manuell erstatten. Ein Stornierungsbeleg (PDF) wird trotzdem erzeugt.'}
                 </p>
               )}
@@ -2006,7 +2022,7 @@ export default function BuchungDetailPage() {
               </label>
 
               <div className="flex justify-end gap-2 mt-5">
-                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelSendEmail(true); }}
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelStripeRefund(true); setCancelSendEmail(true); }}
                   className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                   Abbrechen
                 </button>

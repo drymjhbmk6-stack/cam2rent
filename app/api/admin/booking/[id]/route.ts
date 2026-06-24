@@ -779,6 +779,7 @@ export async function PATCH(
     status,
     cancellation_reason,
     refund_amount,
+    stripe_refund,
     send_email,
     customer_email,
     verification_gate,
@@ -793,6 +794,7 @@ export async function PATCH(
     status?: string;
     cancellation_reason?: string;
     refund_amount?: number;
+    stripe_refund?: boolean;
     send_email?: boolean;
     customer_email?: string;
     verification_gate?: 'approve' | 'revoke';
@@ -2053,12 +2055,16 @@ export async function PATCH(
       const requestedRefund = Math.max(0, Math.min(priceTotal, Number(refund_amount) || 0));
       const piId = (booking.payment_intent_id ?? '').toString();
       const isStripePI = piId.startsWith('pi_');
+      // stripe_refund=false → Admin erstattet selbst (z.B. bereits manuell
+      // erstattet / Kulanz aussserhalb Stripe). Betrag wird trotzdem in Mail
+      // + Stornierungsbeleg ausgewiesen, aber Stripe loest NICHTS aus.
+      const wantStripeRefund = stripe_refund !== false;
       let refundStatus = 'not_applicable';
       let stripeRefundId: string | null = null;
       let refundDone = false;
 
       if (requestedRefund > 0) {
-        if (isStripePI) {
+        if (isStripePI && wantStripeRefund) {
           try {
             const stripe = await getStripe();
             const refund = await stripe.refunds.create(
@@ -2085,8 +2091,9 @@ export async function PATCH(
             } catch { /* Notification best-effort */ }
           }
         } else {
-          // Manuelle Buchung (MANUAL-/PENDING-...): kein Stripe-Refund moeglich,
-          // der Admin erstattet selbst. Betrag wird dennoch dokumentiert.
+          // Kein automatischer Stripe-Refund: entweder manuelle Buchung
+          // (MANUAL-/PENDING-...) ODER der Admin hat "ohne Stripe" gewaehlt.
+          // Der Admin erstattet selbst; Betrag wird dennoch dokumentiert.
           refundStatus = 'manual';
         }
 
