@@ -30,15 +30,26 @@ export interface ParcelStatus {
 const CACHE_TTL_MS = 3 * 60 * 1000;
 const cache = new Map<number, { ts: number; data: ParcelStatus }>();
 
-function categorize(message: string, statusId: number | null): TrackingCategory {
+function categorize(message: string, statusId: number | null, isReturn = false): TrackingCategory {
   const m = (message || '').toLowerCase();
   if (!m || m === 'unbekannt') return 'unknown';
 
   // Sendcloud-Status-IDs (deterministisch, falls bekannt): 11 = Delivered.
   if (statusId === 11) return 'delivered';
 
+  // Benigne "wartet noch auf Abholung"-Zustaende sind KEIN Problem — das Paket
+  // liegt bereit / ist unterwegs, nur noch nicht abgeholt. Vor der
+  // Problem-Pruefung abfangen, sonst matcht "not collected" faelschlich.
+  if (/not (yet )?collected|awaiting (customer )?(collection|pickup)|to be collected|noch nicht abgeholt/.test(m)) {
+    return 'transit';
+  }
+
   // Probleme zuerst (Meldungen enthalten teils "deliver"/"return").
-  if (/fail|error|cancel|refus|problem|exception|not collected|undeliver|lost|returned to sender|return to sender|delivery attempt failed|customs|address (issue|problem|invalid)|delayed|on hold|held|rejected/.test(m)) {
+  // "return to sender" ist bei einer Retoure NORMAL (das Paket geht ja zurueck)
+  // und darf dort NICHT als Problem zaehlen — nur beim Hinversand.
+  const problemBase = /fail|error|cancel|refus|problem|exception|undeliver|lost|delivery attempt failed|customs|address (issue|problem|invalid)|delayed|on hold|held|rejected/;
+  const returnToSender = /returned to sender|return to sender/;
+  if (problemBase.test(m) || (!isReturn && returnToSender.test(m))) {
     return 'problem';
   }
   // Zugestellt / beim Kunden / im Shop abholbereit.
@@ -73,7 +84,7 @@ function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
     statusId,
     // Kategorie auf dem englischen Originaltext bestimmen, Anzeige uebersetzen.
     statusMessage: translateStatus(rawMessage),
-    category: categorize(rawMessage, statusId),
+    category: categorize(rawMessage, statusId, !!p.is_return),
     carrier: p.carrier?.code ?? null,
     trackingNumber: p.tracking_number ?? null,
     trackingUrl: p.tracking_url ?? null,
@@ -149,6 +160,7 @@ const STATUS_DE_EXACT: Record<string, string> = {
   'at pickup point': 'Im Paketshop',
   'delivered to service point': 'An Paketshop zugestellt',
   'awaiting customer pickup': 'Wartet auf Abholung',
+  'not collected': 'Noch nicht abgeholt',
   'cancelled': 'Storniert',
   'cancellation requested': 'Stornierung angefragt',
   'refused by recipient': 'Vom Empfänger abgelehnt',
@@ -173,6 +185,7 @@ const STATUS_DE_PARTIAL: [RegExp, string][] = [
   [/delay/i, 'Verzögert'],
   [/sorting|sorted/i, 'Im Sortierzentrum'],
   [/en route|in transit|on its way/i, 'Unterwegs'],
+  [/not (yet )?collected|to be collected/i, 'Noch nicht abgeholt'],
   [/picked up|collected/i, 'Abgeholt'],
   [/announced/i, 'Angekündigt'],
   [/ready to send/i, 'Versandbereit'],
