@@ -56,6 +56,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   shipping_confirmation: { label: 'Versandbestätigung', color: '#10b981', bg: '#10b98114' },
   wbw_confirmation: { label: 'Wiederbeschaffungswerte (final)', color: '#06b6d4', bg: '#06b6d414' },
   invoice_adjustment: { label: 'Rechnungsanpassung', color: '#06b6d4', bg: '#06b6d414' },
+  credit_note: { label: 'Stornierungsbeleg / Gutschrift', color: '#dc2626', bg: '#dc262614' },
   damage_report_customer: { label: 'Schadensmeldung', color: '#f97316', bg: '#f9731614' },
   damage_report_admin: { label: 'Schadensmeldung (Admin)', color: '#f97316', bg: '#f9731614' },
   damage_resolution: { label: 'Schadensauflösung', color: '#f59e0b', bg: '#f59e0b14' },

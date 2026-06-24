@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
+import PriceInput from '@/components/admin/PriceInput';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
@@ -232,6 +233,9 @@ export default function BuchungDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelRefundMode, setCancelRefundMode] = useState<'none' | 'full' | 'partial'>('none');
+  const [cancelRefundAmount, setCancelRefundAmount] = useState(0);
+  const [cancelSendEmail, setCancelSendEmail] = useState(true);
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -628,18 +632,31 @@ export default function BuchungDetailPage() {
 
   async function handleCancel() {
     if (!booking || !cancelReason.trim()) return;
+    const total = booking.price_total ?? 0;
+    const refundAmount =
+      cancelRefundMode === 'full' ? total
+      : cancelRefundMode === 'partial' ? Math.max(0, Math.min(total, cancelRefundAmount))
+      : 0;
     setStatusUpdating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'cancelled', cancellation_reason: cancelReason.trim() }),
+        body: JSON.stringify({
+          status: 'cancelled',
+          cancellation_reason: cancelReason.trim(),
+          refund_amount: refundAmount,
+          send_email: cancelSendEmail,
+        }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
       setBooking((prev) => prev ? { ...prev, status: 'cancelled' } : prev);
       setNewStatus('cancelled');
       setShowCancelModal(false);
       setCancelReason('');
+      setCancelRefundMode('none');
+      setCancelRefundAmount(0);
+      setCancelSendEmail(true);
     } catch { alert('Netzwerkfehler.'); }
     finally { setStatusUpdating(false); }
   }
@@ -1922,10 +1939,11 @@ export default function BuchungDetailPage() {
 
         {/* ═══ Stornieren-Modal ═══ */}
         {showCancelModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCancelModal(false)}>
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto" onClick={() => setShowCancelModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md my-8" onClick={(e) => e.stopPropagation()}>
               <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung stornieren</h3>
               <p className="text-sm font-body text-brand-muted mb-4">Buchung {booking.id} wird als storniert markiert.</p>
+
               <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Stornierungsgrund *</label>
               <textarea
                 value={cancelReason}
@@ -1935,8 +1953,60 @@ export default function BuchungDetailPage() {
                 autoFocus
                 className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
               />
-              <div className="flex justify-end gap-2 mt-4">
-                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+
+              {/* Rückerstattung */}
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mt-4 mb-2">Rückerstattung</label>
+              <div className="space-y-1.5">
+                {([
+                  { v: 'none', label: 'Keine Rückerstattung' },
+                  { v: 'full', label: `Voller Betrag (${fmtEuro(booking.price_total ?? 0)})` },
+                  { v: 'partial', label: 'Teilbetrag' },
+                ] as const).map((opt) => (
+                  <label key={opt.v} className="flex items-center gap-2 text-sm font-body text-brand-black dark:text-slate-200 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelRefundMode"
+                      checked={cancelRefundMode === opt.v}
+                      onChange={() => setCancelRefundMode(opt.v)}
+                      className="accent-red-600"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              {cancelRefundMode === 'partial' && (
+                <div className="mt-2">
+                  <PriceInput
+                    value={cancelRefundAmount}
+                    onChange={(v) => setCancelRefundAmount(Math.max(0, Math.min(booking.price_total ?? 0, v)))}
+                    min={0}
+                    placeholder="0,00"
+                    className="w-full px-3 py-2 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                  <p className="text-xs text-brand-muted mt-1">Max. {fmtEuro(booking.price_total ?? 0)}</p>
+                </div>
+              )}
+              {cancelRefundMode !== 'none' && (
+                <p className="text-xs mt-2 text-brand-muted">
+                  {booking.payment_intent_id?.startsWith('pi_')
+                    ? 'Der Betrag wird automatisch über Stripe zurückerstattet, ein Stornierungsbeleg (PDF) wird erzeugt.'
+                    : 'Keine Stripe-Zahlung hinterlegt — bitte den Betrag manuell erstatten. Ein Stornierungsbeleg (PDF) wird trotzdem erzeugt.'}
+                </p>
+              )}
+
+              {/* E-Mail */}
+              <label className="flex items-center gap-2 mt-4 text-sm font-body text-brand-black dark:text-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cancelSendEmail}
+                  onChange={(e) => setCancelSendEmail(e.target.checked)}
+                  className="accent-red-600"
+                />
+                E-Mail an Kunden senden
+              </label>
+
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelSendEmail(true); }}
                   className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                   Abbrechen
                 </button>

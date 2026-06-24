@@ -365,6 +365,9 @@ export interface CancellationEmailData {
   priceTotal: number;
   refundAmount: number;
   refundPercentage: number; // 0 | 0.5 | 1
+  /** Optionaler freier Zusatzsatz zur Rückerstattung (z.B. Kulanz-Hinweis).
+   *  Unabhaengig vom internen Admin-Stornogrund. Leer = kein Zusatz. */
+  refundNote?: string;
 }
 
 export async function sendCancellationConfirmation(data: CancellationEmailData) {
@@ -639,8 +642,14 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
         <td style="padding:8px 0;text-align:right;font-size:15px;font-weight:700;color:#16a34a;">${fmtEuro(d.refundAmount)}</td>
        </tr>`
     : `<tr>
-        <td colspan="2" style="padding:8px 0;font-size:14px;color:#dc2626;">Keine Rückerstattung (Stornierung < 7 Tage vor Mietstart)</td>
+        <td colspan="2" style="padding:8px 0;font-size:14px;color:#dc2626;">Keine Rückerstattung</td>
        </tr>`;
+
+  // Optionaler freier Zusatzsatz (z.B. Kulanz-Hinweis) — vom Admin gesetzt,
+  // unabhaengig vom internen Stornogrund.
+  const refundNoteRow = d.refundNote && d.refundNote.trim().length > 0
+    ? `<p style="margin:0 0 24px;font-size:13px;color:#4b5563;">${h(d.refundNote.trim())}</p>`
+    : '';
 
   const rebookUrl = `${BUSINESS.url}/kameras/${d.productId}`;
 
@@ -705,6 +714,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
             ${refundRow}
           </table>
           ${d.refundAmount > 0 ? `<p style="margin:0 0 24px;font-size:13px;color:#6b7280;">Die Rückerstattung erscheint innerhalb von 7 Werktagen auf deinem Konto.</p>` : ''}
+          ${refundNoteRow}
 
           <!-- Rebook CTA -->
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border-radius:10px;margin-bottom:24px;">
@@ -948,6 +958,77 @@ export async function sendInvoiceAdjustment(data: InvoiceAdjustmentEmailData) {
     bookingId: data.bookingId,
     emailType: 'invoice_adjustment',
     attachments: [{ filename: `Rechnungsanpassung-${data.bookingId}-v${data.version}.pdf`, content: data.pdfBuffer }],
+  });
+}
+
+// ─── Stornierungsbeleg / Gutschrift an den Kunden ────────────────────────────
+
+export interface CreditNoteEmailData {
+  bookingId: string | null;
+  creditNoteNumber: string;
+  customerName: string;
+  customerEmail: string;
+  grossAmount: number;
+  reason?: string;
+  /** true = Betrag bereits erstattet, false = wird erstattet. */
+  refunded?: boolean;
+  pdfBuffer: Buffer;
+}
+
+export async function sendCreditNote(data: CreditNoteEmailData) {
+  const subject = stripSubject(`Stornierungsbeleg ${data.creditNoteNumber} – ${BUSINESS.name}`);
+  const firstName = (data.customerName || '').trim().split(/\s+/)[0] || 'dort';
+  const refundLine = data.refunded
+    ? `Der Betrag von <strong>${fmtEuro(Math.abs(data.grossAmount))}</strong> wurde auf dein ursprüngliches Zahlungsmittel zurückerstattet.`
+    : `Der Betrag von <strong>${fmtEuro(Math.abs(data.grossAmount))}</strong> wird auf dein ursprüngliches Zahlungsmittel zurückerstattet.`;
+  const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <tr><td style="background:#0f172a;border-radius:12px 12px 0 0;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">cam<span style="color:#06b6d4;">2</span>rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 12px 12px;">
+          <p style="margin:0 0 18px;font-size:15px;color:#374151;line-height:1.6;">
+            Hallo ${h(firstName)},<br><br>
+            ${data.bookingId ? `zu deiner Buchung <strong>${h(data.bookingId)}</strong> haben wir einen ` : 'wir haben einen '}Stornierungsbeleg
+            (Gutschrift <strong>${h(data.creditNoteNumber)}</strong>) erstellt. Du findest ihn als PDF im Anhang.
+          </p>
+          <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6;">${refundLine}</p>
+          ${data.reason ? `<p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6;">Grund: ${h(data.reason)}</p>` : ''}
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">
+            Bei Fragen erreichst du uns jederzeit unter
+            <a href="mailto:${h(BUSINESS.emailKontakt)}" style="color:#06b6d4;">${h(BUSINESS.emailKontakt)}</a>.<br><br>
+            ${h(BUSINESS.name)} – ${h(BUSINESS.owner)}<br>
+            <a href="${h(BUSINESS.url)}" style="color:#06b6d4;">${h(BUSINESS.url)}</a>
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'credit_note',
+    attachments: [{ filename: `Stornierungsbeleg-${data.creditNoteNumber}.pdf`, content: data.pdfBuffer }],
   });
 }
 

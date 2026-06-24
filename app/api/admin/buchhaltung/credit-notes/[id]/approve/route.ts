@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { getStripe } from '@/lib/stripe';
 import { getStripeSecretKey } from '@/lib/env-mode';
+import { dispatchCreditNoteDocument } from '@/lib/buchhaltung/credit-note-document';
 
 export async function POST(
   _req: NextRequest,
@@ -146,6 +147,15 @@ export async function POST(
       .from('invoices')
       .update({ status: 'cancelled' })
       .eq('id', creditNote.invoice_id);
+  }
+
+  // Stornierungsbeleg-PDF erzeugen + an den Kunden mailen (best-effort,
+  // non-blocking). Nur wenn die Gutschrift tatsaechlich auf `sent` ging
+  // (Refund nicht fehlgeschlagen).
+  if (!refundFailed) {
+    dispatchCreditNoteDocument(supabase, id, { sendEmail: true }).catch((err) =>
+      console.error('[credit-note-approve] PDF/Mail fehlgeschlagen:', err),
+    );
   }
 
   // Bei Refund-Fehler Admin-Notification fuer Manual-Refund-Workflow

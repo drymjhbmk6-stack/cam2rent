@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { calculateTax, type TaxMode } from '@/lib/accounting/tax';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
+import { nextCreditNoteNumber } from '@/lib/buchhaltung/credit-note-utils';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -137,28 +138,11 @@ export async function POST(req: NextRequest) {
   // Steuer berechnen
   const taxCalc = calculateTax(gross_amount || 0, taxMode, taxRate, 'gross');
 
-  // Gutschriftnummer generieren — Jahr in Berlin-Zeit, damit eine Gutschrift
-  // in der Silvester-Nacht zwischen 23-24 Uhr Berlin nicht schon ins
-  // Folgejahr rutscht (UTC ist dann noch 22-23 = altes Jahr).
-  // Test-Modus: separater Counter, `TEST-GS-...` Praefix
+  // Gutschriftnummer generieren — Logik in nextCreditNoteNumber (geteilt mit
+  // dem Buchungs-Storno-Auto-Gutschrift-Pfad). Jahr in Berlin-Zeit, separater
+  // Counter im Test-Modus.
   const testMode = await isTestMode();
-  const year = parseInt(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 4), 10);
-  const prefix = testMode ? 'TEST-GS' : 'GS';
-  const { data: lastCn } = await supabase
-    .from('credit_notes')
-    .select('credit_note_number')
-    .like('credit_note_number', `${prefix}-${year}-%`)
-    .eq('is_test', testMode)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let nextNum = 1;
-  if (lastCn?.credit_note_number) {
-    const match = lastCn.credit_note_number.match(new RegExp(`${prefix}-\\d{4}-(\\d+)`));
-    if (match) nextNum = parseInt(match[1], 10) + 1;
-  }
-  const creditNoteNumber = `${prefix}-${year}-${String(nextNum).padStart(6, '0')}`;
+  const creditNoteNumber = await nextCreditNoteNumber(supabase);
 
   const { data: creditNote, error } = await supabase
     .from('credit_notes')

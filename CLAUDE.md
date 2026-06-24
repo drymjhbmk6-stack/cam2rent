@@ -938,6 +938,53 @@ CTA auf `/konto/buchungen/[id]/material`). Bei `condition='beschaedigt'` (→ St
   Übersicht `lib/email-previews.ts` (`EMAIL_TEMPLATE_CATALOG` → vorab ansehbar +
   per Override anpassbar unter `/admin/emails/vorlagen`).
 
+### Storno mit Rückerstattungswahl + echter Stornierungsbeleg (Stand 2026-06-24)
+Beim Stornieren einer Buchung hat der Admin jetzt die volle Kontrolle über
+Rückerstattung und Kunden-Mail; bei einer Rückerstattung wird automatisch ein
+**Stornierungsbeleg (Gutschrift-PDF)** erzeugt und an den Kunden gemailt.
+Hintergrund: vorher rief der Storno **immer** `sendCancellationConfirmation`
+mit `refundAmount: 0` auf → die Kunden-Mail sagte hart „Keine Rückerstattung",
+auch wenn aus Kulanz erstattet wurde. Und Gutschriften (`credit_notes`)
+erzeugten weder ein PDF noch eine E-Mail.
+- **Storno-Modal** (`/admin/buchungen/[id]`, Reiter „Status & Verlauf"):
+  Stornogrund (Pflicht) + Block **Rückerstattung** (Radio „Keine" / „Voller
+  Betrag" / „Teilbetrag" + `PriceInput`, gedeckelt auf `price_total`) + Checkbox
+  **„E-Mail an Kunden senden"** (Default an). `handleCancel` schickt zusätzlich
+  `refund_amount` (Zahl) + `send_email` (bool) im PATCH-Body.
+- **Backend `PATCH /api/admin/booking/[id]`** (Storno-Branch, non-blocking
+  Post-Processing): sanitisiert `refund_amount` (`max(0, min(price_total, …))`).
+  Bei `> 0` und echtem `pi_`-PaymentIntent → automatischer Stripe-Refund
+  (`idempotencyKey: cancel-refund:<id>:<cents>`); Fehler → `refund_status`-Notiz
+  `failed_pending_admin` + `payment_failed`-Notification, Storno bleibt bestehen.
+  Manuelle Buchungen (`MANUAL-`/`PENDING-`) → `refund_status='manual'` (Admin
+  erstattet selbst), Betrag wird trotzdem dokumentiert. `refund_amount`/
+  `refund_note` werden in `bookings` persistiert (defensiver Skip ohne die
+  Spalten aus `supabase-bookings-refund.sql`). Kunden-/Admin-Storno-Mail nur
+  wenn `send_email !== false`, mit **echtem** `refundAmount` + `refundPercentage`.
+- **Stornierungsbeleg (Kopplung „Beides"):** Bei `refund_amount > 0` (und Refund
+  nicht fehlgeschlagen) legt `createCancellationCreditNote`
+  (`lib/buchhaltung/credit-note-document.ts`) automatisch eine `credit_notes`-Zeile
+  an (`status='sent'`, `reason_category='cancellation'`, `gross_amount=refund`,
+  `refund_status` aus dem bereits ausgelösten Refund — **kein** doppelter Stripe-
+  Refund), sichert idempotent die Originalrechnung via `storeInvoiceForBooking`,
+  setzt sie auf `cancelled`, dann `dispatchCreditNoteDocument` → PDF + Mail (nur
+  wenn `send_email`). Erscheint auch im Gutschriften-Tab der Buchhaltung.
+- **Gutschriften-Tab eigenständig:** `POST /api/admin/buchhaltung/credit-notes/[id]/approve`
+  ruft nach erfolgreichem Refund/`sent` ebenfalls `dispatchCreditNoteDocument`
+  (best-effort) → manuell angestoßene Gutschriften bekommen jetzt auch PDF + Mail.
+- **Neue Bausteine:** `lib/credit-note-pdf.tsx` (`CreditNotePDF`, Stornorechnung-
+  Layout analog `invoice-pdf`, negative Beträge, Bezug zur Originalrechnung),
+  `lib/buchhaltung/credit-note-utils.ts` (`nextCreditNoteNumber`, aus der POST-
+  Route extrahiert — Verhalten 1:1), `lib/buchhaltung/credit-note-document.ts`
+  (`dispatchCreditNoteDocument` + `createCancellationCreditNote`),
+  `sendCreditNote` in `lib/email.ts` (emailType `credit_note`, in
+  `/admin/emails` `TYPE_LABELS` registriert). `CancellationEmailData` hat ein
+  optionales `refundNote` (freier Zusatzsatz), der „Keine Rückerstattung"-Text
+  ist neutral (kein „< 7 Tage"-Grund mehr).
+- **Keine neue Migration:** `credit_notes`, `invoices`, `bookings.refund_amount/
+  refund_note` existieren bereits. GoBD: Rechnungsnummern bleiben unangetastet,
+  Storno läuft über separate `GS-`-Gutschriftnummer.
+
 ### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
 Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
 „Als zugestellt markieren" auf `shipped` direkt auf `completed` — falsch, denn

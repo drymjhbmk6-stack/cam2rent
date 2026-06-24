@@ -23,6 +23,7 @@ import { getSiteUrl } from '@/lib/env-mode';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 import { sanitizeOverrideDate } from '@/lib/booking-buffer';
+import { createCancellationCreditNote, dispatchCreditNoteDocument } from '@/lib/buchhaltung/credit-note-document';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -777,6 +778,8 @@ export async function PATCH(
   const {
     status,
     cancellation_reason,
+    refund_amount,
+    send_email,
     customer_email,
     verification_gate,
     liability_override,
@@ -789,6 +792,8 @@ export async function PATCH(
   } = body as {
     status?: string;
     cancellation_reason?: string;
+    refund_amount?: number;
+    send_email?: boolean;
     customer_email?: string;
     verification_gate?: 'approve' | 'revoke';
     liability_override?: {
@@ -2040,11 +2045,68 @@ export async function PATCH(
         console.error('[booking-cancel] accessory-unit release failed:', err),
       );
 
-      // Stornierungs-Mails (non-blocking). Refund auf 0 — manueller Storno
-      // durch den Admin, etwaige Rueckerstattung macht der Admin in Stripe
-      // direkt. Wenn Bedarf besteht, kann das spaeter ueber ein
-      // optionales body.refund_amount erweitert werden.
-      if (booking.customer_email) {
+      // ── Rueckerstattung ──────────────────────────────────────────────────
+      // refund_amount kommt aus dem Storno-Fenster (keiner / voll / Teilbetrag),
+      // gedeckelt auf den Buchungsbetrag. Bei > 0 und echtem Stripe-PaymentIntent
+      // wird der Refund automatisch ausgeloest.
+      const priceTotal = Number(booking.price_total ?? 0);
+      const requestedRefund = Math.max(0, Math.min(priceTotal, Number(refund_amount) || 0));
+      const piId = (booking.payment_intent_id ?? '').toString();
+      const isStripePI = piId.startsWith('pi_');
+      let refundStatus = 'not_applicable';
+      let stripeRefundId: string | null = null;
+      let refundDone = false;
+
+      if (requestedRefund > 0) {
+        if (isStripePI) {
+          try {
+            const stripe = await getStripe();
+            const refund = await stripe.refunds.create(
+              {
+                payment_intent: piId,
+                amount: Math.round(requestedRefund * 100),
+                reason: 'requested_by_customer',
+              },
+              { idempotencyKey: `cancel-refund:${id}:${Math.round(requestedRefund * 100)}` },
+            );
+            stripeRefundId = refund.id;
+            refundStatus = refund.status === 'succeeded' ? 'succeeded' : 'pending';
+            refundDone = true;
+          } catch (refundErr) {
+            refundStatus = 'failed_pending_admin';
+            console.error('[booking-cancel] Stripe-Refund fehlgeschlagen:', refundErr);
+            try {
+              await createAdminNotification(supabase, {
+                type: 'payment_failed',
+                title: `Storno ${id}: Refund fehlgeschlagen`,
+                message: `Automatischer Refund (${requestedRefund.toFixed(2)} EUR) fehlgeschlagen — bitte manuell in Stripe erstatten.`,
+                link: `/admin/buchungen/${id}`,
+              });
+            } catch { /* Notification best-effort */ }
+          }
+        } else {
+          // Manuelle Buchung (MANUAL-/PENDING-...): kein Stripe-Refund moeglich,
+          // der Admin erstattet selbst. Betrag wird dennoch dokumentiert.
+          refundStatus = 'manual';
+        }
+
+        // Refund-Betrag + Status auf der Buchung dokumentieren (defensiver
+        // Retry ohne die Spalten, falls supabase-bookings-refund.sql aussteht).
+        const refundNoteEntry = `Storno-Rueckerstattung ${requestedRefund.toFixed(2)} EUR (${refundStatus})`;
+        const existingRefundNote = (booking.refund_note ?? '') as string;
+        const refundUpdate: Record<string, unknown> = {
+          refund_amount: requestedRefund,
+          refund_note: existingRefundNote ? `${existingRefundNote} | ${refundNoteEntry}` : refundNoteEntry,
+        };
+        const { error: refundUpdErr } = await supabase.from('bookings').update(refundUpdate).eq('id', id);
+        if (refundUpdErr && /refund_amount|refund_note/i.test(refundUpdErr.message || '')) {
+          console.warn('[booking-cancel] refund_amount/refund_note Migration steht aus — Betrag nicht persistiert.');
+        }
+      }
+
+      // ── Stornierungs-Mails (non-blocking, nur wenn send_email !== false) ──
+      const wantEmail = send_email !== false;
+      if (wantEmail && booking.customer_email) {
         const emailData = {
           bookingId: booking.id,
           customerName: booking.customer_name ?? '',
@@ -2054,9 +2116,9 @@ export async function PATCH(
           rentalFrom: booking.rental_from,
           rentalTo: booking.rental_to,
           days: booking.days,
-          priceTotal: booking.price_total ?? 0,
-          refundAmount: 0,
-          refundPercentage: 0,
+          priceTotal,
+          refundAmount: requestedRefund,
+          refundPercentage: priceTotal > 0 ? requestedRefund / priceTotal : 0,
         };
         Promise.allSettled([
           sendCancellationConfirmation(emailData),
@@ -2069,8 +2131,29 @@ export async function PATCH(
             }
           });
         });
+      } else if (!wantEmail) {
+        console.info(`[booking-cancel] Buchung ${id} storniert ohne Kunden-E-Mail (Admin-Wahl).`);
       } else {
         console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
+      }
+
+      // ── Stornierungsbeleg (Gutschrift) bei Rueckerstattung ───────────────
+      // Auto-Anlage einer Gutschrift + Stornierungsbeleg-PDF an den Kunden.
+      // Best-effort/non-blocking: schlaegt es fehl, bleibt Storno + Refund +
+      // Storno-Mail bestehen.
+      if (requestedRefund > 0 && refundStatus !== 'failed_pending_admin') {
+        (async () => {
+          const cnId = await createCancellationCreditNote(supabase, {
+            bookingId: id,
+            grossAmount: requestedRefund,
+            reason: cancellation_reason || 'Stornierung der Buchung',
+            refundStatus: refundDone ? refundStatus : 'manual',
+            stripeRefundId,
+          });
+          if (cnId) {
+            await dispatchCreditNoteDocument(supabase, cnId, { sendEmail: wantEmail });
+          }
+        })().catch((err) => console.error('[booking-cancel] Stornierungsbeleg fehlgeschlagen:', err));
       }
     }
   }
