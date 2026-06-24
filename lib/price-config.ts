@@ -249,6 +249,35 @@ export function calcEarlyBirdDiscount(
   return sorted.find((d) => weeksBefore >= d.min_weeks) ?? null;
 }
 
+// ─── Sonderkonditionen pro Kunde ─────────────────────────────────────────────
+
+export interface SpecialCustomerCondition {
+  /** Rabatt in Prozent (0–100). null/0 = keine Sonderkondition. */
+  percent: number | null;
+  /** Optionales Ablaufdatum (YYYY-MM-DD). leer/null = unbegrenzt gültig. */
+  validUntil?: string | null;
+}
+
+/**
+ * Liefert den aktiven Sonderkonditions-Prozentsatz eines Kunden (0 wenn keine,
+ * ≤0 oder abgelaufen). Berlin-tagesgenau (gültig bis EINSCHLIESSLICH des Tages),
+ * dependency-frei — identisch für Client-Vorschau und Server-Recompute.
+ */
+export function getActiveSpecialDiscountPercent(
+  cond: SpecialCustomerCondition | null | undefined,
+  now: Date = new Date(),
+): number {
+  if (!cond) return 0;
+  const pct = Number(cond.percent);
+  if (!Number.isFinite(pct) || pct <= 0) return 0;
+  if (cond.validUntil) {
+    const until = String(cond.validUntil).slice(0, 10);
+    const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    if (until < today) return 0;
+  }
+  return Math.min(100, Math.max(0, Math.round(pct)));
+}
+
 // ─── Produktrabatte (z.B. Black Friday) ──────────────────────────────────────
 
 export type DiscountType = 'percent' | 'fixed' | 'free';

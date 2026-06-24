@@ -22,6 +22,11 @@ interface CustomerProfile {
   blacklist_reason: string;
   blacklisted_at: string | null;
   is_tester: boolean | null;
+  special_discount_percent: number | null;
+  special_discount_reason: string;
+  special_discount_valid_until: string | null;
+  special_discount_set_by: string | null;
+  special_discount_set_at: string | null;
   created_at: string;
   anonymized: boolean;
   deleted_at: string | null;
@@ -406,6 +411,50 @@ export default function KundenDetailPage() {
       fetchData();
     } finally {
       setTesterLoading(false);
+    }
+  }
+
+  // ── Sonderkonditionen (Kunden-Rabatt) ──────────────────────────────────────
+  const [scdEditing, setScdEditing] = useState(false);
+  const [scdPercent, setScdPercent] = useState('');
+  const [scdReason, setScdReason] = useState('');
+  const [scdValidUntil, setScdValidUntil] = useState('');
+  const [scdLoading, setScdLoading] = useState(false);
+
+  function startEditSpecialDiscount() {
+    setScdPercent(customer?.special_discount_percent != null ? String(customer.special_discount_percent) : '');
+    setScdReason(customer?.special_discount_reason || '');
+    setScdValidUntil(customer?.special_discount_valid_until || '');
+    setScdEditing(true);
+  }
+
+  async function saveSpecialDiscount(remove: boolean) {
+    setScdLoading(true);
+    try {
+      const percent = remove ? null : Math.round(Number(scdPercent.replace(',', '.')));
+      if (!remove && (!Number.isFinite(percent as number) || (percent as number) < 0 || (percent as number) > 100)) {
+        alert('Bitte einen Prozentsatz zwischen 0 und 100 eingeben.');
+        return;
+      }
+      const res = await fetch('/api/admin/kunden/special-discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: customerId,
+          percent,
+          reason: remove ? null : scdReason,
+          validUntil: remove ? null : scdValidUntil || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? 'Fehler beim Speichern der Sonderkondition.');
+        return;
+      }
+      setScdEditing(false);
+      fetchData();
+    } finally {
+      setScdLoading(false);
     }
   }
 
@@ -1051,6 +1100,144 @@ export default function KundenDetailPage() {
               >
                 Als Tester-Konto markieren
               </button>
+            )}
+          </div>
+
+          {/* Sonderkonditionen (Kunden-Rabatt) */}
+          <div style={{
+            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            padding: 24,
+          }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 8, marginTop: 0 }}>
+              Sonderkonditionen
+            </h2>
+            <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, marginTop: 0 }}>
+              Individueller Rabatt für diesen Kunden. Wird im Checkout
+              <strong style={{ color: '#e2e8f0' }}> automatisch</strong> abgezogen und
+              <strong style={{ color: '#e2e8f0' }}> ersetzt</strong> dort die anderen
+              Auto-Rabatte (Aktion, Mengen-, Frühbucher-, Treuerabatt). Ein Gutschein-Code
+              bleibt zusätzlich möglich.
+            </p>
+
+            {!scdEditing ? (
+              <div>
+                {customer.special_discount_percent != null ? (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#818cf8', fontSize: 15, fontWeight: 700 }}>
+                      ● {customer.special_discount_percent}% Sonderrabatt aktiv
+                    </div>
+                    {customer.special_discount_reason && (
+                      <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4 }}>
+                        Grund: {customer.special_discount_reason}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                      {customer.special_discount_valid_until
+                        ? `Gültig bis ${fmtDate(customer.special_discount_valid_until)}`
+                        : 'Unbegrenzt gültig'}
+                      {customer.special_discount_set_by ? ` · gesetzt von ${customer.special_discount_set_by}` : ''}
+                      {customer.special_discount_set_at ? ` am ${fmtDate(customer.special_discount_set_at)}` : ''}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, color: '#64748b', marginBottom: 14 }}>
+                    Keine Sonderkondition hinterlegt.
+                  </div>
+                )}
+                <button
+                  onClick={startEditSpecialDiscount}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                    background: customer.special_discount_percent != null ? '#1e293b' : '#6366f1',
+                    color: customer.special_discount_percent != null ? '#e2e8f0' : 'white',
+                    border: customer.special_discount_percent != null ? '1px solid #334155' : 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {customer.special_discount_percent != null ? 'Bearbeiten' : 'Sonderkondition setzen'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Rabatt (%)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    value={scdPercent}
+                    onChange={(e) => setScdPercent(e.target.value)}
+                    placeholder="z.B. 10"
+                    style={{
+                      width: 120, padding: '8px 12px', borderRadius: 8, fontSize: 16,
+                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Grund / interne Notiz (optional)</label>
+                  <textarea
+                    value={scdReason}
+                    onChange={(e) => setScdReason(e.target.value)}
+                    rows={2}
+                    placeholder="z.B. Stammkunde / Geschäftspartner"
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 16,
+                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', resize: 'vertical',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Gültig bis (optional, leer = unbegrenzt)</label>
+                  <input
+                    type="date"
+                    value={scdValidUntil}
+                    onChange={(e) => setScdValidUntil(e.target.value)}
+                    style={{
+                      padding: '8px 12px', borderRadius: 8, fontSize: 16,
+                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => saveSpecialDiscount(false)}
+                    disabled={scdLoading}
+                    style={{
+                      padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                      background: '#6366f1', color: 'white', border: 'none', cursor: 'pointer',
+                      opacity: scdLoading ? 0.5 : 1,
+                    }}
+                  >
+                    Speichern
+                  </button>
+                  {customer.special_discount_percent != null && (
+                    <button
+                      onClick={() => saveSpecialDiscount(true)}
+                      disabled={scdLoading}
+                      style={{
+                        padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                        background: '#7f1d1d', color: '#fecaca', border: '1px solid #991b1b', cursor: 'pointer',
+                        opacity: scdLoading ? 0.5 : 1,
+                      }}
+                    >
+                      Entfernen
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setScdEditing(false)}
+                    disabled={scdLoading}
+                    style={{
+                      padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                      background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                      opacity: scdLoading ? 0.5 : 1,
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

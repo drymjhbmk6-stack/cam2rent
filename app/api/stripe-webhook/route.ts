@@ -12,6 +12,7 @@ import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
+import { getActiveSpecialDiscountPercent } from '@/lib/price-config';
 import {
   loadProfileAddressRow,
   resolveShippingAddress,
@@ -436,6 +437,27 @@ async function handleSingleBooking(
   // (Race vor confirm-booking) anlegt, mit is_test=false und blockiert den
   // Live-Kalender. testModeForIdSingle = isTesterSingle || isTestMode().
   const singleEarlyBird = Math.max(0, parseFloat(meta.early_bird_discount ?? '0') || 0);
+  // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
+  // (maßgeblich). Sie ersetzt Produktaktion + Frühbucher. Basis = Miete + Zubehör.
+  let singleSpecial = 0;
+  if (meta.user_id) {
+    try {
+      const { data: spRow } = await supabase
+        .from('profiles')
+        .select('special_discount_percent, special_discount_valid_until')
+        .eq('id', meta.user_id)
+        .maybeSingle();
+      const spPct = getActiveSpecialDiscountPercent({
+        percent: (spRow as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+        validUntil: (spRow as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+      });
+      if (spPct > 0) {
+        const base = Math.max(0, parseFloat(meta.price_rental ?? '0')) + Math.max(0, parseFloat(meta.price_accessories ?? '0'));
+        singleSpecial = Math.round(base * spPct) / 100;
+      }
+    } catch { /* defensiv: Migration evtl. nicht durch */ }
+  }
+  const singleSpecialActive = singleSpecial > 0;
   const singleInsert: Record<string, unknown> = {
     id: bookingId,
     payment_intent_id: intent.id,
@@ -470,7 +492,7 @@ async function handleSingleBooking(
     // Felder verloren, wenn der Webhook die Buchung schneller anlegt als
     // confirm-booking nach dem Stripe-Redirect — Rechnung + Buchungsdetail
     // wuerden den Rabatt nicht zeigen, obwohl Stripe ihn abgezogen hat.
-    ...(Math.max(0, parseFloat(meta.product_discount ?? '0') || 0) > 0
+    ...(Math.max(0, parseFloat(meta.product_discount ?? '0') || 0) > 0 && !singleSpecialActive
       ? {
           discount_amount: Math.max(0, parseFloat(meta.product_discount ?? '0') || 0),
           ...(meta.product_discount_label
@@ -479,12 +501,18 @@ async function handleSingleBooking(
         }
       : {}),
     // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(singleEarlyBird > 0 ? { early_bird_discount: singleEarlyBird } : {}),
+    ...(singleEarlyBird > 0 && !singleSpecialActive ? { early_bird_discount: singleEarlyBird } : {}),
+    // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
+    ...(singleSpecialActive ? { special_discount: singleSpecial } : {}),
   };
 
   let { error } = await supabase.from('bookings').insert(singleInsert);
   if (error && singleEarlyBird > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
     delete singleInsert.early_bird_discount;
+    ({ error } = await supabase.from('bookings').insert(singleInsert));
+  }
+  if (error && singleSpecialActive && /special_discount|column|schema cache|PGRST/i.test(error.message)) {
+    delete singleInsert.special_discount;
     ({ error } = await supabase.from('bookings').insert(singleInsert));
   }
 
@@ -705,6 +733,28 @@ async function handleCartBooking(
   // is_test tester-bewusst setzen (siehe handleSingleBooking) — sonst blockiert
   // eine vom Webhook-Race angelegte Tester-Cart-Buchung den Live-Kalender.
   // testModeForIdCart = isTesterCart || isTestMode().
+  // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
+  // (maßgeblich). Sie ersetzt Mengen-/Frühbucher-/Treuerabatt. Basis = Miete +
+  // Zubehör + Haftung (= Warenwert, konsistent zur Checkout-Anzeige).
+  let cartSpecial = 0;
+  if (userId) {
+    try {
+      const { data: spRow } = await supabase
+        .from('profiles')
+        .select('special_discount_percent, special_discount_valid_until')
+        .eq('id', userId)
+        .maybeSingle();
+      const spPct = getActiveSpecialDiscountPercent({
+        percent: (spRow as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+        validUntil: (spRow as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+      });
+      if (spPct > 0) {
+        const base = items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0);
+        cartSpecial = Math.round(base * spPct) / 100;
+      }
+    } catch { /* defensiv: Migration evtl. nicht durch */ }
+  }
+  const cartSpecialActive = cartSpecial > 0;
   const cartInsert: Record<string, unknown> = {
     id: bookingId,
     payment_intent_id: intent.id,
@@ -735,15 +785,21 @@ async function handleCartBooking(
       : {}),
     coupon_code: couponCode || null,
     discount_amount: discountAmount,
-    duration_discount: durationDiscount,
-    loyalty_discount: loyaltyDiscount,
+    duration_discount: cartSpecialActive ? 0 : durationDiscount,
+    loyalty_discount: cartSpecialActive ? 0 : loyaltyDiscount,
     // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(earlyBirdDiscount > 0 ? { early_bird_discount: earlyBirdDiscount } : {}),
+    ...(earlyBirdDiscount > 0 && !cartSpecialActive ? { early_bird_discount: earlyBirdDiscount } : {}),
+    // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
+    ...(cartSpecialActive ? { special_discount: cartSpecial } : {}),
   };
 
   let { error } = await supabase.from('bookings').insert(cartInsert);
   if (error && earlyBirdDiscount > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
     delete cartInsert.early_bird_discount;
+    ({ error } = await supabase.from('bookings').insert(cartInsert));
+  }
+  if (error && cartSpecialActive && /special_discount|column|schema cache|PGRST/i.test(error.message)) {
+    delete cartInsert.special_discount;
     ({ error } = await supabase.from('bookings').insert(cartInsert));
   }
 
@@ -757,9 +813,7 @@ async function handleCartBooking(
     (items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0) +
       shippingPrice -
       discountAmount -
-      durationDiscount -
-      earlyBirdDiscount -
-      loyaltyDiscount) * 100,
+      (cartSpecialActive ? cartSpecial : durationDiscount + earlyBirdDiscount + loyaltyDiscount)) * 100,
   );
   await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
 

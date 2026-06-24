@@ -16,7 +16,8 @@ import { isAngebotActive, getAngebotCameraOption, type Angebot } from '@/data/an
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, hasActiveNotCombinableDiscount, calcEarlyBirdDiscount, weeksUntil, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount, type EarlyBirdDiscount } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, hasActiveNotCombinableDiscount, calcEarlyBirdDiscount, weeksUntil, getActiveSpecialDiscountPercent, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount, type EarlyBirdDiscount } from '@/lib/price-config';
+import { createAuthBrowserClient } from '@/lib/supabase-auth';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
@@ -160,6 +161,10 @@ interface Breakdown {
   earlyBirdDiscount: number;
   /** Label des Frühbucherrabatts (z.B. "ab 4 Wochen: 10%") fuer UI/Rechnung. */
   earlyBirdLabel: string | null;
+  /** Sonderkondition (Kunden-Rabatt) — ERSETZT Aktion + Frühbucher, bereits vom Total abgezogen. */
+  specialDiscount: number;
+  /** Prozentsatz der Sonderkondition (für Anzeige), 0 = keine. */
+  specialPercent: number;
   total: number;
 }
 
@@ -180,6 +185,11 @@ function calcBreakdown(
    * normal weiter, Produkt-Rabatte werden im Angebots-Modus ignoriert.
    */
   offerOverride?: { price: number; mode: 'flat' | 'perDay' } | null,
+  /**
+   * Sonderkondition (individueller Kunden-Rabatt in %). ERSETZT Produktaktion +
+   * Frühbucherrabatt (exklusiv). Im Angebots-Modus ignoriert.
+   */
+  specialPercent?: number,
 ): Breakdown {
   // Inclusive day count: Mo→Mo = 1 Tag, Mo→Di = 2 Tage, Mo→So = 7 Tage
   const days = to && to.getTime() !== from.getTime()
@@ -227,6 +237,14 @@ function calcBreakdown(
   // Produkt-Rabatte (Aktionen wie "Release50") — gelten auch im Einzel-Buchungs-
   // flow. Vorher wurden sie nur im Cart angewendet, das Single-Product /buchen
   // hat den vollen Mietpreis an Stripe geschickt → Aktion war wirkungslos.
+  // Sonderkondition (individueller Kunden-Rabatt) ERSETZT Produktaktion +
+  // Frühbucherrabatt (exklusiv). Basis = Miete + Zubehör (Originalpreis).
+  const specialPct = !offerOverride ? Math.min(100, Math.max(0, Math.round(specialPercent ?? 0))) : 0;
+  const specialActive = specialPct > 0;
+  const specialDiscount = specialActive
+    ? Math.round((rentalPrice + accessoryPrice) * specialPct) / 100
+    : 0;
+
   const productDiscounts: ProductDiscount[] = ((dynPrices && 'productDiscounts' in dynPrices)
     ? (dynPrices as { productDiscounts?: ProductDiscount[] }).productDiscounts
     : undefined) ?? [];
@@ -234,7 +252,7 @@ function calcBreakdown(
   let productDiscountLabel: string | null = null;
   let itemDisc = 0;
   let cartLevel = 0;
-  if (productDiscounts.length > 0 && !offerOverride) {
+  if (productDiscounts.length > 0 && !offerOverride && !specialActive) {
     const matches = getDiscountMatchesForItem(
       product.id,
       rentalPrice,
@@ -266,7 +284,7 @@ function calcBreakdown(
     : undefined) ?? [];
   let earlyBirdDiscount = 0;
   let earlyBirdLabel: string | null = null;
-  if (earlyBirdDiscounts.length > 0 && !offerOverride) {
+  if (earlyBirdDiscounts.length > 0 && !offerOverride && !specialActive) {
     const blocked = hasActiveNotCombinableDiscount(
       rentalPrice + accessoryPrice - itemDisc,
       itemDisc,
@@ -281,7 +299,7 @@ function calcBreakdown(
   }
 
   const totalBeforeDiscount = subtotal + shipping.price;
-  const total = Math.max(0, totalBeforeDiscount - productDiscount - earlyBirdDiscount);
+  const total = Math.max(0, totalBeforeDiscount - productDiscount - earlyBirdDiscount - specialDiscount);
 
   return {
     days,
@@ -294,6 +312,8 @@ function calcBreakdown(
     productDiscountLabel,
     earlyBirdDiscount,
     earlyBirdLabel,
+    specialDiscount,
+    specialPercent: specialPct,
     total,
   };
 }
@@ -630,6 +650,28 @@ export default function BuchenPage() {
       setTaxRate(d.taxRate || 19);
     }).catch(() => {});
   }, []);
+
+  // Sonderkondition (individueller Kunden-Rabatt) des eingeloggten Kunden laden.
+  // Nur Anzeige — maßgeblich ist der serverseitig aufgelöste Wert in
+  // create-payment-intent/confirm-booking.
+  const [specialPercent, setSpecialPercent] = useState(0);
+  useEffect(() => {
+    if (!user) { setSpecialPercent(0); return; }
+    const supabase = createAuthBrowserClient();
+    supabase
+      .from('profiles')
+      .select('special_discount_percent, special_discount_valid_until')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setSpecialPercent(
+          getActiveSpecialDiscountPercent({
+            percent: (data as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+            validUntil: (data as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+          }),
+        );
+      });
+  }, [user]);
 
   useEffect(() => {
     // Frueher: nur `available=true`-Sets laden. Damit verschwanden ausgebuchte
@@ -1008,6 +1050,15 @@ export default function BuchenPage() {
                   early_bird_label: breakdown.earlyBirdLabel ?? '',
                 }
               : {}),
+            // Sonderkondition (Kunden-Rabatt) — server-seitig in
+            // create-payment-intent/confirm-booking aus profiles neu aufgelöst
+            // (maßgeblich). Metadata dient nur als Beleg.
+            ...(breakdown.specialDiscount > 0
+              ? {
+                  special_discount: String(breakdown.specialDiscount),
+                  special_discount_percent: String(breakdown.specialPercent),
+                }
+              : {}),
             user_id: user?.id ?? '',
             customer_email: user?.email ?? '',
             customer_name: user?.user_metadata?.full_name ?? user?.email ?? '',
@@ -1176,7 +1227,7 @@ export default function BuchenPage() {
 
   // breakdown exists as soon as a start date is picked (to=undefined → 1 Tag)
   const breakdown = range?.from
-    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices, accessoryQty, offerOverride)
+    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices, accessoryQty, offerOverride, specialPercent)
     : null;
 
   // Angebot: enthaltenes Zubehoer im Zeitraum nicht ausreichend verfuegbar?
@@ -2488,6 +2539,17 @@ export default function BuchenPage() {
                       </span>
                       <span className="font-semibold text-status-success">
                         -{fmt(breakdown.earlyBirdDiscount)} €
+                      </span>
+                    </div>
+                  )}
+
+                  {breakdown.specialDiscount > 0 && (
+                    <div className="flex justify-between items-center text-sm font-body">
+                      <span className="text-status-success">
+                        Sonderkondition ({breakdown.specialPercent} %)
+                      </span>
+                      <span className="font-semibold text-status-success">
+                        -{fmt(breakdown.specialDiscount)} €
                       </span>
                     </div>
                   )}

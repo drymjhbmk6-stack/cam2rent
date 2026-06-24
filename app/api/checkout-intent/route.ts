@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
-import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
@@ -148,9 +148,25 @@ export async function POST(req: NextRequest) {
               (ctxDisc('discountAmount') + ctxDisc('productDiscount') + ctxDisc('durationDiscount')
                 + ctxDisc('earlyBirdDiscount') + ctxDisc('loyaltyDiscount')) * 100,
             );
+            // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
+            // (maßgeblich, nicht aus dem Client). Sie ERSETZT die Auto-Rabatte,
+            // läuft im Floor aber additiv zur Coupon-Schicht (discountAmount).
+            let serverSpecialCents = 0;
+            try {
+              const { data: sp } = await supabase
+                .from('profiles')
+                .select('special_discount_percent, special_discount_valid_until')
+                .eq('id', userId)
+                .maybeSingle();
+              const spPct = getActiveSpecialDiscountPercent({
+                percent: (sp as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+                validUntil: (sp as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+              });
+              if (spPct > 0) serverSpecialCents = Math.round((expectedMinCents * spPct) / 100);
+            } catch { /* defensiv: Migration evtl. nicht durch → kein Special-Floor */ }
             const floorCents = Math.max(
               Math.floor(expectedMinCents * 0.05),
-              expectedMinCents - claimedCents - 100,
+              expectedMinCents - claimedCents - serverSpecialCents - 100,
             );
             if (amountCents < floorCents) {
               console.error('[checkout-intent] Preis-Plausibilität verletzt:', {

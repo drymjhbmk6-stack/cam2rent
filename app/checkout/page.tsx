@@ -17,7 +17,7 @@ import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount, getActiveSpecialDiscountPercent } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -320,6 +320,9 @@ export default function CheckoutPage() {
   const [earlyBirdDiscounts, setEarlyBirdDiscounts] = useState<EarlyBirdDiscount[]>([]);
   const [productDiscounts, setProductDiscounts] = useState<ProductDiscount[]>([]);
   const [userBookingCount, setUserBookingCount] = useState(0);
+  // Sonderkondition (individueller Kunden-Rabatt) — Anzeige; maßgeblich ist der
+  // serverseitig aufgelöste Wert in checkout-intent/confirm-cart.
+  const [specialPercent, setSpecialPercent] = useState(0);
 
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
@@ -378,12 +381,18 @@ export default function CheckoutPage() {
     const supabase = createAuthBrowserClient();
     supabase
       .from('profiles')
-      .select('booking_count, verification_status')
+      .select('booking_count, verification_status, special_discount_percent, special_discount_valid_until')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.booking_count) setUserBookingCount(data.booking_count);
         setIsVerified(data?.verification_status === 'verified');
+        setSpecialPercent(
+          getActiveSpecialDiscountPercent({
+            percent: (data as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+            validUntil: (data as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+          }),
+        );
       });
   }, [user]);
 
@@ -483,7 +492,14 @@ export default function CheckoutPage() {
   // Stacking, weil sonst >100 % moeglich waere).
   const cartTotalNetItems = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0) - itemDiscountAmount;
   const cartLevelDiscountAmount = calcCartLevelDiscount(cartTotalNetItems, productDiscounts);
-  const productDiscountAmount = itemDiscountAmount + cartLevelDiscountAmount;
+
+  // Sonderkondition (Kunden-Rabatt) ERSETZT alle anderen Auto-Rabatte: greift
+  // sie, gelten Aktion/Mengen-/Frühbucher-/Treuerabatt NICHT (exklusiv). Sie
+  // wird additiv auf den Originalpreis (cartTotal) gerechnet. Coupon danach.
+  const specialActive = specialPercent > 0;
+  const specialDiscountAmount = specialActive ? Math.round(cartTotal * specialPercent) / 100 : 0;
+
+  const productDiscountAmount = specialActive ? 0 : itemDiscountAmount + cartLevelDiscountAmount;
   // productDiscountLabel für zukünftige Nutzung
   void productDiscountAmount;
 
@@ -505,7 +521,7 @@ export default function CheckoutPage() {
   // Duration discount: based on max rental days across all items
   const maxDays = items.reduce((m, it) => Math.max(m, it.days), 0);
   const durationMatch = calcDurationDiscount(maxDays, durationDiscounts);
-  const durationDiscountAmount = !actionBlocksAutoDiscounts && durationMatch
+  const durationDiscountAmount = !actionBlocksAutoDiscounts && !specialActive && durationMatch
     ? Math.round(cartTotal * durationMatch.discount_percent) / 100
     : 0;
 
@@ -515,7 +531,7 @@ export default function CheckoutPage() {
     (min, it) => Math.min(min, weeksUntil(it.rentalFrom)),
     items.length ? Infinity : 0,
   );
-  const earlyBirdMatch = !actionBlocksAutoDiscounts && Number.isFinite(earlyBirdWeeks)
+  const earlyBirdMatch = !actionBlocksAutoDiscounts && !specialActive && Number.isFinite(earlyBirdWeeks)
     ? calcEarlyBirdDiscount(earlyBirdWeeks, earlyBirdDiscounts)
     : null;
   const earlyBirdDiscountAmount = earlyBirdMatch
@@ -523,7 +539,7 @@ export default function CheckoutPage() {
     : 0;
 
   // Loyalty discount: additiv auf den Originalpreis
-  const loyaltyMatch = !actionBlocksAutoDiscounts && user
+  const loyaltyMatch = !actionBlocksAutoDiscounts && !specialActive && user
     ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts)
     : null;
   const loyaltyDiscountAmount = loyaltyMatch
@@ -532,7 +548,7 @@ export default function CheckoutPage() {
 
   // Safety-Cap: Summe der Auto-Rabatte darf den Originalpreis nicht übersteigen
   // (additive Prozente könnten sonst >100% ergeben). Coupon danach auf Rest.
-  const autoDiscountRaw = productDiscountAmount + durationDiscountAmount + earlyBirdDiscountAmount + loyaltyDiscountAmount;
+  const autoDiscountRaw = productDiscountAmount + durationDiscountAmount + earlyBirdDiscountAmount + loyaltyDiscountAmount + specialDiscountAmount;
   const autoDiscountCapped = Math.min(autoDiscountRaw, cartTotal);
   const afterAutoDiscounts = Math.max(0, cartTotal - autoDiscountCapped);
 
@@ -583,8 +599,9 @@ export default function CheckoutPage() {
 
   // Additive Auto-Rabatte + Coupon, gedeckelt auf den Originalpreis (Summe der
   // Prozente könnte sonst >100% ergeben → negativer Betrag).
+  // Sonderkondition gilt immer (wie Produktrabatt), unabhängig vom Coupon-Flag.
   const totalDiscount = Math.min(
-    effectiveProductDiscount + effectiveDurationDiscount + effectiveEarlyBirdDiscount + effectiveLoyaltyDiscount + couponDiscountAmount,
+    effectiveProductDiscount + effectiveDurationDiscount + effectiveEarlyBirdDiscount + effectiveLoyaltyDiscount + specialDiscountAmount + couponDiscountAmount,
     cartTotal,
   );
   const discountedSubtotal = cartTotal - totalDiscount;
@@ -909,6 +926,12 @@ export default function CheckoutPage() {
                       <div className="flex justify-between text-sm">
                         <span className="text-brand-steel dark:text-gray-400">Rabatt</span>
                         <span className="text-status-success font-semibold">-{fmt(totalDiscount)}</span>
+                      </div>
+                    )}
+                    {specialActive && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-brand-steel dark:text-gray-400">↳ inkl. Sonderkondition ({specialPercent} %)</span>
+                        <span className="text-status-success">-{fmt(specialDiscountAmount)}</span>
                       </div>
                     )}
                     {haftungTotal > 0 && (

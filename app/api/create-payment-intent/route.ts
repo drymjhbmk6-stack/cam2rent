@@ -5,7 +5,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
-import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
@@ -65,11 +65,33 @@ export async function POST(req: NextRequest) {
 
     // Verifizierungs- und Blacklist-Check
     const supabase = createServiceClient();
-    const { data: profile } = await supabase
+    type ProfileSel = {
+      verification_status?: string | null;
+      blacklisted?: boolean | null;
+      special_discount_percent?: number | null;
+      special_discount_valid_until?: string | null;
+    };
+    const profileRes = await supabase
       .from('profiles')
-      .select('verification_status, blacklisted')
+      .select('verification_status, blacklisted, special_discount_percent, special_discount_valid_until')
       .eq('id', metadata.user_id)
       .maybeSingle();
+    let profile = profileRes.data as ProfileSel | null;
+    // Defensiv: fehlt die Sonderkonditions-Migration → ohne die Spalten neu laden,
+    // damit verification_status/blacklisted weiter korrekt gelesen werden.
+    if (profileRes.error && /special_discount/i.test(profileRes.error.message)) {
+      const fb = await supabase
+        .from('profiles')
+        .select('verification_status, blacklisted')
+        .eq('id', metadata.user_id)
+        .maybeSingle();
+      profile = fb.data as ProfileSel | null;
+    }
+    // Sonderkondition serverseitig (maßgeblich) — für den Plausibilitäts-Floor.
+    const serverSpecialPct = getActiveSpecialDiscountPercent({
+      percent: (profile as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+      validUntil: (profile as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+    });
 
     if (profile?.blacklisted) {
       return NextResponse.json(
@@ -176,9 +198,16 @@ export async function POST(req: NextRequest) {
                   ((parseFloat(metadata.product_discount ?? '0') || 0)
                     + (parseFloat(metadata.early_bird_discount ?? '0') || 0)) * 100,
                 );
+                // Sonderkondition (serverseitig, maßgeblich) — sie ersetzt die
+                // Auto-Rabatte. Basis = Miete + Zubehör (analog calcBreakdown).
+                const baseForSpecialCents = expectedMinCents
+                  + Math.round((parseFloat(metadata.price_accessories ?? '0') || 0) * 100);
+                const serverSpecialCents = serverSpecialPct > 0
+                  ? Math.round((baseForSpecialCents * serverSpecialPct) / 100)
+                  : 0;
                 const floorCents = Math.max(
                   Math.floor(expectedMinCents * 0.05),
-                  expectedMinCents - claimedCents - 100,
+                  expectedMinCents - claimedCents - serverSpecialCents - 100,
                 );
                 if (amountCents < floorCents) {
                   console.error('[create-payment-intent] Preis-Plausibilitaet verletzt:', {

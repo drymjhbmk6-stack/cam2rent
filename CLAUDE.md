@@ -1638,6 +1638,55 @@ Flag wird trotzdem gesetzt; die Buchungs-Sperre greift unabhängig davon).
 registriert**, bekommt eine neue `user_id` (neues, ungesperrtes Konto) —
 die Sperre hängt am Konto, nicht an der E-Mail.
 
+### Sonderkonditionen pro Kunde — individueller Auto-Rabatt (Stand 2026-06-23)
+Der Admin kann pro Kunde unter `/admin/kunden/[id]` (Profil-Tab, Section
+„Sonderkonditionen", neben Tester/Sperren) einen individuellen **Prozent-Rabatt**
+hinterlegen (frei pro Kunde: %-Satz + Grund/Notiz + optionales „gültig bis").
+Der Rabatt wird dem Kunden danach **automatisch im Checkout** abgezogen und
+**ersetzt** dort exklusiv die anderen Auto-Rabatte (Produktaktion, Mengen-,
+Frühbucher-, Treuerabatt). Ein Gutschein-Code bleibt als letzte Schicht auf dem
+Restbetrag zusätzlich möglich.
+- **Migrationen** (beide idempotent, additiv, KEINE neue Tabelle):
+  `supabase/supabase-profiles-special-discount.sql` (`profiles`:
+  `special_discount_percent INTEGER`, `special_discount_reason TEXT`,
+  `special_discount_valid_until DATE`, `special_discount_set_by TEXT`,
+  `special_discount_set_at TIMESTAMPTZ` + CHECK 0–100) und
+  `supabase/supabase-bookings-special-discount.sql`
+  (`bookings.special_discount NUMERIC DEFAULT 0`, liegt neben
+  `discount_amount`/`duration_discount`/`loyalty_discount`/`early_bird_discount`).
+  Die profiles-Spalten sind **service-role-only** (NICHT im column-level
+  `GRANT UPDATE` aus `supabase-profiles-rls-column-level.sql` → Kunde kann sich
+  selbst keinen Rabatt setzen; SELECT der eigenen Zeile für die Anzeige bleibt).
+- **Helper** `getActiveSpecialDiscountPercent(cond, now?)` in `lib/price-config.ts`
+  (0 wenn keine/≤0/abgelaufen, Berlin-tagesgenau, gültig bis EINSCHLIESSLICH des
+  Tages) — eine Wahrheitsquelle für Client-Anzeige und Server-Recompute.
+- **Admin-API** `POST /api/admin/kunden/special-discount`
+  (`{ userId, percent: number|null, reason?, validUntil? }`, Permission `kunden`,
+  `percent` null/0 = entfernen, Audit `customer.set_special_discount` /
+  `customer.unset_special_discount`, 503 bei fehlender Migration). Liste
+  `/admin/kunden` zeigt Badge „Sonderkondition X %" (indigo).
+- **Maßgeblich = serverseitig:** Der %-Satz wird **immer aus `profiles` über die
+  Session-/Buchungs-User-ID** aufgelöst (wie Coupons, Sweep 6/7) — der Client-Wert
+  ist nur Anzeige. Greift die Sonderkondition, setzen die Server-Pfade die anderen
+  Auto-Rabatt-Felder auf 0 und schreiben `bookings.special_discount`.
+  - **Anzeige:** `app/checkout/page.tsx` (Cart) + `app/kameras/[slug]/buchen/page.tsx`
+    (Einzelflow, `calcBreakdown`-Param `specialPercent`) — laden den eigenen
+    %-Satz aus `profiles`, zeigen eine Zeile „Sonderkondition (X %)" und nullen
+    Aktion/Mengen-/Frühbucher-/Treuerabatt.
+  - **Floor:** `app/api/checkout-intent` + `app/api/create-payment-intent` ziehen
+    den server-aufgelösten Sonderrabatt zusätzlich vom Plausibilitäts-Floor ab
+    (sonst würde die korrekt-rabattierte Zahlung fälschlich abgelehnt). Beide mit
+    defensivem Spalten-Fallback.
+  - **Persistenz:** `app/api/confirm-cart` (pro Periode skaliert, Sonderrabatt
+    fließt in die Stripe-Skalierungs-Summe → keine Fehl-Mismatch-Notification),
+    `app/api/confirm-booking` (Basis Miete+Zubehör) und `app/api/stripe-webhook`
+    (beide Race-Pfade) lösen die Sonderkondition aus `profiles` auf, setzen
+    `special_discount` und nullen die übrigen Auto-Rabatte. Alle Inserts haben
+    einen defensiven Retry ohne die Spalte (Muster `early_bird_discount`).
+- **Go-Live TODO:** beide Migrationen ausführen. Ohne sie läuft alles unverändert
+  weiter (Helper liefert 0, Selects/Inserts fallen defensiv zurück, Admin-API
+  liefert 503) — kein Rabatt wird angewendet.
+
 ### Test-Konto zurücksetzen (Stand 2026-06-14)
 In der Kundenliste (`/admin/kunden`) hat jede Zeile mit `is_tester=true` neben
 dem „Tester"-Badge einen amber **„↻ Zurücksetzen"**-Button. Klick (mit
@@ -4807,6 +4856,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Sonderkonditionen-Migrationen auszuführen (2, idempotent, additiv):**
+  `supabase/supabase-profiles-special-discount.sql` (5 `profiles.special_discount_*`-
+  Spalten, service-role-only) + `supabase/supabase-bookings-special-discount.sql`
+  (`bookings.special_discount NUMERIC DEFAULT 0`). Ohne sie ist der Kunden-Rabatt
+  inaktiv (Helper liefert 0, Admin-API 503, Selects/Inserts fallen defensiv
+  zurück) — der restliche Checkout läuft unverändert. Siehe „Sonderkonditionen
+  pro Kunde". Empfohlen ASAP ausführen.
 - **Frühbucherrabatt-Migration auszuführen:**
   `supabase/supabase-bookings-early-bird-discount.sql` (idempotent, additiv:
   `bookings.early_bird_discount NUMERIC DEFAULT 0`, KEINE neue Tabelle). Ohne

@@ -9,7 +9,7 @@ import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { releaseUserCartHolds } from '@/lib/cart-holds';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
 import {
   loadProfileAddressRow,
@@ -402,6 +402,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
+    // (maßgeblich). Sie ERSETZT Produktaktion + Frühbucher (die das Frontend bei
+    // aktiver Sonderkondition bereits auf 0 setzt). Basis = Miete + Zubehör
+    // (analog calcBreakdown im Buchungsflow).
+    let specialFromServer = 0;
+    if (meta.user_id) {
+      try {
+        const { data: spRow } = await supabase
+          .from('profiles')
+          .select('special_discount_percent, special_discount_valid_until')
+          .eq('id', meta.user_id)
+          .maybeSingle();
+        const spPct = getActiveSpecialDiscountPercent({
+          percent: (spRow as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+          validUntil: (spRow as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+        });
+        if (spPct > 0) {
+          const base = (parseFloat(meta.price_rental ?? '0') || 0) + finalPriceAccessories;
+          specialFromServer = Math.round(base * spPct) / 100;
+        }
+      } catch { /* defensiv: Migration evtl. nicht durch */ }
+    }
+    const specialActive = specialFromServer > 0;
+
     const bookingInsert: Record<string, unknown> = {
       id: bookingId,
       payment_intent_id,
@@ -432,7 +456,7 @@ export async function POST(req: NextRequest) {
       ...(invoiceOverride
         ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
         : {}),
-      ...(productDiscountFromMeta > 0
+      ...(productDiscountFromMeta > 0 && !specialActive
         ? {
             discount_amount: productDiscountFromMeta,
             ...(productDiscountLabel ? { coupon_code: productDiscountLabel } : {}),
@@ -440,7 +464,11 @@ export async function POST(req: NextRequest) {
         : {}),
       // Eigene Spalte (Migration supabase-bookings-early-bird-discount.sql) —
       // defensiver Insert-Retry unten entfernt sie bei fehlender Migration.
-      ...(earlyBirdFromMeta > 0 ? { early_bird_discount: earlyBirdFromMeta } : {}),
+      ...(earlyBirdFromMeta > 0 && !specialActive ? { early_bird_discount: earlyBirdFromMeta } : {}),
+      // Sonderkondition (Migration supabase-bookings-special-discount.sql) —
+      // ersetzt die Auto-Rabatte; defensiver Insert-Retry unten entfernt sie
+      // bei fehlender Migration.
+      ...(specialActive ? { special_discount: specialFromServer } : {}),
       // Signatur direkt persistieren — ohne das geht sie bei Container-Restart
       // verloren und der after()-Block kann den Vertrag nicht mehr erzeugen.
       // Mit Persistenz kann der Admin den Vertrag jederzeit ueber den Recovery-
@@ -463,6 +491,12 @@ export async function POST(req: NextRequest) {
     // Insert ohne sie wiederholen — Buchung bleibt erhalten, Wert nur nicht separat.
     if (insertRes.error && earlyBirdFromMeta > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(insertRes.error.message)) {
       delete bookingInsert.early_bird_discount;
+      insertRes = await supabase.from('bookings').insert(bookingInsert);
+    }
+    // Defensiv: fehlt die special_discount-Spalte (Migration ausstehend),
+    // Insert ohne sie wiederholen.
+    if (insertRes.error && specialActive && /special_discount|column|schema cache|PGRST/i.test(insertRes.error.message)) {
+      delete bookingInsert.special_discount;
       insertRes = await supabase.from('bookings').insert(bookingInsert);
     }
     if (insertRes.error) {

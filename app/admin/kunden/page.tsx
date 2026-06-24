@@ -17,6 +17,8 @@ interface Customer {
   blacklist_reason: string;
   blacklisted_at: string | null;
   is_tester: boolean;
+  special_discount_percent: number | null;
+  special_discount_valid_until: string | null;
   booking_count: number;
   created_at: string;
   last_login: string | null;
@@ -453,6 +455,26 @@ export default function KundenPage() {
                               }}
                             >
                               Tester
+                            </span>
+                          )}
+                          {c.special_discount_percent != null && c.special_discount_percent > 0 &&
+                            (!c.special_discount_valid_until ||
+                              c.special_discount_valid_until >=
+                                new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' })) && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#818cf8',
+                                background: '#6366f114',
+                                border: '1px solid #6366f133',
+                              }}
+                              title="Sonderkondition (individueller Rabatt)"
+                            >
+                              Sonderkondition {c.special_discount_percent}%
                             </span>
                           )}
                           {c.is_tester && (

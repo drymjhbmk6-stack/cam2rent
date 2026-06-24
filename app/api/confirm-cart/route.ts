@@ -6,7 +6,7 @@ import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
-import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { desiredFromBooking, resolveBookingCameras } from '@/lib/booking-cameras';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
@@ -603,6 +603,27 @@ export async function POST(req: NextRequest) {
     // 4. Items nach Mietzeitraum gruppieren → separate Buchungen
     const periodGroups = groupByPeriod(r_items);
     const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
+
+    // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
+    // (maßgeblich, nicht aus dem Body). Sie ERSETZT die anderen Auto-Rabatte;
+    // läuft additiv zur Coupon-Schicht. Basis = Warenwert inkl. Haftung
+    // (= totalCartSubtotal), konsistent zur Client-Anzeige im Checkout.
+    let serverSpecialPct = 0;
+    if (r_userId) {
+      try {
+        const { data: spRow } = await supabase
+          .from('profiles')
+          .select('special_discount_percent, special_discount_valid_until')
+          .eq('id', r_userId)
+          .maybeSingle();
+        serverSpecialPct = getActiveSpecialDiscountPercent({
+          percent: (spRow as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
+          validUntil: (spRow as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
+        });
+      } catch { /* defensiv: Migration evtl. nicht durch → keine Sonderkondition */ }
+    }
+    const specialActive = serverSpecialPct > 0;
+    const serverSpecialTotal = specialActive ? Math.round(totalCartSubtotal * serverSpecialPct) / 100 : 0;
     const bookingIds: string[] = [];
     // Welche Buchungen wurden von DIESEM Request frisch in die DB eingefuegt?
     // Vuln-17-Recovery (siehe unten) uebernimmt IDs aus der DB, schickt aber
@@ -660,20 +681,27 @@ export async function POST(req: NextRequest) {
 
       // Body-Discount-Felder fuer Aufschluesselung skalieren, sodass sie zum
       // effektiven Rabatt passen (Stripe ist verbindlich).
+      // Bei aktiver Sonderkondition zählen die Auto-Rabatte NICHT (sie ersetzt
+      // sie) — stattdessen geht der serverseitige Sonderrabatt in die Summe ein,
+      // damit die Stripe-Skalierung (scale) passt und keine Fehl-Mismatch-
+      // Benachrichtigung feuert. Coupon bleibt zusätzlich.
       const bodyDiscountSum =
         Number(r_discountAmount ?? 0) +
-        Number(r_productDiscount ?? 0) +
-        Number(r_durationDiscount ?? 0) +
-        Number(r_earlyBirdDiscount ?? 0) +
-        Number(r_loyaltyDiscount ?? 0);
+        (specialActive
+          ? serverSpecialTotal
+          : Number(r_productDiscount ?? 0) +
+            Number(r_durationDiscount ?? 0) +
+            Number(r_earlyBirdDiscount ?? 0) +
+            Number(r_loyaltyDiscount ?? 0));
       const scale = bodyDiscountSum > 0 ? effectiveDiscount / bodyDiscountSum : 0;
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
       const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * ratio * scale * 100) / 100;
-      const groupProductDiscount = Math.round((r_productDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupProductDiscount = specialActive ? 0 : Math.round((r_productDiscount ?? 0) * ratio * scale * 100) / 100;
       const groupDiscount = groupCouponDiscount + groupProductDiscount;
-      const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupEarlyBirdDiscount = Math.round((r_earlyBirdDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupDurationDiscount = specialActive ? 0 : Math.round((r_durationDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupEarlyBirdDiscount = specialActive ? 0 : Math.round((r_earlyBirdDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupLoyaltyDiscount = specialActive ? 0 : Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupSpecialDiscount = specialActive ? Math.round(serverSpecialTotal * ratio * scale * 100) / 100 : 0;
 
       // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt mehr
       // als 0,50 EUR auseinander liegen, ist das ein Hinweis auf einen Frontend-
@@ -762,7 +790,7 @@ export async function POST(req: NextRequest) {
       }
 
       // is_test wurde oben bereits einmal berechnet (siehe vor der Loop).
-      const buildInsertPayload = (id: string, dropEarlyBird = false) => ({
+      const buildInsertPayload = (id: string, dropEarlyBird = false, dropSpecial = false) => ({
         id,
         payment_intent_id: piId,
         is_test: testMode,
@@ -799,6 +827,9 @@ export async function POST(req: NextRequest) {
         // Nur wenn Migration `supabase-bookings-early-bird-discount.sql` durch
         // ist — sonst bei 42703/PGRST204 unten ohne die Spalte erneut versuchen.
         ...(dropEarlyBird ? {} : { early_bird_discount: groupEarlyBirdDiscount }),
+        // Nur wenn Migration `supabase-bookings-special-discount.sql` durch ist
+        // — sonst bei 42703/PGRST204 unten ohne die Spalte erneut versuchen.
+        ...(dropSpecial ? {} : { special_discount: groupSpecialDiscount }),
         early_service_consent_at: r_earlyServiceConsentAt,
         early_service_consent_ip: r_earlyServiceConsentIp,
         // Signatur direkt persistieren (s. confirm-booking) — Recovery-Pfad
@@ -816,9 +847,10 @@ export async function POST(req: NextRequest) {
       // Nummer fallen, wenn parallele Aufrufer in derselben Sekunde laufen.
       let insertError: { code?: string; message?: string } | null = null;
       let dropEarlyBird = false;
+      let dropSpecial = false;
       const MAX_ID_COLLISION_RETRIES = 30;
       for (let idAttempt = 0; idAttempt < MAX_ID_COLLISION_RETRIES; idAttempt++) {
-        const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId, dropEarlyBird));
+        const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId, dropEarlyBird, dropSpecial));
         if (!insErr) {
           insertError = null;
           freshlyInsertedIds.add(bookingId);
@@ -829,6 +861,11 @@ export async function POST(req: NextRequest) {
         // damit der Buchungsflow nicht bricht (Wert landet dann nur nicht separat).
         if (!dropEarlyBird && /early_bird_discount/i.test(insErr.message ?? '') && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
           dropEarlyBird = true;
+          continue;
+        }
+        // Analog: Migration `supabase-bookings-special-discount.sql` fehlt.
+        if (!dropSpecial && /special_discount/i.test(insErr.message ?? '') && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+          dropSpecial = true;
           continue;
         }
         if (insErr.code !== '23505') {
