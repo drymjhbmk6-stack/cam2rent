@@ -157,6 +157,31 @@ export async function renderCreditNotePdfBuffer(data: CreditNotePdfData): Promis
 }
 
 /**
+ * Rendert das Stornierungsbeleg-PDF einer bestehenden Gutschrift, damit es
+ * direkt an die Storno-Bestaetigungsmail angehaengt werden kann (statt als
+ * separate Mail). Best-effort: gibt `null` zurueck, wirft NICHT.
+ */
+export async function renderCreditNotePdfForId(
+  supabase: SupabaseClient,
+  creditNoteId: string,
+): Promise<{ buffer: Buffer; number: string } | null> {
+  try {
+    const { data: cn } = await supabase
+      .from('credit_notes')
+      .select('*')
+      .eq('id', creditNoteId)
+      .maybeSingle();
+    if (!cn) return null;
+    const pdfData = await buildCreditNotePdfDataFromRow(supabase, cn);
+    const buffer = await renderCreditNotePdfBuffer(pdfData);
+    return { buffer, number: (cn.credit_note_number as string) || 'Storno' };
+  } catch (err) {
+    console.error('[credit-note-document] renderCreditNotePdfForId fehlgeschlagen:', err, { creditNoteId });
+    return null;
+  }
+}
+
+/**
  * Erzeugt das Stornierungsbeleg-PDF einer bestehenden Gutschrift und schickt
  * es (optional) per E-Mail an den Kunden der zugehoerigen Buchung.
  * Best-effort: faengt eigene Fehler ab (loggt nur), wirft NICHT.

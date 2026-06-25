@@ -23,7 +23,7 @@ import { getSiteUrl } from '@/lib/env-mode';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 import { sanitizeOverrideDate } from '@/lib/booking-buffer';
-import { createCancellationCreditNote, dispatchCreditNoteDocument } from '@/lib/buchhaltung/credit-note-document';
+import { createCancellationCreditNote, renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -2113,26 +2113,55 @@ export async function PATCH(
         }
       }
 
-      // ── Stornierungs-Mails (non-blocking, nur wenn send_email !== false) ──
+      // ── Stornierungsbeleg + Stornierungs-Mail (non-blocking) ────────────
+      // Der Stornierungsbeleg (Gutschrift) wird als echte Stornorechnung
+      // angelegt (voller Buchungsbetrag, hebt die Originalrechnung auf) und
+      // sein PDF DIREKT an die Storno-Bestaetigungsmail angehaengt — so wie es
+      // die Vorschau ("Anhänge: Stornierungsbeleg") verspricht. Kein separater
+      // Gutschrift-Mailversand mehr (sonst Doppel-Mail). Der erstattete Betrag
+      // (requestedRefund) steht als "davon erstattet"-Zeile auf dem Beleg.
+      // Best-effort/non-blocking. (refundDone nur fuer Doku referenziert.)
+      void refundDone;
       const wantEmail = send_email !== false;
       const wantInvoiceAttachment = attach_invoice === true;
-      if (wantEmail && booking.customer_email) {
-        const emailData = {
-          bookingId: booking.id,
-          customerName: booking.customer_name ?? '',
-          customerEmail: booking.customer_email,
-          productName: booking.product_name,
-          productId: booking.product_id,
-          rentalFrom: booking.rental_from,
-          rentalTo: booking.rental_to,
-          days: booking.days,
-          priceTotal,
-          refundAmount: requestedRefund,
-          refundPercentage: priceTotal > 0 ? requestedRefund / priceTotal : 0,
-        };
-        // Kunden-Mail mit optionalem Rechnungs-PDF-Anhang (async, damit das
-        // PDF-Rendern die Response nicht blockiert).
-        (async () => {
+      const wantCreditNote =
+        priceTotal > 0 && refundStatus !== 'failed_pending_admin' && (wantEmail || requestedRefund > 0);
+
+      const emailData = {
+        bookingId: booking.id,
+        customerName: booking.customer_name ?? '',
+        customerEmail: booking.customer_email ?? '',
+        productName: booking.product_name,
+        productId: booking.product_id,
+        rentalFrom: booking.rental_from,
+        rentalTo: booking.rental_to,
+        days: booking.days,
+        priceTotal,
+        refundAmount: requestedRefund,
+        refundPercentage: priceTotal > 0 ? requestedRefund / priceTotal : 0,
+      };
+
+      // Alles in EINEM Hintergrund-Task: erst Gutschrift anlegen + PDF rendern,
+      // dann die Kunden-Mail mit Rechnungs- und/oder Stornierungsbeleg-Anhang
+      // versenden. Blockiert die PATCH-Response nicht.
+      (async () => {
+        // 1) Gutschrift anlegen (Buchhaltung) + PDF fuer Mail-Anhang rendern.
+        let creditNotePdf: { buffer: Buffer; number: string } | null = null;
+        if (wantCreditNote) {
+          const cnId = await createCancellationCreditNote(supabase, {
+            bookingId: id,
+            grossAmount: priceTotal,
+            reason: cancellation_reason || 'Stornierung der Buchung',
+            refundStatus,
+            stripeRefundId,
+          });
+          if (cnId) {
+            creditNotePdf = await renderCreditNotePdfForId(supabase, cnId);
+          }
+        }
+
+        // 2) Kunden-Mail mit Anhaengen (nur wenn gewuenscht + E-Mail vorhanden).
+        if (wantEmail && booking.customer_email) {
           const attachments: { filename: string; content: Buffer }[] = [];
           if (wantInvoiceAttachment && priceTotal > 0) {
             try {
@@ -2142,39 +2171,19 @@ export async function PATCH(
               console.error('[booking-cancel] Rechnungs-Anhang fehlgeschlagen:', e);
             }
           }
-          await sendCancellationConfirmation(emailData, { attachments });
-        })().catch((err) => console.error('[booking-cancel] customer cancellation mail failed:', err));
-        sendAdminCancellationNotification(emailData).catch((err) =>
-          console.error('[booking-cancel] admin cancellation mail failed:', err),
-        );
-      } else if (!wantEmail) {
-        console.info(`[booking-cancel] Buchung ${id} storniert ohne Kunden-E-Mail (Admin-Wahl).`);
-      } else {
-        console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
-      }
-
-      // ── Stornierungsbeleg (Gutschrift) ──────────────────────────────────
-      // Echte Stornorechnung: hebt die komplette Originalrechnung auf (voller
-      // Buchungsbetrag), unabhaengig vom tatsaechlich erstatteten Betrag. Der
-      // erstattete Betrag (requestedRefund) steht als "davon erstattet"-Zeile
-      // auf dem Beleg (gelesen aus bookings.refund_amount). Wird erzeugt, wenn
-      // die Buchung einen Betrag hatte UND eine Mail rausgeht ODER erstattet
-      // wurde. Best-effort/non-blocking. (refundDone nur fuer Doku referenziert.)
-      void refundDone;
-      if (priceTotal > 0 && refundStatus !== 'failed_pending_admin' && (wantEmail || requestedRefund > 0)) {
-        (async () => {
-          const cnId = await createCancellationCreditNote(supabase, {
-            bookingId: id,
-            grossAmount: priceTotal,
-            reason: cancellation_reason || 'Stornierung der Buchung',
-            refundStatus,
-            stripeRefundId,
-          });
-          if (cnId) {
-            await dispatchCreditNoteDocument(supabase, cnId, { sendEmail: wantEmail });
+          if (creditNotePdf) {
+            attachments.push({ filename: `Stornierungsbeleg-${creditNotePdf.number}.pdf`, content: creditNotePdf.buffer });
           }
-        })().catch((err) => console.error('[booking-cancel] Stornierungsbeleg fehlgeschlagen:', err));
-      }
+          await sendCancellationConfirmation(emailData, { attachments });
+          sendAdminCancellationNotification(emailData).catch((err) =>
+            console.error('[booking-cancel] admin cancellation mail failed:', err),
+          );
+        } else if (!wantEmail) {
+          console.info(`[booking-cancel] Buchung ${id} storniert ohne Kunden-E-Mail (Admin-Wahl).`);
+        } else {
+          console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
+        }
+      })().catch((err) => console.error('[booking-cancel] Storno-Mail/Beleg fehlgeschlagen:', err));
     }
   }
 

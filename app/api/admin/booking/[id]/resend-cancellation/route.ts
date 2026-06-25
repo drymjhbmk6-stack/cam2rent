@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation } from '@/lib/email';
-import { dispatchCreditNoteDocument } from '@/lib/buchhaltung/credit-note-document';
+import { renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
 import { renderInvoicePdfBuffer } from '@/lib/invoice-pdf-buffer';
 
 /**
@@ -78,8 +78,30 @@ export async function POST(
     }
   }
 
+  // Stornierungsbeleg (Gutschrift) der Buchung suchen — das PDF wird DIREKT an
+  // die Storno-Mail angehaengt (kein separater Gutschrift-Mailversand mehr),
+  // damit es wie in der Vorschau ("Anhänge: Stornierungsbeleg") versprochen
+  // beim Kunden ankommt.
+  let creditNoteResent = false;
+  let creditNotePdf: { buffer: Buffer; number: string } | null = null;
+  const { data: cn } = await supabase
+    .from('credit_notes')
+    .select('id')
+    .eq('booking_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (cn?.id) {
+    // Erfassten Refund auf der Gutschrift markieren (informativ).
+    if (body.refund_amount != null && refundAmount > 0) {
+      await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
+    }
+    creditNotePdf = await renderCreditNotePdfForId(supabase, cn.id);
+    creditNoteResent = !!creditNotePdf;
+  }
+
   // Storno-Bestaetigung an den Kunden (mit dem gespeicherten Refund-Betrag),
-  // optional mit Rechnungs-PDF-Anhang.
+  // optional mit Rechnungs-PDF-Anhang + Stornierungsbeleg-Anhang.
   let emailSent = false;
   try {
     const attachments: { filename: string; content: Buffer }[] = [];
@@ -89,6 +111,9 @@ export async function POST(
       } catch (e) {
         console.error('[resend-cancellation] Rechnungs-Anhang fehlgeschlagen:', e);
       }
+    }
+    if (creditNotePdf) {
+      attachments.push({ filename: `Stornierungsbeleg-${creditNotePdf.number}.pdf`, content: creditNotePdf.buffer });
     }
     await sendCancellationConfirmation({
       bookingId: booking.id,
@@ -106,24 +131,6 @@ export async function POST(
     emailSent = true;
   } catch (err) {
     console.error('[resend-cancellation] Storno-Mail fehlgeschlagen:', err);
-  }
-
-  // Stornierungsbeleg (Gutschrift) erneut, falls vorhanden.
-  let creditNoteResent = false;
-  const { data: cn } = await supabase
-    .from('credit_notes')
-    .select('id')
-    .eq('booking_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (cn?.id) {
-    // Erfassten Refund auf der Gutschrift markieren (informativ).
-    if (body.refund_amount != null && refundAmount > 0) {
-      await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
-    }
-    await dispatchCreditNoteDocument(supabase, cn.id, { sendEmail: true });
-    creditNoteResent = true;
   }
 
   await logAudit({
