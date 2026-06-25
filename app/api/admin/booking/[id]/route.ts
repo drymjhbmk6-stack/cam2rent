@@ -23,7 +23,7 @@ import { getSiteUrl } from '@/lib/env-mode';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 import { sanitizeOverrideDate } from '@/lib/booking-buffer';
-import { createCancellationCreditNote, renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
+import { createCancellationCreditNote, renderCancellationBelegPdf } from '@/lib/buchhaltung/credit-note-document';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -2148,16 +2148,20 @@ export async function PATCH(
         // 1) Gutschrift anlegen (Buchhaltung) + PDF fuer Mail-Anhang rendern.
         let creditNotePdf: { buffer: Buffer; number: string } | null = null;
         if (wantCreditNote) {
-          const cnId = await createCancellationCreditNote(supabase, {
+          await createCancellationCreditNote(supabase, {
             bookingId: id,
             grossAmount: priceTotal,
             reason: cancellation_reason || 'Stornierung der Buchung',
             refundStatus,
             stripeRefundId,
           });
-          if (cnId) {
-            creditNotePdf = await renderCreditNotePdfForId(supabase, cnId);
-          }
+          // Beleg-PDF GARANTIERT rendern (aus der eben angelegten Gutschrift,
+          // sonst als Fallback aus den Buchungsdaten) — damit der Anhang auch
+          // dann da ist, wenn die Gutschrift-Anlage scheitert.
+          creditNotePdf = await renderCancellationBelegPdf(supabase, booking, {
+            refundedAmount: requestedRefund,
+            reason: cancellation_reason || 'Stornierung der Buchung',
+          });
         }
 
         // 2) Kunden-Mail mit Anhaengen (nur wenn gewuenscht + E-Mail vorhanden).

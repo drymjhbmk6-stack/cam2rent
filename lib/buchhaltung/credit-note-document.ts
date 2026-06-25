@@ -157,26 +157,47 @@ export async function renderCreditNotePdfBuffer(data: CreditNotePdfData): Promis
 }
 
 /**
- * Rendert das Stornierungsbeleg-PDF einer bestehenden Gutschrift, damit es
- * direkt an die Storno-Bestaetigungsmail angehaengt werden kann (statt als
- * separate Mail). Best-effort: gibt `null` zurueck, wirft NICHT.
+ * Liefert das Stornierungsbeleg-PDF einer Buchung fuer den Mail-Anhang —
+ * GARANTIERT, solange die Buchung einen Betrag hatte:
+ *  - existiert bereits eine Gutschrift → deren echte Fassung,
+ *  - sonst → eine aus den Buchungsdaten gebaute Fassung (wie die Vorschau).
+ * Damit haengt der Beleg auch dann an der Mail, wenn die Gutschrift-Anlage
+ * (z.B. wegen ausstehender Migration) scheitert. Best-effort: `null` bei
+ * priceTotal<=0 oder Render-Fehler, wirft NICHT.
  */
-export async function renderCreditNotePdfForId(
+export async function renderCancellationBelegPdf(
   supabase: SupabaseClient,
-  creditNoteId: string,
+  booking: Record<string, unknown>,
+  opts: { refundedAmount?: number; reason?: string } = {},
 ): Promise<{ buffer: Buffer; number: string } | null> {
   try {
+    const priceTotal = Number(booking.price_total ?? 0);
     const { data: cn } = await supabase
       .from('credit_notes')
       .select('*')
-      .eq('id', creditNoteId)
+      .eq('booking_id', booking.id as string)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (!cn) return null;
-    const pdfData = await buildCreditNotePdfDataFromRow(supabase, cn);
-    const buffer = await renderCreditNotePdfBuffer(pdfData);
-    return { buffer, number: (cn.credit_note_number as string) || 'Storno' };
+    if (!cn && !(priceTotal > 0)) return null;
+
+    const data = cn
+      ? await buildCreditNotePdfDataFromRow(supabase, cn)
+      : await buildCreditNotePreviewData(supabase, booking, {
+          grossAmount: priceTotal,
+          refundedAmount: opts.refundedAmount,
+          reason: opts.reason,
+        });
+    if (opts.refundedAmount != null) {
+      data.refundedAmount = priceTotal > 0
+        ? Math.min(priceTotal, Math.max(0, opts.refundedAmount))
+        : Math.max(0, opts.refundedAmount);
+    }
+    const buffer = await renderCreditNotePdfBuffer(data);
+    const number = (cn?.credit_note_number as string) || data.creditNoteNumber || 'Storno';
+    return { buffer, number };
   } catch (err) {
-    console.error('[credit-note-document] renderCreditNotePdfForId fehlgeschlagen:', err, { creditNoteId });
+    console.error('[credit-note-document] renderCancellationBelegPdf fehlgeschlagen:', err, { bookingId: booking.id });
     return null;
   }
 }

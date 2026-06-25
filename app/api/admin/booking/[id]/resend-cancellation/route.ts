@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation } from '@/lib/email';
-import { createCancellationCreditNote, renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
+import { createCancellationCreditNote, renderCancellationBelegPdf } from '@/lib/buchhaltung/credit-note-document';
 import { renderInvoicePdfBuffer } from '@/lib/invoice-pdf-buffer';
 
 /**
@@ -106,12 +106,18 @@ export async function POST(
     if (cnId) cn = { id: cnId };
   }
 
-  if (cn?.id) {
-    // Erfassten Refund auf der Gutschrift markieren (informativ).
-    if (body.refund_amount != null && refundAmount > 0) {
-      await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
-    }
-    creditNotePdf = await renderCreditNotePdfForId(supabase, cn.id);
+  // Erfassten Refund auf der Gutschrift markieren (informativ).
+  if (cn?.id && body.refund_amount != null && refundAmount > 0) {
+    await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
+  }
+
+  // PDF fuer den Mail-Anhang rendern — GARANTIERT, solange die Buchung einen
+  // Betrag hatte (aus Gutschrift wenn vorhanden, sonst aus den Buchungsdaten).
+  if (priceTotal > 0) {
+    creditNotePdf = await renderCancellationBelegPdf(supabase, booking, {
+      refundedAmount: refundAmount,
+      reason: 'Stornierung der Buchung',
+    });
     creditNoteResent = !!creditNotePdf;
   }
 
