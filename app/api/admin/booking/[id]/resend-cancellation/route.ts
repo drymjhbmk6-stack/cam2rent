@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation } from '@/lib/email';
-import { renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
+import { createCancellationCreditNote, renderCreditNotePdfForId } from '@/lib/buchhaltung/credit-note-document';
 import { renderInvoicePdfBuffer } from '@/lib/invoice-pdf-buffer';
 
 /**
@@ -84,13 +84,28 @@ export async function POST(
   // beim Kunden ankommt.
   let creditNoteResent = false;
   let creditNotePdf: { buffer: Buffer; number: string } | null = null;
-  const { data: cn } = await supabase
+  let { data: cn } = await supabase
     .from('credit_notes')
     .select('id')
     .eq('booking_id', id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Existiert noch keine Gutschrift (z.B. Buchung vor diesem Feature storniert
+  // oder Anlage damals fehlgeschlagen), aber die Buchung hatte einen Betrag →
+  // jetzt eine echte Gutschrift mit GS-Nummer anlegen, damit der Kunde einen
+  // ordnungsgemaess nummerierten Stornierungsbeleg als Anhang bekommt.
+  if (!cn?.id && priceTotal > 0) {
+    const cnId = await createCancellationCreditNote(supabase, {
+      bookingId: id,
+      grossAmount: priceTotal,
+      reason: 'Stornierung der Buchung',
+      refundStatus: refundAmount > 0 ? 'manual' : 'none',
+    });
+    if (cnId) cn = { id: cnId };
+  }
+
   if (cn?.id) {
     // Erfassten Refund auf der Gutschrift markieren (informativ).
     if (body.refund_amount != null && refundAmount > 0) {
