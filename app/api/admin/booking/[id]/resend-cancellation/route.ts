@@ -106,10 +106,9 @@ export async function POST(
     if (cnId) cn = { id: cnId };
   }
 
-  // Erfassten Refund auf der Gutschrift markieren (informativ).
-  if (cn?.id && body.refund_amount != null && refundAmount > 0) {
-    await supabase.from('credit_notes').update({ refund_status: 'manual' }).eq('id', cn.id);
-  }
+  // (Der tatsaechlich erstattete Betrag steht auf der Buchung und erscheint als
+  // „Davon erstattet"-Zeile auf dem Beleg; credit_notes.refund_status bleibt im
+  // erlaubten CHECK-Wertebereich und wird hier nicht auf 'manual' gesetzt.)
 
   // PDF fuer den Mail-Anhang rendern — GARANTIERT, solange die Buchung einen
   // Betrag hatte (aus Gutschrift wenn vorhanden, sonst aus den Buchungsdaten).

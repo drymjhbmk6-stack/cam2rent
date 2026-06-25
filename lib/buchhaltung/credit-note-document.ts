@@ -295,31 +295,60 @@ export async function createCancellationCreditNote(
     const number = await nextCreditNoteNumber(supabase);
     const nowIso = new Date().toISOString();
 
-    const { data: cn, error } = await supabase
+    // refund_status auf den erlaubten CHECK-Wertebereich der credit_notes-
+    // Tabelle abbilden ('pending'|'succeeded'|'failed'|'not_applicable').
+    // Buchungs-Stati wie 'manual'/'none'/'failed_pending_admin' wuerden den
+    // Insert sonst per CHECK-Constraint scheitern lassen → keine Gutschrift →
+    // PDF traegt "Vorschau".
+    const VALID_REFUND_STATUS = new Set(['pending', 'succeeded', 'failed', 'not_applicable']);
+    const refundStatusForCn = VALID_REFUND_STATUS.has(args.refundStatus)
+      ? args.refundStatus
+      : args.refundStatus === 'failed_pending_admin'
+        ? 'failed'
+        : 'not_applicable';
+
+    // Pflicht-Spalten (existieren auch in der manuellen Gutschrift-Anlage).
+    const baseRow: Record<string, unknown> = {
+      credit_note_number: number,
+      invoice_id: invoice?.id ?? null,
+      booking_id: args.bookingId,
+      net_amount: taxCalc.net,
+      tax_amount: taxCalc.tax,
+      gross_amount: taxCalc.gross,
+      tax_mode: taxMode,
+      tax_rate: taxCalc.taxRate,
+      reason: args.reason,
+      reason_category: 'cancellation',
+      status: 'sent',
+      refund_status: refundStatusForCn,
+      is_test: testMode,
+    };
+    // Optionale Spalten — fehlen sie in der DB (aeltere Schema-Version), darf der
+    // Insert NICHT scheitern (sonst kein Beleg → PDF traegt "Vorschau").
+    const optionalRow: Record<string, unknown> = {
+      stripe_refund_id: args.stripeRefundId ?? null,
+      approved_at: nowIso,
+      sent_at: nowIso,
+    };
+
+    let { data: cn, error } = await supabase
       .from('credit_notes')
-      .insert({
-        credit_note_number: number,
-        invoice_id: invoice?.id ?? null,
-        booking_id: args.bookingId,
-        net_amount: taxCalc.net,
-        tax_amount: taxCalc.tax,
-        gross_amount: taxCalc.gross,
-        tax_mode: taxMode,
-        tax_rate: taxCalc.taxRate,
-        reason: args.reason,
-        reason_category: 'cancellation',
-        status: 'sent',
-        refund_status: args.refundStatus,
-        stripe_refund_id: args.stripeRefundId ?? null,
-        approved_at: nowIso,
-        sent_at: nowIso,
-        is_test: testMode,
-      })
+      .insert({ ...baseRow, ...optionalRow })
       .select('id')
       .single();
 
-    if (error) {
-      console.error('[credit-note-document] Auto-Gutschrift Insert fehlgeschlagen:', error.message, { bookingId: args.bookingId });
+    // Defensiver Retry ohne die optionalen Spalten bei Schema-/Spalten-Fehler.
+    if (error && /column|schema cache|PGRST|does not exist/i.test(error.message || '')) {
+      console.warn('[credit-note-document] Auto-Gutschrift: optionale Spalten fehlen, Retry ohne sie.', error.message);
+      ({ data: cn, error } = await supabase
+        .from('credit_notes')
+        .insert(baseRow)
+        .select('id')
+        .single());
+    }
+
+    if (error || !cn) {
+      console.error('[credit-note-document] Auto-Gutschrift Insert fehlgeschlagen:', error?.message, { bookingId: args.bookingId });
       return null;
     }
 
