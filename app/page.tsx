@@ -33,8 +33,8 @@ export default async function Home() {
         <PromoBanner />
       </div>
       <HomeSeasonalAction />
-      <HomeAngebote />
       <TrustBanner />
+      <HomeAngebote />
       <ProductGrid />
       <KameraFinderCta />
       <HowItWorks />
