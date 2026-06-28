@@ -1329,11 +1329,11 @@ export default function BuchenPage() {
 
             {/* Angebots-Hinweis */}
             {offerMode && offer && (
-              <div className="mb-6 p-4 rounded-xl border-2 border-accent-teal/40 bg-accent-teal-soft/40">
-                <p className="font-heading font-bold text-sm text-accent-teal">
+              <div className="mb-6 p-4 rounded-xl border-2 border-accent-teal/40 bg-accent-teal-soft/40 dark:border-teal-400/40 dark:bg-teal-500/10">
+                <p className="font-heading font-bold text-sm text-accent-teal dark:text-teal-200">
                   Angebot: {offer.name}
                 </p>
-                <p className="text-xs font-body text-accent-teal/90 mt-0.5">
+                <p className="text-xs font-body text-accent-teal/90 dark:text-teal-100/90 mt-0.5">
                   Komplettpreis inkl. enthaltenem Zubehör.
                   {offer.pricing_mode === 'flat'
                     ? ` Feste Mietdauer: ${offer.fixed_days} ${offer.fixed_days === 1 ? 'Tag' : 'Tage'}.`
