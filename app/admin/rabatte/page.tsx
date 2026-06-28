@@ -17,11 +17,21 @@ const S = {
   cyan: '#06b6d4',
 };
 
-function toLocal(iso: string | null): string {
+function toDateInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Datum-String (YYYY-MM-DD) auf Tag-Beginn bzw. Tag-Ende klemmen, damit der Rabatt den ganzen Tag gilt
+function dayStartIso(dateStr: string): string | null {
+  if (!dateStr) return null;
+  return new Date(`${dateStr}T00:00:00`).toISOString();
+}
+function dayEndIso(dateStr: string): string | null {
+  if (!dateStr) return null;
+  return new Date(`${dateStr}T23:59:59`).toISOString();
 }
 
 function getDiscountStatus(d: ProductDiscount): { label: string; color: string; bg: string } {
@@ -539,14 +549,14 @@ export default function AdminRabattePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
                     <div>
                       <label style={S.label}>Gültig ab</label>
-                      <input type="datetime-local" value={toLocal(d.valid_from)}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_from: e.target.value ? new Date(e.target.value).toISOString() : null }; setProductDiscounts(a); }}
+                      <input type="date" value={toDateInput(d.valid_from)}
+                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_from: dayStartIso(e.target.value) }; setProductDiscounts(a); }}
                         style={{ ...S.input, width: '100%' }} />
                     </div>
                     <div>
                       <label style={S.label}>Gültig bis</label>
-                      <input type="datetime-local" value={toLocal(d.valid_until)}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_until: e.target.value ? new Date(e.target.value).toISOString() : null }; setProductDiscounts(a); }}
+                      <input type="date" value={toDateInput(d.valid_until)}
+                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_until: dayEndIso(e.target.value) }; setProductDiscounts(a); }}
                         style={{ ...S.input, width: '100%' }} />
                     </div>
                   </div>
