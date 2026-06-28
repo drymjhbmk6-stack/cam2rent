@@ -1,6 +1,7 @@
 import Hero from '@/components/home/Hero';
 import PromoBanner from '@/components/home/PromoBanner';
 import HomeSeasonalAction from '@/components/home/HomeSeasonalAction';
+import HomeAngebote from '@/components/home/HomeAngebote';
 import ProductGrid from '@/components/home/ProductGrid';
 import KameraFinderCta from '@/components/home/KameraFinderCta';
 import TrustBanner from '@/components/home/TrustBanner';
@@ -32,6 +33,7 @@ export default async function Home() {
         <PromoBanner />
       </div>
       <HomeSeasonalAction />
+      <HomeAngebote />
       <TrustBanner />
       <ProductGrid />
       <KameraFinderCta />
