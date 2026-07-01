@@ -145,28 +145,39 @@ export default function BlogDashboardPage() {
   const orphanedCount = !isGenerating ? schedule.filter(e => e.status === 'generating').length : 0;
   const hasOrphanedGenerating = orphanedCount > 0;
 
+  const BACKGROUND_MSG = 'Generierung gestartet — sie läuft im Hintergrund weiter (dauert 3–5 Min). Der grüne Status oben zeigt den Fortschritt, der Artikel erscheint danach unter „Letzte Artikel".';
+
   async function handleRunNow() {
     if (manualRunning) return;
     setManualMsg(null);
     setManualRunning(true);
     try {
       const res = await fetch('/api/admin/blog/run-generator', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      const r = data?.result ?? {};
+      let data: Record<string, unknown> = {};
+      try { data = await res.json(); } catch { /* keine JSON-Antwort (z.B. Proxy-Timeout) */ }
+      const r = (data?.result ?? {}) as Record<string, unknown>;
       if (r.success) {
-        setManualMsg({ ok: true, text: `Artikel generiert: ${r.post?.title ?? 'OK'}` });
+        const post = r.post as { title?: string } | undefined;
+        setManualMsg({ ok: true, text: `Artikel generiert: ${post?.title ?? 'OK'}` });
       } else if (r.skipped === 'test_mode') {
         setManualMsg({ ok: false, text: 'Test-Modus aktiv — Generierung wird übersprungen. Unter Einstellungen auf Live schalten.' });
-      } else {
-        const base = r.error || r.message || 'Unbekannte Antwort vom Generator.';
+      } else if (r.error || r.message) {
+        const base = String(r.error || r.message);
         const raw = r.raw ? ` — Roh-Antwort (Anfang): ${String(r.raw).slice(0, 300)}` : '';
         setManualMsg({ ok: false, text: base + raw });
+      } else {
+        // Verbindung abgebrochen/Proxy-Timeout, aber keine echte Fehlerantwort:
+        // der Server generiert weiter. Kein Fehler anzeigen.
+        setManualMsg({ ok: true, text: BACKGROUND_MSG });
       }
-      await loadStatus();
     } catch {
-      setManualMsg({ ok: false, text: 'Anfrage fehlgeschlagen (Timeout oder Netzwerk). Bitte erneut versuchen.' });
+      // Die Pipeline (Artikel + 3 Prüf-Pässe + Bild) dauert länger als das
+      // Proxy-/Browser-Timeout (~100 s). Der Server läuft trotzdem bis zum
+      // Ende weiter — deshalb ist ein Verbindungsabbruch KEIN Fehler.
+      setManualMsg({ ok: true, text: BACKGROUND_MSG });
     } finally {
       setManualRunning(false);
+      loadStatus();
     }
   }
 
