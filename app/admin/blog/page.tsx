@@ -51,6 +51,8 @@ export default function BlogDashboardPage() {
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
   const [vorlaufzeit, setVorlaufzeit] = useState(3);
+  const [manualRunning, setManualRunning] = useState(false);
+  const [manualMsg, setManualMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -143,6 +145,29 @@ export default function BlogDashboardPage() {
   const orphanedCount = !isGenerating ? schedule.filter(e => e.status === 'generating').length : 0;
   const hasOrphanedGenerating = orphanedCount > 0;
 
+  async function handleRunNow() {
+    if (manualRunning) return;
+    setManualMsg(null);
+    setManualRunning(true);
+    try {
+      const res = await fetch('/api/admin/blog/run-generator', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      const r = data?.result ?? {};
+      if (r.success) {
+        setManualMsg({ ok: true, text: `Artikel generiert: ${r.post?.title ?? 'OK'}` });
+      } else if (r.skipped === 'test_mode') {
+        setManualMsg({ ok: false, text: 'Test-Modus aktiv — Generierung wird übersprungen. Unter Einstellungen auf Live schalten.' });
+      } else {
+        setManualMsg({ ok: false, text: r.error || r.message || 'Unbekannte Antwort vom Generator.' });
+      }
+      await loadStatus();
+    } catch {
+      setManualMsg({ ok: false, text: 'Anfrage fehlgeschlagen (Timeout oder Netzwerk). Bitte erneut versuchen.' });
+    } finally {
+      setManualRunning(false);
+    }
+  }
+
   async function handleResetGeneration() {
     if (!confirm('Generator-Status zurücksetzen? Der nächste Cron-Lauf startet eine neue Generierung.')) return;
     try {
@@ -172,6 +197,16 @@ export default function BlogDashboardPage() {
           <p className="text-sm" style={{ color: '#64748b' }}>Übersicht über alle Blog-Aktivitäten</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleRunNow}
+            disabled={manualRunning}
+            className="px-4 py-2 rounded-lg text-sm font-heading font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+            style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}
+            title="Startet die KI-Generierung sofort (umgeht den stündlichen Cron) und zeigt das Ergebnis bzw. den Fehler an."
+          >
+            {manualRunning && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            {manualRunning ? 'Generiert…' : 'Jetzt generieren'}
+          </button>
           <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
             + Neuer Artikel
           </Link>
@@ -345,6 +380,20 @@ export default function BlogDashboardPage() {
           </div>
         </div>
       </div>
+
+      {manualMsg && (
+        <div
+          className="rounded-xl p-3 sm:p-4 mb-6 text-sm flex items-start gap-2"
+          style={{
+            background: manualMsg.ok ? '#22c55e10' : '#ef444410',
+            border: `1px solid ${manualMsg.ok ? '#22c55e30' : '#ef444430'}`,
+            color: manualMsg.ok ? '#22c55e' : '#f87171',
+          }}
+        >
+          <span className="shrink-0">{manualMsg.ok ? '✅' : '⚠️'}</span>
+          <span className="min-w-0 break-words">{manualMsg.text}</span>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: '#64748b' }} className="text-sm">Laden...</p>
