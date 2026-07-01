@@ -333,9 +333,20 @@ export async function middleware(request: NextRequest) {
   // ── Admin-APIs (/api/admin/*) ─────────────────────────────────────────────
   if (pathname.startsWith('/api/admin')) {
     const isGet = request.method === 'GET';
+    // Meta-OAuth-Callback: Facebook leitet den Browser cross-site zurueck auf
+    // /api/admin/social/oauth?code=... — dabei sendet der Browser das
+    // admin_token-Cookie (sameSite='strict') NICHT mit, die Middleware wuerde
+    // sonst mit 'Unauthorized' abbrechen. Der Callback ist stattdessen ueber
+    // den state-Cookie-Vergleich in der Route (sameSite='lax') gegen CSRF
+    // abgesichert. Der action=start-Zweig hat KEIN code/error → bleibt geschuetzt.
+    const isMetaOauthCallback =
+      isGet &&
+      pathname === '/api/admin/social/oauth' &&
+      (request.nextUrl.searchParams.has('code') || request.nextUrl.searchParams.has('error'));
     const isPublic =
       pathname === '/api/admin/login' ||
       pathname === '/api/admin/logout' ||
+      isMetaOauthCallback ||
       (isGet && pathname === '/api/admin/settings') ||
       (isGet && pathname === '/api/admin/blog/categories');
 
