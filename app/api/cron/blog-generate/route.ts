@@ -5,7 +5,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { generateBlogImageWithFallback } from '@/lib/blog-image';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
-import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
+import { buildBlogSystemPrompt, HUMANIZER_PASS, blogJsonCandidates } from '@/lib/blog/system-prompt';
 import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -292,23 +292,32 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` }],
+      // 8192 statt 4096: der komplette Artikel steckt als JSON-String im
+      // "content"-Feld. Bei 4096 wurde ein 1000-1500-Wort-Artikel mitten im
+      // String abgeschnitten -> ungültiges JSON -> "konnte nicht geparst werden".
+      max_tokens: 8192,
+      messages: [
+        { role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` },
+        // Assistant-Prefill erzwingt reines JSON (kein Vorwort, kein Codeblock).
+        { role: 'assistant', content: '{' },
+      ],
       system: systemPrompt,
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
     let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) parsed = JSON.parse(match[1]);
-      else {
-        await releaseClaimedSchedule(scheduleId);
-        await setGenerationStatus('idle');
-        return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.' }, { status: 500 });
-      }
+    for (const cand of blogJsonCandidates(text)) {
+      try { parsed = JSON.parse(cand); break; } catch { /* nächster Kandidat */ }
+    }
+    if (!parsed) {
+      await releaseClaimedSchedule(scheduleId);
+      await setGenerationStatus('idle');
+      const truncated = message.stop_reason === 'max_tokens';
+      return NextResponse.json({
+        error: truncated
+          ? 'KI-Antwort war zu lang und wurde abgeschnitten — bitte in den Blog-Einstellungen eine kürzere Artikellänge wählen.'
+          : 'KI-Antwort konnte nicht als JSON gelesen werden.',
+      }, { status: 500 });
     }
 
     const wordCount = (parsed.content || '').split(/\s+/).length;
@@ -326,7 +335,7 @@ export async function POST(req: NextRequest) {
       try {
         const reviewMsg = await client.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: `Du bist ${pass.role} bei cam2rent.de. ${pass.instruction}
 
 Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, keine Kommentare — nur der fertige Text.`,

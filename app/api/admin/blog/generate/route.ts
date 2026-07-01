@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
-import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
+import { buildBlogSystemPrompt, HUMANIZER_PASS, blogJsonCandidates } from '@/lib/blog/system-prompt';
 import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 
 // Anthropic-Calls kosten Geld (~3-6 Cent pro Generierung). Auch wenn der
@@ -125,32 +125,39 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` }],
+      // 8192 statt 4096: der komplette Artikel steckt als JSON-String im
+      // "content"-Feld — bei 4096 wird ein langer Artikel abgeschnitten.
+      max_tokens: 8192,
+      messages: [
+        { role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` },
+        // Assistant-Prefill erzwingt reines JSON (kein Vorwort, kein Codeblock).
+        { role: 'assistant', content: '{' },
+      ],
       system: systemPrompt,
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    // JSON aus der Antwort parsen
+    // JSON aus der Antwort parsen (Prefill-'{', Codeblock, umschließende Prosa)
     let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Versuche JSON aus Markdown-Codeblock zu extrahieren
-      const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        parsed = JSON.parse(match[1]);
-      } else {
-        return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.', raw: text }, { status: 500 });
-      }
+    for (const cand of blogJsonCandidates(text)) {
+      try { parsed = JSON.parse(cand); break; } catch { /* nächster Kandidat */ }
+    }
+    if (!parsed) {
+      const truncated = message.stop_reason === 'max_tokens';
+      return NextResponse.json({
+        error: truncated
+          ? 'KI-Antwort war zu lang und wurde abgeschnitten — bitte eine kürzere Artikellänge wählen.'
+          : 'KI-Antwort konnte nicht als JSON gelesen werden.',
+        raw: text,
+      }, { status: 500 });
     }
 
     // Humanisierungs-Pass — gleiche Pipeline wie im Cron
     try {
       const humanizeMsg = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: `Du bist ${HUMANIZER_PASS.role} bei cam2rent.de. ${HUMANIZER_PASS.instruction}
 
 Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, keine Kommentare — nur der fertige Text.`,

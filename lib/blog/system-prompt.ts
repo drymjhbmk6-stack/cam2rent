@@ -115,6 +115,25 @@ const FORBIDDEN_PHRASES = [
   '"State of the Art"',
 ];
 
+/**
+ * Kandidaten-Strings fuers JSON-Parsing der Modell-Antwort, in Prioritaets-
+ * Reihenfolge. Deckt drei Faelle ab:
+ *  1. Assistant-Prefill mit '{' -> die Antwort ist der Rest ('{' + text)
+ *  2. Reine JSON-Antwort ohne Prefill
+ *  3. JSON in einem ```json ```-Codeblock oder von Prosa umschlossen
+ * Der Aufrufer probiert die Kandidaten der Reihe nach mit JSON.parse.
+ */
+export function blogJsonCandidates(text: string): string[] {
+  const trimmed = (text || '').trim();
+  const out: string[] = ['{' + trimmed, trimmed];
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) out.push(fence[1].trim());
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first !== -1 && last > first) out.push(trimmed.slice(first, last + 1));
+  return out;
+}
+
 export function buildBlogSystemPrompt(opts: BlogPromptOptions): string {
   const {
     currentYear,
