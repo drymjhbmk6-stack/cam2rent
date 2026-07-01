@@ -128,11 +128,7 @@ export async function POST(req: NextRequest) {
       // 8192 statt 4096: der komplette Artikel steckt als JSON-String im
       // "content"-Feld — bei 4096 wird ein langer Artikel abgeschnitten.
       max_tokens: 8192,
-      messages: [
-        { role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` },
-        // Assistant-Prefill erzwingt reines JSON (kein Vorwort, kein Codeblock).
-        { role: 'assistant', content: '{' },
-      ],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` }],
       system: systemPrompt,
     });
 

@@ -296,11 +296,7 @@ export async function POST(req: NextRequest) {
       // "content"-Feld. Bei 4096 wurde ein 1000-1500-Wort-Artikel mitten im
       // String abgeschnitten -> ungültiges JSON -> "konnte nicht geparst werden".
       max_tokens: 8192,
-      messages: [
-        { role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` },
-        // Assistant-Prefill erzwingt reines JSON (kein Vorwort, kein Codeblock).
-        { role: 'assistant', content: '{' },
-      ],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` }],
       system: systemPrompt,
     });
 

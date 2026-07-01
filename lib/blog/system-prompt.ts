@@ -117,15 +117,15 @@ const FORBIDDEN_PHRASES = [
 
 /**
  * Kandidaten-Strings fuers JSON-Parsing der Modell-Antwort, in Prioritaets-
- * Reihenfolge. Deckt drei Faelle ab:
- *  1. Assistant-Prefill mit '{' -> die Antwort ist der Rest ('{' + text)
- *  2. Reine JSON-Antwort ohne Prefill
- *  3. JSON in einem ```json ```-Codeblock oder von Prosa umschlossen
+ * Reihenfolge. Deckt ab:
+ *  1. Reine JSON-Antwort (Normalfall — System-Prompt verlangt reines JSON)
+ *  2. JSON in einem ```json ```-Codeblock
+ *  3. JSON von etwas Prosa umschlossen (erstes '{' bis letztes '}')
  * Der Aufrufer probiert die Kandidaten der Reihe nach mit JSON.parse.
  */
 export function blogJsonCandidates(text: string): string[] {
   const trimmed = (text || '').trim();
-  const out: string[] = ['{' + trimmed, trimmed];
+  const out: string[] = [trimmed];
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) out.push(fence[1].trim());
   const first = trimmed.indexOf('{');
