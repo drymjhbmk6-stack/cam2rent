@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
     await setGenerationStatus('generating', topicData.topic);
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` }],
       system: systemPrompt,
@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
     for (const pass of REVIEW_PASSES) {
       try {
         const reviewMsg = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4096,
           system: `Du bist ${pass.role} bei cam2rent.de. ${pass.instruction}
 
@@ -381,7 +381,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
         author: 'cam2rent',
         ai_generated: true,
         ai_prompt: topicData.topic,
-        ai_model: 'claude-sonnet-4-20250514',
+        ai_model: 'claude-sonnet-4-6',
         reading_time_min: readingTime,
         published_at: publishedAt,
         scheduled_at: scheduledAt,

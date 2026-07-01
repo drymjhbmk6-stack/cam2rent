@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   try {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` }],
       system: systemPrompt,
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     // Humanisierungs-Pass — gleiche Pipeline wie im Cron
     try {
       const humanizeMsg = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         system: `Du bist ${HUMANIZER_PASS.role} bei cam2rent.de. ${HUMANIZER_PASS.instruction}
 
@@ -174,7 +174,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
     return NextResponse.json({
       ...parsed,
       reading_time_min: readingTime,
-      ai_model: 'claude-sonnet-4-20250514',
+      ai_model: 'claude-sonnet-4-6',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
