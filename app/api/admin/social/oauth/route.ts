@@ -37,10 +37,6 @@ function externalRedirect(req: NextRequest, path: string): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await checkAdminAuth())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const url = new URL(req.url);
   const action = url.searchParams.get('action');
   const code = url.searchParams.get('code');
@@ -49,6 +45,17 @@ export async function GET(req: NextRequest) {
 
   // ── Schritt 1: Login-URL generieren ───────────────────────────────────
   if (action === 'start') {
+    // Nur der Start-Zweig braucht eine gueltige Admin-Session — er wird aus
+    // dem Admin-UI per fetch() aufgerufen (Cookie kommt mit).
+    // Der Callback (code=...) darf NICHT ueber checkAdminAuth() laufen: Meta
+    // leitet den Browser cross-site von facebook.com zurueck, dabei sendet der
+    // Browser das admin_token-Cookie (sameSite='strict') nicht mit → sonst
+    // immer "Unauthorized". Der Callback ist stattdessen ueber den
+    // state-Cookie-Vergleich (sameSite='lax', ueberlebt den Redirect) gegen
+    // CSRF abgesichert — das ist der von OAuth vorgesehene Auth-Beweis.
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
       return NextResponse.json(
         { error: 'META_APP_ID / META_APP_SECRET nicht gesetzt (Coolify Env-Variablen)' },
