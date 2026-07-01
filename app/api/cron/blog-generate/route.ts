@@ -5,7 +5,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { generateBlogImageWithFallback } from '@/lib/blog-image';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
-import { buildBlogSystemPrompt, HUMANIZER_PASS, blogJsonCandidates } from '@/lib/blog/system-prompt';
+import { buildBlogSystemPrompt, HUMANIZER_PASS, parseBlogJson } from '@/lib/blog/system-prompt';
 import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -301,10 +301,7 @@ export async function POST(req: NextRequest) {
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
-    let parsed;
-    for (const cand of blogJsonCandidates(text)) {
-      try { parsed = JSON.parse(cand); break; } catch { /* nächster Kandidat */ }
-    }
+    const parsed = parseBlogJson(text);
     if (!parsed) {
       await releaseClaimedSchedule(scheduleId);
       await setGenerationStatus('idle');
@@ -313,6 +310,8 @@ export async function POST(req: NextRequest) {
         error: truncated
           ? 'KI-Antwort war zu lang und wurde abgeschnitten — bitte in den Blog-Einstellungen eine kürzere Artikellänge wählen.'
           : 'KI-Antwort konnte nicht als JSON gelesen werden.',
+        stop_reason: message.stop_reason,
+        raw: text.slice(0, 800),
       }, { status: 500 });
     }
 
@@ -326,7 +325,7 @@ export async function POST(req: NextRequest) {
       { role: 'Chefredakteur', instruction: 'Letzte Prüfung: Würdest du das mit deinem Namen veröffentlichen? Korrigiere letzte Details. Stelle sicher dass "Versicherung" nirgends vorkommt — nur "Haftungsschutz".' },
     ];
 
-    let checkedContent = parsed.content;
+    let checkedContent: string = parsed.content ?? '';
     for (const pass of REVIEW_PASSES) {
       try {
         const reviewMsg = await client.messages.create({

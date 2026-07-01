@@ -115,23 +115,77 @@ const FORBIDDEN_PHRASES = [
   '"State of the Art"',
 ];
 
+/** Von Claude erzeugter Blog-Artikel (JSON-Schema aus dem System-Prompt). */
+export interface GeneratedBlogPost {
+  title?: string;
+  slug?: string;
+  content?: string;
+  excerpt?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  suggestedTags?: string[];
+  imagePrompt?: string;
+  keywords?: string[];
+  [key: string]: unknown;
+}
+
 /**
- * Kandidaten-Strings fuers JSON-Parsing der Modell-Antwort, in Prioritaets-
- * Reihenfolge. Deckt ab:
- *  1. Reine JSON-Antwort (Normalfall — System-Prompt verlangt reines JSON)
- *  2. JSON in einem ```json ```-Codeblock
- *  3. JSON von etwas Prosa umschlossen (erstes '{' bis letztes '}')
- * Der Aufrufer probiert die Kandidaten der Reihe nach mit JSON.parse.
+ * LLMs betten den mehrzeiligen Markdown-Artikel oft mit ROHEN Zeilenumbrüchen
+ * und Tabs in den JSON-String "content" ein. Das ist ungültiges JSON
+ * (JSON.parse: "Bad control character in string literal"). Diese Funktion
+ * escaped Steuerzeichen NUR innerhalb von String-Literalen (String-Zustand +
+ * Backslash-Escapes werden mitgezählt), damit JSON.parse durchläuft.
  */
-export function blogJsonCandidates(text: string): string[] {
+export function repairJsonControlChars(input: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (escaped) { out += ch; escaped = false; continue; }
+    if (ch === '\\') { out += ch; escaped = true; continue; }
+    if (ch === '"') { inString = !inString; out += ch; continue; }
+    if (inString) {
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) { out += '\\u' + code.toString(16).padStart(4, '0'); continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Parst die Modell-Antwort robust in ein Blog-Post-Objekt. Deckt ab:
+ *  1. Reine JSON-Antwort (Normalfall)
+ *  2. JSON in einem ```json ```-Codeblock
+ *  3. JSON von Prosa umschlossen (erstes '{' bis letztes '}')
+ * Jeder Kandidat wird zusätzlich mit escapten Steuerzeichen (repair) versucht,
+ * weil der mehrzeilige Artikel im content-String sonst das Parsen sprengt.
+ * Gibt null zurück, wenn nichts parst.
+ */
+export function parseBlogJson(text: string): GeneratedBlogPost | null {
   const trimmed = (text || '').trim();
-  const out: string[] = [trimmed];
+  const bases: string[] = [trimmed];
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) out.push(fence[1].trim());
+  if (fence) bases.push(fence[1].trim());
   const first = trimmed.indexOf('{');
   const last = trimmed.lastIndexOf('}');
-  if (first !== -1 && last > first) out.push(trimmed.slice(first, last + 1));
-  return out;
+  if (first !== -1 && last > first) bases.push(trimmed.slice(first, last + 1));
+
+  for (const base of bases) {
+    for (const candidate of [base, repairJsonControlChars(base)]) {
+      try {
+        const obj = JSON.parse(candidate);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          return obj as GeneratedBlogPost;
+        }
+      } catch { /* nächster Kandidat */ }
+    }
+  }
+  return null;
 }
 
 export function buildBlogSystemPrompt(opts: BlogPromptOptions): string {

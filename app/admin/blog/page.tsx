@@ -158,7 +158,9 @@ export default function BlogDashboardPage() {
       } else if (r.skipped === 'test_mode') {
         setManualMsg({ ok: false, text: 'Test-Modus aktiv — Generierung wird übersprungen. Unter Einstellungen auf Live schalten.' });
       } else {
-        setManualMsg({ ok: false, text: r.error || r.message || 'Unbekannte Antwort vom Generator.' });
+        const base = r.error || r.message || 'Unbekannte Antwort vom Generator.';
+        const raw = r.raw ? ` — Roh-Antwort (Anfang): ${String(r.raw).slice(0, 300)}` : '';
+        setManualMsg({ ok: false, text: base + raw });
       }
       await loadStatus();
     } catch {

@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
-import { buildBlogSystemPrompt, HUMANIZER_PASS, blogJsonCandidates } from '@/lib/blog/system-prompt';
+import { buildBlogSystemPrompt, HUMANIZER_PASS, parseBlogJson } from '@/lib/blog/system-prompt';
 import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 
 // Anthropic-Calls kosten Geld (~3-6 Cent pro Generierung). Auch wenn der
@@ -134,11 +134,9 @@ export async function POST(req: NextRequest) {
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    // JSON aus der Antwort parsen (Prefill-'{', Codeblock, umschließende Prosa)
-    let parsed;
-    for (const cand of blogJsonCandidates(text)) {
-      try { parsed = JSON.parse(cand); break; } catch { /* nächster Kandidat */ }
-    }
+    // JSON aus der Antwort parsen (Codeblock, umschließende Prosa,
+    // rohe Steuerzeichen im mehrzeiligen content-String)
+    const parsed = parseBlogJson(text);
     if (!parsed) {
       const truncated = message.stop_reason === 'max_tokens';
       return NextResponse.json({
@@ -157,7 +155,7 @@ export async function POST(req: NextRequest) {
         system: `Du bist ${HUMANIZER_PASS.role} bei cam2rent.de. ${HUMANIZER_PASS.instruction}
 
 Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, keine Kommentare — nur der fertige Text.`,
-        messages: [{ role: 'user', content: parsed.content }],
+        messages: [{ role: 'user', content: parsed.content ?? '' }],
       });
       const humanized = humanizeMsg.content[0].type === 'text' ? humanizeMsg.content[0].text : '';
       if (humanized.trim().length > 100) {
