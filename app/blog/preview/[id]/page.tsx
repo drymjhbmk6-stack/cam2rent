@@ -42,7 +42,7 @@ export default async function BlogPreviewPage({ params }: { params: Promise<{ id
   return (
     <>
       {/* Preview-Banner */}
-      <div className="sticky top-0 z-50 flex items-center justify-between px-4 py-2" style={{ background: '#f59e0b', color: '#0f172a' }}>
+      <div className="sticky top-0 z-50 flex items-center justify-between px-4 py-2" style={{ background: '#f59e0b', color: '#0f172a', paddingTop: 'calc(0.5rem + env(safe-area-inset-top))' }}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-heading font-bold">VORSCHAU</span>
           <span className="text-xs font-body">
