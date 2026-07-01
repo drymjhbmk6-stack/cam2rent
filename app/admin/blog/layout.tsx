@@ -90,7 +90,7 @@ export default function BlogAdminLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen" style={{ background: '#0f172a' }}>
       {/* Mobile Header */}
-      <div className="lg:hidden sticky top-0 z-50 flex items-center justify-between px-4 h-14" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+      <div className="lg:hidden sticky top-0 z-50 flex items-center justify-between px-4" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b', paddingTop: 'env(safe-area-inset-top)', height: 'calc(3.5rem + env(safe-area-inset-top))' }}>
         <div className="flex items-center gap-2">
           <span className="font-heading font-black text-base tracking-tight" style={{ color: 'white' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
@@ -119,8 +119,8 @@ export default function BlogAdminLayout({ children }: { children: React.ReactNod
 
       {/* Mobile Drawer */}
       <div
-        className={`lg:hidden fixed top-14 right-0 bottom-0 w-64 z-50 transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
-        style={{ background: '#0f172a', borderLeft: '1px solid #1e293b' }}
+        className={`lg:hidden fixed right-0 bottom-0 w-64 z-50 transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ background: '#0f172a', borderLeft: '1px solid #1e293b', top: 'calc(3.5rem + env(safe-area-inset-top))' }}
       >
         <nav className="px-3 py-4 space-y-0.5">
           {NAV_ITEMS.map((item) => {
