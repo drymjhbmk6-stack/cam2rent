@@ -68,21 +68,59 @@ function countryName(code: string): string {
   try { return regionNames?.of(code) ?? code; } catch { return code; }
 }
 
-// Cloudflare liefert Bundesländer als englische Exonyme — auf Deutsch mappen.
+// Cloudflare liefert Bundesländer als englische Exonyme (teils mit Präfix wie
+// "State of Berlin" / "Free State of Bavaria") — auf Deutsch mappen.
 const DE_BUNDESLAND: Record<string, string> = {
+  'baden-wurttemberg': 'Baden-Württemberg',
+  'baden-württemberg': 'Baden-Württemberg',
   'bavaria': 'Bayern',
+  'bayern': 'Bayern',
+  'berlin': 'Berlin',
+  'brandenburg': 'Brandenburg',
+  'bremen': 'Bremen',
+  'hamburg': 'Hamburg',
   'hesse': 'Hessen',
+  'hessen': 'Hessen',
   'lower saxony': 'Niedersachsen',
+  'niedersachsen': 'Niedersachsen',
   'north rhine-westphalia': 'Nordrhein-Westfalen',
+  'nordrhein-westfalen': 'Nordrhein-Westfalen',
   'rhineland-palatinate': 'Rheinland-Pfalz',
+  'rheinland-pfalz': 'Rheinland-Pfalz',
+  'saarland': 'Saarland',
   'saxony': 'Sachsen',
+  'sachsen': 'Sachsen',
   'saxony-anhalt': 'Sachsen-Anhalt',
+  'sachsen-anhalt': 'Sachsen-Anhalt',
+  'schleswig-holstein': 'Schleswig-Holstein',
   'thuringia': 'Thüringen',
+  'thüringen': 'Thüringen',
   'mecklenburg-west pomerania': 'Mecklenburg-Vorpommern',
   'mecklenburg-vorpommern': 'Mecklenburg-Vorpommern',
 };
 function bundeslandName(name: string): string {
-  return DE_BUNDESLAND[name.toLowerCase().trim()] ?? name;
+  const key = name
+    .toLowerCase()
+    .trim()
+    // Cloudflare-Präfixe entfernen: "State of ...", "Free State of ...",
+    // "Land ...", "Free (and) Hanseatic City of ..." (Bremen/Hamburg)
+    .replace(/^(free\s+state\s+of|state\s+of|free\s+and\s+hanseatic\s+city\s+of|free\s+hanseatic\s+city\s+of|land)\s+/i, '')
+    .trim();
+  return DE_BUNDESLAND[key] ?? DE_BUNDESLAND[name.toLowerCase().trim()] ?? name;
+}
+
+// Deutsche Städte, die Cloudflare mit englischem Namen liefert — auf Deutsch mappen.
+const DE_STADT: Record<string, string> = {
+  'munich': 'München',
+  'cologne': 'Köln',
+  'nuremberg': 'Nürnberg',
+  'hanover': 'Hannover',
+  'brunswick': 'Braunschweig',
+  'frankfurt': 'Frankfurt am Main',
+  'frankfurt am main': 'Frankfurt am Main',
+};
+function stadtName(name: string): string {
+  return DE_STADT[name.toLowerCase().trim()] ?? name;
 }
 
 type Tab = 'live' | 'bookings' | 'traffic' | 'customers' | 'blog';
@@ -552,7 +590,7 @@ function generateCSV(
       rows.push([]);
       rows.push(['Stadt (DE)', 'Besucher', 'Prozent']);
       for (const c of trafficData.de_cities) {
-        rows.push([c.name, String(c.count), `${c.pct}%`]);
+        rows.push([stadtName(c.name), String(c.count), `${c.pct}%`]);
       }
     }
   }
@@ -1543,7 +1581,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(trafficData?.de_cities ?? []).map((c, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stadtName(c.name)}</div>
                       <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
                         <div style={{ width: `${c.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
                           <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.count} ({c.pct}%)</span>
