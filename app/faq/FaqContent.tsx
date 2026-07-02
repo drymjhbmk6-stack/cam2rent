@@ -95,7 +95,7 @@ const faqSections: FaqSection[] = [
       {
         question: 'Gibt es eine Mindestmietdauer?',
         answer:
-          'Nein, es gibt keine Mindestmietdauer. Du kannst eine Kamera ab einem Tag mieten. Je länger die Mietdauer, desto günstiger wird der Tagespreis — ab 5 Tagen gibt es automatisch Mengenrabatte.',
+          'Nein, es gibt keine Mindestmietdauer. Du kannst eine Kamera ab einem Tag mieten. Je länger die Mietdauer, desto günstiger wird der Tagespreis — längere Mietzeiträume werden automatisch günstiger.',
       },
       {
         question: 'Kann ich meine Mietdauer verlängern?',
@@ -113,7 +113,7 @@ const faqSections: FaqSection[] = [
         answer: (
           <span className="space-y-2 block">
             <span className="block">Die Buchung ist in 5 einfache Schritte aufgeteilt:</span>
-            <span className="block"><strong>1. Versand</strong> — Wähle, ob du die Ausrüstung per DHL geliefert bekommen oder selbst abholen möchtest.</span>
+            <span className="block"><strong>1. Versand</strong> — Wähle, ob du die Ausrüstung per DHL/DPD geliefert bekommen oder selbst abholen möchtest.</span>
             <span className="block"><strong>2. Zubehör</strong> — Optional kannst du passendes Zubehör wie Speicherkarten, Akkus oder Stative dazubuchen.</span>
             <span className="block"><strong>3. Haftungsschutz</strong> — Entscheide dich für eine Haftungsoption: Standard oder Premium.</span>
             <span className="block"><strong>4. Zusammenfassung</strong> — Prüfe alle Details deiner Buchung: Zeitraum, Zubehör, Haftungsschutz und Gesamtpreis.</span>
@@ -130,8 +130,32 @@ const faqSections: FaqSection[] = [
         answer: 'Der Versandpreis beinhaltet sowohl den Hinversand als auch den Rückversand. Ein frankiertes Rücksendeetikett liegt dem Paket bei — du musst dich um nichts kümmern.',
       },
       {
-        question: 'Wie lange dauert die Kautionsfreigabe?',
-        answer: 'Nach erfolgreicher Rückgabe und Zustandsprüfung wird die Kaution innerhalb von 5 Werktagen auf deinem Konto freigegeben.',
+        question: 'Muss ich einen Mietvertrag unterschreiben?',
+        answer:
+          'Ja. Zu jeder Buchung gehört ein Mietvertrag, den du digital direkt im Buchungsprozess unterschreibst (bei Selbstabholung alternativ vor Ort). Erst mit deiner Unterschrift ist die Buchung vollständig. Den unterschriebenen Vertrag erhältst du als PDF und findest ihn jederzeit in deinem Kundenkonto.',
+      },
+      {
+        question: 'Muss ich meinen Ausweis hochladen?',
+        answer: (
+          <>
+            Als Neukunde lädst du nach der Buchung einmalig deinen Ausweis (Vorder- und
+            Rückseite) in deinem{' '}
+            <Link href="/konto/verifizierung" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>{' '}
+            hoch. Wir prüfen ihn vor dem Versand — die Kamera wird erst verschickt,
+            sobald die Verifizierung abgeschlossen ist. Das dient dem Schutz vor Missbrauch
+            und ist nur beim ersten Mal nötig.
+          </>
+        ),
+      },
+      {
+        question: 'Welches Zubehör kann ich dazubuchen?',
+        answer:
+          'Im Buchungsschritt „Zubehör" kannst du passendes Zubehör wie Speicherkarten, Akkus, Stative oder Halterungen dazubuchen. Für viele Kameras gibt es außerdem fertige Sets, die beliebtes Zubehör zum günstigen Paketpreis bündeln. Es wird immer nur Zubehör angezeigt, das zu deiner gewählten Kamera passt.',
+      },
+      {
+        question: 'Was ist, wenn meine Wunschkamera nicht verfügbar ist?',
+        answer:
+          'Für Kameras, die noch nicht im Bestand sind, erscheint statt „Jetzt mieten" ein „Benachrichtige mich"-Feld. Trag dort einfach deine E-Mail-Adresse ein — wir melden uns bei dir, sobald die Kamera buchbar ist.',
       },
     ],
   },
@@ -147,7 +171,7 @@ const faqSections: FaqSection[] = [
       {
         question: 'Wie wird die Ausrüstung geliefert?',
         answer:
-          'Wir versenden per DHL Standardversand (2–3 Werktage) oder DHL Express (nächster Werktag). Die Ausrüstung wird in der Regel einen Werktag vor Mietbeginn versendet. Ab 49 € Bestellwert ist der Standardversand kostenlos.',
+          'Wir versenden mit DHL oder DPD. Der Standardversand dauert in der Regel 3–5 Werktage, Express wird innerhalb von 24 Stunden an Werktagen verschickt. Die Ausrüstung geht üblicherweise einen Werktag vor Mietbeginn raus. Ab 50 € Bestellwert ist der Standardversand kostenlos.',
       },
       {
         question: 'Kann ich die Ausrüstung auch abholen?',
@@ -170,23 +194,23 @@ const faqSections: FaqSection[] = [
         answer: (
           <>
             Packe die Ausrüstung vollständig zurück (Originalverpackung bevorzugt) und verwende
-            das beigelegte DHL-Rücksende-Etikett. Falls du es nicht mehr hast, kannst du es in
+            das beigelegte Rücksende-Etikett. Falls du es nicht mehr hast, kannst du es in
             deinem{' '}
             <Link href="/konto/buchungen" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>{' '}
-            herunterladen. Die Rücksendung muss spätestens am Tag nach Mietende bei DHL abgegeben
-            werden.
+            herunterladen. Die Rücksendung muss spätestens am Tag nach Mietende beim Paketdienst
+            abgegeben werden.
           </>
         ),
       },
       {
         question: 'Was passiert bei verspäteter Rückgabe?',
         answer:
-          'Für jeden zusätzlichen Tag wird der reguläre Tagespreis berechnet. Bei erheblicher Verspätung (mehr als 3 Tage ohne Rückmeldung) behalten wir uns die Einbehaltung der Kaution sowie weitere Schritte vor.',
+          'Für jeden zusätzlichen Tag wird der reguläre Tagespreis berechnet. Bei erheblicher Verspätung (mehr als 3 Tage ohne Rückmeldung) behalten wir uns die Berechnung des entstandenen Ausfalls sowie weitere Schritte vor. Melde dich einfach kurz bei uns, falls es zeitlich eng wird.',
       },
     ],
   },
   {
-    title: 'Kaution & Zahlung',
+    title: 'Zahlung',
     color: 'violet',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-6 h-6" aria-hidden="true">
@@ -195,19 +219,31 @@ const faqSections: FaqSection[] = [
     ),
     items: [
       {
-        question: 'Wie funktioniert die Kaution?',
-        answer:
-          'Bei jeder Buchung wird eine Kaution als Vorautorisierung auf deiner Kreditkarte blockiert — der Betrag wird nicht abgebucht, nur reserviert. Nach erfolgreicher Rückgabe und Zustandsprüfung wird die Vorautorisierung automatisch freigegeben, in der Regel noch am selben Tag.',
+        question: 'Muss ich eine Kaution hinterlegen?',
+        answer: (
+          <>
+            Nein. cam2rent verlangt keine klassische Kaution und reserviert keinen Betrag
+            auf deiner Kreditkarte. Stattdessen wählst du bei der Buchung einen
+            Haftungsschutz (Standard oder Premium), der deine Haftung im Schadensfall
+            begrenzt. Mehr dazu findest du unter{' '}
+            <a href="#schäden-und-haftung" className="text-accent-blue hover:underline font-medium">Schäden &amp; Haftung</a>.
+          </>
+        ),
       },
       {
         question: 'Welche Zahlungsmethoden gibt es?',
         answer:
           'Wir akzeptieren Visa, Mastercard, Klarna, Apple Pay, Google Pay und SEPA-Lastschrift. Die Bezahlung erfolgt sicher über Stripe. Barzahlung ist nicht möglich.',
       },
+      {
+        question: 'Kann ich einen Gutschein oder Rabatt einlösen?',
+        answer:
+          'Ja. Einen Gutscheincode gibst du im Checkout ein — der Rabatt wird sofort abgezogen. Zusätzlich greifen automatische Rabatte: Längere Mietzeiträume werden günstiger, und je nach Aktion können auch Mengen-, Frühbucher- oder Treuerabatte automatisch berücksichtigt werden.',
+      },
     ],
   },
   {
-    title: 'Stornierung',
+    title: 'Stornierung & Widerruf',
     color: 'rose',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-6 h-6" aria-hidden="true">
@@ -219,12 +255,28 @@ const faqSections: FaqSection[] = [
         question: 'Kann ich meine Buchung stornieren?',
         answer: (
           <>
-            Ja, nach folgender Staffelung: Mehr als 7 Tage vor Mietbeginn ist die Stornierung
-            kostenlos. 3–6 Tage vorher fällt eine Stornogebühr von 50 % an. Weniger als 2 Tage
-            vorher oder bei Nichtabholung wird der volle Mietpreis berechnet. Details findest du
-            in unseren{' '}
+            Ja, nach folgender Staffelung: 7 Tage oder mehr vor Mietbeginn ist die Stornierung
+            kostenlos (volle Erstattung). 3–6 Tage vorher fällt eine Stornogebühr von 50 % an
+            (Stornierung dann nur per E-Mail). Weniger als 3 Tage vorher oder bei Nichtabholung
+            wird der volle Mietpreis berechnet. Details findest du in unseren{' '}
             <Link href="/stornierung" className="text-accent-blue hover:underline font-medium">
               Stornierungsbedingungen
+            </Link>
+            .
+          </>
+        ),
+      },
+      {
+        question: 'Habe ich ein Widerrufsrecht?',
+        answer: (
+          <>
+            Als Verbraucher hast du grundsätzlich ein 14-tägiges Widerrufsrecht. Beginnt deine
+            Miete jedoch schon vor Ablauf dieser Frist, bestätigst du im Checkout ausdrücklich,
+            dass wir vorzeitig mit der Leistung beginnen dürfen — dein Widerrufsrecht erlischt
+            dann mit vollständiger Vertragserfüllung (§ 356 Abs. 4 BGB). Alle Details findest du
+            in unserer{' '}
+            <Link href="/widerruf" className="text-accent-blue hover:underline font-medium">
+              Widerrufsbelehrung
             </Link>
             .
           </>
@@ -244,17 +296,23 @@ const faqSections: FaqSection[] = [
       {
         question: 'Was passiert bei einem Schaden?',
         answer:
-          'Normaler Verschleiß ist kein Problem. Bei Beschädigungen wird die Kaution je nach Schwere teilweise oder vollständig einbehalten. Du wirst vorab per E-Mail über den Schadensbetrag informiert. Schäden bitte immer sofort melden.',
+          'Normaler Verschleiß ist kein Problem. Bei Beschädigungen haftest du im Rahmen deiner gewählten Haftungsoption — höchstens bis zur jeweiligen Selbstbeteiligung, ohne gewählten Haftungsschutz bis zum Wiederbeschaffungswert. Du wirst vorab per E-Mail über den Schadensbetrag informiert. Schäden bitte immer sofort melden.',
       },
       {
         question: 'Gibt es einen Haftungsschutz?',
         answer: (
           <>
-            Ja! Bei der Buchung kannst du zwischen Standard-Haftung (max. 150 € Selbstbeteiligung)
-            und Premium-Haftung (keine Selbstbeteiligung) wählen. Ohne gewählte Haftungsoption
-            haftest du für den vollen Wiederbeschaffungswert. Es handelt sich dabei nicht um eine
-            Versicherung, sondern um eine Haftungsbegrenzung. Details findest du in unseren{' '}
+            Ja! Bei der Buchung kannst du zwischen Standard-Haftung (max. 200 € Selbstbeteiligung,
+            bei 360°-Kameras 300 €) und Premium-Haftung (keine Selbstbeteiligung) wählen. Ohne
+            gewählte Haftungsoption haftest du für den vollen Wiederbeschaffungswert. Es handelt
+            sich dabei nicht um eine Versicherung, sondern um eine Haftungsbegrenzung. Details
+            findest du in unseren{' '}
             <Link href="/haftungsbedingungen" className="text-accent-blue hover:underline font-medium">Haftungsbedingungen</Link>.
+            <span className="block mt-2">
+              Tipp: Manche private Haftpflichtversicherungen übernehmen Schäden an gemieteten
+              Gegenständen (sogenannte Mietsachschäden). Es lohnt sich, das vor Mietbeginn bei
+              deiner eigenen Versicherung zu erfragen.
+            </span>
           </>
         ),
       },
