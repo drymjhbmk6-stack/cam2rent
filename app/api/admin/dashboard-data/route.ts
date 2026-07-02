@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { computeCameraUtilization } from '@/lib/camera-utilization';
 import { isTestMode } from '@/lib/env-mode';
+import {
+  loadBufferDays,
+  computeShipDate,
+  computeReturnDueDate,
+  toIsoDate,
+  type BufferDays,
+} from '@/lib/booking-buffer';
 
 /**
  * GET /api/admin/dashboard-data
@@ -387,6 +394,60 @@ export async function GET() {
       };
     });
 
+    // ── Abhol-/Rückgabe-Terminabsprache (Aufgaben) ──────────────────
+    // Für Abhol-Buchungen (delivery_mode='abholung') soll der Admin ≤ 48h vor
+    // dem Abhol- bzw. Rückgabetag mit dem Kunden eine Uhrzeit ausmachen. Wird
+    // LIVE aus den bereits geladenen aqRows berechnet (kein Dedup — das
+    // Dashboard zeigt die Aufgabe, solange sie im Fenster liegt; die einmalige
+    // Push liefert der Cron /api/cron/pickup-return-reminder).
+    const coordBuf: BufferDays = await loadBufferDays(supabase, {
+      versand_before: 3, versand_after: 3, abholung_before: 1, abholung_after: 1,
+    });
+    const coordDaysUntil = (dateStr: string) => {
+      const a = Date.parse(`${berlinDate}T00:00:00Z`);
+      const c = Date.parse(`${dateStr}T00:00:00Z`);
+      return Number.isNaN(c) ? Number.POSITIVE_INFINITY : Math.round((c - a) / 86_400_000);
+    };
+    const COORD_WITHIN_DAYS = 2; // „maximal 48h im Voraus"
+    const coordinations: Array<{
+      id: string; type: 'pickup' | 'return';
+      product_name: string; customer_name: string; due_date: string;
+    }> = [];
+    for (const b of aqRows) {
+      if (b.delivery_mode !== 'abholung') continue;
+      const id = b.id as string;
+      const st = String(b.status ?? '');
+      if (st === 'confirmed' || st === 'awaiting_pickup') {
+        const rf = String(b.rental_from ?? '').slice(0, 10);
+        if (!rf) continue;
+        const pickupDate = toIsoDate(
+          computeShipDate(rf, 'abholung', coordBuf, (b.ship_date_override as string | null) ?? null),
+        );
+        if (coordDaysUntil(pickupDate) <= COORD_WITHIN_DAYS) {
+          coordinations.push({
+            id, type: 'pickup',
+            product_name: (b.product_name as string) ?? '',
+            customer_name: (b.customer_name as string) ?? '',
+            due_date: pickupDate,
+          });
+        }
+      } else if (st === 'picked_up') {
+        const rt = String(b.rental_to ?? '').slice(0, 10);
+        if (!rt) continue;
+        const returnDate = toIsoDate(
+          computeReturnDueDate(rt, 'abholung', coordBuf, (b.return_due_date_override as string | null) ?? null),
+        );
+        if (coordDaysUntil(returnDate) <= COORD_WITHIN_DAYS) {
+          coordinations.push({
+            id, type: 'return',
+            product_name: (b.product_name as string) ?? '',
+            customer_name: (b.customer_name as string) ?? '',
+            due_date: returnDate,
+          });
+        }
+      }
+    }
+
     // ── Build response ───────────────────────────────────────────
 
     const data: Record<string, unknown> = {
@@ -420,7 +481,7 @@ export async function GET() {
 
       camera_utilization: { products: utilizationProducts },
 
-      action_queue: { items: actionQueueItems, verifications: pendingVerifications },
+      action_queue: { items: actionQueueItems, verifications: pendingVerifications, coordinations },
     };
 
     return NextResponse.json(data);

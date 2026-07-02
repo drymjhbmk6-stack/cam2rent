@@ -30,6 +30,8 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   beleg_duplicate: 'finanzen',
   availability_alert: 'tagesgeschaeft',
   firmware_update_available: 'katalog',
+  pickup_coordination: 'tagesgeschaeft',
+  return_coordination: 'tagesgeschaeft',
 };
 
 /**

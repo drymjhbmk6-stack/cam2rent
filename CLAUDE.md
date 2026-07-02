@@ -980,6 +980,50 @@ ab (die alte Mail lief nur auf `confirmed`/`shipped`).
   am letzten Miettag gar keine Rückgabe-Erinnerung mehr verschickt (die alte
   `return_reminder_0d` ist entfernt) — der Eintrag sollte also gesetzt werden.
 
+### Abhol-/Rückgabe-Terminabsprache — Push + Aufgabe max. 48h im Voraus (Stand 2026-07-02)
+Für **Abhol-Buchungen** (`delivery_mode='abholung'`) bekommt der Admin ≤ 48h vor
+dem Abhol- bzw. Rückgabetag eine **Push-Benachrichtigung** (+ Eintrag in der
+Glocke) UND eine eigene **Aufgabe im Dashboard-„Aufgaben"-Widget**, um mit dem
+Kunden eine Uhrzeit auszumachen, wann er die Kamera abholt bzw. zurückbringt.
+Versand-Buchungen sind bewusst ausgenommen (dort wird nichts physisch
+vereinbart).
+- **Migration `supabase/supabase-bookings-coordination-reminder.sql`**
+  (idempotent, additiv): `bookings.pickup_coordination_reminded_at` +
+  `bookings.return_coordination_reminded_at` (TIMESTAMPTZ NULL) als Dedup-Marker
+  für den Push (eine Push pro Buchung + Richtung).
+- **Cron `GET/POST /api/cron/pickup-return-reminder`** (`verifyCronAuth` +
+  `acquireCronLock('pickup-return-reminder')`, `isTestMode`-Filter): lädt
+  Abhol-Buchungen und schickt EINE Push, sobald der Abhol- bzw. Rückgabetag ≤ 2
+  Kalendertage entfernt ist. **Abholung vereinbaren:** Status
+  `confirmed`/`awaiting_pickup`, Abholtag = `computeShipDate`
+  (`ship_date_override` mit Vorrang, sonst `rental_from − abholung_before`).
+  **Rückgabe vereinbaren:** Status `picked_up`, Rückgabetag =
+  `computeReturnDueDate` (`return_due_date_override` bzw.
+  `rental_to + abholung_after`). Puffer-Fallback 1/1 (analog Auftragskalender).
+  Idempotenz via **atomarem Claim** (`update … .is(marker, null).select('id')`
+  → nur der Gewinner verschickt). Ohne Migration → `migration_pending` (kein
+  Push; das Dashboard-Widget läuft trotzdem). Notification-Typen
+  `pickup_coordination` / `return_coordination` (Permission `tagesgeschaeft`,
+  cyan Telefon-Icon in der Glocke), Link auf `/admin/buchungen/[id]`.
+- **Dashboard-Widget** (`GET /api/admin/dashboard-data` →
+  `action_queue.coordinations`, gerendert in `ActionQueueWidget`): berechnet die
+  Termin-Aufgaben LIVE aus den ohnehin geladenen Action-Queue-Rows (kein Dedup —
+  die Aufgabe erscheint, solange sie im 48h-Fenster liegt und die Buchung im
+  passenden Status ist). Eigene Zeilen „📞 Abholtermin vereinbaren" /
+  „📞 Rückgabetermin vereinbaren" (cyan, weight 1 → direkt nach den
+  Verifizierungen). Verschwinden automatisch, sobald die Buchung weiterläuft
+  (übergeben/zurückgegeben). Der Admin macht den Termin dann per Nachricht/Anruf
+  aus und kann bei Bedarf `ship_date_override`/`return_due_date_override` setzen.
+- **Go-Live TODO:**
+  1. Migration `supabase/supabase-bookings-coordination-reminder.sql` ausführen.
+     Ohne sie erscheinen die Aufgaben im Dashboard trotzdem (live), nur der Push
+     ist inaktiv (`migration_pending`).
+  2. Hetzner-Crontab (mehrmals täglich, `--resolve` umgeht Cloudflare):
+     ```
+     0 8,13,18 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/pickup-return-reminder
+     ```
+  3. Push einmalig aktivieren unter `/admin/einstellungen` → „Push aktivieren".
+
 ### Storno mit Rückerstattungswahl + echter Stornierungsbeleg (Stand 2026-06-24)
 Beim Stornieren einer Buchung hat der Admin jetzt die volle Kontrolle über
 Rückerstattung und Kunden-Mail; bei einer Rückerstattung wird automatisch ein
@@ -4972,6 +5016,15 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Abhol-/Rückgabe-Terminabsprache — Migration + Cron auszuführen:** Migration
+  `supabase/supabase-bookings-coordination-reminder.sql` (idempotent, additiv:
+  2 Timestamp-Marker) + Crontab-Eintrag (mehrmals täglich, `--resolve`):
+  ```
+  0 8,13,18 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/pickup-return-reminder
+  ```
+  Ohne Migration erscheinen die Termin-Aufgaben im Dashboard trotzdem (live),
+  nur der Push ist inaktiv; ohne Cron kein Push. Siehe „Abhol-/Rückgabe-
+  Terminabsprache". Empfohlen ASAP ausführen.
 - **Sonderkonditionen-Migrationen auszuführen (2, idempotent, additiv):**
   `supabase/supabase-profiles-special-discount.sql` (5 `profiles.special_discount_*`-
   Spalten, service-role-only) + `supabase/supabase-bookings-special-discount.sql`

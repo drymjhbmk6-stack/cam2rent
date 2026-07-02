@@ -117,6 +117,14 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
         </svg>
       );
+    case 'pickup_coordination':
+    case 'return_coordination':
+      // Telefon-Hörer — Termin mit Kunde vereinbaren
+      return (
+        <svg style={iconStyle} fill="none" stroke="#06b6d4" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+        </svg>
+      );
     default:
       return (
         <svg style={iconStyle} fill="none" stroke="#64748b" viewBox="0 0 24 24">

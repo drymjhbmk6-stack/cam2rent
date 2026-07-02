@@ -648,6 +648,16 @@ interface VerificationTask {
   created_at: string;
 }
 
+// Abhol-/Rückgabe-Terminabsprache (Aufgabe): mit dem Kunden eine Uhrzeit
+// ausmachen, wann er die Abhol-Buchung abholt bzw. zurückbringt.
+interface CoordinationTask {
+  id: string;
+  type: 'pickup' | 'return';
+  product_name: string;
+  customer_name: string;
+  due_date: string;
+}
+
 interface QueueRow {
   key: string;
   title: string;
@@ -742,7 +752,7 @@ const AQ_CHIPS_CSS = `
 }`;
 
 export function ActionQueueWidget({ data, loading }: {
-  data: { items: QueueBooking[]; verifications?: VerificationTask[] } | null;
+  data: { items: QueueBooking[]; verifications?: VerificationTask[]; coordinations?: CoordinationTask[] } | null;
   loading: boolean;
 }) {
   const today = berlinTodayStr();
@@ -756,6 +766,24 @@ export function ActionQueueWidget({ data, loading }: {
     action: { label: '✅ Verifizieren', href: `/admin/kunden/${v.id}`, color: C.purple, weight: 0 },
     sortDate: '',
     bucket: 0,
+  }));
+
+  // Abhol-/Rückgabe-Terminabsprache: mit dem Kunden eine Uhrzeit ausmachen.
+  // Fällig ab ≤ 48h vor dem Abhol- bzw. Rückgabetag (Server berechnet das
+  // Fenster). weight 1 → direkt nach den Verifizierungen, über den
+  // Standard-Buchungsaufgaben.
+  const coordinationRows: QueueRow[] = (data?.coordinations ?? []).map((c) => ({
+    key: `coord-${c.type}-${c.id}`,
+    title: `${c.customer_name || 'Kunde'} · ${c.type === 'pickup' ? 'Abholung' : 'Rückgabe'} ${formatDate(c.due_date)}`,
+    subtitle: c.product_name || 'Buchung',
+    action: {
+      label: c.type === 'pickup' ? '📞 Abholtermin vereinbaren' : '📞 Rückgabetermin vereinbaren',
+      href: `/admin/buchungen/${c.id}`,
+      color: C.cyan,
+      weight: 1,
+    },
+    sortDate: c.due_date,
+    bucket: bucketForDays(daysUntilDue(c.due_date, today)),
   }));
 
   const bookingRows: QueueRow[] = (data?.items ?? [])
@@ -806,7 +834,7 @@ export function ActionQueueWidget({ data, loading }: {
   // innerhalb eines Buckets nach Datum, dann nach Dringlichkeit (weight).
   // Verifizierungen haben leeres sortDate + weight 0 → stehen im Heute-Bucket
   // ganz oben.
-  const rows: QueueRow[] = [...verificationRows, ...bookingRows]
+  const rows: QueueRow[] = [...verificationRows, ...coordinationRows, ...bookingRows]
     .filter((r) => !doneIds.has(r.key))
     .sort((x, y) =>
       x.bucket - y.bucket ||
@@ -1068,7 +1096,7 @@ export function WidgetRenderer({ widgetId, data, loading }: {
 
   // Aufgaben-Queue (Direktlinks zur nächsten Aktion)
   if (widgetId === 'action_queue') {
-    return <ActionQueueWidget data={widgetData as { items: QueueBooking[]; verifications?: VerificationTask[] } | null} loading={loading} />;
+    return <ActionQueueWidget data={widgetData as { items: QueueBooking[]; verifications?: VerificationTask[]; coordinations?: CoordinationTask[] } | null} loading={loading} />;
   }
 
   // Camera utilization widget
