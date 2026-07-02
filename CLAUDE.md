@@ -3433,6 +3433,29 @@ Admin-Test-Besuche der Live-Seite verfälschten die Analytics. Toggle in `/admin
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
 Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
 
+### Blog-Übersicht serverseitig gerendert (SSR + ISR, Stand 2026-07-02)
+Die Blog-**Übersicht** `/blog` holte ihre Artikel bisher client-seitig (`app/blog/BlogOverview.tsx`
+per `useEffect` → `fetch('/api/blog/posts')`) — im initialen HTML stand nur der Spinner
+„Artikel werden geladen...". Crawler/KI-Bots ohne JS sahen die Artikelliste nicht (SEO-Lücke).
+Jetzt wird **Seite 1** server-gerendert, sodass Titel + Teaser bereits im HTML stehen.
+- **`app/blog/page.tsx`** ist jetzt eine `async` Server-Komponente mit `export const revalidate = 300`
+  (ISR — neue veröffentlichte Artikel erscheinen ohne Rebuild, spätestens nach 5 Min). Lädt Seite 1
+  der Artikel + Kategorien direkt via `createServiceClient()` (`lib/supabase.ts`, gleiche Query/Filter
+  wie `app/api/blog/posts/route.ts`, `status='published'`, limit 9). Defensiv in try/catch (leere
+  Arrays bei DB-Problem, analog `app/sitemap.ts`). Reicht `initialPosts`/`initialTotalPages`/
+  `initialCategories` als Props durch. `metadata`-Export bleibt.
+- **`app/blog/BlogOverview.tsx`** bleibt Client-Komponente (Filter/Pagination/saisonales Hero),
+  initialisiert seinen State jetzt aus den Server-Props (`loading` initial `false` → kein Spinner
+  im HTML). Ein `useRef`-„didMount"-Guard überspringt den ersten Client-Fetch (Daten kommen schon
+  vom Server, kein Doppel-Flash); spätere `page`/`activeCat`-Wechsel laden wie bisher über
+  `/api/blog/posts`. Kategorien werden nur nachgeladen, wenn der Server keine mitgeliefert hat.
+  `Post`/`Category`-Interfaces sind jetzt exportiert (von `page.tsx` wiederverwendet).
+- **Bewusst NICHT geändert:** Die Artikel-Detailseite `app/blog/[slug]/page.tsx` war schon SSR
+  (direkte Supabase-Query, `generateMetadata`, JSON-LD, server-seitige View-Zählung) — **kein ISR**
+  ergänzt, weil das die `headers()`-basierte `trackBlogView`-Zählung still brechen würde.
+  Auto-Generierung/-Publishing (Crons), `/api/blog/posts` (weiter für Client-Pagination) und
+  `app/sitemap.ts` unberührt.
+
 ### Kernfunktionen
 - **Redaktionsplan** (`/admin/blog/zeitplan`): Aufklappbare Karten mit editierbarem Titel, ausführlichem KI-Prompt, Keywords, Ton, Länge, Kategorie
 - **KI-Themenplanung:** Generiert Themen mit detaillierten Prompts im Hintergrund (Fenster kann geschlossen werden)

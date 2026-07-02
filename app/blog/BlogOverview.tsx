@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { SeasonalImage } from '@/lib/seasonal-themes';
 
-interface Post {
+export interface Post {
   id: string; title: string; slug: string; excerpt: string;
   featured_image: string | null; featured_image_alt: string;
   tags: string[]; author: string; reading_time_min: number;
@@ -13,28 +13,49 @@ interface Post {
   blog_categories?: { id: string; name: string; slug: string; color: string } | null;
 }
 
-interface Category {
+export interface Category {
   id: string; name: string; slug: string; color: string;
 }
 
-export default function BlogOverview() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+interface BlogOverviewProps {
+  initialPosts?: Post[];
+  initialTotalPages?: number;
+  initialCategories?: Category[];
+}
+
+export default function BlogOverview({
+  initialPosts = [],
+  initialTotalPages = 1,
+  initialCategories = [],
+}: BlogOverviewProps) {
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [activeCat, setActiveCat] = useState('');
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(initialTotalPages);
+  // Startet ohne Spinner: Seite 1 kommt bereits server-gerendert im HTML an.
+  const [loading, setLoading] = useState(false);
   const [seasonalImage, setSeasonalImage] = useState<SeasonalImage | null>(null);
+  // Ueberspringt den ersten Client-Fetch, weil die Initialdaten schon vom Server kommen.
+  const didMount = useRef(false);
 
   useEffect(() => {
-    fetch('/api/admin/blog/categories').then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    // Kategorien nur nachladen, wenn der Server keine mitgeliefert hat.
+    if (initialCategories.length === 0) {
+      fetch('/api/admin/blog/categories').then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    }
     fetch('/api/seasonal-images?zone=blog')
       .then((r) => r.json())
       .then((d) => { if (d.image) setSeasonalImage(d.image); })
       .catch(() => {});
-  }, []);
+  }, [initialCategories.length]);
 
   useEffect(() => {
+    // Erster Render nutzt die server-gelieferten Initialdaten (Seite 1, keine Kategorie).
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: '9' });
     if (activeCat) params.set('category', activeCat);
