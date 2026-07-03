@@ -490,14 +490,20 @@ export default function CheckoutPage() {
   // Cart-Level-Rabatt (Aktionen mit applies_to_cart=true) — gilt auf den
   // Gesamtbetrag aller Items minus Item-Rabatte. Hoechster gewinnt (kein
   // Stacking, weil sonst >100 % moeglich waere).
-  const cartTotalNetItems = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0) - itemDiscountAmount;
+  // Originalpreis der rabattierbaren Positionen = Miete + Zubehör. Der
+  // Haftungsschutz (in cartTotal enthalten) darf NICHT rabattiert werden —
+  // analog zum Einzel-Buchungsflow (calcBreakdown: Basis = Miete + Zubehör,
+  // Haftung/Versand außen vor).
+  const cartProductTotal = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0);
+  const cartTotalNetItems = cartProductTotal - itemDiscountAmount;
   const cartLevelDiscountAmount = calcCartLevelDiscount(cartTotalNetItems, productDiscounts);
 
   // Sonderkondition (Kunden-Rabatt) ERSETZT alle anderen Auto-Rabatte: greift
   // sie, gelten Aktion/Mengen-/Frühbucher-/Treuerabatt NICHT (exklusiv). Sie
-  // wird additiv auf den Originalpreis (cartTotal) gerechnet. Coupon danach.
+  // wird additiv auf den Originalpreis (Miete + Zubehör, OHNE Haftung)
+  // gerechnet. Coupon danach.
   const specialActive = specialPercent > 0;
-  const specialDiscountAmount = specialActive ? Math.round(cartTotal * specialPercent) / 100 : 0;
+  const specialDiscountAmount = specialActive ? Math.round(cartProductTotal * specialPercent) / 100 : 0;
 
   const productDiscountAmount = specialActive ? 0 : itemDiscountAmount + cartLevelDiscountAmount;
   // productDiscountLabel für zukünftige Nutzung
@@ -513,16 +519,17 @@ export default function CheckoutPage() {
     productDiscounts,
   );
 
-  // Auto-Rabatte stapeln ADDITIV auf den Originalpreis (cartTotal): jeder
-  // Prozentsatz wird auf den vollen Betrag gerechnet und summiert, z.B.
-  // Aktion 25% + Frühbucher 5% + Mengen 10% = 40% vom Originalpreis. Eine
-  // `not_combinable`-Aktion blockt weiterhin alle Auto-Rabatte.
+  // Auto-Rabatte stapeln ADDITIV auf den Originalpreis (Miete + Zubehör, OHNE
+  // Haftung): jeder Prozentsatz wird auf cartProductTotal gerechnet und
+  // summiert, z.B. Aktion 25% + Frühbucher 5% + Mengen 10% = 40% vom
+  // Produktpreis. Eine `not_combinable`-Aktion blockt weiterhin alle
+  // Auto-Rabatte.
 
   // Duration discount: based on max rental days across all items
   const maxDays = items.reduce((m, it) => Math.max(m, it.days), 0);
   const durationMatch = calcDurationDiscount(maxDays, durationDiscounts);
   const durationDiscountAmount = !actionBlocksAutoDiscounts && !specialActive && durationMatch
-    ? Math.round(cartTotal * durationMatch.discount_percent) / 100
+    ? Math.round(cartProductTotal * durationMatch.discount_percent) / 100
     : 0;
 
   // Frühbucherrabatt: kleinster Vorlauf aller Positionen (konservativ),
@@ -535,21 +542,22 @@ export default function CheckoutPage() {
     ? calcEarlyBirdDiscount(earlyBirdWeeks, earlyBirdDiscounts)
     : null;
   const earlyBirdDiscountAmount = earlyBirdMatch
-    ? Math.round(cartTotal * earlyBirdMatch.discount_percent) / 100
+    ? Math.round(cartProductTotal * earlyBirdMatch.discount_percent) / 100
     : 0;
 
-  // Loyalty discount: additiv auf den Originalpreis
+  // Loyalty discount: additiv auf den Originalpreis (Miete + Zubehör)
   const loyaltyMatch = !actionBlocksAutoDiscounts && !specialActive && user
     ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts)
     : null;
   const loyaltyDiscountAmount = loyaltyMatch
-    ? Math.round(cartTotal * loyaltyMatch.discount_percent) / 100
+    ? Math.round(cartProductTotal * loyaltyMatch.discount_percent) / 100
     : 0;
 
-  // Safety-Cap: Summe der Auto-Rabatte darf den Originalpreis nicht übersteigen
+  // Safety-Cap: Summe der Auto-Rabatte darf den Produktpreis (Miete + Zubehör)
+  // nicht übersteigen — der Haftungsschutz bleibt immer voll bestehen
   // (additive Prozente könnten sonst >100% ergeben). Coupon danach auf Rest.
   const autoDiscountRaw = productDiscountAmount + durationDiscountAmount + earlyBirdDiscountAmount + loyaltyDiscountAmount + specialDiscountAmount;
-  const autoDiscountCapped = Math.min(autoDiscountRaw, cartTotal);
+  const autoDiscountCapped = Math.min(autoDiscountRaw, cartProductTotal);
   const afterAutoDiscounts = Math.max(0, cartTotal - autoDiscountCapped);
 
   // ── Coupon discount (on remainder after auto-discounts) ───────────────────
