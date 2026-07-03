@@ -34,7 +34,7 @@ interface LiveData {
 }
 interface TodayData {
   total_views: number; unique_visitors: number; sessions: number;
-  hourly: number[]; top_pages: { path: string; views: number }[];
+  hourly: number[]; hourly_cookieless?: number[]; top_pages: { path: string; views: number }[];
   devices: { desktop: number; mobile: number; tablet: number };
 }
 interface HistoryData { history: { date: string; views: number; unique_visitors: number; sessions: number }[] }
@@ -218,27 +218,59 @@ function BarChart({ data, color = C.cyan, height = 80 }: { data: number[]; color
   );
 }
 
-function HourlyChart({ data }: { data: number[] }) {
-  const max = Math.max(...data, 1);
+/**
+ * Stunden-Balkendiagramm. `data` = Aufrufe MIT Cookie-Zustimmung (cyan).
+ * Optional `cookieless` = Besuche OHNE Cookies (grün) — wird als eigener
+ * Segment auf denselben Balken gestapelt. Ohne `cookieless` verhält sich das
+ * Diagramm wie zuvor (nur cyan, keine Legende).
+ */
+function HourlyChart({ data, cookieless }: { data: number[]; cookieless?: number[] }) {
+  const hasCookieless = Array.isArray(cookieless);
+  const green = cookieless ?? [];
+  const totals = data.map((v, i) => v + (green[i] ?? 0));
+  const max = Math.max(...totals, 1);
   const h = 120;
+  const barH = h - 16;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: h }}>
-        {data.map((v, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            {v > 0 && (
-              <div style={{ fontSize: 9, fontWeight: 700, color: C.cyan, lineHeight: 1 }}>{v}</div>
-            )}
-            <div
-              style={{
-                width: '100%',
-                height: Math.max(2, (v / max) * (h - 16)),
-                background: `linear-gradient(180deg, ${C.cyan}, ${C.cyan}55)`,
-                borderRadius: '3px 3px 0 0',
-              }}
-            />
-          </div>
-        ))}
+        {data.map((v, i) => {
+          const g = green[i] ?? 0;
+          const total = v + g;
+          const cyanH = v > 0 ? Math.max(2, (v / max) * barH) : 0;
+          const greenH = g > 0 ? Math.max(2, (g / max) * barH) : 0;
+          return (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              {total > 0 && (
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, lineHeight: 1 }}>{total}</div>
+              )}
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                {greenH > 0 && (
+                  <div
+                    title={`${i}:00 — ohne Cookies: ${g}`}
+                    style={{
+                      width: '100%',
+                      height: greenH,
+                      background: `linear-gradient(180deg, ${C.green}, ${C.green}55)`,
+                      borderRadius: '3px 3px 0 0',
+                    }}
+                  />
+                )}
+                {cyanH > 0 && (
+                  <div
+                    title={`${i}:00 — mit Cookies: ${v}`}
+                    style={{
+                      width: '100%',
+                      height: cyanH,
+                      background: `linear-gradient(180deg, ${C.cyan}, ${C.cyan}55)`,
+                      borderRadius: greenH > 0 ? 0 : '3px 3px 0 0',
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div style={{ display: 'flex', marginTop: 4 }}>
         {data.map((_, i) => (
@@ -247,6 +279,16 @@ function HourlyChart({ data }: { data: number[] }) {
           </div>
         ))}
       </div>
+      {hasCookieless && (
+        <div style={{ display: 'flex', gap: 16, marginTop: 10, justifyContent: 'center', fontSize: 11, color: C.textDim }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: C.cyan }} /> Mit Cookies
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: C.green }} /> Ohne Cookies
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1336,7 +1378,7 @@ export default function AnalyticsPage() {
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>{getViewsChartTitle(filters.timeRange)}</div>
             {filters.timeRange === 'heute' || filters.timeRange === '24h' ? (
               todayData ? (
-                <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} />
+                <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} cookieless={todayData.hourly_cookieless ?? Array(24).fill(0)} />
               ) : (
                 <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
               )

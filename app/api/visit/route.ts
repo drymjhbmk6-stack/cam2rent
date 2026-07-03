@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { getBerlinDateString } from '@/lib/timezone';
+import { getBerlinDateString, getBerlinHour } from '@/lib/timezone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,13 +32,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = createServiceClient();
+    const now = new Date();
+    const berlinDay = getBerlinDateString(now);
     const { error } = await supabase.rpc('increment_site_visit', {
-      p_day: getBerlinDateString(),
+      p_day: berlinDay,
     });
     // Defensiv: fehlt die Migration (Tabelle/RPC), wird der Besuch nur nicht
     // gezählt — die App bleibt unberührt.
     if (error && !/function|does not exist|schema cache|PGRST202/i.test(error.message)) {
       console.error('[visit] increment failed:', error.message);
+    }
+
+    // Stunden-Auflösung für das "nach Stunde"-Balkendiagramm (Grün = ohne
+    // Cookies). Eigene Migration `supabase-site-visits-hourly.sql` — defensiv,
+    // falls noch nicht ausgeführt.
+    const { error: hErr } = await supabase.rpc('increment_site_visit_hourly', {
+      p_day: berlinDay,
+      p_hour: getBerlinHour(now),
+    });
+    if (hErr && !/function|does not exist|schema cache|PGRST202/i.test(hErr.message)) {
+      console.error('[visit] hourly increment failed:', hErr.message);
     }
   } catch (err) {
     console.error('[visit] increment threw:', err instanceof Error ? err.message : err);

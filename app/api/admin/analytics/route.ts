@@ -191,10 +191,42 @@ export async function GET(req: NextRequest) {
     const uniqueVisitors = new Set(rows.map((r) => r.visitor_id)).size;
     const sessions = new Set(rows.map((r) => r.session_id)).size;
 
-    // Hourly distribution — Stunde in Europe/Berlin.
+    // Hourly distribution — Stunde in Europe/Berlin. `hourly` zählt die
+    // Seitenaufrufe MIT Cookie-Zustimmung (aus `page_views`).
     const hourly = Array(24).fill(0);
+    // Konsent-Sessions pro Stunde (distinct session_id) — Basis, um die
+    // cookielosen Besuche NICHT doppelt zu zählen.
+    const consentedSessionsByHour: Set<string>[] = Array.from({ length: 24 }, () => new Set<string>());
     for (const row of rows) {
-      hourly[getBerlinHour(row.created_at)]++;
+      const h = getBerlinHour(row.created_at);
+      hourly[h]++;
+      if (row.session_id) consentedSessionsByHour[h].add(row.session_id);
+    }
+
+    // Cookielose Besuche pro Stunde (ohne Cookie-Zustimmung) für den grünen
+    // Balken-Anteil. Quelle: `site_visits_hourly` (zählt JEDEN Besuch, eine
+    // Session = ein Besuch). "Ohne Cookies" = alle Besuche der Stunde minus die
+    // Sessions, die zugestimmt haben (die stecken bereits im cyanen `hourly`).
+    // Defensiv bei fehlender Migration → alles 0.
+    const hourlyCookieless = Array(24).fill(0);
+    {
+      const startDay = getBerlinDateKey(parsed.startISO);
+      const endDay = parsed.endISO ? getBerlinDateKey(parsed.endISO) : getBerlinDateString();
+      const { data: cvh } = await supabase
+        .from('site_visits_hourly')
+        .select('day, hour, visits')
+        .gte('day', startDay)
+        .lte('day', endDay);
+      if (cvh) {
+        const totalByHour = Array(24).fill(0);
+        for (const row of cvh) {
+          const h = Number(row.hour);
+          if (h >= 0 && h <= 23) totalByHour[h] += Number(row.visits) || 0;
+        }
+        for (let h = 0; h < 24; h++) {
+          hourlyCookieless[h] = Math.max(0, totalByHour[h] - consentedSessionsByHour[h].size);
+        }
+      }
     }
 
     // Top pages (ohne Admin/API-Pfade — die sind ohnehin nicht getrackt,
@@ -223,6 +255,7 @@ export async function GET(req: NextRequest) {
       unique_visitors: uniqueVisitors,
       sessions,
       hourly,
+      hourly_cookieless: hourlyCookieless,
       top_pages: topPages,
       devices: {
         desktop: Math.round((desktop / total) * 100),

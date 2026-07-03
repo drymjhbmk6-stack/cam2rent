@@ -3473,6 +3473,42 @@ Admin-Test-Besuche der Live-Seite verfälschten die Analytics. Toggle in `/admin
 - **UI:** `components/admin/AnalyticsOptOutSection.tsx` — Toggle-Switch. Pro Browser einmalig zu aktivieren (Hinweis im UI). Bei Cache-/Cookie-Löschung muss erneut aktiviert werden.
 - **Was nicht passiert:** Bestehende Datensätze in `page_views` werden NICHT rückwirkend gefiltert — nur neue Besuche ab Aktivierung werden ausgeschlossen.
 
+### Stunden-Balkendiagramm: cookielose Besuche in Grün (Stand 2026-07-03)
+Das „Aufrufe heute nach Stunde"-Balkendiagramm (`/admin/analytics`, Tab
+„Besucher & Marketing", Range `heute`/`24h`) zeigte nur die Aufrufe MIT
+Cookie-Zustimmung (aus `page_views`, § 25 TTDSG consent-gated). Bei niedriger
+Consent-Rate war es fast leer, obwohl der cookielose Zähler („Besucher heute
+(mit/ohne Cookies)") Traffic auswies. Jetzt ist jeder Balken **gestapelt**:
+cyan = „Mit Cookies" (unverändert `page_views` pro Stunde), grün = „Ohne
+Cookies" (cookielose Besuche pro Stunde). Legende + Hover-Tooltips pro Segment.
+- **Neue Migration `supabase/supabase-site-visits-hourly.sql`** (idempotent):
+  Tabelle `site_visits_hourly (day DATE, hour SMALLINT, visits BIGINT,
+  PK(day,hour))` + RPC `increment_site_visit_hourly(p_day, p_hour)`. Gleiche
+  DSGVO-Logik wie `site_visits` — **KEIN Personenbezug** (keine IP/visitor_id/
+  Cookie), reine anonyme Aggregat-Statistik, consent-frei. `site_visits`
+  (täglich) bleibt Quelle der Wahrheit für die Startseiten-/StatCard-Zähler;
+  die Stunden-Tabelle läuft parallel nur fürs Diagramm.
+- **`app/api/visit/route.ts`** (POST, cookieloser Zähler): ruft nach
+  `increment_site_visit` zusätzlich `increment_site_visit_hourly` mit der
+  Berlin-Stunde. Defensiv bei fehlender Migration (RPC-Fehler wird geschluckt).
+- **`app/api/admin/analytics/route.ts`** (`type=today`): baut
+  `hourly_cookieless[24]`. „Ohne Cookies" pro Stunde = `max(0,
+  site_visits_hourly[Stunde] − konsentierte Sessions[Stunde])` — die
+  konsentierten Sessions (distinct `session_id` aus `page_views` pro
+  Berlin-Stunde) stecken bereits im cyanen `hourly` und werden abgezogen, damit
+  nicht doppelt gezählt wird (`site_visits` zählt JEDEN Besuch inkl. der
+  konsentierten). Defensiv → alles 0 bei fehlender Tabelle. `hourly`
+  (page_views-Aufrufe) unverändert → CSV-Export/Tooltips unberührt.
+- **`app/admin/analytics/page.tsx`:** `HourlyChart` nimmt optional
+  `cookieless?: number[]` und rendert den grünen Segment gestapelt (grün oben,
+  cyan unten) + Legende. Ohne die Prop (z.B. Blog-Trend-Chart) unverändert.
+- **Wichtig:** Stunden-Daten beginnen ab Migration — vergangene cookielose
+  Besuche sind nicht rückwirkend importierbar (`site_visits` kennt keine
+  Stunde). Der grüne Balken füllt sich also erst ab Migrations-Datum vorwärts.
+- **Go-Live TODO:** Migration `supabase/supabase-site-visits-hourly.sql`
+  ausführen. Ohne sie läuft alles wie zuvor (nur cyan; `hourly_cookieless` = 0,
+  Legende zeigt „Ohne Cookies" leer).
+
 ## Blog-System (KI-automatisiert)
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
 Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
