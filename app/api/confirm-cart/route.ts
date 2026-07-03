@@ -354,6 +354,9 @@ export async function POST(req: NextRequest) {
     let r_shippingMethod = shippingMethod;
     let r_discountAmount = discountAmount;
     let r_couponCode = couponCode;
+    // Name der greifenden Produktaktion (z.B. "Sommer25") — für die Rechnung.
+    // Kommt aus dem checkout-context; kein echter Gutschein-Code.
+    let r_productDiscountLabel: string | null = null;
     let r_productDiscount = productDiscount;
     let r_durationDiscount = durationDiscount;
     let r_earlyBirdDiscount = earlyBirdDiscount;
@@ -390,6 +393,9 @@ export async function POST(req: NextRequest) {
           r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
           r_discountAmount = ctx.discountAmount ?? r_discountAmount;
           r_couponCode = ctx.couponCode ?? r_couponCode;
+          r_productDiscountLabel = (typeof ctx.productDiscountLabel === 'string' && ctx.productDiscountLabel.trim())
+            ? ctx.productDiscountLabel.trim()
+            : r_productDiscountLabel;
           r_productDiscount = ctx.productDiscount ?? r_productDiscount;
           r_durationDiscount = ctx.durationDiscount ?? r_durationDiscount;
           r_earlyBirdDiscount = ctx.earlyBirdDiscount ?? r_earlyBirdDiscount;
@@ -820,7 +826,9 @@ export async function POST(req: NextRequest) {
         ...(invoiceOverrideCart
           ? { invoice_name: invoiceOverrideCart.invoice_name, invoice_address: invoiceOverrideCart.invoice_address }
           : {}),
-        coupon_code: gi === 0 ? (r_couponCode || null) : null,
+        // Echter Gutschein-Code hat Vorrang; sonst der Aktionsname (z.B.
+        // "Sommer25"), damit die Rechnung die Rabatt-Zeile korrekt beschriftet.
+        coupon_code: gi === 0 ? (r_couponCode || r_productDiscountLabel || null) : null,
         discount_amount: groupDiscount,
         duration_discount: groupDurationDiscount,
         loyalty_discount: groupLoyaltyDiscount,

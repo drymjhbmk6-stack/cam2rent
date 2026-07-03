@@ -61,7 +61,13 @@ export interface InvoiceData {
   couponDiscount?: number;     // Aktions-/Coupon-Rabatt (booking.discount_amount)
   durationDiscount?: number;   // Mietdauer-Rabatt (booking.duration_discount)
   loyaltyDiscount?: number;    // Stammkunden-Rabatt (booking.loyalty_discount)
-  /** Optional: Gutschein-Code zur Beschriftung der Rabatt-Zeile */
+  earlyBirdDiscount?: number;  // Frühbucherrabatt (booking.early_bird_discount)
+  specialDiscount?: number;    // Sonderkondition (booking.special_discount)
+  /** Basis für die %-Beschriftung der Rabatt-Zeilen (Miete + Zubehör, ohne
+   *  Haftung) — analog Checkout. Wenn nicht gesetzt, wird die Zwischensumme
+   *  als Näherung genutzt. */
+  discountBase?: number;
+  /** Optional: Gutschein-Code bzw. Aktionsname zur Beschriftung der Rabatt-Zeile */
   couponCode?: string;
   priceTotal: number;
   deposit: number;
@@ -416,21 +422,32 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   // Komponenten. Set-Bundle/Anpassung = Differenz zwischen Gesamt-Rabatt und
   // den explizit gespeicherten Rabatt-Komponenten (= "Rest", den der Bundle-
   // Preis automatisch erzeugt).
-  const rabattProzent = zwischensumme > 0 ? Math.round((rabatt / zwischensumme) * 100) : 0;
+  // Basis für die %-Beschriftung (Miete + Zubehör, ohne Haftung — analog
+  // Checkout). Fallback: Zwischensumme.
+  const discBase = (data.discountBase && data.discountBase > 0) ? data.discountBase : zwischensumme;
+  const pctOf = (v: number) => (discBase > 0 ? Math.round((v / discBase) * 100) : 0);
   const couponPart = Math.max(0, Math.round((data.couponDiscount ?? 0) * 100) / 100);
   const durationPart = Math.max(0, Math.round((data.durationDiscount ?? 0) * 100) / 100);
+  const earlyBirdPart = Math.max(0, Math.round((data.earlyBirdDiscount ?? 0) * 100) / 100);
   const loyaltyPart = Math.max(0, Math.round((data.loyaltyDiscount ?? 0) * 100) / 100);
-  const explicitSum = Math.round((couponPart + durationPart + loyaltyPart) * 100) / 100;
+  const specialPart = Math.max(0, Math.round((data.specialDiscount ?? 0) * 100) / 100);
+  const explicitSum = Math.round((couponPart + durationPart + earlyBirdPart + loyaltyPart + specialPart) * 100) / 100;
+  // Rest, den die explizit gespeicherten Komponenten nicht abdecken (z.B.
+  // Set-Bundle-Preis oder Rabatt-Feld, dessen Migration noch aussteht).
   const bundlePart = Math.max(0, Math.round((rabatt - explicitSum) * 100) / 100);
+  // Einzelne Rabatt-Zeilen — Reihenfolge wie im Checkout (Aktion → Mietdauer →
+  // Frühbucher → Stammkunde → Sonderkondition → Rest).
   const rabattParts: { label: string; value: number }[] = [];
   if (couponPart > 0) {
     rabattParts.push({
-      label: data.couponCode ? `Gutschein ${data.couponCode}` : 'Aktion / Gutschein',
+      label: data.couponCode ? `Rabatt (${data.couponCode})` : 'Rabatt',
       value: couponPart,
     });
   }
-  if (durationPart > 0) rabattParts.push({ label: 'Mietdauer', value: durationPart });
-  if (loyaltyPart > 0) rabattParts.push({ label: 'Stammkunde', value: loyaltyPart });
+  if (durationPart > 0) rabattParts.push({ label: 'Mietdauer-Rabatt', value: durationPart });
+  if (earlyBirdPart > 0) rabattParts.push({ label: `Frühbucherrabatt (${pctOf(earlyBirdPart)} %)`, value: earlyBirdPart });
+  if (loyaltyPart > 0) rabattParts.push({ label: 'Stammkunden-Rabatt', value: loyaltyPart });
+  if (specialPart > 0) rabattParts.push({ label: `Sonderkondition (${pctOf(specialPart)} %)`, value: specialPart });
   if (bundlePart > 0.01) rabattParts.push({ label: 'Set-Bundle / Anpassung', value: bundlePart });
 
   const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
@@ -558,23 +575,14 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             <Text style={s.sumLabel}>Zwischensumme:</Text>
             <Text style={s.sumValue}>{fmtEuro(zwischensumme)}</Text>
           </View>
-          {rabatt > 0 && (
-            <>
-              <View style={s.sumRow}>
-                <Text style={s.sumLabel}>
-                  Rabatt{rabattProzent > 0 ? ` (${rabattProzent} %)` : ''}{data.couponCode ? ` (${data.couponCode})` : ''}:
-                </Text>
-                <Text style={s.sumValue}>-{fmtEuro(rabatt)}</Text>
-              </View>
-              {rabattParts.length > 0 && (
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -1, marginBottom: 2 }}>
-                  <Text style={{ fontSize: 8, color: C.grayMid, width: 207, textAlign: 'right' }}>
-                    {rabattParts.map((p) => `${p.label}: -${fmtEuro(p.value)}`).join('  ·  ')}
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
+          {/* Rabatte einzeln beschriftet — je Komponente eine Zeile (wie im
+              Checkout). Die Summe der Zeilen entspricht exakt dem Gesamt-Rabatt. */}
+          {rabattParts.map((p, i) => (
+            <View style={s.sumRow} key={i}>
+              <Text style={s.sumLabel}>{p.label}:</Text>
+              <Text style={s.sumValue}>-{fmtEuro(p.value)}</Text>
+            </View>
+          ))}
           {aufpreis > 0 && (
             <View style={s.sumRow}>
               <Text style={s.sumLabel}>Anpassung:</Text>

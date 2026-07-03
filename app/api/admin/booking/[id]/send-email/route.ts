@@ -141,6 +141,15 @@ export async function POST(
             (booking.discount_amount ?? 0)
             + (booking.duration_discount ?? 0)
             + (booking.loyalty_discount ?? 0),
+          // Rabatt-Komponenten für die einzeln beschrifteten Rechnungs-Zeilen
+          // (Aktion / Frühbucher / Sonderkondition). Defensiv: fehlt die
+          // Spalte early_bird_discount (Migration ausstehend), bleibt der Wert 0.
+          couponDiscount: booking.discount_amount ?? 0,
+          durationDiscount: booking.duration_discount ?? 0,
+          loyaltyDiscount: booking.loyalty_discount ?? 0,
+          earlyBirdDiscount: booking.early_bird_discount ?? 0,
+          specialDiscount: booking.special_discount ?? 0,
+          discountBase: (booking.price_rental ?? 0) + (booking.price_accessories ?? 0),
           couponCode: booking.coupon_code ?? undefined,
           priceTotal: booking.price_total ?? 0,
           deposit: booking.deposit ?? 0,

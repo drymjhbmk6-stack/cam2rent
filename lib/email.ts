@@ -241,17 +241,30 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
   // Defensiv: schlaegt das fehl, greift im PDF der Fallback-Pfad.
   let cameraLines: InvoiceData['cameraLines'];
   let accessoryLines: InvoiceData['accessoryLines'];
+  // Rabatt-Aufschlüsselung für die einzeln beschrifteten Rechnungs-Zeilen
+  // (Aktion / Frühbucher / Sonderkondition ...). Defensiv: fehlt die Spalte
+  // early_bird_discount (Migration ausstehend), bleibt der Wert 0.
+  let discountBreakdown: Partial<InvoiceData> = {};
   try {
     const sb = createServiceClient();
     const { data: bk } = await sb
       .from('bookings')
-      .select('product_name, price_rental, price_accessories, days, accessory_items, accessories')
+      .select('*')
       .eq('id', data.bookingId)
       .maybeSingle();
     if (bk) {
       const lines = await computeInvoiceLines(sb, bk);
       cameraLines = lines.cameraLines;
       accessoryLines = lines.accessoryLines;
+      discountBreakdown = {
+        couponDiscount: Number(bk.discount_amount ?? 0),
+        durationDiscount: Number(bk.duration_discount ?? 0),
+        loyaltyDiscount: Number(bk.loyalty_discount ?? 0),
+        earlyBirdDiscount: Number(bk.early_bird_discount ?? 0),
+        specialDiscount: Number(bk.special_discount ?? 0),
+        discountBase: Number(bk.price_rental ?? 0) + Number(bk.price_accessories ?? 0),
+        couponCode: (bk.coupon_code as string) ?? data.couponCode,
+      };
     }
   } catch (err) {
     console.error('[email] computeInvoiceLines fehlgeschlagen:', err);
@@ -283,6 +296,9 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
     taxMode: data.taxMode,
     taxRate: data.taxRate,
     ustId: data.ustId,
+    // Rabatt-Komponenten (Aktion / Frühbucher / Sonderkondition) — überschreibt
+    // couponDiscount/couponCode, wenn die Buchung geladen werden konnte.
+    ...discountBreakdown,
   };
   const pdfBuffer = await renderToBuffer(
     createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>

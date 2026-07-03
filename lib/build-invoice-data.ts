@@ -165,6 +165,13 @@ export async function buildInvoiceData(
     couponDiscount: (booking.discount_amount as number) ?? 0,
     durationDiscount: (booking.duration_discount as number) ?? 0,
     loyaltyDiscount: (booking.loyalty_discount as number) ?? 0,
+    // Frühbucherrabatt + Sonderkondition — defensiv: fehlt die Spalte
+    // (Migration ausstehend), ist der Wert einfach 0.
+    earlyBirdDiscount: (booking.early_bird_discount as number) ?? 0,
+    specialDiscount: (booking.special_discount as number) ?? 0,
+    // Basis für die %-Beschriftung der Rabatt-Zeilen (Miete + Zubehör, ohne
+    // Haftung) — analog Checkout.
+    discountBase: ((booking.price_rental as number) ?? 0) + ((booking.price_accessories as number) ?? 0),
     couponCode: (booking.coupon_code as string) ?? undefined,
     priceTotal: (booking.price_total as number) ?? 0,
     deposit: (booking.deposit as number) ?? 0,

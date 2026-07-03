@@ -17,7 +17,7 @@ import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount, getActiveSpecialDiscountPercent } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, hasActiveNotCombinableDiscount, getActiveSpecialDiscountPercent } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -506,8 +506,31 @@ export default function CheckoutPage() {
   const specialDiscountAmount = specialActive ? Math.round(cartProductTotal * specialPercent) / 100 : 0;
 
   const productDiscountAmount = specialActive ? 0 : itemDiscountAmount + cartLevelDiscountAmount;
-  // productDiscountLabel für zukünftige Nutzung
-  void productDiscountAmount;
+
+  // Name der greifenden Aktion (z.B. "Sommer25") — für die Beschriftung der
+  // Rabatt-Zeile in der Rechnung. Item-Level-Match bevorzugt (höchster Betrag),
+  // sonst die tatsächlich greifende Cart-Level-Aktion.
+  let productDiscountLabel: string | null = null;
+  if (!specialActive && productDiscountAmount > 0) {
+    let bestItem: { name: string; amount: number } | null = null;
+    for (const item of items) {
+      const ms = getDiscountMatchesForItem(
+        item.productId,
+        item.priceRental,
+        item.priceAccessories,
+        item.accessories ?? [],
+        productDiscounts,
+      );
+      for (const m of ms) {
+        if (m.discount.name && (!bestItem || m.amount > bestItem.amount)) {
+          bestItem = { name: m.discount.name, amount: m.amount };
+        }
+      }
+    }
+    productDiscountLabel = bestItem
+      ? bestItem.name
+      : (getWinningCartLevelDiscount(cartTotalNetItems, productDiscounts)?.name ?? null);
+  }
 
   // Wenn eine greifende Aktion `not_combinable=true` hat, werden Mietdauer-
   // und Stammkunden-Rabatte deaktiviert — der Admin hat die Aktion als
@@ -686,6 +709,7 @@ export default function CheckoutPage() {
             discountAmount: couponDiscountAmount,
             couponCode: appliedCoupon?.code ?? '',
             productDiscount: effectiveProductDiscount,
+            productDiscountLabel: productDiscountLabel ?? '',
             durationDiscount: effectiveDurationDiscount,
             earlyBirdDiscount: effectiveEarlyBirdDiscount,
             loyaltyDiscount: effectiveLoyaltyDiscount,
