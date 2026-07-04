@@ -68,6 +68,7 @@ export default function BlogZeitplanPage() {
   const [showImport, setShowImport] = useState(false);
   const [importDate, setImportDate] = useState(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pastMonths, setPastMonths] = useState(0); // wie viele Monate rückwirkend zusätzlich angezeigt werden
   const [editEntry, setEditEntry] = useState<ScheduleEntry | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const dragCalEntry = useRef<string | null>(null);
@@ -277,7 +278,7 @@ export default function BlogZeitplanPage() {
 
     const months: React.ReactElement[] = [];
 
-    for (let m = 0; m < 7; m++) {
+    for (let m = -pastMonths; m < 7; m++) {
       const baseDate = new Date(today.getFullYear(), today.getMonth() + m, 1);
       const year = baseDate.getFullYear();
       const month = baseDate.getMonth();
@@ -432,7 +433,52 @@ export default function BlogZeitplanPage() {
       );
     }
 
-    return <div>{months}</div>;
+    // Wie viele Monate liegt der früheste Eintrag zurück? (für „Alle anzeigen")
+    let earliestBack = 0;
+    for (const e of schedule) {
+      if (!e.scheduled_date) continue;
+      const [y, mo] = e.scheduled_date.split('-').map(Number);
+      if (!y || !mo) continue;
+      const diff = (today.getFullYear() - y) * 12 + (today.getMonth() - (mo - 1));
+      if (diff > earliestBack) earliestBack = diff;
+    }
+    const hasMorePast = earliestBack > pastMonths;
+
+    return (
+      <div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <button
+            onClick={() => setPastMonths((p) => p + 3)}
+            className="px-3 py-1.5 rounded-lg font-heading font-semibold"
+            style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', fontSize: 12 }}
+          >
+            ← 3 frühere Monate anzeigen
+          </button>
+          {hasMorePast && (
+            <button
+              onClick={() => setPastMonths(earliestBack)}
+              className="px-3 py-1.5 rounded-lg font-heading font-semibold"
+              style={{ background: '#0f172a', color: '#64748b', border: '1px solid #334155', fontSize: 12 }}
+            >
+              Alle bisherigen anzeigen
+            </button>
+          )}
+          {pastMonths > 0 && (
+            <>
+              <button
+                onClick={() => setPastMonths(0)}
+                className="px-3 py-1.5 rounded-lg font-heading font-semibold"
+                style={{ background: 'transparent', color: '#64748b', border: '1px solid #334155', fontSize: 12 }}
+              >
+                Zurücksetzen
+              </button>
+              <span style={{ fontSize: 11, color: '#475569' }}>{pastMonths} {pastMonths === 1 ? 'Monat' : 'Monate'} rückwirkend</span>
+            </>
+          )}
+        </div>
+        {months}
+      </div>
+    );
   }
 
   // ── Edit-Modal (festes Overlay) ───────────────────────────────────────────
