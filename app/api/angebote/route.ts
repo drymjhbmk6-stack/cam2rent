@@ -49,7 +49,20 @@ export async function GET() {
         if (r?.id && r.name) accessory_names[r.id] = r.name;
       }
     }
-    return NextResponse.json({ angebote, accessory_names });
+    // Zeitkritisch: der Handler recomputet bei jedem Origin-Hit mit frischem
+    // `now` (revalidate=0). Nur ein sehr kurzer BROWSER-Cache (kein s-maxage,
+    // Cloudflare bypassed /api/* ohnehin), damit schnelle Wiederholungs-Fetches
+    // auf der Startseite nicht jedes Mal zwei DB-Queries ausloesen. Das
+    // Verkaufsfenster bleibt praktisch unberuehrt (max. 15 s Browser-Lag, und
+    // die Buchungs-Validierung prueft das Fenster ohnehin serverseitig neu).
+    return NextResponse.json(
+      { angebote, accessory_names },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
+        },
+      },
+    );
   } catch (err) {
     console.error('GET /api/angebote error:', err);
     return NextResponse.json({ angebote: [], accessory_names: {} });

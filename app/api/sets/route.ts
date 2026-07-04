@@ -186,7 +186,18 @@ export async function GET(req: NextRequest) {
     const onlyAvailable = req.nextUrl.searchParams.get('available') === 'true';
     const result = onlyAvailable ? allSets.filter((s) => s.available) : allSets;
 
-    return NextResponse.json({ sets: result });
+    // Sets aendern sich selten (nur bei Admin-Edit) — kurzer Browser-Cache
+    // reduziert die Last auf jeder Produkt-Detailseite. Vorbild:
+    // /api/shop-content. (Cloudflare bypassed /api/*, daher wirkt v.a. max-age
+    // im Browser + stale-while-revalidate.)
+    return NextResponse.json(
+      { sets: result },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=30, s-maxage=300, stale-while-revalidate=3600',
+        },
+      },
+    );
   } catch (err) {
     console.error('GET /api/sets error:', err);
     return NextResponse.json({ error: 'Fehler beim Laden der Sets.' }, { status: 500 });

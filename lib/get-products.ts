@@ -2,6 +2,7 @@
  * Zentrale Produktliste: Nur aus DB.
  * Wird von API-Routen und Server-Komponenten genutzt.
  */
+import { cache } from 'react';
 import { createServiceClient } from '@/lib/supabase';
 import { type Product } from '@/data/products';
 import {
@@ -83,23 +84,23 @@ function adminToProduct(
   };
 }
 
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
 /**
- * Lädt alle Produkte aus der DB.
- * Gibt leeres Array zurück wenn DB nicht erreichbar.
+ * admin_config laden (products + kautionTiers). Gibt `null` zurueck, wenn der
+ * Read fehlschlaegt — der Aufrufer behandelt das wie bisher als `return []`.
  */
-export async function getProducts(): Promise<Product[]> {
+async function loadAdminConfig(
+  supabase: ServiceClient,
+): Promise<{ adminProducts: AdminProducts; kautionTiers: KautionTiers } | null> {
   let adminProducts: AdminProducts = {};
   let kautionTiers: KautionTiers = DEFAULT_KAUTION_TIERS;
-  const productsWithUnits = new Set<string>();
-  let supabase: ReturnType<typeof createServiceClient>;
-
   try {
-    supabase = createServiceClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('admin_config')
       .select('key, value')
       .in('key', ['products', 'kautionTiers']);
-
+    if (error) return null;
     if (data) {
       for (const row of data) {
         if (row.key === 'products' && row.value && typeof row.value === 'object') {
@@ -110,6 +111,96 @@ export async function getProducts(): Promise<Product[]> {
         }
       }
     }
+    return { adminProducts, kautionTiers };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Neue Welt: migration_audit (legacy-id → produkte.id) + inventar_units.
+ * Liefert legacyId → aktive Stueckzahl. Best-effort: fehlt eine der Tabellen
+ * (Hybrid-Migrationszustand), kommt eine leere Map zurueck.
+ */
+async function loadNewWorldCount(supabase: ServiceClient): Promise<Map<string, number>> {
+  const newWorldCount = new Map<string, number>();
+  try {
+    // Beide Queries sind voneinander unabhaengig — das produktIdToLegacy-Mapping
+    // wird erst in-memory angewandt. Parallel abfragen.
+    const [auditRes, invRes] = await Promise.all([
+      supabase
+        .from('migration_audit')
+        .select('alte_id, neue_id')
+        .eq('alte_tabelle', 'admin_config.products')
+        .eq('neue_tabelle', 'produkte'),
+      supabase
+        .from('inventar_units')
+        .select('produkt_id, tracking_mode, bestand')
+        .eq('typ', 'kamera')
+        .neq('status', 'ausgemustert'),
+    ]);
+
+    const produktIdToLegacy = new Map<string, string>();
+    for (const row of (auditRes.data ?? []) as Array<{ alte_id: string; neue_id: string }>) {
+      if (row.alte_id && row.neue_id) produktIdToLegacy.set(row.neue_id, row.alte_id);
+    }
+
+    for (const row of (invRes.data ?? []) as Array<{ produkt_id: string | null; tracking_mode?: string | null; bestand?: number | null }>) {
+      if (!row.produkt_id) continue;
+      const legacyId = produktIdToLegacy.get(row.produkt_id);
+      if (!legacyId) continue;
+      // Kameras sind normalerweise individual-getrackt (1 Zeile = 1 Stueck);
+      // Bulk-Bestand defensiv ueber `bestand` aufsummieren.
+      const n = row.tracking_mode === 'bulk' ? Math.max(0, row.bestand ?? 0) : 1;
+      newWorldCount.set(legacyId, (newWorldCount.get(legacyId) ?? 0) + n);
+    }
+  } catch {
+    // migration_audit oder inventar_units fehlen — okay, Fallback greift.
+  }
+  return newWorldCount;
+}
+
+/**
+ * Alte Welt: product_units. Fuer Pre-Migration und Produkte ohne
+ * migration_audit-Eintrag. Liefert legacyId → aktive Stueckzahl.
+ */
+async function loadOldWorldCount(supabase: ServiceClient): Promise<Map<string, number>> {
+  const oldWorldCount = new Map<string, number>();
+  try {
+    const { data: unitRows } = await supabase
+      .from('product_units')
+      .select('product_id')
+      .neq('status', 'retired');
+    if (unitRows) {
+      for (const row of unitRows) {
+        if (row.product_id) {
+          oldWorldCount.set(row.product_id, (oldWorldCount.get(row.product_id) ?? 0) + 1);
+        }
+      }
+    }
+  } catch {
+    // best-effort — Fallback auf Config-Stock.
+  }
+  return oldWorldCount;
+}
+
+/**
+ * Lädt alle Produkte aus der DB.
+ * Gibt leeres Array zurück wenn DB nicht erreichbar.
+ *
+ * Mit `React.cache()` request-scoped memoisiert: mehrfache Aufrufe innerhalb
+ * DESSELBEN Requests (z.B. generateMetadata + Page-Body der Detailseite, oder
+ * getProductBySlug/getProductById) teilen sich EIN Ergebnis. Das ist KEIN
+ * cross-request-Cache — der Live-Bestand wird pro Request frisch gezaehlt, damit
+ * der harte Ueberbuchungsschutz (findCameraOverbookingConflict) nie veraltete
+ * Kapazitaet sieht.
+ */
+export const getProducts = cache(async (): Promise<Product[]> => {
+  const productsWithUnits = new Set<string>();
+
+  let supabase: ServiceClient;
+  try {
+    supabase = createServiceClient();
   } catch {
     return [];
   }
@@ -127,62 +218,17 @@ export async function getProducts(): Promise<Product[]> {
   // (product_units) zurueck — und erst wenn auch dort nichts ist, bleibt der
   // Config-Wert als letzter Fallback (Pre-Inventory-Altbestand). Die beiden
   // Welten werden NICHT summiert (Mirror wuerde sonst doppelt zaehlen).
-  const newWorldCount = new Map<string, number>(); // legacyId → aktive inventar_units
-  const oldWorldCount = new Map<string, number>(); // legacyId → aktive product_units
+  //
+  // admin_config + beide Bestandswelten sind datenunabhaengig → parallel laden.
+  const [cfg, newWorldCount, oldWorldCount] = await Promise.all([
+    loadAdminConfig(supabase),
+    loadNewWorldCount(supabase),
+    loadOldWorldCount(supabase),
+  ]);
 
-  // 1) Neue Welt: migration_audit liefert legacy-id → produkte.id, dann
-  //    inventar_units gegen aktive Stuecke abfragen.
-  try {
-    const { data: auditRows } = await supabase
-      .from('migration_audit')
-      .select('alte_id, neue_id')
-      .eq('alte_tabelle', 'admin_config.products')
-      .eq('neue_tabelle', 'produkte');
-
-    const produktIdToLegacy = new Map<string, string>();
-    for (const row of (auditRows ?? []) as Array<{ alte_id: string; neue_id: string }>) {
-      if (row.alte_id && row.neue_id) produktIdToLegacy.set(row.neue_id, row.alte_id);
-    }
-
-    if (produktIdToLegacy.size > 0) {
-      const { data: invRows } = await supabase
-        .from('inventar_units')
-        .select('produkt_id, tracking_mode, bestand')
-        .eq('typ', 'kamera')
-        .neq('status', 'ausgemustert');
-
-      for (const row of (invRows ?? []) as Array<{ produkt_id: string | null; tracking_mode?: string | null; bestand?: number | null }>) {
-        if (!row.produkt_id) continue;
-        const legacyId = produktIdToLegacy.get(row.produkt_id);
-        if (!legacyId) continue;
-        // Kameras sind normalerweise individual-getrackt (1 Zeile = 1 Stueck);
-        // Bulk-Bestand defensiv ueber `bestand` aufsummieren.
-        const n = row.tracking_mode === 'bulk' ? Math.max(0, row.bestand ?? 0) : 1;
-        newWorldCount.set(legacyId, (newWorldCount.get(legacyId) ?? 0) + n);
-      }
-    }
-  } catch {
-    // migration_audit oder inventar_units fehlen — okay, Fallback unten greift.
-  }
-
-  // 2) Alte Welt: product_units. Fuer Pre-Migration und Produkte ohne
-  //    migration_audit-Eintrag.
-  try {
-    const { data: unitRows } = await supabase
-      .from('product_units')
-      .select('product_id')
-      .neq('status', 'retired');
-
-    if (unitRows) {
-      for (const row of unitRows) {
-        if (row.product_id) {
-          oldWorldCount.set(row.product_id, (oldWorldCount.get(row.product_id) ?? 0) + 1);
-        }
-      }
-    }
-  } catch {
-    // best-effort — Fallback auf Config-Stock.
-  }
+  // admin_config-Read fehlgeschlagen → wie bisher leeres Array.
+  if (!cfg) return [];
+  const { adminProducts, kautionTiers } = cfg;
 
   // Effektiven Bestand pro Produkt bestimmen (neue Welt hat Vorrang, kein
   // Summieren). productsWithUnits steuert weiterhin `hasUnits` (Waitlist-UI).
@@ -211,7 +257,7 @@ export async function getProducts(): Promise<Product[]> {
   });
 
   return result;
-}
+});
 
 /**
  * Einzelnes Produkt per Slug laden.

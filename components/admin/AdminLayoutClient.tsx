@@ -834,6 +834,10 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
     router.push('/admin/login');
   }, [router]);
 
+  // Identität/Permissions einmal beim Mount laden — NICHT bei jeder Navigation
+  // (die Middleware erzwingt Rechte weiterhin serverseitig bei jedem Request;
+  // `me` steuert nur die Sidebar-Sichtbarkeit). Spart pro Klick 1 DB-Read +
+  // 1 last_used_at-Write.
   useEffect(() => {
     let cancelled = false;
     fetch('/api/admin/me')
@@ -841,7 +845,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       .then((d) => { if (!cancelled && d?.user) setMe(d.user as MeInfo); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [pathname]);
+  }, []);
 
   // Druck-/QR-/Scan-Seiten haben ein eigenes Layout (weisser Hintergrund,
   // kein Sidebar/Header) — das Admin-Shell wuerde sie sonst zerquetschen.

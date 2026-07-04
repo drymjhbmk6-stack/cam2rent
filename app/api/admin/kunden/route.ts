@@ -59,10 +59,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ customers: [] });
     }
 
-    // E-Mails aus auth.users holen (admin API)
-    const { data: { users }, error: usersErr } = await supabase.auth.admin.listUsers({
-      perPage: 1000,
-    });
+    const userIds = profiles.map((p) => p.id);
+
+    // E-Mails/Last-Login (auth.admin) und die Buchungs-Count-Query sind
+    // voneinander unabhaengig → parallel laden (spart einen Roundtrip).
+    // Bewusst KEIN Limit/keine Pagination: die Kundenliste filtert/sucht/sortiert
+    // client-seitig ueber die volle Liste (Suche „ueber alle Kunden").
+    const [usersRes, bookingCountsRes] = await Promise.all([
+      supabase.auth.admin.listUsers({ perPage: 1000 }),
+      supabase.from('bookings').select('user_id').in('user_id', userIds),
+    ]);
+    const users = usersRes.data?.users;
+    const usersErr = usersRes.error;
+    const bookingCounts = bookingCountsRes.data;
 
     const emailMap = new Map<string, string>();
     const lastLoginMap = new Map<string, string | null>();
@@ -72,13 +81,6 @@ export async function GET(req: NextRequest) {
         lastLoginMap.set(u.id, u.last_sign_in_at || null);
       }
     }
-
-    // Buchungsanzahl pro User
-    const userIds = profiles.map((p) => p.id);
-    const { data: bookingCounts } = await supabase
-      .from('bookings')
-      .select('user_id')
-      .in('user_id', userIds);
 
     const countMap = new Map<string, number>();
     if (bookingCounts) {

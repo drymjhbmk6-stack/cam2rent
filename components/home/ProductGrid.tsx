@@ -10,12 +10,18 @@ import { useProductImage } from '@/components/ProductImagesProvider';
 type FilterBrand = string;
 
 function ProductCardWithImage({ product }: { product: Product }) {
-  const imageUrl = useProductImage(product.id);
+  // Provider hat Vorrang; vor dem Client-Fetch faellt die Anzeige auf das im
+  // Product-Objekt eingebettete Bild zurueck (server-gerenderte Karten zeigen
+  // sofort ein Bild statt des Platzhalters).
+  const imageUrl = useProductImage(product.id) ?? product.images?.[0];
   return <ProductCard product={product} imageUrl={imageUrl} />;
 }
 
-export default function ProductGrid() {
-  const { products } = useProducts();
+export default function ProductGrid({ initialProducts }: { initialProducts?: Product[] }) {
+  const ctx = useProducts();
+  // Server-Daten fuer den ersten Frame; sobald der Provider live geladen hat,
+  // hat er Vorrang (Live-Bestand/-Verfuegbarkeit).
+  const products = ctx.products.length > 0 ? ctx.products : (initialProducts ?? []);
   const filters: FilterBrand[] = ['Alle', ...Array.from(new Set(products.map((p) => p.brand)))];
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);

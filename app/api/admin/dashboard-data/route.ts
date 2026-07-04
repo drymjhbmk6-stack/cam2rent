@@ -82,6 +82,7 @@ export async function GET() {
       activityBookingsRes,
       actionQueueRes,
       pendingVerificationsRes,
+      utilizationProducts,
     ] = await Promise.all([
       // daily_bookings: count bookings created today
       supabase
@@ -233,6 +234,10 @@ export async function GET() {
         .eq('verification_status', 'pending')
         .order('created_at', { ascending: true })
         .limit(50),
+
+      // camera_utilization (30 Tage) — unabhaengig von allen anderen Queries,
+      // daher direkt im Parallel-Batch statt als sequentieller Nach-Await.
+      computeCameraUtilization(supabase, 30),
     ]);
 
     // ── Calculate revenue sums ───────────────────────────────────
@@ -299,9 +304,6 @@ export async function GET() {
       }));
     }
 
-    // ── Camera Utilization (30 Tage) — zentrale Lib, gleiche Logik wie /api/admin/utilization
-    const utilizationProducts = await computeCameraUtilization(supabase, 30);
-
     // ── Action-Queue-Items mit Status-Übersicht anreichern ───────────
     // 4 Indikatoren pro Buchung fürs Dashboard-Aufgaben-Widget:
     //  verified  = Ausweis/Konto-Gate erfüllt (oder nicht erforderlich)
@@ -322,39 +324,39 @@ export async function GET() {
       aqRows.map((b) => b.user_id).filter((x): x is string => typeof x === 'string' && x.length > 0),
     )];
     const verifyStatusMap: Record<string, string> = {};
-    if (aqUserIds.length > 0) {
-      const { data: vprofiles } = await supabase
-        .from('profiles')
-        .select('id, verification_status')
-        .in('id', aqUserIds);
-      for (const p of vprofiles ?? []) {
-        verifyStatusMap[p.id as string] = (p.verification_status as string) ?? '';
-      }
-    }
-
     // 1. Stripe-Abgleich: welche Buchungen haben einen echten Zahlungseingang?
     const paidViaStripe = new Set<string>();
     // 2. Buchhaltung: welche Buchungen haben eine bezahlte Rechnung?
     const paidViaInvoice = new Set<string>();
-    if (aqIds.length > 0) {
-      const [stripeRes, invRes] = await Promise.all([
-        supabase
-          .from('stripe_transactions')
-          .select('booking_id, match_status')
-          .in('booking_id', aqIds)
-          .in('match_status', ['matched', 'manual']),
-        supabase
-          .from('invoices')
-          .select('booking_id, status, payment_status')
-          .in('booking_id', aqIds)
-          .or('status.eq.paid,payment_status.eq.paid'),
-      ]);
-      for (const t of stripeRes.data ?? []) {
-        if (t.booking_id) paidViaStripe.add(t.booking_id as string);
-      }
-      for (const i of invRes.data ?? []) {
-        if (i.booking_id) paidViaInvoice.add(i.booking_id as string);
-      }
+
+    // verifyStatus + Stripe-Abgleich + Rechnungen haengen NUR von aqRows ab,
+    // nicht voneinander → in EINEM Roundtrip parallel laden (statt 2-3
+    // sequentiell). Bei leeren ID-Listen liefert `.in(..., [])` einfach [] —
+    // identisch zum bisherigen if-Guard (leere Maps).
+    const [vprofilesRes, stripeRes, invRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, verification_status')
+        .in('id', aqUserIds),
+      supabase
+        .from('stripe_transactions')
+        .select('booking_id, match_status')
+        .in('booking_id', aqIds)
+        .in('match_status', ['matched', 'manual']),
+      supabase
+        .from('invoices')
+        .select('booking_id, status, payment_status')
+        .in('booking_id', aqIds)
+        .or('status.eq.paid,payment_status.eq.paid'),
+    ]);
+    for (const p of vprofilesRes.data ?? []) {
+      verifyStatusMap[p.id as string] = (p.verification_status as string) ?? '';
+    }
+    for (const t of stripeRes.data ?? []) {
+      if (t.booking_id) paidViaStripe.add(t.booking_id as string);
+    }
+    for (const i of invRes.data ?? []) {
+      if (i.booking_id) paidViaInvoice.add(i.booking_id as string);
     }
 
     const actionQueueItems = aqRows.map((b) => {

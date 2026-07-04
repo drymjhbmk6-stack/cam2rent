@@ -3322,6 +3322,54 @@ Pro Einkauf koennen jetzt mehrere Belege hinterlegt werden — Rechnung, Quittun
 - **Sitemap dynamic:** `app/sitemap.ts` nutzt `dynamic = 'force-dynamic'` + `revalidate = 3600` + `withTimeout(5s)` für DB-Calls. Wird nicht mehr beim Build generiert (sonst Build-Timeout bei langsamer Supabase).
 - **Server:** Hetzner Cloud CPX32 (4 vCPU AMD, 8 GB RAM) — Upgrade von CX23 am 2026-04-19 wegen Build-OOM bei großen Dependency-Trees (Social-Modul).
 
+### Ladezeit-Optimierung Shop + Admin (Stand 2026-07-04)
+Shop und Adminbereich zeigten Inhalte zu spät, weil fast alles client-seitig
+nachgeladen wurde (leere Seite → Hydration → `fetch` → schwere, teils
+sequentielle DB-Queries). Rein latenzsenkende Änderungen — **keine Funktion/
+kein Verhalten geändert**; jeder Endzustand bleibt identisch. `tsc`+`next lint`
+für alle geänderten Dateien: 0 Errors (die 4 vorbestehenden tsc-/3 Lint-Errors
+liegen unverändert in fremden Dateien).
+- **`lib/get-products.ts` parallelisiert + request-scoped memo:** die vier
+  bisher **sequentiellen** Queries (`admin_config`, `migration_audit`,
+  `inventar_units`, `product_units`) laufen jetzt in **einem `Promise.all`**
+  (drei Helfer `loadAdminConfig`/`loadNewWorldCount`/`loadOldWorldCount`, jeder
+  mit eigenem `try/catch` → Hybrid-Migrationszustand bleibt 1:1 defensiv;
+  `admin_config`-Fehler → weiterhin `return []`). `getProducts` ist zusätzlich
+  in `React.cache()` (request-scoped, KEIN cross-request-Cache) gewrappt →
+  behebt den Doppel-Aufruf pro Produkt-Detailseite (`generateMetadata` + Body).
+  **Wichtig:** Der Live-Bestand wird weiterhin pro Request frisch gezählt — der
+  harte Überbuchungsschutz (`findCameraOverbookingConflict` liest `stock` via
+  `getProductById`) sieht nie veraltete Kapazität. Bewusst **kein**
+  `unstable_cache` (würde den Stock stalen → Überbuchungs-Lücke).
+- **Shop-Grid server-gerendert (Waterfall weg):** Startseite (`app/page.tsx`,
+  ISR 60) und `/kameras` (jetzt dünne Server-`page.tsx` + neue Client-Komponente
+  `app/kameras/KamerasClient.tsx`, ISR 60) laden `getProducts()` **serverseitig**
+  und reichen `initialProducts` an `ProductGrid`/`KamerasClient`. Beide zeigen
+  den Grid sofort im initialen HTML; der `ProductsProvider`-Client-Fetch läuft
+  **unverändert** weiter und übernimmt nach Hydration die Live-Daten
+  (`ctx.products.length ? ctx.products : initialProducts`). `ProductCardWithImage`
+  fällt vor dem Provider-Load auf `product.images[0]` zurück (Karte zeigt sofort
+  ein Bild statt Platzhalter). Provider selbst unangetastet → keine Mehrlast für
+  Admin-Seiten.
+- **Cache-Header:** `/api/sets` bekam `Cache-Control: public, max-age=30,
+  s-maxage=300, stale-while-revalidate=3600` (wird auf jeder Produkt-Detailseite
+  geladen). `/api/angebote` behält `revalidate=0` (zeitkritisches Verkaufsfenster,
+  Handler recomputet mit frischem `now`) + nur kurzer Browser-Cache
+  `max-age=15, stale-while-revalidate=30`.
+- **Admin `/api/admin/me` nur 1× pro Mount:** `AdminLayoutClient`-Effekt-Dep
+  `[pathname]` → `[]`. Spart pro Navigation 1 DB-Read + 1 `last_used_at`-Write.
+  Middleware erzwingt Permissions weiterhin serverseitig bei jedem Request.
+- **`dashboard-data` weiter parallelisiert:** `computeCameraUtilization(…,30)`
+  (30-Tage-Scan) ins initiale `Promise.all` hochgezogen; die Nach-Queries
+  verifyStatus + Stripe-Abgleich + Rechnungen in **einen** `Promise.all`
+  gebündelt (leere `.in(…, [])`-Listen → [] wie der bisherige if-Guard). Reine
+  Await-Nebenläufigkeit, keine Logik-/Filteränderung.
+- **`kunden`-Route:** `auth.admin.listUsers` + die Buchungs-Count-Query laufen
+  jetzt parallel (`Promise.all`). **Bewusst KEINE Pagination/kein Limit** — die
+  Kundenliste sucht/filtert/sortiert client-seitig über die volle Liste
+  (`app/admin/kunden/page.tsx`); Server-Pagination würde die Suche „über alle
+  Kunden" brechen.
+
 ## Timezone-Helper (`lib/timezone.ts`, Stand 2026-04-19)
 Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datum um die Server-TZ-Differenz (Server läuft UTC, aber App denkt Berlin). Analytics-Queries für "heute" lieferten deshalb 0, weil sie ab 22:00 UTC des Vortags filterten.
 - `getBerlinDayStart(date?)` — Mitternacht in Berlin-Zeit als UTC-Date (mit Sommer-/Winterzeit-Handling via `Intl.DateTimeFormat timeZoneName='longOffset'`)

@@ -16,6 +16,7 @@ import CustomerPushPrompt from '@/components/home/CustomerPushPrompt';
 import HomeSeoText from '@/components/home/HomeSeoText';
 import VisitorCounter from '@/components/home/VisitorCounter';
 import { getHomePageData } from '@/lib/get-homepage-data';
+import { getProducts } from '@/lib/get-products';
 
 // ISR-Cache: max. 60 Sek alt. Shop-Updater ruft revalidatePath('/') auf,
 // damit Änderungen sofort sichtbar sind — der Cache ist nur Schutz vor
@@ -23,7 +24,13 @@ import { getHomePageData } from '@/lib/get-homepage-data';
 export const revalidate = 60;
 
 export default async function Home() {
-  const data = await getHomePageData();
+  // Produkte serverseitig laden, damit der Grid im initialen HTML gefuellt ist
+  // (kein leeres Grid-→-/api/products-Waterfall nach der Hydration mehr). Der
+  // ProductsProvider aktualisiert nach Hydration weiterhin auf den Live-Stand.
+  const [data, initialProducts] = await Promise.all([
+    getHomePageData(),
+    getProducts(),
+  ]);
 
   return (
     <>
@@ -35,7 +42,7 @@ export default async function Home() {
       <HomeSeasonalAction />
       <TrustBanner />
       <HomeAngebote />
-      <ProductGrid />
+      <ProductGrid initialProducts={initialProducts} />
       <KameraFinderCta />
       <HowItWorks />
       <HomeUgc />
