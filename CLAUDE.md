@@ -512,6 +512,19 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   HTML-Mailinhalt per Button in sandboxed `<iframe sandbox="">` (kein JS),
   Anhänge als Download-Links über `GET /api/admin/message-attachment-url?id=`
   (Permission `kunden`, Signed-URL 5 Min).
+- **Live-Vorschau der E-Mail-Antwort (Stand 2026-07-07):** Der Chat zeigte beim
+  Tippen nur den Rohtext, verschickt wird aber die gestylte Cam2Rent-Mail (Header/
+  Footer/Grußformel via `sendInboundReply`). Neuer Augen-Toggle neben dem
+  Eingabefeld (nur bei `source='email'`) blendet unter dem Input eine
+  Live-Vorschau in einem sandboxed `<iframe srcDoc>` ein, die beim Tippen
+  (450 ms Debounce) aktualisiert. Quelle: neuer Endpoint **`POST
+  /api/admin/nachrichten/[conversationId]/preview`** (`{ body } → { html,
+  subject }`), der `renderEmailPreview(sendInboundReply, …)` im Capture-Modus
+  aufruft → **byte-genau die echte E-Mail**, kein Versand/kein `email_log`.
+  Auth + `mayAccess` (Owner alle / Mitarbeiter eigene+unzugeordnete) wie die
+  Reply-Route, nur für E-Mail-Konversationen. Vorschau-State wird beim
+  Konversationswechsel zurückgesetzt. Reine Anzeige — POST-Reply-Pfad
+  unverändert.
 - **„Neue Nachricht"-Button (Stand 2026-06-22):** Button oben rechts im Header
   von `/admin/nachrichten` öffnet ein Compose-Modal (`ComposeModal` lokal in
   `app/admin/nachrichten/page.tsx`): Kunde aus der Liste suchen/wählen (lädt
