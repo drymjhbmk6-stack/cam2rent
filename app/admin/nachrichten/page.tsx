@@ -60,6 +60,12 @@ export default function AdminNachrichtenPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen): zeigt, wie die
+  // Antwort mit komplettem Cam2Rent-Layout beim Kunden ankommt.
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // Bulk-Auswahl: Set von Konversations-IDs.
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -110,6 +116,32 @@ export default function AdminNachrichtenPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Beim Konversationswechsel Vorschau-Zustand zuruecksetzen.
+  useEffect(() => {
+    setShowPreview(false);
+    setPreviewHtml('');
+  }, [selectedId]);
+
+  // Live-Vorschau: bei Aenderung des Antworttexts die echte E-Mail (debounced)
+  // vom Server rendern lassen — exakt das HTML, das verschickt wird.
+  useEffect(() => {
+    if (!showPreview || !selectedId || convInfo?.source !== 'email') return;
+    let cancelled = false;
+    setPreviewLoading(true);
+    const t = setTimeout(() => {
+      fetch(`/api/admin/nachrichten/${selectedId}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: replyText }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((d) => { if (!cancelled) setPreviewHtml(d.html || ''); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setPreviewLoading(false); });
+    }, 450);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [replyText, showPreview, selectedId, convInfo?.source]);
 
   const handleReply = async () => {
     if (!replyText.trim() || !selectedId || sending) return;
@@ -608,29 +640,69 @@ export default function AdminNachrichtenPage() {
 
               {/* Reply input */}
               {!convInfo.closed && (
-                <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    placeholder={convInfo.source === 'email' ? 'E-Mail-Antwort schreiben...' : 'Antwort schreiben...'}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleReply()}
-                    style={inputStyle}
-                    maxLength={5000}
-                  />
-                  <button
-                    onClick={handleReply}
-                    disabled={!replyText.trim() || sending}
-                    style={{
-                      padding: '10px 16px', background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 10,
-                      cursor: replyText.trim() && !sending ? 'pointer' : 'not-allowed',
-                      opacity: replyText.trim() && !sending ? 1 : 0.4, flexShrink: 0,
-                    }}
-                  >
-                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                    </svg>
-                  </button>
+                <div style={{ borderTop: '1px solid #1e293b' }}>
+                  {/* Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen) */}
+                  {convInfo.source === 'email' && showPreview && (
+                    <div style={{ padding: '12px 20px 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                          👁 So kommt die E-Mail beim Kunden an{previewLoading ? ' · aktualisiere…' : ''}
+                        </span>
+                        <button
+                          onClick={() => setShowPreview(false)}
+                          style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          Vorschau ausblenden
+                        </button>
+                      </div>
+                      <iframe
+                        title="E-Mail-Vorschau"
+                        sandbox=""
+                        srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#94a3b8;padding:16px;">Vorschau wird geladen…</p>'}
+                        style={{ width: '100%', height: 320, border: '1px solid #1e293b', borderRadius: 10, background: '#fff' }}
+                      />
+                    </div>
+                  )}
+                  <div style={{ padding: '12px 20px', display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {convInfo.source === 'email' && (
+                      <button
+                        onClick={() => setShowPreview((v) => !v)}
+                        title="Live-Vorschau der echten E-Mail an-/ausschalten"
+                        style={{
+                          padding: '10px', background: showPreview ? '#0e7490' : '#1e293b',
+                          color: showPreview ? '#fff' : '#94a3b8', border: 'none', borderRadius: 10,
+                          cursor: 'pointer', flexShrink: 0, lineHeight: 0,
+                        }}
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
+                    )}
+                    <input
+                      type="text"
+                      placeholder={convInfo.source === 'email' ? 'E-Mail-Antwort schreiben...' : 'Antwort schreiben...'}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleReply()}
+                      style={inputStyle}
+                      maxLength={5000}
+                    />
+                    <button
+                      onClick={handleReply}
+                      disabled={!replyText.trim() || sending}
+                      style={{
+                        padding: '10px 16px', background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 10,
+                        cursor: replyText.trim() && !sending ? 'pointer' : 'not-allowed',
+                        opacity: replyText.trim() && !sending ? 1 : 0.4, flexShrink: 0,
+                      }}
+                    >
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )}
             </>
