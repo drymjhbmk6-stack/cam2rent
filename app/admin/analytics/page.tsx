@@ -1585,7 +1585,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(todayData.top_pages ?? []).map((p, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ background: `${C.cyan}18`, color: C.cyanLight, borderRadius: 6, padding: '2px 8px', fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.path}</span>
+                      <span title={p.path} style={{ background: `${C.cyan}18`, color: C.cyanLight, borderRadius: 6, padding: '2px 8px', fontFamily: 'monospace', fontSize: 11, minWidth: 0, wordBreak: 'break-all' }}>{p.path}</span>
                       <span style={{ color: C.text, fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{p.views}</span>
                     </div>
                   ))}
