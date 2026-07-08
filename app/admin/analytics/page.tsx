@@ -53,6 +53,15 @@ interface BookingsData {
   trend: { date: string; count: number; revenue: number }[];
 }
 interface ProductsData { products: { slug: string; views: number; bookings: number; revenue: number; utilization: number }[] }
+interface PatternsData {
+  available: boolean;
+  by_hour: number[];          // [24] cookielose Besuche je Stunde-des-Tages (summiert)
+  by_weekday: number[];       // [7]  Mo…So gesamt
+  by_weekday_hour: number[][];// [7][24] Mo…So × Stunde
+  total: number;
+  day_count: number;          // Anzahl Tage mit Daten (für Ø-Kontext)
+  pdays: string;
+}
 
 // ISO-2-Code → Flaggen-Emoji (Regional-Indicator-Symbole). "XX" = unbekannt.
 function flagEmoji(code: string): string {
@@ -327,6 +336,108 @@ function LabeledBarChart({ items }: { items: Array<{ label: string; value: numbe
             {i % step === 0 ? it.label : ''}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
+const WEEKDAY_LABELS_LONG = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'] as const;
+
+/** Top-Stunde als lesbares Zeitfenster, z.B. "18–19 Uhr". Null wenn keine Daten. */
+function peakHourLabel(byHour: number[]): string | null {
+  const max = Math.max(...byHour, 0);
+  if (max <= 0) return null;
+  const peak = byHour.indexOf(max);
+  return `${peak}–${(peak + 1) % 24} Uhr`;
+}
+
+/**
+ * Tageszeit-Muster: 24 Balken (Besuche je Stunde-des-Tages, ueber den
+ * gewaehlten Zeitraum summiert). Die staerkste Stunde ist gruen hervorgehoben.
+ */
+function HourPatternChart({ data }: { data: number[] }) {
+  const max = Math.max(...data, 1);
+  const peak = data.indexOf(Math.max(...data, 0));
+  const h = 130;
+  const barH = h - 18;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: h }}>
+        {data.map((v, i) => {
+          const isPeak = v > 0 && i === peak;
+          const col = isPeak ? C.green : C.cyan;
+          return (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+              {v > 0 && (
+                <div style={{ fontSize: 9, fontWeight: 700, color: isPeak ? C.green : C.textMuted, lineHeight: 1 }}>{v}</div>
+              )}
+              <div
+                title={`${i}:00–${(i + 1) % 24}:00 Uhr — ${v} Besuche`}
+                style={{
+                  width: '100%',
+                  height: v > 0 ? Math.max(2, (v / max) * barH) : 2,
+                  background: `linear-gradient(180deg, ${col}, ${col}55)`,
+                  borderRadius: '3px 3px 0 0',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', marginTop: 4 }}>
+        {data.map((_, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: C.textDark }}>
+            {i % 3 === 0 ? i : ''}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Wochentag × Stunde als Heatmap (7 Zeilen Mo…So × 24 Spalten). Zell-Intensitaet
+ * skaliert mit der Besuchszahl relativ zum globalen Maximum. Horizontal
+ * scrollbar auf schmalen Screens.
+ */
+function WeekdayHourHeatmap({ grid }: { grid: number[][] }) {
+  let max = 1;
+  for (const row of grid) for (const v of row) if (v > max) max = v;
+  const cellBg = (v: number) => (v <= 0 ? '#0f172a' : `rgba(34, 211, 238, ${(0.15 + 0.85 * (v / max)).toFixed(3)})`);
+  const cols = '34px repeat(24, 1fr)';
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: 560 }}>
+        {/* Stunden-Kopfzeile */}
+        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 2, marginBottom: 3 }}>
+          <div />
+          {Array.from({ length: 24 }, (_, hh) => (
+            <div key={hh} style={{ textAlign: 'center', fontSize: 8, color: C.textDark }}>{hh % 3 === 0 ? hh : ''}</div>
+          ))}
+        </div>
+        {grid.map((row, wd) => (
+          <div key={wd} style={{ display: 'grid', gridTemplateColumns: cols, gap: 2, marginBottom: 2 }}>
+            <div style={{ fontSize: 10, color: C.textMuted, display: 'flex', alignItems: 'center' }}>{WEEKDAY_LABELS[wd]}</div>
+            {row.map((v, hh) => (
+              <div
+                key={hh}
+                title={`${WEEKDAY_LABELS_LONG[wd]}, ${hh}:00–${(hh + 1) % 24}:00 Uhr — ${v} Besuche`}
+                style={{ height: 20, borderRadius: 3, background: cellBg(v), border: `1px solid ${C.border}55` }}
+              />
+            ))}
+          </div>
+        ))}
+        {/* Legende */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 11, color: C.textDim }}>
+          <span>weniger</span>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {[0, 0.25, 0.5, 0.75, 1].map((t) => (
+              <div key={t} style={{ width: 18, height: 12, borderRadius: 2, background: t === 0 ? '#0f172a' : `rgba(34,211,238,${0.15 + 0.85 * t})`, border: `1px solid ${C.border}55` }} />
+            ))}
+          </div>
+          <span>mehr</span>
+        </div>
       </div>
     </div>
   );
@@ -693,6 +804,9 @@ export default function AnalyticsPage() {
   } | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [blogData, setBlogData] = useState<any>(null);
+  const [patternsData, setPatternsData] = useState<PatternsData | null>(null);
+  const [patternDays, setPatternDays] = useState<string>('30'); // 7 | 30 | 90 | 365 | all
+  const [showWeekdayHeatmap, setShowWeekdayHeatmap] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
@@ -834,6 +948,12 @@ export default function AnalyticsPage() {
     if (res) setBlogData(res);
   }, [filtersIncomplete, rangeQS, safeFetch]);
 
+  // Tageszeit-/Wochentag-Muster (eigener pdays-Zeitraum, unabhaengig vom Haupt-Filter).
+  const fetchPatterns = useCallback(async () => {
+    const res = await safeFetch<PatternsData>(`/api/admin/analytics?type=patterns&pdays=${patternDays}`);
+    if (res) setPatternsData(res);
+  }, [safeFetch, patternDays]);
+
   // Initial load + auto-refresh fuer Live-Tab
   useEffect(() => { fetchLive(); }, [fetchLive]);
 
@@ -859,6 +979,11 @@ export default function AnalyticsPage() {
     if (activeTab !== 'live') return;
     if (historyDays > 0) fetchHistory(historyDays);
   }, [activeTab, historyDays, fetchHistory]);
+
+  // Tageszeit-/Wochentag-Muster nur im Live-Tab laden (+ bei pdays-Wechsel).
+  useEffect(() => {
+    if (activeTab === 'live') fetchPatterns();
+  }, [activeTab, fetchPatterns]);
 
   // ─── Filter logic (client-side filtering of history/trend data) ───────────
   const getFilteredHistory = useCallback(() => {
@@ -1388,6 +1513,63 @@ export default function AnalyticsPage() {
               ) : (
                 <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
               )
+            )}
+          </Card>
+
+          {/* Tageszeit- & Wochentag-Muster (cookielos, über viele Tage aggregiert) */}
+          <Card style={{ marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Wann sind Besucher da? — Tageszeit-Muster</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {([['7', '7 Tage'], ['30', '30 Tage'], ['90', '90 Tage'], ['365', '1 Jahr'], ['all', 'Gesamt']] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => setPatternDays(val)}
+                    style={{
+                      background: patternDays === val ? C.cyan : 'transparent',
+                      color: patternDays === val ? '#04121a' : C.textDim,
+                      border: `1px solid ${patternDays === val ? C.cyan : C.border}`,
+                      borderRadius: 6, padding: '4px 10px', fontSize: 12,
+                      fontWeight: patternDays === val ? 700 : 500, cursor: 'pointer',
+                    }}
+                  >{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 16 }}>
+              Alle Besuche (cookielos) je Uhrzeit, über {patternDays === 'all' ? 'den gesamten Zeitraum' : `die letzten ${patternDays} Tage`} summiert — zeigt, wann statistisch die meisten Leute auf der Seite sind.
+            </div>
+            {!patternsData ? (
+              <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
+            ) : !patternsData.available ? (
+              <div style={{ color: C.yellow, fontSize: 13, padding: '16px 0' }}>
+                Noch keine Stunden-Statistik verfügbar. Die Erfassung startet, sobald die Migration <code style={{ background: C.border, padding: '1px 5px', borderRadius: 4 }}>site_visits_hourly</code> ausgeführt ist.
+              </div>
+            ) : patternsData.total === 0 ? (
+              <div style={{ color: C.textDim, fontSize: 13, padding: '16px 0' }}>Für diesen Zeitraum liegen noch keine Besuche vor.</div>
+            ) : (
+              <>
+                <HourPatternChart data={patternsData.by_hour} />
+                {peakHourLabel(patternsData.by_hour) && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: C.textMuted }}>
+                    Stärkste Zeit: <span style={{ color: C.green, fontWeight: 700 }}>{peakHourLabel(patternsData.by_hour)}</span>
+                    {' · '}{patternsData.total.toLocaleString('de-DE')} Besuche an {patternsData.day_count} {patternsData.day_count === 1 ? 'Tag' : 'Tagen'}
+                  </div>
+                )}
+                <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 16, paddingTop: 12 }}>
+                  <button
+                    onClick={() => setShowWeekdayHeatmap((s) => !s)}
+                    style={{ background: 'transparent', color: C.cyanLight, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}
+                  >
+                    {showWeekdayHeatmap ? '▾' : '▸'} Wochentage anzeigen (Mo–So × Uhrzeit)
+                  </button>
+                  {showWeekdayHeatmap && (
+                    <div style={{ marginTop: 16 }}>
+                      <WeekdayHourHeatmap grid={patternsData.by_weekday_hour} />
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </Card>
         </div>

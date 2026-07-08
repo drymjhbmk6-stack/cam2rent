@@ -266,6 +266,62 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // ── PATTERNS (Tageszeit- + Wochentag-Muster) ──────────────────────────────
+  // Aggregiert die cookielosen Besuche aus `site_visits_hourly` (Tag + Stunde,
+  // consent-frei, zaehlt JEDEN Besuch) ueber einen frei waehlbaren Zeitraum zu
+  // (a) Besuche je Stunde-des-Tages und (b) Wochentag × Stunde. Zeigt
+  // statistisch, wann Besucher auf der Seite sind. Eigener `pdays`-Parameter
+  // (7/30/90/365 oder "all") — unabhaengig vom Haupt-Range-Filter, weil ein
+  // Muster ueber viele Tage aussagekraeftiger ist als "heute".
+  if (type === 'patterns') {
+    const pdaysRaw = req.nextUrl.searchParams.get('pdays') ?? '30';
+    let startDay: string | null = null;
+    if (pdaysRaw !== 'all') {
+      const pdays = Math.min(Math.max(parseInt(pdaysRaw, 10) || 30, 1), 3650);
+      // Start = heute (Berlin) minus (pdays-1) Tage → inklusives N-Tage-Fenster.
+      startDay = getBerlinDateString(new Date(Date.now() - (pdays - 1) * 86400000));
+    }
+    const endDay = getBerlinDateString();
+
+    const res = await fetchAllRowsSafe<{ day: string; hour: number; visits: number }>((from, to) => {
+      let q = supabase.from('site_visits_hourly').select('day, hour, visits');
+      if (startDay) q = q.gte('day', startDay);
+      return q.lte('day', endDay).order('day', { ascending: true }).range(from, to);
+    });
+
+    const byHour = Array(24).fill(0);
+    const byWeekday = Array(7).fill(0);
+    const byWeekdayHour: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
+    const daySet = new Set<string>();
+    let total = 0;
+    for (const row of res.rows) {
+      const h = Number(row.hour);
+      if (!(h >= 0 && h <= 23)) continue;
+      const v = Number(row.visits) || 0;
+      if (v <= 0) continue;
+      // Wochentag aus dem Berlin-Kalendertag ableiten. Mittag-UTC als Anker,
+      // damit die Datumsgrenze nicht durch Zeitzonen kippt. Montag-first:
+      // Mo=0, Di=1, …, So=6.
+      const d = new Date(`${row.day}T12:00:00Z`);
+      const wd = (d.getUTCDay() + 6) % 7;
+      byHour[h] += v;
+      byWeekday[wd] += v;
+      byWeekdayHour[wd][h] += v;
+      daySet.add(row.day);
+      total += v;
+    }
+
+    return NextResponse.json({
+      available: res.ok,
+      by_hour: byHour,
+      by_weekday: byWeekday,
+      by_weekday_hour: byWeekdayHour,
+      total,
+      day_count: daySet.size,
+      pdays: pdaysRaw,
+    });
+  }
+
   // ── HISTORY ───────────────────────────────────────────────────────────────
   if (type === 'history') {
     const daysRaw = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10);

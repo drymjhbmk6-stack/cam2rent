@@ -3570,6 +3570,36 @@ Cookies" (cookielose Besuche pro Stunde). Legende + Hover-Tooltips pro Segment.
   ausführen. Ohne sie läuft alles wie zuvor (nur cyan; `hourly_cookieless` = 0,
   Legende zeigt „Ohne Cookies" leer).
 
+### Tageszeit-Muster + Wochentag-Heatmap (Stand 2026-07-08)
+Zusätzlich zum „Aufrufe heute nach Stunde"-Diagramm (nur heute/24h) gibt es im
+Live-Tab von `/admin/analytics` eine neue Karte **„Wann sind Besucher da? —
+Tageszeit-Muster"**, die über **viele Tage aggregiert** zeigt, zu welcher
+Uhrzeit statistisch die meisten Leute auf der Seite sind — plus optional eine
+**Wochentag × Uhrzeit-Heatmap** (Mo–So, je 24 Stunden). Reine additive
+Anzeige, keine Migration.
+- **Datenquelle:** `site_visits_hourly` (cookielos, consent-frei, `day` + `hour`
+  + `visits`). Aus `day` wird der Wochentag abgeleitet (Mittag-UTC-Anker,
+  Montag-first Mo=0…So=6), aus `hour` die Stunde. Zählt JEDEN Besuch (nicht nur
+  konsentierte) → beste statistische Basis; **kein** Merge mit `page_views`
+  (das wäre eine Teilmenge → würde doppelt zählen).
+- **API `GET /api/admin/analytics?type=patterns&pdays=<7|30|90|365|all>`**
+  (neuer Branch): liest `site_visits_hourly` über `fetchAllRowsSafe` (Pagination,
+  da >1000 Zeilen bei langen Zeiträumen), liefert `by_hour[24]`,
+  `by_weekday[7]`, `by_weekday_hour[7][24]`, `total`, `day_count`, `available`
+  (false = Tabelle/Migration fehlt → UI-Hinweis). **Eigener `pdays`-Zeitraum,
+  unabhängig vom Haupt-Range-Filter** (ein Muster über viele Tage ist
+  aussagekräftiger als „heute"; Default 30 Tage).
+- **UI** (`app/admin/analytics/page.tsx`): Perioden-Pills (7/30/90 Tage · 1 Jahr
+  · Gesamt), `HourPatternChart` (24 Balken, stärkste Stunde grün + Caption
+  „Stärkste Zeit: X–Y Uhr · N Besuche an M Tagen"), Ausklapp-Button
+  „Wochentage anzeigen" → `WeekdayHourHeatmap` (7×24 Cyan-Intensitäts-Grid,
+  horizontal scrollbar, Hover-Tooltip pro Zelle, Legende weniger→mehr). Lädt
+  nur im Live-Tab (`type=patterns`), eigener State `patternDays` +
+  `showWeekdayHeatmap`.
+- **Wichtig:** hängt an derselben `site_visits_hourly`-Tabelle wie der grüne
+  Balken oben — Daten beginnen ab deren Migration, nicht rückwirkend. Ohne
+  Migration zeigt die Karte einen Hinweis (`available:false`).
+
 ## Blog-System (KI-automatisiert)
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
 Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
