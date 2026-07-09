@@ -188,22 +188,38 @@ export async function POST(
   // den alten (Admin kann das Etikett also einfach durch erneutes Hochladen
   // ersetzen).
   const storagePath = `${bookingId}.pdf`;
-  const uploadRes = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, a5Pdf, {
-      contentType: 'application/pdf',
-      upsert: true,
-    });
+  const doUpload = () =>
+    supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(storagePath, a5Pdf, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
 
-  if (uploadRes.error) {
-    const msg = uploadRes.error.message;
-    if (/Bucket not found|bucket.*not.*exist/i.test(msg)) {
+  let uploadRes = await doUpload();
+
+  // Bucket existiert nicht (nie manuell angelegt) → einmalig anlegen +
+  // Upload wiederholen. Privat (GET nutzt Service-Role-Download). Gleiche
+  // Vorgehensweise wie handover-photos / legal-documents.
+  if (uploadRes.error && /bucket not found|bucket.*not.*exist|not found/i.test(uploadRes.error.message || '')) {
+    const { error: createErr } = await supabase.storage.createBucket(STORAGE_BUCKET, {
+      public: false,
+      fileSizeLimit: 10 * 1024 * 1024,
+      allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
+    });
+    // "already exists" = Race mit parallelem Request → trotzdem retry
+    if (createErr && !/already exists|exists/i.test(createErr.message || '')) {
+      console.error('[return-label POST] Bucket konnte nicht angelegt werden:', createErr.message);
       return NextResponse.json(
-        { error: `Storage-Bucket "${STORAGE_BUCKET}" fehlt — bitte im Supabase-Dashboard anlegen (siehe supabase/supabase-return-labels-bucket.sql).` },
-        { status: 503 },
+        { error: `Storage-Bucket "${STORAGE_BUCKET}" konnte nicht angelegt werden (${createErr.message}).` },
+        { status: 500 },
       );
     }
-    console.error('[return-label POST] Storage-Upload fehlgeschlagen:', msg);
+    uploadRes = await doUpload();
+  }
+
+  if (uploadRes.error) {
+    console.error('[return-label POST] Storage-Upload fehlgeschlagen:', uploadRes.error.message);
     return NextResponse.json({ error: 'Datei konnte nicht gespeichert werden.' }, { status: 500 });
   }
 

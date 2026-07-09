@@ -1338,15 +1338,18 @@ A4-Querformat-Bogen kombiniert.
   Versuch mit `labelMode: 'outbound'|'return'`-Switch im Sendcloud-Modal
   ist komplett entfernt — Retour ist jetzt ein eigener Upload-Workflow.
 - **Storage-Bucket:** `return-labels` (privat, 10 MB, MIME-Allowlist
-  `application/pdf` + `image/jpeg` + `image/png`). Muss manuell im
-  Supabase-Dashboard angelegt werden, siehe
-  `supabase/supabase-return-labels-bucket.sql` (reines Hinweis-Skript,
-  keine echte Migration — `storage.create_bucket()` per SQL ist
-  unzuverlässig).
-- **Go-Live TODO:** Storage-Bucket `return-labels` im Supabase-Dashboard
-  anlegen. Ohne Bucket liefert der Upload-Endpoint 503 mit klarem
-  Hinweis. Alte Buchungen mit Sendcloud-Retoure-URL (vor 25.05.)
-  funktionieren weiter per Legacy-Pfad.
+  `application/pdf` + `image/jpeg` + `image/png`). **Wird beim ersten
+  Upload automatisch angelegt (Stand 2026-07-09):** schlägt der Upload mit
+  „Bucket not found" fehl, ruft `POST /api/admin/return-label/[id]`
+  einmalig `supabase.storage.createBucket('return-labels', {public:false,
+  fileSizeLimit:10MB, allowedMimeTypes:[pdf,jpeg,png]})` und wiederholt den
+  Upload — gleiche Vorgehensweise wie `handover-photos`/`legal-documents`.
+  Das manuelle Anlegen im Dashboard ist damit nicht mehr nötig; die
+  hochgeladene PDF wird auch ohne vorbereiteten Bucket sofort hinterlegt.
+  `supabase/supabase-return-labels-bucket.sql` bleibt als reines
+  Sanity-Check-Hinweis-Skript.
+- **Alte Buchungen** mit Sendcloud-Retoure-URL (vor 25.05.) funktionieren
+  weiter per Legacy-Pfad.
 
 ### „Rückgabe prüfen"-Einstieg auch bei Abholung + direkter Link (Stand 2026-05-23)
 Zwei UX-Lücken in der Versand/Tracking-Section von `/admin/buchungen/[id]`
@@ -5258,13 +5261,11 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   nicht (500 beim Insert/Select), die Inventar-Stammdaten-Card zeigt
   „Firmware installiert" nicht. Crontab-Eintrag siehe „Firmware-Check"-
   Sektion oben. Empfohlen ASAP ausführen.
-- **Storage-Bucket `return-labels` anlegen:** Im Supabase-Dashboard ein neuer
-  privater Bucket `return-labels` (10 MB, MIME-Allowlist `application/pdf` +
-  `image/jpeg` + `image/png`). Siehe Hinweis-Skript
-  `supabase/supabase-return-labels-bucket.sql`. Ohne Bucket liefert
-  `POST /api/admin/return-label/[id]` 503 — der Retourlabel-Upload auf
-  `/admin/retouren` ist dann inaktiv. Hin-Versand-Etikett (Sendcloud) +
-  Drucken-Button (sobald beide da sind) funktionieren unverändert.
+- ~~**Storage-Bucket `return-labels` anlegen:**~~ Nicht mehr nötig (Stand
+  2026-07-09) — `POST /api/admin/return-label/[id]` legt den privaten Bucket
+  beim ersten Upload automatisch an (`createBucket`, 10 MB, MIME `application/pdf`
+  + `image/jpeg` + `image/png`) und wiederholt den Upload. Der Retourlabel-Upload
+  auf `/admin/retouren` funktioniert damit sofort ohne Dashboard-Vorarbeit.
 - **Alert-Details-Migration auszuführen:** `supabase/supabase-availability-alerts-details.sql`
   (idempotent). Fügt nullable Spalte `availability_alerts.details JSONB` hinzu.
   Ohne Migration läuft die Telemetrie weiter (POST retryt ohne `details`), aber
