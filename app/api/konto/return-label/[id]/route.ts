@@ -54,29 +54,42 @@ export async function GET(
     return NextResponse.json({ error: 'Kein Rücksendeetikett vorhanden. Bitte beim Support melden.' }, { status: 404 });
   }
 
-  if (!isSendcloudUrl(booking.return_label_url)) {
-    return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
+  const url = booking.return_label_url as string;
+  let pdfBuffer: ArrayBuffer;
+
+  if (url.startsWith('https://')) {
+    // Legacy: Sendcloud-URL — als Proxy mit Basic-Auth laden.
+    if (!isSendcloudUrl(url)) {
+      return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
+    }
+    const { publicKey, secretKey } = await getSendcloudKeys();
+    const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
+    const labelRes = await fetch(url, { headers: { Authorization: auth } });
+    if (!labelRes.ok) {
+      return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
+    }
+    pdfBuffer = await labelRes.arrayBuffer();
+  } else {
+    // Neu: hochgeladenes Etikett aus Supabase-Storage (return-labels-Bucket).
+    // Format `return-labels/<bookingId>.pdf`, schon beim Upload auf A5
+    // konvertiert. Gleiche Quelle wie GET /api/admin/return-label/[id].
+    const prefix = 'return-labels/';
+    const storagePath = url.startsWith(prefix) ? url.slice(prefix.length) : url;
+    const { data, error: dlErr } = await supabase.storage.from('return-labels').download(storagePath);
+    if (dlErr || !data) {
+      console.error('[konto/return-label] Storage-Download fehlgeschlagen:', dlErr?.message);
+      return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
+    }
+    pdfBuffer = await data.arrayBuffer();
   }
-
-  // Sendcloud Label-PDF als Proxy laden
-  const { publicKey, secretKey } = await getSendcloudKeys();
-  const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
-
-  const labelRes = await fetch(booking.return_label_url, {
-    headers: { Authorization: auth },
-  });
-
-  if (!labelRes.ok) {
-    return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
-  }
-
-  const pdfBuffer = await labelRes.arrayBuffer();
 
   return new NextResponse(pdfBuffer, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="ruecksendeetikett-${bookingId}.pdf"`,
+      'Content-Length': String(pdfBuffer.byteLength),
+      'Cache-Control': 'private, no-store',
     },
   });
 }
