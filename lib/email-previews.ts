@@ -36,6 +36,12 @@ import {
   sendVerificationRejected,
   sendWbwConfirmation,
   sendInvoiceAdjustment,
+  sendContractResignRequest,
+  sendContractSignReminder,
+  sendVerificationReminder,
+  sendAppointmentReminder,
+  sendCreditNote,
+  sendInboundReply,
   escapeHtml,
   stripSubject,
   type BookingEmailData,
@@ -439,6 +445,191 @@ HyperSmooth und 5.3K-Video. Direkt buchbar ab 9,90 € pro Tag.</p>
   };
 }
 
+function previewContractAutoCancel(): { subject: string; html: string } {
+  const safeBusiness = escapeHtml(BUSINESS.name);
+  const safeName = escapeHtml('Max Mustermann');
+  const safeId = escapeHtml(DUMMY_BOOKING_ID);
+  const safeProduct = escapeHtml('GoPro Hero13 Black');
+  return {
+    subject: stripSubject(`Buchung ${DUMMY_BOOKING_ID} storniert — Mietvertrag fehlte`),
+    html: `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:24px 32px;">
+    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${safeBusiness}</p>
+  </td></tr>
+  <tr><td style="background:#ffffff;padding:32px;">
+    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#991b1b;">Deine Buchung wurde storniert</h1>
+    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${safeId}</strong> (${safeProduct}) wurde storniert, weil bis zum Versandtermin kein unterschriebener Mietvertrag vorlag. Ohne gültigen Mietvertrag können wir aus rechtlichen Gründen keine Kamera versenden.</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">Die Zahlung haben wir automatisch erstattet — das Geld sollte innerhalb von 5–10 Werktagen wieder auf deinem Konto sein.</p>
+    <p style="margin:0;font-size:14px;color:#6b7280;">Gerne kannst du jederzeit neu buchen — denk dann bitte daran, den Mietvertrag direkt im Buchungsprozess bzw. unter <a href="https://cam2rent.de/konto/buchungen" style="color:#3b82f6;">Mein Konto → Meine Buchungen</a> zu unterschreiben, damit wir rechtzeitig versenden können.</p>
+  </td></tr>
+</table></td></tr></table></body></html>`,
+  };
+}
+
+function previewSaleInvoice(): { subject: string; html: string } {
+  const safeName = escapeHtml('Max Mustermann');
+  const safeInvoiceNr = escapeHtml('RE-2620-014');
+  const safeTotal = escapeHtml('49,90');
+  const paymentUrl = 'https://buy.stripe.com/test_link_DUMMY';
+  const itemRows = `<tr>
+      <td style="padding:8px 0;font-size:14px;">1× SanDisk Extreme 128 GB (gebraucht)</td>
+      <td style="padding:8px 0;text-align:right;font-size:14px;">49,90&nbsp;€</td>
+    </tr>`;
+  const payButton = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;"><tr><td align="center">
+      <a href="${paymentUrl}" style="display:inline-block;padding:14px 32px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;">Jetzt bezahlen</a>
+    </td></tr></table>`;
+  return {
+    subject: stripSubject('Deine Rechnung RE-2620-014 — cam2rent'),
+    html: `
+    <div style="font-family:'DM Sans',Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 16px;color:#1a1a1a;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <span style="font-weight:900;font-size:20px;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+      </div>
+      <h1 style="font-size:22px;font-weight:700;margin-bottom:8px;">Deine Rechnung ${safeInvoiceNr}</h1>
+      <p style="color:#64748b;font-size:15px;line-height:1.6;margin-bottom:20px;">
+        Hallo ${safeName},<br/>
+        anbei findest du deine Rechnung über deinen Kauf bei cam2rent. Die
+        Rechnung ist auch als PDF angehängt.
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">${itemRows}</table>
+      <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;margin-bottom:8px;">
+        <tr>
+          <td style="padding:10px 0;font-weight:700;font-size:16px;">Gesamtbetrag</td>
+          <td style="padding:10px 0;text-align:right;font-weight:700;font-size:16px;">${safeTotal}&nbsp;€</td>
+        </tr>
+      </table>
+      ${payButton}
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 24px;">
+        Bitte begleiche den Betrag bequem über den Button oben (Kreditkarte oder PayPal).
+      </p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>
+      <p style="color:#94a3b8;font-size:11px;line-height:1.5;margin:0;text-align:center;">
+        ${escapeHtml(BUSINESS.owner)} &middot; ${escapeHtml(BUSINESS.street)} &middot; ${escapeHtml(BUSINESS.zip)} ${escapeHtml(BUSINESS.city)}<br/>
+        ${escapeHtml(BUSINESS.emailKontakt)} &middot; ${escapeHtml(BUSINESS.phone)}
+      </p>
+    </div>`,
+  };
+}
+
+// Spiegel des Layouts aus lib/reminder-emails.ts (wrapLayout/ctaButton). Wird
+// für die Vorschau der Rückgabe-/Überfälligkeits-Mails genutzt — diese senden
+// direkt über Resend (nicht sendAndLog), daher kein renderEmailPreview-Capture.
+function wrapReminderLayout(body: string): string {
+  const BASE_URL = BUSINESS.url;
+  return `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
+        <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">cam2rent</p>
+        <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+      </td></tr>
+      <tr><td style="background:#ffffff;padding:32px;">${body}</td></tr>
+      <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="${BASE_URL}" style="color:#9ca3af;">${BASE_URL.replace('https://', '')}</a></p>
+      </td></tr>
+    </table>
+  </td></tr></table></body></html>`;
+}
+
+function reminderCta(label: string): string {
+  const href = `${BUSINESS.url}/buchung/${DUMMY_BOOKING_ID}`;
+  return `<table cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td style="background:#0a0a0a;border-radius:8px;padding:12px 28px;">
+    <a href="${href}" style="color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">${label}</a>
+  </td></tr></table>`;
+}
+
+function previewReturnReminder2d(): { subject: string; html: string } {
+  const p = escapeHtml('GoPro Hero13 Black');
+  const n = escapeHtml('Max Mustermann');
+  return {
+    subject: `Erinnerung: Deine Rückgabe steht bevor – ${p}`,
+    html: wrapReminderLayout(`
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Rückgabe in 2 Tagen</h1>
+    <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">Hallo ${n},<br><br>nur eine kurze Erinnerung: Dein Mietartikel <strong>${p}</strong> muss bis zum <strong>22.05.2026</strong> zurückgesendet werden.</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">Bitte denke daran, das Paket rechtzeitig aufzugeben, damit es pünktlich bei uns ankommt.</p>
+    ${reminderCta('Buchung ansehen')}
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${escapeHtml(DUMMY_BOOKING_ID)}</p>`),
+  };
+}
+
+function previewOverdue1d(): { subject: string; html: string } {
+  const p = escapeHtml('GoPro Hero13 Black');
+  const n = escapeHtml('Max Mustermann');
+  return {
+    subject: `Rückgabe überfällig – ${p}`,
+    html: wrapReminderLayout(`
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#b91c1c;">Rückgabe überfällig</h1>
+    <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">Hallo ${n},<br><br>der Rückgabetermin für <strong>${p}</strong> war gestern. Bitte sende den Mietartikel schnellstmöglich zurück, um zusätzliche Kosten zu vermeiden.</p>
+    ${reminderCta('Buchung ansehen')}
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${escapeHtml(DUMMY_BOOKING_ID)}</p>`),
+  };
+}
+
+function previewOverdue3d(): { subject: string; html: string } {
+  const p = escapeHtml('GoPro Hero13 Black');
+  const n = escapeHtml('Max Mustermann');
+  return {
+    subject: `Dringende Erinnerung: Rückgabe ausstehend – ${p}`,
+    html: wrapReminderLayout(`
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#b91c1c;">Dringend: Rückgabe seit 3 Tagen ausstehend</h1>
+    <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">Hallo ${n},<br><br>dein Mietartikel <strong>${p}</strong> ist seit 3 Tagen überfällig. Bitte melde dich umgehend bei uns bzw. sende die Ausrüstung sofort zurück — andernfalls stellen wir den Wiederbeschaffungswert in Rechnung.</p>
+    ${reminderCta('Buchung ansehen')}
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${escapeHtml(DUMMY_BOOKING_ID)}</p>`),
+  };
+}
+
+function previewWeeklyReport(): { subject: string; html: string } {
+  const row = (label: string, value: string, valueStyle = '') =>
+    `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">${label}</td>
+        <td style="padding:3px 0;font-size:13px;text-align:right;${valueStyle}">${value}</td></tr>`;
+  return {
+    subject: 'cam2rent Wochenbericht KW 18/2026',
+    html: `<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:22px 32px;">
+    <p style="margin:0;font-size:22px;font-weight:700;color:#fff;line-height:1.1;">Wochenbericht</p>
+    <p style="margin:3px 0 0;font-size:13px;color:#9ca3af;">KW 18/2026 · 27.04.2026 – 03.05.2026</p>
+  </td></tr>
+  <tr><td style="background:#fff;padding:28px 32px;">
+    <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6;">Hier die Zusammenfassung der letzten 7 Tage. Alle Details im PDF-Anhang.</p>
+    <h3 style="margin:18px 0 8px;font-size:14px;color:#0a0a0a;">💶 Finanzen</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${row('Umsatz Woche', '1.284,00&nbsp;€', 'font-weight:700;color:#10b981;')}
+      ${row('Vorwoche', '1.010,00&nbsp;€', 'color:#6b7280;')}
+      ${row('Bezahlte Rechnungen', '9')}
+      ${row('Offene Rechnungen', '2 (überfällig: 78,00&nbsp;€)')}
+    </table>
+    <h3 style="margin:20px 0 8px;font-size:14px;color:#0a0a0a;">📅 Buchungen</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${row('Neue Buchungen', '12 (Vorwoche: 9)', 'font-weight:700;color:#10b981;')}
+      ${row('Stornierungen', '1')}
+      ${row('Nächste 7 Tage', '5 Versand · 4 Rückgabe')}
+    </table>
+    <h3 style="margin:20px 0 8px;font-size:14px;color:#0a0a0a;">👤 Kunden & Operativ</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${row('Neue Registrierungen', '7')}
+      ${row('Offene Verifizierungen', '1')}
+      ${row('Neue Waitlist-Einträge', '3')}
+      ${row('Neue Schäden', '0')}
+      ${row('Kameras in Wartung', '1')}
+    </table>
+    <p style="margin:24px 0 4px;font-size:12px;color:#6b7280;">📎 Vollständiger Bericht als PDF im Anhang.</p>
+    <p style="margin:0;font-size:12px;color:#6b7280;"><a href="https://cam2rent.de/admin" style="color:#3b82f6;">→ Admin-Dashboard öffnen</a></p>
+  </td></tr>
+  <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Automatischer Wochenbericht · <a href="https://cam2rent.de/admin/einstellungen" style="color:#9ca3af;">Einstellungen</a></p>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`,
+  };
+}
+
 // ─── Katalog ──────────────────────────────────────────────────────────────────
 
 export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
@@ -471,6 +662,23 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Parallel zur Stornierungsbestätigung: Admin erhält Info über die stornierte Buchung.',
     recipient: 'admin',
     render: () => withOverride('cancellation_admin', async () => buildCancellationAdminEmail(dummyCancellation)),
+  },
+  {
+    id: 'credit_note',
+    name: 'Stornierungsbeleg (Gutschrift)',
+    description: 'Beim Stornieren mit Rückerstattung bzw. bei Freigabe einer Gutschrift im Gutschriften-Tab — Kunde bekommt den Stornierungsbeleg (hebt die Originalrechnung auf) als PDF-Anhang.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendCreditNote(d); }, {
+      bookingId: DUMMY_BOOKING_ID,
+      creditNoteNumber: 'GS-2026-000014',
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      grossAmount: 104,
+      refundedAmount: 78,
+      reason: 'Stornierung durch den Kunden',
+      refunded: true,
+      pdfBuffer: Buffer.alloc(0),
+    }),
   },
   // Versand
   {
@@ -524,6 +732,21 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Wenn der Admin auf eine Kundennachricht antwortet.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendNewMessageNotificationToCustomer, dummyMessage),
+  },
+  {
+    id: 'inbound_reply',
+    name: 'Antwort auf Kunden-E-Mail',
+    description: 'Wenn der Admin in /admin/nachrichten auf eine echte eingehende Kunden-E-Mail antwortet — die Antwort geht als gestylte cam2rent-Mail raus (mit korrekten Re:-/Threading-Headern).',
+    recipient: 'customer',
+    render: () => renderEmailPreview(
+      async (d: { customerEmail: string; customerName: string; subject: string; body: string }) => { await sendInboundReply(d); },
+      {
+        customerEmail: 'max.mustermann@example.de',
+        customerName: 'Max Mustermann',
+        subject: 'Frage zur Lieferung',
+        body: 'Hallo Max,\n\ndanke für deine Nachricht! Eine Wunschuhrzeit für die Zustellung am Freitag können wir leider nicht garantieren, das Paket kommt aber in der Regel zwischen 9 und 17 Uhr an.\n\nViele Grüße\nDein cam2rent-Team',
+      },
+    ),
   },
   // Verlängerung
   {
@@ -584,6 +807,27 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
         { name: 'Floating Hand Grip', qty: 1 },
       ],
     }),
+  },
+  {
+    id: 'return_reminder_2d',
+    name: 'Rückgabe-Erinnerung (2 Tage vorher)',
+    description: 'Cron-basiert: 2 Tage vor dem Mietende — Erinnerung an die bevorstehende Rückgabe (Paket rechtzeitig aufgeben).',
+    recipient: 'customer',
+    render: () => withOverride('return_reminder_2d', async () => previewReturnReminder2d()),
+  },
+  {
+    id: 'overdue_1d',
+    name: 'Rückgabe überfällig (1 Tag)',
+    description: 'Cron-basiert: 1 Tag nach dem Mietende, wenn noch nicht zurückgegeben — Hinweis auf die überfällige Rückgabe.',
+    recipient: 'customer',
+    render: () => withOverride('overdue_1d', async () => previewOverdue1d()),
+  },
+  {
+    id: 'overdue_3d',
+    name: 'Rückgabe überfällig (3 Tage, dringend)',
+    description: 'Cron-basiert: 3 Tage nach dem Mietende — dringende zweite Mahnung; danach droht die Berechnung des Wiederbeschaffungswerts.',
+    recipient: 'customer',
+    render: () => withOverride('overdue_3d', async () => previewOverdue3d()),
   },
   {
     id: 'abandoned_cart',
@@ -676,6 +920,13 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       return { subject, html };
     }),
   },
+  {
+    id: 'kauf_rechnung',
+    name: 'Verkaufsrechnung (Zubehör-Verkauf)',
+    description: 'Beim Verkauf von Zubehör (z.B. gebrauchte Speicherkarte) über /admin/verkauf — Kunde bekommt die Rechnung + Stripe-Zahlungslink, Rechnung zusätzlich als PDF-Anhang.',
+    recipient: 'customer',
+    render: () => withOverride('kauf_rechnung', async () => previewSaleInvoice()),
+  },
   // Mietvertrag
   {
     id: 'contract_signed',
@@ -692,6 +943,44 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       rentalTo: '07.05.2026',
       pdfBuffer: Buffer.alloc(0),
     }),
+  },
+  {
+    id: 'contract_resign_request',
+    name: 'Mietvertrag — Bitte neu unterschreiben',
+    description: 'Wenn der Admin den Mietvertrag zurücksetzt (z.B. nach einem Signatur-Glitch) — Kunde wird gebeten, erneut zu unterschreiben (CTA auf „Meine Buchungen").',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendContractResignRequest(d); }, {
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      bookingNumber: DUMMY_BOOKING_ID,
+      productName: 'GoPro Hero13 Black',
+      rentalFrom: '2026-05-01',
+      rentalTo: '2026-05-07',
+    }),
+  },
+  {
+    id: 'contract_sign_reminder',
+    name: 'Mietvertrag — Erinnerung unterschreiben',
+    description: 'Cron-basiert (täglich ~08:00 Berlin): Erinnerung ab 5 Tage vor dem Versand-/Übergabetag, solange der Mietvertrag nicht unterschrieben ist. Bei ≤1 Tag Vorlauf eskaliert der Wortlaut.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendContractSignReminder(d); }, {
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      bookingNumber: DUMMY_BOOKING_ID,
+      productName: 'GoPro Hero13 Black',
+      rentalFrom: '2026-05-01',
+      rentalTo: '2026-05-07',
+      deadlineDate: '2026-04-29',
+      daysUntilDeadline: 1,
+      deliveryMode: 'versand',
+    }),
+  },
+  {
+    id: 'contract_auto_cancel',
+    name: 'Mietvertrag — Auto-Storno',
+    description: 'Cron-basiert (täglich ~09:00 Berlin): Buchung wird am Puffertag (Versand-/Übergabetag) automatisch storniert, wenn kein unterschriebener Mietvertrag vorliegt — inkl. Erstattungshinweis.',
+    recipient: 'customer',
+    render: () => withOverride('contract_auto_cancel', async () => previewContractAutoCancel()),
   },
   // Wiederbeschaffungswerte
   {
@@ -737,6 +1026,16 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Cron-basiert: Buchung wurde 2 Tage vor Mietbeginn storniert, weil der Ausweis nicht hochgeladen wurde — inkl. Refund-Hinweis.',
     recipient: 'customer',
     render: () => withOverride('verification_auto_cancel', async () => previewVerificationAutoCancel()),
+  },
+  {
+    id: 'verification_reminder_manual',
+    name: 'Verifizierungs-Erinnerung (manuell)',
+    description: 'Manuell vom Admin ausgelöst (Button „Verifizierungs-Erinnerung senden" in der Kundenakte) — bittet den Kunden, sein Konto/seinen Ausweis zu verifizieren.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendVerificationReminder(d); }, {
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+    }),
   },
   // Buchungs-Storno-Crons
   {
@@ -794,6 +1093,31 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       subject: 'Neuer Monat, neue Kameras im Verleih',
       bodyHtml: '<h2 style="margin:0 0 16px;font-size:20px;color:#0a0a0a;">Beispiel-Newsletter</h2><p>Hier kommt der eigentliche Inhalt der Newsletter-Kampagne…</p>',
     }),
+  },
+  // Interne Termin-Erinnerung (Mitarbeiter)
+  {
+    id: 'appointment_reminder',
+    name: 'Termin-Erinnerung (Mein Kalender)',
+    description: 'Cron-basiert (alle 5 Min): persönliche Termin-Erinnerung aus „Mein Kalender" an den Mitarbeiter (+ ggf. Kollegen bei geteiltem Termin), zur eingestellten Vorlaufzeit.',
+    recipient: 'admin',
+    render: () => renderEmailPreview(sendAppointmentReminder, {
+      to: 'mitarbeiter@cam2rent.de',
+      employeeName: 'Lisa Schmidt',
+      appointmentTitle: 'Kamera-Übergabe an Max Mustermann',
+      startsAt: '2026-05-01T14:30:00.000Z',
+      minutesBefore: 30,
+      location: 'Ladenlokal Berlin',
+      description: 'GoPro Hero13 Black + Zubehör bereitlegen.',
+      isAllDay: false,
+      isShared: false,
+    }),
+  },
+  {
+    id: 'weekly_report',
+    name: 'Wochenbericht',
+    description: 'Cron-basiert (Sonntag ~18:30 Berlin): automatischer Wochenbericht an den Owner/Empfänger aus den Einstellungen — Kennzahlen der letzten 7 Tage inkl. PDF-Anhang. Kann unter /admin/einstellungen deaktiviert werden.',
+    recipient: 'admin',
+    render: () => withOverride('weekly_report', async () => previewWeeklyReport()),
   },
 ];
 
