@@ -667,6 +667,58 @@ damit der Kunde frisch unterschreiben muss.
   ausführen. Ohne sie funktioniert das Zurücksetzen (inkl. Pflicht-Mail)
   bereits; nur die „Alles okay"-Sperre ist erst nach der Migration aktiv.
 
+### Mietvertrag-Erinnerung + Auto-Storno bei fehlender Unterschrift (Stand 2026-07-13)
+Vorher bekam der Kunde **keine** wiederkehrende Erinnerung, wenn der Mietvertrag
+nicht unterschrieben war — der rote „Mietvertrag nicht unterschrieben"-Banner war
+nur im Admin sichtbar. Jetzt: zwei Crons erinnern den Kunden täglich und
+stornieren die Buchung automatisch am Puffertag (Versand-/Übergabetag), wenn bis
+dahin kein unterschriebener Vertrag vorliegt. Analog zum Ausweis-Flow
+(`verification-reminder` / `verification-auto-cancel`), aber für `contract_signed`.
+- **Keine neue Migration.** Reminder dedupt über `email_log`, Auto-Storno über
+  atomaren Status-Flip (wie `verification-auto-cancel`). `contract_signed`
+  existiert längst.
+- **Config** `admin_settings.contract_reminder_config` (`lib/contract-reminder-config.ts`,
+  `loadContractReminderConfig`): `{ enabled, reminder_lead_days=5,
+  autocancel_versand=true, autocancel_abholung=true, refund_on_cancel=true }`.
+  Ohne Setting greifen diese Defaults. **Wichtig:** Bei Abholung kann der Vertrag
+  auch bei der Übergabe unterschrieben werden — wer Abholung NICHT
+  auto-stornieren will, setzt `{ "autocancel_abholung": false }` (Reminder läuft
+  dann trotzdem weiter). Zum Deaktivieren des ganzen Features:
+  `{ "enabled": false }`.
+- **Cron `/api/cron/contract-reminder`** (täglich ~08:00 Berlin, `verifyCronAuth`
+  + `acquireCronLock('contract-reminder')`, `isTestMode`-Filter): lädt Buchungen
+  mit Status `confirmed|preparing_shipment|awaiting_pickup`, `contract_signed`
+  nicht true, `booking_type != 'kauf'`, mit `customer_email`. Berechnet den
+  Puffertag via `computeShipDate` (`ship_date_override` mit Vorrang, sonst
+  `rental_from − versand_before/abholung_before` aus `booking_buffer_days`).
+  Erinnert im Fenster `[reminder_lead_days vor .. 3 Tage nach]` dem Puffertag,
+  max. 1 Mail/Tag/Buchung. Mail-Funktion `sendContractSignReminder` in
+  `lib/email.ts` (emailType `contract_sign_reminder`, CTA auf `/konto/buchungen`,
+  eskalierender Wortlaut bei ≤1 Tag Vorlauf).
+- **Cron `/api/cron/contract-auto-cancel`** (täglich ~09:00 Berlin, nach der
+  Reminder-Mail): storniert dieselben Kandidaten, sobald der Puffertag erreicht/
+  überschritten ist (`daysUntil(shipDate) <= 0`), gated pro Lieferart über die
+  Config. Atomarer Flip `status='cancelled'` mit Status-Guard +
+  `.or('contract_signed.is.null,contract_signed.eq.false')` (schließt eine
+  Last-Minute-Unterschrift aus). Bei `refund_on_cancel`: Stripe-Refund
+  (idempotencyKey `contract-auto-cancel:<id>`) + Kaution-Vorautorisierung
+  freigeben; Refund-Fehler → `refund_status='failed_pending_admin'` +
+  `payment_failed`-Notification. Zubehör-Exemplare werden freigegeben,
+  `booking_cancelled`-Notification, Storno-Mail an den Kunden (emailType
+  `contract_auto_cancel`, inline). Manuelle Buchungen (`MANUAL-`/`PENDING-`)
+  lösen keinen Stripe-Refund aus.
+- **Registriert** in `app/admin/emails/page.tsx` (`TYPE_LABELS`:
+  `contract_sign_reminder`, `contract_auto_cancel`).
+- **Go-Live TODO:** Zwei Hetzner-Crontab-Einträge (täglich, `--resolve` umgeht
+  Cloudflare — siehe „Cloudflare-Vollintegration"). Reminder vor dem Storno:
+  ```
+  0 8 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/contract-reminder
+  0 9 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/contract-auto-cancel
+  ```
+  Ohne die Crontab-Einträge passiert nichts (keine Erinnerung, kein Storno). Kein
+  Migrations-Schritt nötig. Bei Bedarf `contract_reminder_config` in
+  `admin_settings` anlegen (sonst greifen die Defaults).
+
 ### Neukunden zahlen immer sofort — Zahlungslink-Pfad entfernt (Stand 2026-06-16)
 Der frühere „erste Buchung → `pending_verification` → Admin gibt frei → Kunde
 bekommt Zahlungslink per E-Mail"-Pfad ist aus dem **Kunden-Flow entfernt**.
@@ -5147,6 +5199,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Mietvertrag-Erinnerung + Auto-Storno — Crontab auszuführen (keine Migration):**
+  Zwei Einträge (täglich, `--resolve` umgeht Cloudflare):
+  ```
+  0 8 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/contract-reminder
+  0 9 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/contract-auto-cancel
+  ```
+  Ohne die Einträge bekommt der Kunde keine Vertrags-Erinnerung und es wird nicht
+  auto-storniert. Verhalten/Config siehe „Mietvertrag-Erinnerung + Auto-Storno".
+  Abholung vom Storno ausnehmen: `admin_settings.contract_reminder_config` →
+  `{ "autocancel_abholung": false }`. Empfohlen ASAP ausführen.
 - **Abhol-/Rückgabe-Terminabsprache — Migration + Cron auszuführen:** Migration
   `supabase/supabase-bookings-coordination-reminder.sql` (idempotent, additiv:
   2 Timestamp-Marker) + Crontab-Eintrag (mehrmals täglich, `--resolve`):

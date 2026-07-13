@@ -2144,6 +2144,110 @@ export async function sendContractResignRequest(data: {
 }
 
 
+// ─── Mietvertrag: tägliche Erinnerung, wenn noch nicht unterschrieben ────────
+/**
+ * Erinnert den Kunden, dass für seine Buchung noch kein unterschriebener
+ * Mietvertrag vorliegt. Wird vom Cron `/api/cron/contract-reminder` täglich
+ * geschickt, solange der Puffertag (Versand-/Übergabetag) näher rückt. Ohne
+ * Unterschrift wird die Buchung am Puffertag automatisch storniert.
+ */
+export async function sendContractSignReminder(data: {
+  customerName: string;
+  customerEmail: string;
+  bookingNumber: string;
+  productName?: string;
+  rentalFrom?: string; // YYYY-MM-DD
+  rentalTo?: string;   // YYYY-MM-DD
+  deadlineDate?: string; // YYYY-MM-DD (Puffertag = spätester Termin)
+  daysUntilDeadline: number; // Tage bis zum Puffertag (0 = heute)
+  deliveryMode?: string | null; // 'versand' | 'abholung'
+}): Promise<void> {
+  const BASE_URL = await getSiteUrl();
+  const isPickup = data.deliveryMode === 'abholung';
+  const isFinal = data.daysUntilDeadline <= 1; // letzter Tag / morgen Storno
+
+  const subject = stripSubject(
+    isFinal
+      ? `LETZTE ERINNERUNG: Mietvertrag für Buchung ${data.bookingNumber} unterschreiben — sonst Storno`
+      : `Bitte Mietvertrag unterschreiben — Buchung ${data.bookingNumber}`,
+  );
+
+  const fmt = (iso?: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('T')[0].split('-');
+    return d && m && y ? `${d}.${m}.${y}` : '';
+  };
+  const zeitraum =
+    data.rentalFrom && data.rentalTo
+      ? `${fmt(data.rentalFrom)} – ${fmt(data.rentalTo)}`
+      : '';
+
+  const detailRows = [
+    ['Buchung', h(data.bookingNumber)],
+    data.productName ? ['Kamera', h(data.productName)] : null,
+    zeitraum ? ['Zeitraum', zeitraum] : null,
+    data.deadlineDate
+      ? [isPickup ? 'Übergabe' : 'Versand', fmt(data.deadlineDate)]
+      : null,
+  ].filter(Boolean) as [string, string][];
+
+  const detailTable = detailRows
+    .map(
+      ([k, v]) =>
+        `<tr>
+          <td style="padding:4px 0;font-size:13px;color:#9ca3af;">${k}</td>
+          <td style="padding:4px 0;font-size:13px;color:#0a0a0a;font-weight:600;text-align:right;">${v}</td>
+        </tr>`,
+    )
+    .join('');
+
+  const deadlineHint = isFinal
+    ? `Wenn bis ${isPickup ? 'zur Übergabe' : 'zum Versandtag'} kein unterschriebener Mietvertrag vorliegt, müssen wir die Buchung <strong>automatisch stornieren</strong> und erstatten dir den vollen Betrag. Das Unterschreiben dauert nur einen Moment.`
+    : `Ohne unterschriebenen Mietvertrag können wir die Kamera nicht ${isPickup ? 'übergeben' : 'versenden'}. Erledige die Unterschrift bitte rechtzeitig — sonst wird die Buchung kurz vor Mietbeginn automatisch storniert.`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${isFinal ? '#9a3412' : '#0a0a0a'};">${isFinal ? 'Letzte Erinnerung: Mietvertrag unterschreiben' : 'Bitte Mietvertrag unterschreiben'}</h1>
+          <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            für deine Buchung liegt noch <strong>kein unterschriebener Mietvertrag</strong> vor. Damit alles glattläuft, brauchen wir deine digitale Unterschrift.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:8px 0;">
+            ${detailTable}
+          </table>
+          <a href="${BASE_URL}/konto/buchungen" style="display:inline-block;padding:14px 28px;background:${isFinal ? '#ea580c' : '#0a0a0a'};color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Jetzt unterschreiben
+          </a>
+          <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">${deadlineHint}</p>
+          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;line-height:1.6;">
+            Melde dich dafür in deinem Konto an und öffne <strong>Meine Buchungen</strong> — dort findest du den Button „Mietvertrag unterschreiben". Fragen? Antworte einfach auf diese E-Mail.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; ${h(BUSINESS.slogan)} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    emailType: 'contract_sign_reminder',
+    bookingId: data.bookingNumber,
+  });
+}
+
+
 // ─── Ausweis-Verifizierung: manuelle Erinnerung (Admin-ausgelöst) ───────────
 
 export async function sendVerificationReminder(data: {

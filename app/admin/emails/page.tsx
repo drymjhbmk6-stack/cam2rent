@@ -85,6 +85,8 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   verification_auto_cancel: { label: 'Verifizierung: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
   verification_rejected: { label: 'Verifizierung: Abgelehnt', color: '#ef4444', bg: '#ef444414' },
   contract_resign_request: { label: 'Mietvertrag: Bitte neu unterschreiben', color: '#ef4444', bg: '#ef444414' },
+  contract_sign_reminder: { label: 'Mietvertrag: Erinnerung unterschreiben', color: '#f59e0b', bg: '#f59e0b14' },
+  contract_auto_cancel: { label: 'Mietvertrag: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
   ugc_approved: { label: 'Kundenmaterial: Freigabe + Gutschein', color: '#10b981', bg: '#10b98114' },
   ugc_featured: { label: 'Kundenmaterial: Feature-Bonus', color: '#9333ea', bg: '#9333ea14' },
   ugc_rejected: { label: 'Kundenmaterial: Absage', color: '#ef4444', bg: '#ef444414' },
