@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     try {
       const holdItems: CartHoldItem[] = (items as Array<Record<string, unknown>>)
         .filter((it) => it && typeof it === 'object')
-        .map((it) => ({
+        .map((it): CartHoldItem => ({
           cartItemId: String(it.id ?? ''),
           productId: String(it.productId ?? ''),
           productName: typeof it.productName === 'string' ? it.productName : null,

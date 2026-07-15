@@ -59,7 +59,6 @@ export async function findCameraOverbookingConflict(
   },
 ): Promise<AvailabilityConflict | null> {
   const { productId, rentalFrom, rentalTo } = args;
-  const deliveryMode = args.deliveryMode ?? 'versand';
 
   if (!productId || !rentalFrom || !rentalTo) return null;
   if (rentalTo < rentalFrom) return null;
@@ -179,8 +178,8 @@ export async function findCameraOverbookingConflict(
         return_due_date_override?: string | null;
       };
       const bMode = b.delivery_mode ?? 'versand';
-      const effFrom = computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null);
-      const effTo = computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null);
+      const effFrom = toIsoDate(computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null));
+      const effTo = toIsoDate(computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null));
       if (effFrom <= cur && effTo >= cur) {
         bookedCount += resolveBookingCameras(bRaw).filter((c) => c.product_id === productId).length;
       }

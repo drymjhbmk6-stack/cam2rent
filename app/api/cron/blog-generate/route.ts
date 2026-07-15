@@ -203,7 +203,6 @@ export async function POST(req: NextRequest) {
   let topicData: { topic: string; prompt?: string | null; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
   let scheduleId: string | null = null;
   // Serien-Kontext (wird aktuell nicht befüllt, Platzhalter für zukünftige Serien-Logik)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const seriesContext = null as { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null;
 
   if (scheduleEntry) {
@@ -475,7 +474,8 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
     // Reviewen bereitsteht. Bei 'published' (voll-Modus, bereits live) keine
     // Push — sonst kommt sie sowohl bei draft als auch bei scheduled.
     if (postStatus !== 'published' && post) {
-      const titleShort = parsed.title.length > 80 ? parsed.title.slice(0, 80) + '…' : parsed.title;
+      const fullTitle = parsed.title ?? 'Neuer Blog-Artikel';
+      const titleShort = fullTitle.length > 80 ? fullTitle.slice(0, 80) + '…' : fullTitle;
       await createAdminNotification(supabase, {
         type: 'blog_ready',
         title: postStatus === 'scheduled' ? 'Geplanter Blog-Artikel generiert' : 'Neuer Blog-Artikel zum Reviewen',
