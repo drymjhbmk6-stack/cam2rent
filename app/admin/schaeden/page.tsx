@@ -36,7 +36,7 @@ type StatusFilter = 'all' | 'open' | 'confirmed' | 'resolved';
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   open: { label: 'Offen', bg: '#f59e0b22', text: '#f59e0b' },
   confirmed: { label: 'Bestätigt', bg: '#ef444422', text: '#ef4444' },
-  resolved: { label: 'Gelöst', bg: '#10b98122', text: '#10b981' },
+  resolved: { label: 'Abgeschlossen', bg: '#10b98122', text: '#10b981' },
 };
 
 export default function AdminSchaedenPage() {
@@ -194,7 +194,7 @@ export default function AdminSchaedenPage() {
     { value: 'all', label: `Alle (${counts.all})` },
     { value: 'open', label: `Offen (${counts.open})` },
     { value: 'confirmed', label: `Bestätigt (${counts.confirmed})` },
-    { value: 'resolved', label: `Gelöst (${counts.resolved})` },
+    { value: 'resolved', label: `Abgeschlossen (${counts.resolved})` },
   ];
 
   return (
@@ -223,7 +223,7 @@ export default function AdminSchaedenPage() {
         {[
           { label: 'Offene Meldungen', value: counts.open, color: '#f59e0b' },
           { label: 'Bestätigt', value: counts.confirmed, color: '#ef4444' },
-          { label: 'Gelöst', value: counts.resolved, color: '#10b981' },
+          { label: 'Abgeschlossen', value: counts.resolved, color: '#10b981' },
           { label: 'Gesamt', value: counts.all, color: '#06b6d4' },
         ].map((stat) => (
           <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
@@ -665,7 +665,7 @@ export default function AdminSchaedenPage() {
                         disabled={saving}
                         style={{ padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
                       >
-                        Als gelöst markieren
+                        Abgeschlossen
                       </button>
                     </>
                   )}
