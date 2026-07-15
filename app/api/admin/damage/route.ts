@@ -320,8 +320,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reportId, status, damage_amount, deposit_retained, admin_notes, resolution_note, repair_until, notify_customer } = body;
-    const notifyCustomer = notify_customer === true || notify_customer === 'true';
+    const { reportId, status, damage_amount, deposit_retained, admin_notes, resolution_note, repair_until } = body;
 
     if (!reportId) {
       return NextResponse.json({ error: 'reportId erforderlich.' }, { status: 400 });
@@ -378,9 +377,9 @@ export async function PATCH(req: NextRequest) {
         .eq('id', report.booking_id);
     }
 
-    // Bei "resolved" → Kunde benachrichtigen, ABER nur wenn der Admin den
-    // Haken "Kunde per E-Mail benachrichtigen" explizit gesetzt hat.
-    if (status === 'resolved' && notifyCustomer) {
+    // Bei "resolved" → Kunde IMMER benachrichtigen (Abschluss-Mail geht
+    // automatisch raus, sobald eine Kunden-E-Mail hinterlegt ist).
+    if (status === 'resolved') {
       const { data: booking } = await supabase
         .from('bookings')
         .select('customer_name, customer_email, product_name')
