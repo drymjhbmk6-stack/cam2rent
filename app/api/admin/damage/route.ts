@@ -382,7 +382,7 @@ export async function PATCH(req: NextRequest) {
     if (status === 'resolved') {
       const { data: booking } = await supabase
         .from('bookings')
-        .select('customer_name, customer_email, product_name')
+        .select('customer_name, customer_email, product_name, deposit_intent_id')
         .eq('id', report.booking_id)
         .single();
 
@@ -394,6 +394,9 @@ export async function PATCH(req: NextRequest) {
           productName: booking.product_name || '',
           damageAmount: damage_amount ?? report.damage_amount ?? 0,
           depositRetained: deposit_retained ?? report.deposit_retained ?? 0,
+          // Kaution-Zeile nur bei echter Kautions-Vorautorisierung. Ohne
+          // deposit_intent_id (Haftungsschutz-Modus) entfällt sie in der Mail.
+          hasDeposit: !!booking.deposit_intent_id,
           // NUR der kundensichtbare Abschlusstext — die internen Admin-Notizen
           // gehen bewusst NICHT an den Kunden.
           adminNotes: resolution_note ?? report.resolution_note ?? '',

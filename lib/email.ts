@@ -1082,6 +1082,9 @@ export interface DamageResolutionEmailData {
   damageAmount: number;
   depositRetained: number;
   adminNotes: string;
+  // Nur true, wenn eine echte Kautions-Vorautorisierung existiert
+  // (Kautions-Modus). Bei Haftungsschutz-Only bleibt die Kaution-Zeile weg.
+  hasDeposit?: boolean;
 }
 
 // ─── Damage report confirmation (to customer) ────────────────────────────────
@@ -1268,12 +1271,18 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
   // aber dieser Subject blieb roh — review_request wurde gefixt, hier
   // vergessen).
   const subject = stripSubject(`Schadensmeldung bearbeitet – ${data.bookingId}`);
-  const retainedInfo = data.depositRetained > 0
-    ? `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+  // Kaution-Zeile nur zeigen, wenn eine echte Kautions-Vorautorisierung
+  // existiert (Kautions-Modus) oder tatsächlich etwas einbehalten wurde.
+  // Bei Haftungsschutz-Only (kein Deposit) entfällt die Zeile komplett.
+  const showDeposit = data.hasDeposit === true || data.depositRetained > 0;
+  const retainedInfo = !showDeposit
+    ? ''
+    : data.depositRetained > 0
+      ? `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Einbehaltene Kaution</p>
         <p style="margin:0;font-size:15px;font-weight:700;color:#dc2626;">${fmtEuro(data.depositRetained)}</p>
       </td></tr>`
-    : `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+      : `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kaution</p>
         <p style="margin:0;font-size:15px;font-weight:600;color:#16a34a;">Vollständig freigegeben</p>
       </td></tr>`;
