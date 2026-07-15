@@ -51,6 +51,7 @@ export default function AdminSchaedenPage() {
   const [saving, setSaving] = useState(false);
   const [photoModal, setPhotoModal] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [notifyResolution, setNotifyResolution] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -72,6 +73,7 @@ export default function AdminSchaedenPage() {
 
   function openDetail(report: DamageReport) {
     setSelectedReport(report);
+    setNotifyResolution(false);
     setEditForm({
       damage_amount: report.damage_amount?.toString() || '',
       deposit_retained: report.deposit_retained?.toString() || '',
@@ -94,6 +96,7 @@ export default function AdminSchaedenPage() {
           deposit_retained: editForm.deposit_retained ? parseFloat(editForm.deposit_retained) : undefined,
           admin_notes: editForm.admin_notes || undefined,
           repair_until: editForm.repair_until || undefined,
+          notify_customer: newStatus === 'resolved' ? notifyResolution : undefined,
         }),
       });
       if (!res.ok) throw new Error();
@@ -460,6 +463,22 @@ export default function AdminSchaedenPage() {
                     style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none', resize: 'none' }}
                   />
                 </div>
+
+                {/* Kunden-Mail nur bei explizitem Haken */}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', marginBottom: 16, borderRadius: 10, background: '#0a0f1e', border: '1px solid #1e293b', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={notifyResolution}
+                    onChange={(e) => setNotifyResolution(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, accentColor: '#10b981', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, color: '#e2e8f0' }}>
+                    Kunde per E-Mail benachrichtigen (Schadensabschluss)
+                    <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      Nur beim Lösen. Sendet dem Kunden Schadenshöhe, einbehaltenen Betrag und deine Notizen. Ohne Haken geht keine Mail raus.
+                    </span>
+                  </span>
+                </label>
 
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   {selectedReport.status === 'open' && (

@@ -255,12 +255,15 @@ export async function POST(req: NextRequest) {
 /**
  * PATCH /api/admin/damage
  * Schadensmeldung aktualisieren.
- * Body: { reportId, status?, damage_amount?, deposit_retained?, admin_notes?, repair_until? }
+ * Body: { reportId, status?, damage_amount?, deposit_retained?, admin_notes?, repair_until?, notify_customer? }
+ * notify_customer: die Schadensabschluss-Mail geht NUR raus, wenn dieses Flag
+ * explizit true ist (bewusste Admin-Entscheidung, kein Auto-Versand).
  */
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reportId, status, damage_amount, deposit_retained, admin_notes, repair_until } = body;
+    const { reportId, status, damage_amount, deposit_retained, admin_notes, repair_until, notify_customer } = body;
+    const notifyCustomer = notify_customer === true || notify_customer === 'true';
 
     if (!reportId) {
       return NextResponse.json({ error: 'reportId erforderlich.' }, { status: 400 });
@@ -310,8 +313,9 @@ export async function PATCH(req: NextRequest) {
         .eq('id', report.booking_id);
     }
 
-    // Bei "resolved" → Kunde benachrichtigen
-    if (status === 'resolved') {
+    // Bei "resolved" → Kunde benachrichtigen, ABER nur wenn der Admin den
+    // Haken "Kunde per E-Mail benachrichtigen" explizit gesetzt hat.
+    if (status === 'resolved' && notifyCustomer) {
       const { data: booking } = await supabase
         .from('bookings')
         .select('customer_name, customer_email, product_name')
