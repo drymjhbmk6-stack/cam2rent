@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
+import DamageReportModal from '@/components/admin/DamageReportModal';
 import CancellationPreviewModal from '@/components/admin/CancellationPreviewModal';
 import PriceInput from '@/components/admin/PriceInput';
 import { BUSINESS } from '@/lib/business-config';
@@ -244,6 +245,7 @@ export default function BuchungDetailPage() {
   const [showResendPreview, setShowResendPreview] = useState(false);
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
+  const [showDamageReport, setShowDamageReport] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -1956,7 +1958,12 @@ export default function BuchungDetailPage() {
                     {accessoryDamageMsg}
                   </p>
                 )}
-                <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
+                <button
+                  onClick={() => { setAccessoryDamageMsg(null); setShowDamageReport(true); }}
+                  className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors"
+                >
+                  Schadensmeldung erstellen
+                </button>
 
                 {booking.status === 'cancelled' && (
                   <>
@@ -1992,6 +1999,15 @@ export default function BuchungDetailPage() {
             // Buchung neu laden, damit Status/Kaution sich aktualisieren
             fetchBooking();
           }}
+        />
+
+        {/* ═══ Schadensmeldung erstellen (Admin für Kunden) ═══ */}
+        <DamageReportModal
+          open={showDamageReport}
+          onClose={() => setShowDamageReport(false)}
+          bookingId={booking.id}
+          bookingLabel={`${booking.customer_name || ''} · ${booking.product_name || ''}`.trim()}
+          onSuccess={(msg) => setAccessoryDamageMsg(msg)}
         />
 
         {/* ═══ Stornieren-Modal ═══ */}

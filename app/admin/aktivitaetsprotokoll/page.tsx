@@ -37,6 +37,11 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.invoice_version': 'Rechnungsfassung archiviert',
   'booking.invoice_send': 'Angepasste Rechnung an Kunden gesendet',
   'booking.billing_address': 'Abweichende Rechnungsadresse geändert',
+  // Schäden
+  'damage.create': 'Schadensmeldung erfasst',
+  'damage.confirm': 'Schaden bestätigt',
+  'damage.resolve': 'Schaden gelöst',
+  'damage.update': 'Schadensmeldung aktualisiert',
   // Kunden
   'customer.block': 'Kunde gesperrt',
   'customer.unblock': 'Kunde entsperrt',

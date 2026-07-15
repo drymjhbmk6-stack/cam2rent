@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendDamageResolution } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
+import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
+import { createAdminNotification } from '@/lib/admin-notifications';
+
+// Magic-Byte-Resultat → Extension + MIME (analog zum Kunden-Pfad
+// /api/damage-report). Der Client-MIME wird bewusst ignoriert.
+const DETECTED_TO_EXT: Record<string, { ext: string; mime: string }> = {
+  jpeg: { ext: 'jpg', mime: 'image/jpeg' },
+  png: { ext: 'png', mime: 'image/png' },
+  webp: { ext: 'webp', mime: 'image/webp' },
+  heic: { ext: 'heic', mime: 'image/heic' },
+  heif: { ext: 'heif', mime: 'image/heif' },
+  gif: { ext: 'gif', mime: 'image/gif' },
+};
 
 /**
  * GET /api/admin/damage
@@ -69,6 +82,135 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('GET /api/admin/damage error:', err);
     return NextResponse.json({ error: 'Fehler beim Laden.' }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/admin/damage
+ * Admin legt im Namen des Kunden eine Schadensmeldung an — spiegelt den
+ * Kunden-Flow (/api/damage-report): Beschreibung + Fotos, booking-bezogen.
+ * Wird auf /admin/schaeden (mit Buchungsauswahl) und in der
+ * Buchungsdetailseite (Buchung vorausgewählt) genutzt.
+ * Body (FormData):
+ *   - bookingId: string
+ *   - description: string
+ *   - admin_notes?: string
+ *   - photos?: File[] (max 5, je max 5 MB, nur Bilder)
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const formData = await req.formData();
+    const bookingId = (formData.get('bookingId') as string | null)?.trim() || '';
+    const description = (formData.get('description') as string | null)?.trim() || '';
+    const adminNotes = (formData.get('admin_notes') as string | null)?.trim() || '';
+
+    if (!bookingId || !description) {
+      return NextResponse.json(
+        { error: 'Buchung und Beschreibung sind erforderlich.' },
+        { status: 400 },
+      );
+    }
+    if (description.length > 2000) {
+      return NextResponse.json(
+        { error: 'Beschreibung darf maximal 2000 Zeichen lang sein.' },
+        { status: 400 },
+      );
+    }
+
+    const supabase = createServiceClient();
+
+    // Buchung prüfen
+    const { data: booking, error: bookingErr } = await supabase
+      .from('bookings')
+      .select('id, product_name, customer_name, customer_email')
+      .eq('id', bookingId)
+      .single();
+
+    if (bookingErr || !booking) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+
+    // Fotos hochladen (privater Bucket, Magic-Byte-Check wie im Kunden-Pfad)
+    const photoPaths: string[] = [];
+    const photos = (formData.getAll('photos') as File[]).filter(
+      (p) => p instanceof File && p.size > 0,
+    );
+    if (photos.length > 5) {
+      return NextResponse.json({ error: 'Maximal 5 Fotos erlaubt.' }, { status: 400 });
+    }
+
+    for (const photo of photos) {
+      if (photo.size > 5 * 1024 * 1024) {
+        return NextResponse.json(
+          { error: `Datei "${photo.name}" ist zu groß (max 5 MB).` },
+          { status: 400 },
+        );
+      }
+      const buffer = Buffer.from(await photo.arrayBuffer());
+      if (!isAllowedImage(buffer)) {
+        return NextResponse.json(
+          { error: `Datei "${photo.name}" ist kein gültiges Bild (JPEG/PNG/WebP/HEIC/GIF erwartet).` },
+          { status: 400 },
+        );
+      }
+      const detected = detectImageType(buffer);
+      const detectedInfo = detected ? DETECTED_TO_EXT[detected] : undefined;
+      const ext = detectedInfo?.ext ?? 'jpg';
+      const realMime = detectedInfo?.mime ?? 'image/jpeg';
+      const fileName = `${bookingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('damage-photos')
+        .upload(fileName, buffer, { contentType: realMime, upsert: false });
+
+      if (uploadErr) {
+        console.error('Admin damage photo upload error:', uploadErr);
+        continue;
+      }
+      photoPaths.push(fileName);
+    }
+
+    const { data: report, error: insertErr } = await supabase
+      .from('damage_reports')
+      .insert({
+        booking_id: bookingId,
+        reported_by: 'admin',
+        description,
+        photos: photoPaths,
+        admin_notes: adminNotes || null,
+        status: 'open',
+      })
+      .select('id')
+      .single();
+
+    if (insertErr) {
+      console.error('Admin insert damage_report error:', insertErr);
+      return NextResponse.json(
+        { error: 'Schadensmeldung konnte nicht erstellt werden.' },
+        { status: 500 },
+      );
+    }
+
+    // Interne Info-Notification (kein Kunden-Mail — der Admin hat sie erfasst)
+    createAdminNotification(supabase, {
+      type: 'new_damage',
+      title: 'Schadensmeldung erfasst (Admin)',
+      message: `${booking.customer_name || '–'} — ${booking.product_name || '–'}`,
+      link: '/admin/schaeden',
+    });
+
+    await logAudit({
+      action: 'damage.create',
+      entityType: 'damage',
+      entityId: report.id,
+      changes: { booking_id: bookingId, photos: photoPaths.length, reported_by: 'admin' },
+      request: req,
+    });
+
+    return NextResponse.json({ success: true, reportId: report.id });
+  } catch (err) {
+    console.error('POST /api/admin/damage error:', err);
+    return NextResponse.json({ error: 'Fehler beim Erstellen der Schadensmeldung.' }, { status: 500 });
   }
 }
 

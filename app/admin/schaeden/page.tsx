@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import DamageReportModal from '@/components/admin/DamageReportModal';
 import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
 
 interface DamageReport {
@@ -49,6 +50,7 @@ export default function AdminSchaedenPage() {
   });
   const [saving, setSaving] = useState(false);
   const [photoModal, setPhotoModal] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -151,13 +153,21 @@ export default function AdminSchaedenPage() {
     <div className="min-h-screen" style={{ padding: '20px 16px' }}>
       <AdminBackLink label="Zurück" />
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
-          Schadensmeldungen
-        </h1>
-        <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>
-          Schäden prüfen, Kaution einbehalten, Reparaturen verwalten
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
+            Schadensmeldungen
+          </h1>
+          <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>
+            Schäden prüfen, Kaution einbehalten, Reparaturen verwalten
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          style={{ padding: '10px 18px', background: '#f97316', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          + Neue Schadensmeldung
+        </button>
       </div>
 
       {/* Stat Cards */}
@@ -513,6 +523,13 @@ export default function AdminSchaedenPage() {
           <img src={photoModal} alt="Schadensfoto" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8 }} />
         </div>
       )}
+
+      {/* Neue Schadensmeldung (Admin erstellt für Kunden) */}
+      <DamageReportModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSuccess={() => fetchReports()}
+      />
     </div>
   );
 }
