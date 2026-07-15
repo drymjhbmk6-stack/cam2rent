@@ -648,7 +648,7 @@ export default function CheckoutPage() {
   );
   const discountedSubtotal = cartTotal - totalDiscount;
   // Versand wird auf ORIGINAL-Warenwert geprüft (vor Rabatten) — kundenfreundlich
-  const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping);
+  const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping, deliveryMode === 'versand' ? country : undefined);
   const finalShipping = shippingOnOriginal.price;
   const total = discountedSubtotal + finalShipping;
 

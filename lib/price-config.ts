@@ -10,6 +10,8 @@ export interface ShippingPriceConfig {
   freeShippingThreshold: number;
   standardPrice: number;
   expressPrice: number;
+  /** Optionale Versandzonen für Länder außerhalb Deutschlands (siehe data/shipping). */
+  zones?: import('@/data/shipping').ShippingZone[];
 }
 
 export const DEFAULT_SHIPPING: ShippingPriceConfig = {

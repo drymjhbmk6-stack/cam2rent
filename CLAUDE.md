@@ -2001,10 +2001,30 @@ Registrierung + Cart-Checkout lehnen nicht erlaubte Länder ab. Default = nur DE
   Server die freigeschalteten Codes und lehnt ein nicht erlaubtes Land mit
   `403 COUNTRY_NOT_ALLOWED` ab BEVOR der Stripe-Intent entsteht. Für Abholung
   irrelevant. Fehlt das Feld (alter Client) → Default DE, kein Bruch.
-- **⚠️ Versandkosten weiterhin einheitlich:** `data/shipping.ts` → `calcShipping`
-  rechnet für ALLE freigeschalteten Länder denselben (deutschen) Preis. Die
-  Admin-Karte weist per amber Hinweis darauf hin. Länder-/Zonenpreise sind noch
-  nicht umgesetzt — vor dem Freischalten von Nicht-DE-Ländern bedenken.
+- **Versandzonen (länderabhängige Versandkosten, Stand 2026-07-15):**
+  `data/shipping.ts` kennt jetzt `ShippingZone` (`{ id, label, countries[],
+  freeShippingThreshold, standardPrice, expressPrice }`); `ShippingConfig`/
+  `ShippingPriceConfig` haben ein optionales `zones?`-Feld (gespeichert im selben
+  `admin_config.shipping`-Objekt). Neuer Helfer `resolveZonePrices(config,
+  country)` + `calcShipping(subtotal, method, mode, config, country?)`: ein Land
+  in einer Zone bekommt deren Preise, alle anderen (inkl. DE + nicht zugeordnete)
+  die Basispreise. Der `country`-Param ist optional → alle bestehenden Aufrufer
+  ohne Land laufen unverändert auf Basispreisen (DE). **Admin-UI:** Zonen-Editor
+  in `VersandpreiseContent` (Versand-Tab) — pro Zone Name + Länder-Pills (aus den
+  freigeschalteten Nicht-DE-Ländern, jedes Land max. 1 Zone) + 3 Preisfelder,
+  gemeinsamer Save mit den Basispreisen (ein `PUT /api/admin/config` key
+  `shipping`). **Wirksam im Cart-Checkout:** `app/checkout/page.tsx` reicht das
+  gewählte `country` an `calcShipping`; `confirm-cart` liest `country` aus dem
+  Checkout-Kontext (`r_country`) und rechnet die beiden `calcShipping`-Aufrufe
+  (Gruppen-Total + E-Mail) maßgeblich damit nach.
+- **Bewusst NICHT zonen-aware (Stand 2026-07-15):** Der Einzel-Buchungsflow
+  (`/kameras/[slug]/buchen`), die Warenkorb-Vorschau (`/warenkorb`), die
+  Admin-Buchungsbearbeitung und `create-pending-booking` rufen `calcShipping`
+  ohne `country` → **Basispreise (DE)**. Der Einzelflow sammelt kein Lieferland
+  inline (nutzt die Profiladresse); für einen ausländischen Direkt-Bucher zeigt
+  er DE-Versand. Zonenpreise greifen dort, wo der Kunde das Lieferland aktiv
+  wählt = Warenkorb-Checkout. Bei Bedarf kann der Admin den Versandpreis pro
+  Buchung manuell überschreiben (`shipping_override` in „Bestellung bearbeiten").
 - **Migration** `supabase/supabase-profiles-country.sql` (idempotent, additiv):
   `profiles.country TEXT NOT NULL DEFAULT 'DE'`. Bestehende Profile = DE (alle
   Bestandskunden sind deutsch). Service-role-only (NICHT im column-level

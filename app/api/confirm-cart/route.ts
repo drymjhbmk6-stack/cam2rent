@@ -363,6 +363,7 @@ export async function POST(req: NextRequest) {
     let r_loyaltyDiscount = loyaltyDiscount;
     let r_referralCode = referralCode;
     let r_shippingAddress = shippingAddress;
+    let r_country = 'DE';
     let r_invoiceName: string | null = invoiceName ?? null;
     let r_invoiceAddress: string | null = invoiceAddress ?? null;
     let r_earlyServiceConsentAt: string | null = null;
@@ -391,6 +392,7 @@ export async function POST(req: NextRequest) {
           r_userId = intentUserId ?? ctx.userId ?? r_userId;
           r_deliveryMode = ctx.deliveryMode ?? r_deliveryMode;
           r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
+          if (typeof ctx.country === 'string' && ctx.country.trim()) r_country = ctx.country.trim().toUpperCase();
           r_discountAmount = ctx.discountAmount ?? r_discountAmount;
           r_couponCode = ctx.couponCode ?? r_couponCode;
           r_productDiscountLabel = (typeof ctx.productDiscountLabel === 'string' && ctx.productDiscountLabel.trim())
@@ -644,7 +646,7 @@ export async function POST(req: NextRequest) {
     type GroupCalc = { subtotal: number; shipping: number; baseTotal: number };
     const groupCalcs: GroupCalc[] = periodGroups.map((g) => {
       const sub = g.reduce((s, it) => s + it.subtotal, 0);
-      const sh = calcShipping(sub, r_shippingMethod as ShippingMethod, r_deliveryMode as 'versand' | 'abholung', shippingCfg).price;
+      const sh = calcShipping(sub, r_shippingMethod as ShippingMethod, r_deliveryMode as 'versand' | 'abholung', shippingCfg, r_country).price;
       return { subtotal: sub, shipping: sh, baseTotal: sub + sh };
     });
     const sumGroupBaseTotals = groupCalcs.reduce((s, g) => s + g.baseTotal, 0) || 1;
@@ -1289,7 +1291,8 @@ export async function POST(req: NextRequest) {
               groupSubtotal,
               r_shippingMethod as ShippingMethod,
               r_deliveryMode as 'versand' | 'abholung',
-              shippingCfg
+              shippingCfg,
+              r_country
             ).price;
             const groupTotal = groupSubtotal
               - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100

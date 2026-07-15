@@ -66,10 +66,9 @@ export default function AllowedCountriesSection() {
         </p>
       </div>
 
-      <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs font-body text-amber-800">
-        ⚠️ Versandkosten gelten aktuell einheitlich (die oben eingestellten Preise) für <strong>alle</strong>{' '}
-        aktivierten Länder. Länder-/Zonenpreise sind noch nicht umgesetzt — schalte Länder außerhalb
-        Deutschlands nur frei, wenn dieselben Versandkosten passen.
+      <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs font-body text-blue-800">
+        💡 Für aktivierte Länder außer Deutschland kannst du oben unter <strong>„Versandzonen“</strong>{' '}
+        eigene Versandpreise festlegen. Länder ohne Zone nutzen die Basispreise (Deutschland).
       </div>
 
       {loading ? (
