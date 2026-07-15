@@ -645,7 +645,7 @@ export default function AdminSchaedenPage() {
                         disabled={saving}
                         style={{ padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
                       >
-                        Direkt lösen
+                        Abgeschlossen
                       </button>
                     </>
                   )}
