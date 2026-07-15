@@ -1292,6 +1292,22 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
         <p style="margin:0;font-size:14px;color:#374151;white-space:pre-wrap;">${h(data.adminNotes)}</p>
       </td></tr>`
     : '';
+  // Klare Abschluss-Anzeige: offener Restbetrag = Schadenshöhe minus
+  // (ggf.) einbehaltene Kaution. > 0 → noch offen, sonst erledigt.
+  const openAmount = Math.max(0, (data.damageAmount || 0) - (data.depositRetained || 0));
+  const statusBanner = openAmount > 0
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;margin-bottom:24px;background:#fffbeb;border:1px solid #fcd34d;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#b45309;">⏳ Noch offen – ${fmtEuro(openAmount)}</p>
+          <p style="margin:0;font-size:14px;color:#92400e;">Zur festgestellten Schadenshöhe erhältst du eine separate Zahlungsaufforderung per E-Mail. Danach ist der Vorgang abgeschlossen.</p>
+        </td></tr>
+      </table>`
+    : `<table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;margin-bottom:24px;background:#f0fdf4;border:1px solid #86efac;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#15803d;">✓ Abgeschlossen – für dich ist nichts weiter zu tun</p>
+          <p style="margin:0;font-size:14px;color:#166534;">Dein Anliegen ist vollständig bearbeitet. Es entstehen keine Kosten für dich.</p>
+        </td></tr>
+      </table>`;
   const html = `
 <!DOCTYPE html>
 <html lang="de">
@@ -1315,6 +1331,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
             Hallo ${h(data.customerName) || 'Kunde'},<br>
             wir haben deine Schadensmeldung zur Buchung <strong>${data.bookingId}</strong> geprüft.
           </p>
+          ${statusBanner}
           <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
