@@ -150,6 +150,25 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
   overdue_notice: 'Überfällig',
 };
 
+interface DamageReportRow {
+  id: string;
+  reported_by: string;
+  description: string;
+  photos: string[];
+  damage_amount: number | null;
+  deposit_retained: number | null;
+  admin_notes: string | null;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+const DAMAGE_STATUS: Record<string, { label: string; cls: string }> = {
+  open: { label: 'Offen', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
+  confirmed: { label: 'Bestätigt', cls: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' },
+  resolved: { label: 'Gelöst', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
+};
+
 interface CustomerProfile {
   id: string;
   full_name: string;
@@ -246,6 +265,8 @@ export default function BuchungDetailPage() {
   const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
   const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
   const [showDamageReport, setShowDamageReport] = useState(false);
+  const [damageReports, setDamageReports] = useState<DamageReportRow[]>([]);
+  const [damagePhoto, setDamagePhoto] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -309,6 +330,7 @@ export default function BuchungDetailPage() {
       setAgreement(data.agreement ?? null);
       setEmails(data.emails ?? []);
       setNewStatus(data.booking.status);
+      fetchDamageReports();
 
       // Zubehör-Map (ID → Name)
       const accData = accRes.ok ? await accRes.json() : { accessories: [] };
@@ -363,6 +385,17 @@ export default function BuchungDetailPage() {
       setError('Buchung konnte nicht geladen werden.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchDamageReports() {
+    try {
+      const res = await fetch(`/api/admin/damage?booking_id=${encodeURIComponent(bookingId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setDamageReports((data.reports ?? []) as DamageReportRow[]);
+    } catch {
+      /* nicht kritisch */
     }
   }
 
@@ -1958,12 +1991,6 @@ export default function BuchungDetailPage() {
                     {accessoryDamageMsg}
                   </p>
                 )}
-                <button
-                  onClick={() => { setAccessoryDamageMsg(null); setShowDamageReport(true); }}
-                  className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors"
-                >
-                  Schadensmeldung erstellen
-                </button>
 
                 {booking.status === 'cancelled' && (
                   <>
@@ -1981,6 +2008,66 @@ export default function BuchungDetailPage() {
                       </p>
                     )}
                   </>
+                )}
+              </div>
+            </Section>
+
+            {/* Schadensmeldungen zu dieser Buchung */}
+            <Section title={`Schadensmeldungen${damageReports.length > 0 ? ` (${damageReports.length})` : ''}`}>
+              <div className="space-y-3">
+                {damageReports.length === 0 ? (
+                  <p className="text-sm font-body text-brand-muted">Noch keine Schadensmeldungen zu dieser Buchung.</p>
+                ) : (
+                  damageReports.map((r) => {
+                    const st = DAMAGE_STATUS[r.status] || { label: r.status, cls: 'bg-slate-100 text-slate-600' };
+                    return (
+                      <div key={r.id} className="rounded-xl border border-brand-border dark:border-slate-700 bg-brand-bg dark:bg-slate-900/40 p-4">
+                        <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-heading font-semibold ${st.cls}`}>{st.label}</span>
+                            <span className="text-xs font-body text-brand-muted">
+                              {r.reported_by === 'customer' ? 'Vom Kunden' : 'Vom Admin'} · {fmtDateTime(r.created_at)}
+                            </span>
+                          </div>
+                          {r.damage_amount != null && (
+                            <span className="text-sm font-heading font-semibold text-red-600 dark:text-red-400">{fmtEuro(r.damage_amount)}</span>
+                          )}
+                        </div>
+                        <p className="text-sm font-body text-brand-black dark:text-slate-200 whitespace-pre-wrap">{r.description}</p>
+                        {r.admin_notes && (
+                          <p className="text-xs font-body text-brand-muted mt-2 whitespace-pre-wrap">Notiz: {r.admin_notes}</p>
+                        )}
+                        {r.photos && r.photos.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {r.photos.map((p, i) => {
+                              const src = /^https?:\/\//.test(p) ? p : `/api/admin/damage-photo-url?path=${encodeURIComponent(p)}`;
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => setDamagePhoto(src)}
+                                  className="w-16 h-16 rounded-lg overflow-hidden border border-brand-border dark:border-slate-700"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={src} alt={`Schaden ${i + 1}`} className="w-full h-full object-cover" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+                <button
+                  onClick={() => { setAccessoryDamageMsg(null); setShowDamageReport(true); }}
+                  className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors"
+                >
+                  + Weitere Schadensmeldung melden
+                </button>
+                {damageReports.length > 0 && (
+                  <Link href="/admin/schaeden" className="block text-center text-xs font-body text-accent-blue hover:underline">
+                    Zur vollständigen Schadensabwicklung →
+                  </Link>
                 )}
               </div>
             </Section>
@@ -2007,8 +2094,19 @@ export default function BuchungDetailPage() {
           onClose={() => setShowDamageReport(false)}
           bookingId={booking.id}
           bookingLabel={`${booking.customer_name || ''} · ${booking.product_name || ''}`.trim()}
-          onSuccess={(msg) => setAccessoryDamageMsg(msg)}
+          onSuccess={(msg) => { setAccessoryDamageMsg(msg); fetchDamageReports(); }}
         />
+
+        {/* ═══ Schaden-Foto-Lightbox ═══ */}
+        {damagePhoto && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 cursor-pointer p-4"
+            onClick={() => setDamagePhoto(null)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={damagePhoto} alt="Schadensfoto" className="max-w-[90vw] max-h-[90vh] rounded-lg" />
+          </div>
+        )}
 
         {/* ═══ Stornieren-Modal ═══ */}
         {showCancelModal && (

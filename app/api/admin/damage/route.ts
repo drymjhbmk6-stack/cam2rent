@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createServiceClient();
     const status = req.nextUrl.searchParams.get('status');
+    const bookingId = req.nextUrl.searchParams.get('booking_id');
 
     let query = supabase
       .from('damage_reports')
@@ -33,6 +34,9 @@ export async function GET(req: NextRequest) {
 
     if (status && ['open', 'confirmed', 'resolved'].includes(status)) {
       query = query.eq('status', status);
+    }
+    if (bookingId) {
+      query = query.eq('booking_id', bookingId);
     }
 
     const { data: reports, error } = await query;
