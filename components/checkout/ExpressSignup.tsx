@@ -6,6 +6,7 @@ import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-aut
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
+import { useAllowedCountries } from '@/lib/use-allowed-countries';
 
 type Mode = 'signup' | 'login';
 type Step = 'auth' | 'collect' | 'upload' | 'done';
@@ -61,6 +62,15 @@ export default function ExpressSignup({
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const { codes: allowedCountryCodes, options: allowedCountryOptions, loading: countriesLoading } = useAllowedCountries();
+  // Sobald die freigeschalteten Länder geladen sind: falls das aktuelle Land
+  // nicht (mehr) erlaubt ist, auf das erste erlaubte springen.
+  useEffect(() => {
+    if (!countriesLoading && allowedCountryCodes.length && !allowedCountryCodes.includes(country)) {
+      setCountry(allowedCountryCodes[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countriesLoading, allowedCountryCodes]);
   const [zipLookupBusy, setZipLookupBusy] = useState(false);
   const [zipLookupError, setZipLookupError] = useState('');
 
@@ -176,8 +186,10 @@ export default function ExpressSignup({
     if (!street.trim()) return 'Bitte gib Straße und Hausnummer ein.';
     if (!/^\d{5}$/.test(zip.trim())) return 'Bitte gib eine gültige 5-stellige PLZ ein.';
     if (!city.trim()) return 'Bitte gib deine Stadt ein.';
-    if (!isAllowedCountry(country)) {
-      return `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`;
+    if (!isAllowedCountry(country, allowedCountryCodes)) {
+      return allowedCountryCodes.length > 1
+        ? 'Bitte wähle ein gültiges Lieferland.'
+        : `Wir liefern aktuell nur innerhalb ${countryName(allowedCountryCodes[0] ?? DEFAULT_COUNTRY)}s.`;
     }
     if (emailExists) return 'Unter dieser E-Mail gibt es bereits ein Konto. Bitte melde dich an.';
     return null;
@@ -838,6 +850,7 @@ export default function ExpressSignup({
             <CountryField
               value={country}
               onChange={setCountry}
+              options={allowedCountryOptions}
               inputClass={inputClass}
               labelClass={labelClass}
             />

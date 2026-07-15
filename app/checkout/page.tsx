@@ -24,6 +24,7 @@ import { BUSINESS } from '@/lib/business-config';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
 import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
+import { useAllowedCountries } from '@/lib/use-allowed-countries';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 // stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
@@ -287,6 +288,13 @@ export default function CheckoutPage() {
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const { codes: allowedCountryCodes, options: allowedCountryOptions, loading: countriesLoading } = useAllowedCountries();
+  useEffect(() => {
+    if (!countriesLoading && allowedCountryCodes.length && !allowedCountryCodes.includes(country)) {
+      setCountry(allowedCountryCodes[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countriesLoading, allowedCountryCodes]);
 
   // Abweichende Rechnungsadresse (optional, pro Buchung)
   const [billingDiffers, setBillingDiffers] = useState(false);
@@ -687,8 +695,10 @@ export default function CheckoutPage() {
       setIntentError('Bitte gib deine Lieferadresse ein.');
       return;
     }
-    if (deliveryMode === 'versand' && !isAllowedCountry(country)) {
-      setIntentError(`Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`);
+    if (deliveryMode === 'versand' && !isAllowedCountry(country, allowedCountryCodes)) {
+      setIntentError(allowedCountryCodes.length > 1
+        ? 'Bitte wähle ein gültiges Lieferland.'
+        : `Wir liefern aktuell nur innerhalb ${countryName(allowedCountryCodes[0] ?? DEFAULT_COUNTRY)}s.`);
       return;
     }
 
@@ -1077,6 +1087,7 @@ export default function CheckoutPage() {
                       <CountryField
                         value={country}
                         onChange={setCountry}
+                        options={allowedCountryOptions}
                         inputClass={inputClass}
                         labelClass={labelClass}
                       />

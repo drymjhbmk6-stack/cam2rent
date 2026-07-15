@@ -5,7 +5,7 @@ import { getCheckoutConfig } from '@/lib/checkout-config';
 import { sendAndLog, escapeHtml } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { createAdminNotification } from '@/lib/admin-notifications';
-import { isAllowedCountry, normalizeCountry, DEFAULT_COUNTRY, countryName } from '@/lib/allowed-countries';
+import { isAllowedCountry, normalizeCountry, countryName, loadAllowedCountryCodes } from '@/lib/allowed-countries';
 
 /**
  * Express-Signup — Konto-Erstellung direkt im Checkout.
@@ -68,16 +68,9 @@ export async function POST(req: NextRequest) {
   const street = (body.street ?? '').trim().slice(0, 120);
   const zip = (body.zip ?? '').trim();
   const city = (body.city ?? '').trim().slice(0, 80);
-  // Land: leer → Default (DE). Ein explizit gesetztes, NICHT erlaubtes Land
-  // wird hart abgelehnt (cam2rent liefert vorerst nur innerhalb Deutschlands).
+  // Land wird nach der supabase-Client-Erstellung gegen die im Admin
+  // freigeschalteten Länder geprüft (siehe unten).
   const countryRaw = (body.country ?? '').trim();
-  if (countryRaw && !isAllowedCountry(countryRaw)) {
-    return NextResponse.json(
-      { error: 'country_not_allowed', message: `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.` },
-      { status: 400 },
-    );
-  }
-  const country = normalizeCountry(countryRaw);
 
   if (!email || !validateEmail(email)) {
     return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
@@ -96,6 +89,22 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
+
+  // Länder-Sperre: nur im Admin freigeschaltete Lieferländer erlaubt. Ein
+  // explizit gesetztes, nicht erlaubtes Land wird hart abgelehnt.
+  const allowedCodes = await loadAllowedCountryCodes(supabase);
+  if (countryRaw && !isAllowedCountry(countryRaw, allowedCodes)) {
+    return NextResponse.json(
+      {
+        error: 'country_not_allowed',
+        message: allowedCodes.length > 1
+          ? 'Dieses Lieferland ist nicht verfügbar.'
+          : `Wir liefern aktuell nur innerhalb ${countryName(allowedCodes[0] ?? 'DE')}s.`,
+      },
+      { status: 400 },
+    );
+  }
+  const country = normalizeCountry(countryRaw, allowedCodes);
 
   // Existiert diese E-Mail bereits? Bevorzugt ueber RPC (siehe
   // supabase/supabase-check-email-rpc.sql); listUsers nur als Fallback solange

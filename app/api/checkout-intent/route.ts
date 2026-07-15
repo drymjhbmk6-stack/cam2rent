@@ -8,7 +8,7 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
-import { isAllowedCountry, DEFAULT_COUNTRY, countryName } from '@/lib/allowed-countries';
+import { isAllowedCountry, DEFAULT_COUNTRY, countryName, loadAllowedCountryCodes } from '@/lib/allowed-countries';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -85,10 +85,13 @@ export async function POST(req: NextRequest) {
     const ctxDeliveryMode = (checkoutContext as { deliveryMode?: string } | undefined)?.deliveryMode;
     if (ctxDeliveryMode === 'versand') {
       const ctxCountry = ((checkoutContext as { country?: string } | undefined)?.country ?? DEFAULT_COUNTRY);
-      if (!isAllowedCountry(ctxCountry)) {
+      const allowedCodes = await loadAllowedCountryCodes(supabase);
+      if (!isAllowedCountry(ctxCountry, allowedCodes)) {
         return NextResponse.json(
           {
-            error: `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`,
+            error: allowedCodes.length > 1
+              ? 'Dieses Lieferland ist nicht verfügbar.'
+              : `Wir liefern aktuell nur innerhalb ${countryName(allowedCodes[0] ?? DEFAULT_COUNTRY)}s.`,
             code: 'COUNTRY_NOT_ALLOWED',
           },
           { status: 403 },

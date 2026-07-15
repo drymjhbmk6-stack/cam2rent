@@ -1960,35 +1960,51 @@ cam2rent liefert vorerst **ausschließlich innerhalb Deutschlands**. Vorher gab
 es KEINE Geo-/Ländersperre (kein Länderfeld, kein Stripe-`allowed_countries`,
 keine länderabhängige Versandlogik) — ein Kunde aus dem Ausland (z.B. USA mit
 5-stelliger ZIP) konnte sich registrieren und bestellen. Jetzt: erlaubte Länder
-kommen aus einer zentralen Liste, Registrierung + Cart-Checkout lehnen nicht
-erlaubte Länder ab.
-- **Zentrale Wahrheitsquelle** `lib/allowed-countries.ts`: `COUNTRY_OPTIONS`
-  (aktuell nur `{ code:'DE', name:'Deutschland' }`), `ALLOWED_COUNTRY_CODES`,
-  `isAllowedCountry()`, `normalizeCountry()`, `DEFAULT_COUNTRY='DE'`,
-  `SINGLE_COUNTRY` (true solange nur ein Land). **Option 2 (DE + Nachbarländer /
-  EU) später:** einfach weitere Einträge zu `COUNTRY_OPTIONS` hinzufügen — dann
-  wird aus dem „nur Deutschland"-Hinweis automatisch ein Dropdown; zusätzlich
-  sollten dann `data/shipping.ts` → `calcShipping` um zonen-/länderabhängige
-  Preise erweitert werden (bewusst noch nicht gemacht).
-- **UI** `components/checkout/CountryField.tsx` (shared): bei `SINGLE_COUNTRY`
-  ein dezenter Hinweis „🇩🇪 Lieferung nur innerhalb Deutschlands" statt eines
-  1-Options-Dropdowns; sonst ein `<select>` aus `COUNTRY_OPTIONS`. Eingebaut in
-  **Registrierung** (`ExpressSignup`, nur im signup-Mode, unter Straße/PLZ/Stadt)
-  und **Cart-Checkout** (`app/checkout/page.tsx`, in der Lieferadress-Sektion).
+werden **im Admin gepflegt** (Einstellungen → Versand → „Lieferländer"),
+Registrierung + Cart-Checkout lehnen nicht erlaubte Länder ab. Default = nur DE.
+- **Admin-gesteuert (Stand 2026-07-15):** Welche Länder erlaubt sind, steht in
+  `admin_config` unter dem Key `allowed_countries` (`{ codes: string[] }`,
+  Default/Fallback `['DE']`). Verwaltet über die Karte
+  `components/admin/AllowedCountriesSection.tsx` im Versand-Tab
+  (`components/admin/VersandpreiseContent.tsx`) — Checkbox-Liste über den
+  Katalog, Deutschland immer aktiv (nicht abwählbar), Speichern via generischem
+  `PUT /api/admin/config` (`key: 'allowed_countries'`). **Kein Code-Deploy mehr
+  nötig, um Länder zu ändern.**
+- **Zentrale Wahrheitsquelle (Katalog + Helfer)** `lib/allowed-countries.ts`:
+  `COUNTRY_CATALOG` (alle auswählbaren Länder: DE + Nachbarn + EU — zum Ergänzen
+  hier Einträge hinzufügen), `DEFAULT_COUNTRY='DE'`, `DEFAULT_ALLOWED_CODES`,
+  `sanitizeCountryCodes()` (erzwingt gültige Codes + min. DE),
+  `isAllowedCountry(code, allowedCodes)`, `normalizeCountry(code, allowedCodes)`,
+  `countryName()`, `optionsForCodes()`, `loadAllowedCountryCodes(supabase)`
+  (liest die freigeschalteten Codes aus `admin_config`, Fallback DE).
+- **Öffentlicher Endpoint** `GET /api/allowed-countries` → `{ codes, options }`
+  (kurz gecacht). **Client-Hook** `lib/use-allowed-countries.ts`
+  (`useAllowedCountries()`, modul-weiter Cache → 1 Fetch für alle Formulare).
+- **UI** `components/checkout/CountryField.tsx` (shared, presentational): bekommt
+  `options` (die freigeschalteten Länder); bei ≤1 Land ein dezenter Hinweis
+  „🇩🇪 Lieferung nur innerhalb Deutschlands", sonst ein `<select>`. Eingebaut in
+  **Registrierung** (`ExpressSignup`, nur signup-Mode, unter Straße/PLZ/Stadt)
+  und **Cart-Checkout** (`app/checkout/page.tsx`, Lieferadress-Sektion). Beide
+  Formulare nutzen `useAllowedCountries()` und snappen `country` per Effekt auf
+  das erste erlaubte Land, falls der aktuelle Wert nicht (mehr) erlaubt ist.
 - **Registrierung** (`ExpressSignup` = einziger Konto-Anlage-Pfad): `country`-
   State (Default DE) wird an `POST /api/auth/express-signup` geschickt.
-  `validateSignupForm` blockt nicht erlaubte Länder client-seitig; der Server
-  lehnt ein explizit gesetztes, nicht erlaubtes Land mit `400
-  country_not_allowed` ab und persistiert das normalisierte Land in
-  `profiles.country` (defensiver Upsert-Retry ohne die Spalte, falls Migration
-  fehlt).
-- **Cart-Checkout** (`app/checkout/page.tsx`): `country`-State (Default DE) →
-  Client-Gate in `handleProceedToPayment` (bei `versand` + nicht erlaubtem Land
-  Fehlermeldung) + `country` im `checkoutContext`. **Server-Sperre**
-  `app/api/checkout-intent/route.ts`: bei `deliveryMode==='versand'` muss das
-  Land erlaubt sein, sonst `403 COUNTRY_NOT_ALLOWED` BEVOR der Stripe-Intent
-  entsteht. Für Abholung irrelevant (kein Versand). Fehlt das Feld (alter
-  Client) → Default DE, kein Bruch.
+  `validateSignupForm` blockt client-seitig gegen die geladenen Codes; der Server
+  lädt die Codes via `loadAllowedCountryCodes` und lehnt ein explizit gesetztes,
+  nicht erlaubtes Land mit `400 country_not_allowed` ab, persistiert das
+  normalisierte Land in `profiles.country` (defensiver Upsert-Retry ohne die
+  Spalte, falls Migration fehlt).
+- **Cart-Checkout** (`app/checkout/page.tsx`): `country`-State → Client-Gate in
+  `handleProceedToPayment` (bei `versand` + nicht erlaubtem Land Fehlermeldung) +
+  `country` im `checkoutContext`. **Server-Sperre**
+  `app/api/checkout-intent/route.ts`: bei `deliveryMode==='versand'` lädt der
+  Server die freigeschalteten Codes und lehnt ein nicht erlaubtes Land mit
+  `403 COUNTRY_NOT_ALLOWED` ab BEVOR der Stripe-Intent entsteht. Für Abholung
+  irrelevant. Fehlt das Feld (alter Client) → Default DE, kein Bruch.
+- **⚠️ Versandkosten weiterhin einheitlich:** `data/shipping.ts` → `calcShipping`
+  rechnet für ALLE freigeschalteten Länder denselben (deutschen) Preis. Die
+  Admin-Karte weist per amber Hinweis darauf hin. Länder-/Zonenpreise sind noch
+  nicht umgesetzt — vor dem Freischalten von Nicht-DE-Ländern bedenken.
 - **Migration** `supabase/supabase-profiles-country.sql` (idempotent, additiv):
   `profiles.country TEXT NOT NULL DEFAULT 'DE'`. Bestehende Profile = DE (alle
   Bestandskunden sind deutsch). Service-role-only (NICHT im column-level
