@@ -59,6 +59,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   credit_note: { label: 'Stornierungsbeleg / Gutschrift', color: '#dc2626', bg: '#dc262614' },
   damage_report_customer: { label: 'Schadensmeldung', color: '#f97316', bg: '#f9731614' },
   damage_report_admin: { label: 'Schadensmeldung (Admin)', color: '#f97316', bg: '#f9731614' },
+  damage_documented_customer: { label: 'Schaden dokumentiert (an Kunde)', color: '#f97316', bg: '#f9731614' },
   damage_resolution: { label: 'Schadensauflösung', color: '#f59e0b', bg: '#f59e0b14' },
   referral_reward: { label: 'Empfehlung', color: '#ec4899', bg: '#ec489914' },
   message_admin: { label: 'Nachricht (Admin)', color: '#6366f1', bg: '#6366f114' },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { sendDamageResolution } from '@/lib/email';
+import { sendDamageResolution, sendAdminDamageNotice } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -108,6 +108,9 @@ export async function POST(req: NextRequest) {
     const description = (formData.get('description') as string | null)?.trim() || '';
     const adminNotes = (formData.get('admin_notes') as string | null)?.trim() || '';
     const rawAmount = (formData.get('damage_amount') as string | null)?.trim() || '';
+    const notifyCustomer = ['true', '1', 'on', 'yes'].includes(
+      String(formData.get('notify_customer') ?? '').toLowerCase(),
+    );
     let damageAmount: number | null = null;
     if (rawAmount) {
       const parsed = parseFloat(rawAmount.replace(',', '.'));
@@ -202,7 +205,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Interne Info-Notification (kein Kunden-Mail — der Admin hat sie erfasst)
+    // Interne Info-Notification
     createAdminNotification(supabase, {
       type: 'new_damage',
       title: 'Schadensmeldung erfasst (Admin)',
@@ -210,15 +213,39 @@ export async function POST(req: NextRequest) {
       link: '/admin/schaeden',
     });
 
+    // Optional: Kunden per E-Mail informieren (Checkbox im Formular)
+    let emailSent = false;
+    let emailError: string | null = null;
+    if (notifyCustomer) {
+      if (!booking.customer_email) {
+        emailError = 'Keine E-Mail-Adresse bei der Buchung hinterlegt.';
+      } else {
+        try {
+          await sendAdminDamageNotice({
+            bookingId,
+            customerName: booking.customer_name || '',
+            customerEmail: booking.customer_email,
+            productName: booking.product_name || '',
+            description,
+            photoCount: photoPaths.length,
+          });
+          emailSent = true;
+        } catch (e) {
+          console.error('Admin damage notice email error:', e);
+          emailError = 'E-Mail konnte nicht gesendet werden.';
+        }
+      }
+    }
+
     await logAudit({
       action: 'damage.create',
       entityType: 'damage',
       entityId: report.id,
-      changes: { booking_id: bookingId, photos: photoPaths.length, reported_by: 'admin' },
+      changes: { booking_id: bookingId, photos: photoPaths.length, reported_by: 'admin', customer_notified: emailSent },
       request: req,
     });
 
-    return NextResponse.json({ success: true, reportId: report.id });
+    return NextResponse.json({ success: true, reportId: report.id, emailSent, emailError });
   } catch (err) {
     console.error('POST /api/admin/damage error:', err);
     return NextResponse.json({ error: 'Fehler beim Erstellen der Schadensmeldung.' }, { status: 500 });

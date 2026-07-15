@@ -1146,6 +1146,70 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
   await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'damage_report_customer' });
 }
 
+// ─── Damage documented by cam2rent (admin-created → to customer) ──────────────
+// Anderer Wortlaut als die Kunden-Bestaetigung: hier hat NICHT der Kunde
+// gemeldet, sondern cam2rent hat bei der Pruefung einen Schaden dokumentiert.
+
+export async function sendAdminDamageNotice(data: DamageEmailData) {
+  const subject = stripSubject(`Schaden an deiner Miete dokumentiert – ${data.bookingId}`);
+  const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Schaden an deiner Miete dokumentiert</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
+            Hallo ${h(data.customerName || 'Kunde')},<br>
+            im Zuge der Prüfung deiner Buchung <strong>${h(data.bookingId)}</strong> haben wir einen Schaden festgestellt und für dich dokumentiert.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
+            <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
+              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${h(data.productName)}</p>
+            </td></tr>
+            <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Dokumentierter Schaden</p>
+              <p style="margin:0;font-size:14px;color:#374151;white-space:pre-wrap;">${h(data.description)}</p>
+            </td></tr>
+            <tr><td style="padding:16px 20px;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Fotos</p>
+              <p style="margin:0;font-size:14px;color:#374151;">${data.photoCount} Foto${data.photoCount !== 1 ? 's' : ''} zur Dokumentation</p>
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef3c7;border-radius:10px;margin-bottom:24px;">
+            <tr><td style="padding:16px 20px;">
+              <p style="margin:0;font-size:14px;color:#92400e;">
+                <strong>Was passiert jetzt?</strong><br>
+                Wir prüfen den Schaden und melden uns mit den nächsten Schritten und – falls nötig – der Höhe der Kosten bei dir. Wenn du dazu Fragen hast oder etwas anders siehst, antworte einfach auf diese E-Mail.
+              </p>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#6b7280;">Fragen? Schreib uns:<br><a href="mailto:${ADMIN_EMAIL}" style="color:#3b82f6;">${ADMIN_EMAIL}</a></p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} · ${BUSINESS.slogan} · <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'damage_documented_customer' });
+}
+
 // ─── Damage report notification (to admin) ───────────────────────────────────
 
 export async function sendAdminDamageNotification(data: DamageEmailData) {

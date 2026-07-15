@@ -92,6 +92,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
+  const [notifyCustomer, setNotifyCustomer] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +116,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       setFunktion('');
       setFestgestellt(todayIso());
       setAmount('');
+      setNotifyCustomer(false);
     }
   }, [open]);
 
@@ -264,13 +266,20 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       fd.append('description', buildDescription());
       if (adminNotes.trim()) fd.append('admin_notes', adminNotes.trim());
       if (amount.trim()) fd.append('damage_amount', amount.trim());
+      if (notifyCustomer) fd.append('notify_customer', 'true');
       for (const p of photos) fd.append('photos', p);
 
       const res = await fetch('/api/admin/damage', { method: 'POST', body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Schadensmeldung fehlgeschlagen.');
 
-      onSuccess?.('Schadensmeldung erstellt.');
+      let msg = 'Schadensmeldung erstellt.';
+      if (notifyCustomer) {
+        msg += json.emailSent
+          ? ' Kunde per E-Mail informiert.'
+          : ` E-Mail an Kunden nicht gesendet${json.emailError ? ` (${json.emailError})` : ''}.`;
+      }
+      onSuccess?.(msg);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Erstellen.');
@@ -565,6 +574,23 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
               className={`${inputCls} resize-none`}
             />
           </div>
+
+          {/* Kunde informieren */}
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-brand-border dark:border-slate-700 bg-brand-bg dark:bg-slate-900/40 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyCustomer}
+              onChange={(e) => setNotifyCustomer(e.target.checked)}
+              className="mt-0.5 w-4 h-4 shrink-0 accent-orange-500"
+            />
+            <span className="text-sm font-body text-brand-black dark:text-slate-200">
+              Kunde per E-Mail informieren
+              <span className="block text-xs text-brand-muted mt-0.5">
+                Sendet dem Kunden eine Info &bdquo;Schaden an deiner Miete dokumentiert&ldquo; mit
+                Kamera, Beschreibung und Fotoanzahl. Nur wenn eine E-Mail-Adresse hinterlegt ist.
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="p-6 border-t border-brand-border dark:border-slate-700 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-800">
