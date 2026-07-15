@@ -293,11 +293,16 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
   const addPhotos = useCallback((files: FileList | null) => {
     if (!files) return;
+    // Manche Quellen (Dropbox, WhatsApp-Export) liefern einen LEEREN MIME-Typ.
+    // Dann per Datei-Endung erkennen, damit die Bilder nicht still verworfen
+    // werden. Der Server prüft ohnehin die echten Magic-Bytes.
+    const isImage = (f: File) =>
+      f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name);
     setPhotos((prev) => {
       const next = [...prev];
       for (const f of Array.from(files)) {
         if (next.length >= MAX_PHOTOS) break;
-        if (f.type.startsWith('image/')) next.push({ file: f, shared: false });
+        if (isImage(f)) next.push({ file: f, shared: false });
       }
       return next;
     });
