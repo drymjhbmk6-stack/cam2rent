@@ -2002,9 +2002,8 @@ erlaubte Länder ab.
   Versandzonen später ergänzen). Keine echte Adress-/Geo-Verifizierung — das
   Land ist eine Deklaration; grobe Missbrauchsfälle fängt die Ausweis-Prüfung
   vor dem Versand ab.
-- **Go-Live TODO:** Migration `supabase/supabase-profiles-country.sql` ausführen.
-  Ohne sie greift die Länder-Sperre trotzdem (über die App-Liste), nur das
-  Land wird nicht separat im Profil gespeichert (defensiver Retry).
+- **Migration:** `supabase-profiles-country.sql` (am 2026-07-15 ausgeführt, Datei
+  nach `erledigte supabase/` verschoben).
 
 ### Abweichende Liefer- + Rechnungsadresse pro Kunde (Standard + pro Buchung, Stand 2026-06-10)
 Privatkunden können eine abweichende **Lieferadresse** und/oder
@@ -4935,6 +4934,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-profiles-country.sql`~~ (Lieferländer-Beschränkung nur DE / `profiles.country` — am 2026-07-15 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-customer-login-history.sql`~~ (Login-Verlauf pro Kundenkonto — am 2026-06-21 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-profiles-deviating-addresses.sql`~~ (Abweichende Liefer-/Rechnungsadresse pro Kunde — am 2026-06-10 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-invoice-address.sql`~~ (Abweichende Rechnungsadresse pro Buchung — am 2026-05-28 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -5251,12 +5251,6 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
-- **Lieferländer-Beschränkung (nur DE) — Migration auszuführen:**
-  `supabase/supabase-profiles-country.sql` (idempotent, additiv:
-  `profiles.country TEXT NOT NULL DEFAULT 'DE'`). Ohne sie greift die
-  Länder-Sperre trotzdem (über die App-Liste in `lib/allowed-countries.ts`),
-  nur das Land wird nicht separat im Profil gespeichert (defensiver Retry).
-  Siehe „Lieferländer-Beschränkung — nur Deutschland". Empfohlen ASAP ausführen.
 - **Mietvertrag-Erinnerung + Auto-Storno — Crontab auszuführen (keine Migration):**
   Zwei Einträge (täglich, `--resolve` umgeht Cloudflare):
   ```
