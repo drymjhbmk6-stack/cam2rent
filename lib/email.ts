@@ -1150,7 +1150,10 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
 // Anderer Wortlaut als die Kunden-Bestaetigung: hier hat NICHT der Kunde
 // gemeldet, sondern cam2rent hat bei der Pruefung einen Schaden dokumentiert.
 
-export async function sendAdminDamageNotice(data: DamageEmailData) {
+export async function sendAdminDamageNotice(
+  data: DamageEmailData,
+  opts?: { attachments?: { filename: string; content: Buffer }[] },
+) {
   const subject = stripSubject(`Schaden an deiner Miete dokumentiert – ${data.bookingId}`);
   const html = `
 <!DOCTYPE html>
@@ -1207,7 +1210,14 @@ export async function sendAdminDamageNotice(data: DamageEmailData) {
   </table>
 </body>
 </html>`;
-  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'damage_documented_customer' });
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'damage_documented_customer',
+    attachments: opts?.attachments,
+  });
 }
 
 // ─── Damage report notification (to admin) ───────────────────────────────────

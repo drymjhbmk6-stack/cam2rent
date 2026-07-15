@@ -4,6 +4,12 @@ import { sendDamageResolution, sendAdminDamageNotice } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import {
+  uploadDamageDocument,
+  buildEmailHistoryAttachment,
+  loadCustomerVisibleFiles,
+  type DamageAttachment,
+} from '@/lib/damage-attachments';
 
 // Magic-Byte-Resultat → Extension + MIME (analog zum Kunden-Pfad
 // /api/damage-report). Der Client-MIME wird bewusst ignoriert.
@@ -143,61 +149,106 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
     }
 
-    // Fotos hochladen (privater Bucket, Magic-Byte-Check wie im Kunden-Pfad)
+    // Kundensichtbar freigegebene Datei-Pfade (Fotos + Dokumente). Alles
+    // andere bleibt rein intern.
+    const visiblePaths: string[] = [];
+
+    // Fotos hochladen — getrennt in intern (`photos`) und für den Kunden
+    // freigegeben (`photos_shared`). Nur freigegebene landen in visiblePaths.
     const photoPaths: string[] = [];
-    const photos = (formData.getAll('photos') as File[]).filter(
-      (p) => p instanceof File && p.size > 0,
+    const uploadPhotos = async (field: string, shared: boolean) => {
+      const files = (formData.getAll(field) as File[]).filter((p) => p instanceof File && p.size > 0);
+      for (const photo of files) {
+        if (photo.size > 5 * 1024 * 1024) {
+          throw { status: 400, error: `Datei "${photo.name}" ist zu groß (max 5 MB).` };
+        }
+        const buffer = Buffer.from(await photo.arrayBuffer());
+        if (!isAllowedImage(buffer)) {
+          throw { status: 400, error: `Datei "${photo.name}" ist kein gültiges Bild (JPEG/PNG/WebP/HEIC/GIF erwartet).` };
+        }
+        const detected = detectImageType(buffer);
+        const info = detected ? DETECTED_TO_EXT[detected] : undefined;
+        const ext = info?.ext ?? 'jpg';
+        const realMime = info?.mime ?? 'image/jpeg';
+        const fileName = `${bookingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('damage-photos')
+          .upload(fileName, buffer, { contentType: realMime, upsert: false });
+        if (uploadErr) {
+          console.error('Admin damage photo upload error:', uploadErr);
+          continue;
+        }
+        photoPaths.push(fileName);
+        if (shared) visiblePaths.push(fileName);
+      }
+    };
+
+    // Dokument-Anhänge (PDF/Bild) — ebenfalls intern (`documents`) vs.
+    // freigegeben (`documents_shared`).
+    const attachments: DamageAttachment[] = [];
+    const uploadDocs = async (field: string, shared: boolean) => {
+      const files = (formData.getAll(field) as File[]).filter((f) => f instanceof File && f.size > 0);
+      for (const file of files) {
+        const res = await uploadDamageDocument(supabase, bookingId, file);
+        if ('error' in res) throw { status: 400, error: res.error };
+        attachments.push(res);
+        if (shared) visiblePaths.push(res.path);
+      }
+    };
+
+    try {
+      await uploadPhotos('photos', false);
+      await uploadPhotos('photos_shared', true);
+      if (photoPaths.length > 20) {
+        return NextResponse.json({ error: 'Maximal 20 Fotos erlaubt.' }, { status: 400 });
+      }
+      await uploadDocs('documents', false);
+      await uploadDocs('documents_shared', true);
+    } catch (e) {
+      const err = e as { status?: number; error?: string };
+      if (err?.error) return NextResponse.json({ error: err.error }, { status: err.status ?? 400 });
+      throw e;
+    }
+
+    // Optional: E-Mail-Verlauf der Buchung als PDF anhängen.
+    const attachEmailHistory = ['true', '1', 'on', 'yes'].includes(
+      String(formData.get('attach_email_history') ?? '').toLowerCase(),
     );
-    if (photos.length > 20) {
-      return NextResponse.json({ error: 'Maximal 20 Fotos erlaubt.' }, { status: 400 });
+    const emailHistoryShared = ['true', '1', 'on', 'yes'].includes(
+      String(formData.get('email_history_shared') ?? '').toLowerCase(),
+    );
+    if (attachEmailHistory) {
+      const mv = await buildEmailHistoryAttachment(supabase, bookingId, booking.customer_name || '');
+      if (mv) {
+        attachments.push(mv);
+        if (emailHistoryShared) visiblePaths.push(mv.path);
+      }
     }
 
-    for (const photo of photos) {
-      if (photo.size > 5 * 1024 * 1024) {
-        return NextResponse.json(
-          { error: `Datei "${photo.name}" ist zu groß (max 5 MB).` },
-          { status: 400 },
-        );
-      }
-      const buffer = Buffer.from(await photo.arrayBuffer());
-      if (!isAllowedImage(buffer)) {
-        return NextResponse.json(
-          { error: `Datei "${photo.name}" ist kein gültiges Bild (JPEG/PNG/WebP/HEIC/GIF erwartet).` },
-          { status: 400 },
-        );
-      }
-      const detected = detectImageType(buffer);
-      const detectedInfo = detected ? DETECTED_TO_EXT[detected] : undefined;
-      const ext = detectedInfo?.ext ?? 'jpg';
-      const realMime = detectedInfo?.mime ?? 'image/jpeg';
-      const fileName = `${bookingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from('damage-photos')
-        .upload(fileName, buffer, { contentType: realMime, upsert: false });
-
-      if (uploadErr) {
-        console.error('Admin damage photo upload error:', uploadErr);
-        continue;
-      }
-      photoPaths.push(fileName);
-    }
-
-    const { data: report, error: insertErr } = await supabase
+    // Insert — defensiver Fallback ohne die neuen Spalten (Migration ausstehend).
+    const baseRow = {
+      booking_id: bookingId,
+      reported_by: 'admin',
+      description,
+      photos: photoPaths,
+      admin_notes: adminNotes || null,
+      damage_amount: damageAmount,
+      status: 'open',
+    };
+    let { data: report, error: insertErr } = await supabase
       .from('damage_reports')
-      .insert({
-        booking_id: bookingId,
-        reported_by: 'admin',
-        description,
-        photos: photoPaths,
-        admin_notes: adminNotes || null,
-        damage_amount: damageAmount,
-        status: 'open',
-      })
+      .insert({ ...baseRow, attachments, customer_visible_paths: visiblePaths })
       .select('id')
       .single();
+    if (insertErr && /attachments|customer_visible_paths|column|schema cache|PGRST/i.test(insertErr.message)) {
+      ({ data: report, error: insertErr } = await supabase
+        .from('damage_reports')
+        .insert(baseRow)
+        .select('id')
+        .single());
+    }
 
-    if (insertErr) {
+    if (insertErr || !report) {
       console.error('Admin insert damage_report error:', insertErr);
       return NextResponse.json(
         { error: 'Schadensmeldung konnte nicht erstellt werden.' },
@@ -221,14 +272,21 @@ export async function POST(req: NextRequest) {
         emailError = 'Keine E-Mail-Adresse bei der Buchung hinterlegt.';
       } else {
         try {
-          await sendAdminDamageNotice({
-            bookingId,
-            customerName: booking.customer_name || '',
-            customerEmail: booking.customer_email,
-            productName: booking.product_name || '',
-            description,
-            photoCount: photoPaths.length,
-          });
+          // Nur die pro Datei freigegebenen Fotos/Anhänge an den Kunden.
+          const files = visiblePaths.length
+            ? await loadCustomerVisibleFiles(supabase, { photos: photoPaths, attachments, visiblePaths })
+            : [];
+          await sendAdminDamageNotice(
+            {
+              bookingId,
+              customerName: booking.customer_name || '',
+              customerEmail: booking.customer_email,
+              productName: booking.product_name || '',
+              description,
+              photoCount: files.length,
+            },
+            files.length ? { attachments: files } : undefined,
+          );
           emailSent = true;
         } catch (e) {
           console.error('Admin damage notice email error:', e);

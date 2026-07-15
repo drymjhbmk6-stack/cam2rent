@@ -161,6 +161,8 @@ interface DamageReportRow {
   status: string;
   created_at: string;
   resolved_at: string | null;
+  attachments?: { path: string; filename: string; mime: string; source: string }[];
+  customer_visible_paths?: string[];
 }
 
 const DAMAGE_STATUS: Record<string, { label: string; cls: string }> = {
@@ -2050,6 +2052,25 @@ export default function BuchungDetailPage() {
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={src} alt={`Schaden ${i + 1}`} className="w-full h-full object-cover" />
                                 </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {r.attachments && r.attachments.length > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-3">
+                            {r.attachments.map((a, i) => {
+                              const shared = (r.customer_visible_paths || []).includes(a.path);
+                              return (
+                                <a
+                                  key={i}
+                                  href={`/api/admin/damage-attachment-url?path=${encodeURIComponent(a.path)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900/60 border border-brand-border dark:border-slate-700 text-sm text-accent-blue hover:underline"
+                                >
+                                  <span className="truncate">{a.source === 'email_history' ? '✉️ ' : '📎 '}{a.filename}</span>
+                                  <span className="text-[10px] whitespace-nowrap text-brand-muted">{shared ? '🔓 Kunde' : '🔒 intern'}</span>
+                                </a>
                               );
                             })}
                           </div>

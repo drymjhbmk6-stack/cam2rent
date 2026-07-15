@@ -95,7 +95,9 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   const [amount, setAmount] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [notifyCustomer, setNotifyCustomer] = useState(false);
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<{ file: File; shared: boolean }[]>([]);
+  const [documents, setDocuments] = useState<{ file: File; shared: boolean }[]>([]);
+  const [attachEmailHistory, setAttachEmailHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +122,8 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       setFestgestellt(todayIso());
       setAmount('');
       setNotifyCustomer(false);
+      setDocuments([]);
+      setAttachEmailHistory(false);
     }
   }, [open]);
 
@@ -263,7 +267,19 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       const next = [...prev];
       for (const f of Array.from(files)) {
         if (next.length >= MAX_PHOTOS) break;
-        if (f.type.startsWith('image/')) next.push(f);
+        if (f.type.startsWith('image/')) next.push({ file: f, shared: false });
+      }
+      return next;
+    });
+  }, []);
+
+  const addDocs = useCallback((files: FileList | null) => {
+    if (!files) return;
+    setDocuments((prev) => {
+      const next = [...prev];
+      for (const f of Array.from(files)) {
+        if (next.length >= 15) break;
+        next.push({ file: f, shared: false });
       }
       return next;
     });
@@ -303,7 +319,11 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       if (adminNotes.trim()) fd.append('admin_notes', adminNotes.trim());
       if (amount.trim()) fd.append('damage_amount', amount.trim());
       if (notifyCustomer) fd.append('notify_customer', 'true');
-      for (const p of photos) fd.append('photos', p);
+      // Fotos: freigegebene getrennt, damit der Server sie als kundensichtbar markiert.
+      for (const p of photos) fd.append(p.shared ? 'photos_shared' : 'photos', p.file);
+      // Dokument-Anhänge analog.
+      for (const d of documents) fd.append(d.shared ? 'documents_shared' : 'documents', d.file);
+      if (attachEmailHistory) fd.append('attach_email_history', 'true');
 
       const res = await fetch('/api/admin/damage', { method: 'POST', body: fd });
       const json = await res.json();
@@ -587,20 +607,35 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
             <label className={labelCls}>
               Fotos <span className="text-brand-muted font-normal">(optional, max {MAX_PHOTOS})</span>
             </label>
+            <p className="text-[11px] text-brand-muted mb-2">
+              Standardmäßig <strong>nur intern</strong>. Häkchen &bdquo;Für Kunde&ldquo; gibt ein Foto zum Mitschicken frei
+              (greift bei aktivierter Kunden-E-Mail).
+            </p>
             {photos.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-3 mb-2">
                 {photos.map((p, i) => (
-                  <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-brand-border dark:border-slate-700">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={URL.createObjectURL(p)} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-white text-xs leading-none flex items-center justify-center"
-                      aria-label="Foto entfernen"
-                    >
-                      ×
-                    </button>
+                  <div key={i} className="w-24">
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-brand-border dark:border-slate-700">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={URL.createObjectURL(p.file)} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-white text-xs leading-none flex items-center justify-center"
+                        aria-label="Foto entfernen"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-1 mt-1 text-[11px] text-brand-muted cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={p.shared}
+                        onChange={(e) => setPhotos((prev) => prev.map((x, idx) => idx === i ? { ...x, shared: e.target.checked } : x))}
+                        className="w-3.5 h-3.5 accent-orange-500"
+                      />
+                      Für Kunde
+                    </label>
                   </div>
                 ))}
               </div>
@@ -615,6 +650,69 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
               />
             )}
           </div>
+
+          {/* Weitere Dokumente (PDF/Bild) */}
+          <div>
+            <label className={labelCls}>
+              Weitere Dokumente <span className="text-brand-muted font-normal">(optional, PDF/Bild — z. B. Mailverlauf, Kostenvoranschlag)</span>
+            </label>
+            <p className="text-[11px] text-brand-muted mb-2">
+              Standardmäßig <strong>nur intern</strong>. &bdquo;Für Kunde&ldquo; gibt ein Dokument zum Mitschicken frei.
+            </p>
+            {documents.length > 0 && (
+              <div className="space-y-2 mb-2">
+                {documents.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-brand-border dark:border-slate-700 bg-brand-bg dark:bg-slate-900/40">
+                    <span className="text-sm font-body text-brand-black dark:text-slate-200 truncate">{d.file.name}</span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <label className="flex items-center gap-1 text-[11px] text-brand-muted cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={d.shared}
+                          onChange={(e) => setDocuments((prev) => prev.map((x, idx) => idx === i ? { ...x, shared: e.target.checked } : x))}
+                          className="w-3.5 h-3.5 accent-orange-500"
+                        />
+                        Für Kunde
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setDocuments((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="w-5 h-5 rounded-full bg-black/60 text-white text-xs leading-none flex items-center justify-center"
+                        aria-label="Dokument entfernen"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {documents.length < 15 && (
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                multiple
+                onChange={(e) => { addDocs(e.target.files); e.target.value = ''; }}
+                className="block w-full text-sm text-brand-muted file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-bg dark:file:bg-slate-700 file:text-brand-black dark:file:text-slate-200"
+              />
+            )}
+          </div>
+
+          {/* E-Mail-Verlauf der Buchung anhängen (intern) */}
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-brand-border dark:border-slate-700 bg-brand-bg dark:bg-slate-900/40 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={attachEmailHistory}
+              onChange={(e) => setAttachEmailHistory(e.target.checked)}
+              className="mt-0.5 w-4 h-4 shrink-0 accent-orange-500"
+            />
+            <span className="text-sm font-body text-brand-black dark:text-slate-200">
+              E-Mail-Verlauf der Buchung anhängen
+              <span className="block text-xs text-brand-muted mt-0.5">
+                Legt den protokollierten E-Mail-Verlauf der Buchung als PDF-Anhang an (intern, zur Dokumentation).
+              </span>
+            </span>
+          </label>
 
           {/* Admin-Notizen */}
           <div>

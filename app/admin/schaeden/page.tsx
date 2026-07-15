@@ -17,6 +17,8 @@ interface DamageReport {
   admin_notes: string | null;
   created_at: string;
   resolved_at: string | null;
+  attachments?: { path: string; filename: string; mime: string; source: string }[];
+  customer_visible_paths?: string[];
   booking: {
     product_name: string;
     product_id: string;
@@ -404,15 +406,46 @@ export default function AdminSchaedenPage() {
                     const src = isLegacyUrl
                       ? urlOrPath
                       : `/api/admin/damage-photo-url?path=${encodeURIComponent(urlOrPath)}`;
+                    const shared = (selectedReport.customer_visible_paths || []).includes(urlOrPath);
                     return (
-                      <button
+                      <div key={i} style={{ width: 80 }}>
+                        <button
+                          onClick={() => setPhotoModal(src)}
+                          style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b', cursor: 'pointer', padding: 0, background: 'none' }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt={`Schaden ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </button>
+                        <p style={{ fontSize: 10, marginTop: 3, color: shared ? '#34d399' : '#64748b' }}>{shared ? '🔓 Kunde' : '🔒 intern'}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Weitere Anhänge (Dokumente / Mailverlauf) */}
+            {(selectedReport.attachments?.length ?? 0) > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                  Anhänge ({selectedReport.attachments!.length})
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {selectedReport.attachments!.map((a, i) => {
+                    const shared = (selectedReport.customer_visible_paths || []).includes(a.path);
+                    return (
+                      <a
                         key={i}
-                        onClick={() => setPhotoModal(src)}
-                        style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b', cursor: 'pointer', padding: 0, background: 'none' }}
+                        href={`/api/admin/damage-attachment-url?path=${encodeURIComponent(a.path)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 8, background: '#0a0f1e', border: '1px solid #1e293b', textDecoration: 'none' }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={`Schaden ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </button>
+                        <span style={{ fontSize: 13, color: '#93c5fd', wordBreak: 'break-all' }}>
+                          {a.source === 'email_history' ? '✉️ ' : '📎 '}{a.filename}
+                        </span>
+                        <span style={{ fontSize: 10, color: shared ? '#34d399' : '#64748b', whiteSpace: 'nowrap' }}>{shared ? '🔓 Kunde' : '🔒 intern'}</span>
+                      </a>
                     );
                   })}
                 </div>
