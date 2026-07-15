@@ -147,16 +147,51 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
         const json = await res.json();
         const b = json.booking || {};
         const names: string[] = [];
-        // Kamera(s) aus product_name (kommagetrennt bei Multi-Kamera)
-        String(b.product_name || '')
-          .split(',')
-          .map((n: string) => n.trim())
-          .filter(Boolean)
-          .forEach((n: string) => names.push(n));
-        // Zubehör / Set-Teile aus resolved_items
-        (Array.isArray(b.resolved_items) ? b.resolved_items : []).forEach(
-          (it: { name?: string }) => { if (it?.name) names.push(it.name); },
+
+        // 1) Kamera(s) — jeweils mit Seriennummer, wenn vorhanden.
+        const cams = Array.isArray(b.cameras_resolved) ? b.cameras_resolved : [];
+        if (cams.length > 0) {
+          cams.forEach((c: { product_name?: string; serial_number?: string | null }) => {
+            const nm = (c.product_name || '').trim();
+            if (!nm) return;
+            names.push(c.serial_number ? `${nm} · SN ${c.serial_number}` : nm);
+          });
+        } else {
+          // Legacy-Fallback: product_name-Split, SN nur für die erste Kamera.
+          String(b.product_name || '')
+            .split(',')
+            .map((n: string) => n.trim())
+            .filter(Boolean)
+            .forEach((n: string, i: number) => {
+              names.push(i === 0 && b.serial_number ? `${n} · SN ${b.serial_number}` : n);
+            });
+        }
+
+        // 2) Zubehör-Exemplar-Codes je accessory_id sammeln.
+        const codesByAcc: Record<string, string[]> = {};
+        (Array.isArray(b.unit_codes) ? b.unit_codes : []).forEach(
+          (u: { accessory_id?: string; exemplar_code?: string }) => {
+            if (!u.accessory_id || !u.exemplar_code) return;
+            (codesByAcc[u.accessory_id] ||= []).push(u.exemplar_code);
+          },
         );
+
+        // 3) Zubehör-Positionen — nur echte Teile (Set-Container-Zeilen ohne
+        //    accessory_id werden übersprungen). Exemplar-Nr. anhängen wenn da.
+        (Array.isArray(b.resolved_items) ? b.resolved_items : []).forEach(
+          (it: { name?: string; accessory_id?: string; qty?: number }) => {
+            if (!it?.name || !it.accessory_id) return;
+            const codes = codesByAcc[it.accessory_id] || [];
+            const qty = it.qty && it.qty > 0 ? it.qty : 1;
+            if (codes.length > 0) {
+              codes.forEach((code) => names.push(`${it.name} · Nr. ${code}`));
+              for (let i = 0; i < qty - codes.length; i++) names.push(it.name!);
+            } else {
+              names.push(qty > 1 ? `${it.name} (×${qty})` : it.name!);
+            }
+          },
+        );
+
         const unique = [...new Set(names)];
         if (!cancelled) setItems(unique);
       } catch {
