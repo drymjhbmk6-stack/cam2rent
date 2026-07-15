@@ -46,6 +46,12 @@ export interface InvoiceData {
   /** Verkauf statt Miete: kein Mietzeitraum, kein Haftungsschutz, kein
    *  Versand. Positionen kommen aus accessoryLines (= verkaufte Artikel). */
   isKauf?: boolean;
+  /** Überschreibt bei isKauf die Positions-Subline (Default "Verkaufsartikel").
+   *  Für Schaden-Rechnungen z. B. "Schadensposition". */
+  saleSubline?: string;
+  /** Überschreibt bei isKauf das Datums-Label (Default "Kaufdatum").
+   *  Für Schaden-Rechnungen z. B. "Rechnungsdatum". */
+  saleDateLabel?: string;
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
@@ -348,7 +354,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
       items.push({
         pos: pos++,
         description: a.name,
-        subline: data.isKauf ? 'Verkaufsartikel' : 'Zubehör',
+        subline: data.isKauf ? (data.saleSubline ?? 'Verkaufsartikel') : 'Zubehör',
         qty: a.qty,
         unitPrice: a.unitPrice,
         lineTotal: a.lineTotal,
@@ -526,7 +532,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <View style={s.metaCol}>
             {data.isKauf ? (
               <>
-                <Text style={s.metaLabel}>Kaufdatum</Text>
+                <Text style={s.metaLabel}>{data.saleDateLabel ?? 'Kaufdatum'}</Text>
                 <Text style={s.metaValue}>{data.invoiceDate}</Text>
               </>
             ) : (

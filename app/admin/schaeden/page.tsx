@@ -52,6 +52,10 @@ export default function AdminSchaedenPage() {
   const [photoModal, setPhotoModal] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [notifyResolution, setNotifyResolution] = useState(false);
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceNotify, setInvoiceNotify] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceResult, setInvoiceResult] = useState<{ msg: string; link?: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -74,6 +78,9 @@ export default function AdminSchaedenPage() {
   function openDetail(report: DamageReport) {
     setSelectedReport(report);
     setNotifyResolution(false);
+    setInvoiceAmount(report.damage_amount != null ? String(report.damage_amount) : '');
+    setInvoiceNotify(false);
+    setInvoiceResult(null);
     setEditForm({
       damage_amount: report.damage_amount?.toString() || '',
       deposit_retained: report.deposit_retained?.toString() || '',
@@ -133,6 +140,38 @@ export default function AdminSchaedenPage() {
       alert('Fehler beim Einbehalten.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function createInvoice() {
+    if (!selectedReport) return;
+    const amount = parseFloat(invoiceAmount.replace(',', '.'));
+    if (isNaN(amount) || amount <= 0) {
+      setInvoiceResult({ msg: 'Bitte einen Betrag größer 0 eingeben.', ok: false });
+      return;
+    }
+    setInvoiceBusy(true);
+    setInvoiceResult(null);
+    try {
+      const res = await fetch('/api/admin/damage/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportId: selectedReport.id, amount, notify_customer: invoiceNotify }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setInvoiceResult({ msg: d.error || 'Fehler beim Erstellen der Rechnung.', ok: false });
+        return;
+      }
+      const mailInfo = invoiceNotify
+        ? d.emailSent ? ' Kunde per E-Mail informiert.' : ` E-Mail nicht gesendet${d.emailError ? ` (${d.emailError})` : ''}.`
+        : ' (keine E-Mail versendet)';
+      setInvoiceResult({ msg: `Rechnung ${d.bookingId} über ${fmtEuro(amount)} erstellt.${mailInfo}`, link: d.paymentUrl, ok: true });
+      fetchReports();
+    } catch {
+      setInvoiceResult({ msg: 'Fehler beim Erstellen der Rechnung.', ok: false });
+    } finally {
+      setInvoiceBusy(false);
     }
   }
 
@@ -375,6 +414,67 @@ export default function AdminSchaedenPage() {
                 </div>
               </div>
             )}
+
+            {/* Schaden-Rechnung an Kunden (echte Rechnung + Zahlungslink) */}
+            <div style={{ height: 1, background: '#1e293b', margin: '24px 0' }} />
+            <div style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 12, padding: 16, marginBottom: 8 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>Schaden-Rechnung an Kunden</p>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+                Erstellt eine echte Rechnung mit Rechnungsnummer (fließt in EÜR/DATEV) + Stripe-Zahlungslink.
+                Der Kunde kann direkt per Karte oder PayPal zahlen.
+              </p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Rechnungsbetrag (€)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={invoiceAmount}
+                    onChange={(e) => setInvoiceAmount(e.target.value)}
+                    placeholder="0,00"
+                    style={{ width: '100%', padding: '10px 14px', background: '#111827', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none' }}
+                  />
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={invoiceNotify}
+                  onChange={(e) => setInvoiceNotify(e.target.checked)}
+                  style={{ marginTop: 2, width: 16, height: 16, accentColor: '#ef4444', flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 13, color: '#e2e8f0' }}>
+                  Rechnung per E-Mail an den Kunden senden
+                  <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                    Ohne Haken wird die Rechnung nur angelegt (Zahlungslink bekommst du hier angezeigt), aber keine E-Mail verschickt.
+                  </span>
+                </span>
+              </label>
+              <button
+                onClick={createInvoice}
+                disabled={invoiceBusy}
+                style={{ marginTop: 14, padding: '10px 20px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: invoiceBusy ? 0.5 : 1 }}
+              >
+                {invoiceBusy ? 'Wird erstellt…' : 'Rechnung erstellen'}
+              </button>
+              {invoiceResult && (
+                <div style={{
+                  marginTop: 12, padding: '10px 14px', borderRadius: 10, fontSize: 13, lineHeight: 1.5,
+                  background: invoiceResult.ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: `1px solid ${invoiceResult.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                  color: invoiceResult.ok ? '#6ee7b7' : '#fca5a5',
+                }}>
+                  {invoiceResult.msg}
+                  {invoiceResult.link && (
+                    <span style={{ display: 'block', marginTop: 6 }}>
+                      <a href={invoiceResult.link} target="_blank" rel="noopener noreferrer" style={{ color: '#93c5fd', wordBreak: 'break-all' }}>
+                        Zahlungslink öffnen ↗
+                      </a>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Bearbeitung */}
             {selectedReport.status !== 'resolved' && (

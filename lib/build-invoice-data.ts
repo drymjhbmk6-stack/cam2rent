@@ -96,6 +96,10 @@ export async function buildInvoiceData(
         lineTotal: Math.round(unitPrice * qty * 100) / 100,
       };
     });
+    // Schaden-Rechnung nutzt dieselbe kauf-Pipeline (Rechnungsnummer, EÜR,
+    // Zahlungslink), soll aber sauber beschriftet sein. Marker: product_name
+    // beginnt mit "Schadensrechnung".
+    const isSchaden = String(booking.product_name ?? '').startsWith('Schadensrechnung');
     return {
       bookingId,
       invoiceNumber,
@@ -113,6 +117,8 @@ export async function buildInvoiceData(
       cameraLines: [],
       accessoryLines: saleLines,
       isKauf: true,
+      saleSubline: isSchaden ? 'Schadensposition' : undefined,
+      saleDateLabel: isSchaden ? 'Rechnungsdatum' : undefined,
       priceRental: 0,
       priceAccessories: (booking.price_total as number) ?? 0,
       priceHaftung: 0,
