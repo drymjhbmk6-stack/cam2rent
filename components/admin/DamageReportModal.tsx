@@ -153,23 +153,50 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
         const b = json.booking || {};
         const names: string[] = [];
 
-        // 1) Kamera(s) — jeweils mit Seriennummer, wenn vorhanden.
-        const cams = Array.isArray(b.cameras_resolved) ? b.cameras_resolved : [];
-        if (cams.length > 0) {
-          cams.forEach((c: { product_name?: string; serial_number?: string | null }) => {
-            const nm = (c.product_name || '').trim();
-            if (!nm) return;
-            names.push(c.serial_number ? `${nm} · SN ${c.serial_number}` : nm);
-          });
-        } else {
-          // Legacy-Fallback: product_name-Split, SN nur für die erste Kamera.
-          String(b.product_name || '')
-            .split(',')
-            .map((n: string) => n.trim())
-            .filter(Boolean)
-            .forEach((n: string, i: number) => {
-              names.push(i === 0 && b.serial_number ? `${n} · SN ${b.serial_number}` : n);
-            });
+        // 1) Kamera(s) — Seriennummer aus der Zuweisung, sonst die
+        //    Modell-Seriennummern aus dem Inventar als auswählbare Chips
+        //    anbieten (Buchung ohne feste unit_id → Admin wählt das Exemplar).
+        const cams: { product_name?: string; serial_number?: string | null }[] =
+          Array.isArray(b.cameras_resolved) && b.cameras_resolved.length > 0
+            ? b.cameras_resolved
+            : String(b.product_name || '')
+                .split(',')
+                .map((n: string) => n.trim())
+                .filter(Boolean)
+                .map((n: string, i: number) => ({
+                  product_name: n,
+                  serial_number: i === 0 ? (b.serial_number ?? null) : null,
+                }));
+
+        const modelLookedUp = new Set<string>();
+        for (const c of cams) {
+          const nm = (c.product_name || '').trim();
+          if (!nm) continue;
+          if (c.serial_number) {
+            names.push(`${nm} · SN ${c.serial_number}`);
+            continue;
+          }
+          // Keine feste Zuweisung → Modell-Seriennummern aus dem Inventar holen.
+          if (modelLookedUp.has(nm.toLowerCase())) continue;
+          modelLookedUp.add(nm.toLowerCase());
+          let serials: string[] = [];
+          try {
+            const r = await fetch(
+              `/api/admin/booking/${encodeURIComponent(effectiveBookingId)}/camera-exemplars?product_name=${encodeURIComponent(nm)}`,
+            );
+            if (r.ok) {
+              const j = await r.json();
+              serials = (Array.isArray(j.units) ? j.units : [])
+                .map((u: { exemplar_code?: string }) => (u.exemplar_code || '').trim())
+                .filter(Boolean)
+                .slice(0, 20);
+            }
+          } catch { /* Inventar-Lookup optional */ }
+          if (serials.length > 0) {
+            serials.forEach((code) => names.push(`${nm} · SN ${code}`));
+          } else {
+            names.push(nm);
+          }
         }
 
         // 2) Zubehör-Exemplar-Codes je accessory_id sammeln.
