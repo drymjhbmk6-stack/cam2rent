@@ -24,6 +24,7 @@ import {
   buildShippingEmail,
   sendDamageReportConfirmation,
   sendAdminDamageNotification,
+  sendAdminDamageNotice,
   sendDamageResolution,
   sendReferralReward,
   sendNewMessageNotificationToAdmin,
@@ -514,6 +515,61 @@ function previewSaleInvoice(): { subject: string; html: string } {
   };
 }
 
+// 1:1-Spiegel der Schadensersatz-Forderung (die echte Mail wird tief in
+// dispatchDamageCharge gebaut — Booking + PDF + Stripe-Link — und lässt sich
+// nicht sauber im Capture-Modus rendern). Bei Änderung der Original-HTML in
+// lib/schaden-rechnung.ts hier nachziehen.
+function previewSchadensersatzForderung(): { subject: string; html: string } {
+  const safeName = escapeHtml('Max Mustermann');
+  const safeVorgang = escapeHtml('SE-2620-003');
+  const safeSource = escapeHtml(DUMMY_BOOKING_ID);
+  const safeTotal = escapeHtml('149,00');
+  const safePaymentUrl = 'https://buy.stripe.com/test_link_DUMMY';
+  const payButton = `<div style="text-align:center;margin:24px 0;">
+        <a href="${safePaymentUrl}" style="display:inline-block;background:#3b82f6;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:10px;text-decoration:none;">
+          Jetzt bezahlen
+        </a>
+      </div>`;
+  return {
+    subject: stripSubject(`Zahlungsaufforderung Schadensersatz ${safeVorgang} — cam2rent`),
+    html: `
+    <div style="font-family:'DM Sans',Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 16px;color:#1a1a1a;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <span style="font-weight:900;font-size:20px;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+      </div>
+      <h1 style="font-size:22px;font-weight:700;margin-bottom:8px;">Zahlungsaufforderung – Schadensersatz</h1>
+      <p style="color:#64748b;font-size:15px;line-height:1.6;margin-bottom:20px;">
+        Hallo ${safeName},<br/>
+        an der Ausrüstung deiner Buchung <strong>${safeSource}</strong> ist ein Schaden entstanden.
+        Die dadurch angefallenen Reparaturkosten machen wir hiermit als Schadensersatz geltend.
+        Die Zahlungsaufforderung und eine Kopie der Reparaturrechnung liegen als PDF bei.
+      </p>
+      <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;margin-bottom:8px;">
+        <tr>
+          <td style="padding:10px 0;font-weight:700;font-size:16px;">Zu zahlen (Schadensersatz)</td>
+          <td style="padding:10px 0;text-align:right;font-weight:700;font-size:16px;">${safeTotal}&nbsp;€</td>
+        </tr>
+      </table>
+      ${payButton}
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 8px;">
+        Bitte begleiche den Betrag über den Button oben (Karte/PayPal) oder per Überweisung (Details im PDF).
+      </p>
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 24px;">
+        Vorgangsnummer: ${safeVorgang}
+      </p>
+      <p style="color:#94a3b8;font-size:11px;line-height:1.5;margin:0 0 16px;text-align:center;">
+        Es handelt sich um echten Schadensersatz (kein Leistungsaustausch), daher ohne Umsatzsteuerausweis
+        (§ 19 UStG). Bei Fragen zum Schaden antworte einfach auf diese E-Mail.
+      </p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>
+      <p style="color:#94a3b8;font-size:11px;line-height:1.5;margin:0;text-align:center;">
+        ${escapeHtml(BUSINESS.owner)} &middot; ${escapeHtml(BUSINESS.street)} &middot; ${escapeHtml(BUSINESS.zip)} ${escapeHtml(BUSINESS.city)}<br/>
+        ${escapeHtml(BUSINESS.emailKontakt)} &middot; ${escapeHtml(BUSINESS.phone)}
+      </p>
+    </div>`,
+  };
+}
+
 // Spiegel des Layouts aus lib/reminder-emails.ts (wrapLayout/ctaButton). Wird
 // für die Vorschau der Rückgabe-/Überfälligkeits-Mails genutzt — diese senden
 // direkt über Resend (nicht sendAndLog), daher kein renderEmailPreview-Capture.
@@ -706,9 +762,23 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
   {
     id: 'damage_resolution',
     name: 'Schadensmeldung — Auflösung',
-    description: 'Wenn der Admin eine Schadensmeldung abschließt — mit Schadenshöhe und Info zur Kaution.',
+    description: 'Wenn der Admin eine Schadensmeldung auf „Abgeschlossen" setzt — mit klarem Status (erledigt / noch offen), Schadenshöhe und „Das haben wir gemacht". Geht immer an den Kunden.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendDamageResolution, dummyDamageResolution),
+  },
+  {
+    id: 'damage_documented_customer',
+    name: 'Schaden dokumentiert — Kunde',
+    description: 'Wenn der Admin auf einer Buchung einen Schaden dokumentiert und den Kunden per Haken informiert — mit Beschreibung, Fotoanzahl und nächsten Schritten.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendAdminDamageNotice, dummyDamage),
+  },
+  {
+    id: 'schadensersatz_forderung',
+    name: 'Schadensersatz — Zahlungsaufforderung',
+    description: 'Wenn der Admin eine Schadensersatz-Forderung erstellt — Zahlungsaufforderung (kein Rechnungsdokument, § 19 UStG) mit Zahllink + PDF-Anhang.',
+    recipient: 'customer',
+    render: () => withOverride('schadensersatz_forderung', async () => previewSchadensersatzForderung()),
   },
   // Freundschaftswerbung
   {
