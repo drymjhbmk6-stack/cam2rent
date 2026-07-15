@@ -461,9 +461,32 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         {/* Entgelt und Zahlung */}
         <Text style={s.sectionHeading}>Entgelt und Zahlung</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-          <TableRow label="Mietpreis" value={fmtEuro(data.priceRental)} />
-          <TableRow label="Versandkosten" value={fmtEuro(data.priceShipping)} alt />
-          <TableRow label={`Schadenspauschale (${data.haftungOption})`} value={fmtEuro(data.priceHaftung)} />
+          {(() => {
+            // Preiszeilen so aufstellen, dass sie IMMER auf den Gesamtbetrag
+            // aufgehen. Zubehoer/Sets werden als eigene Zeile gezeigt; die
+            // Differenz zwischen (Miete + Zubehoer + Haftung + Versand) und dem
+            // tatsaechlich gezahlten Gesamtbetrag wird als Rabatt/Anpassung
+            // ausgewiesen (Set-Bundle-Rabatt, Gutschein, manuelle Anpassung).
+            const acc = data.priceAccessories ?? 0;
+            const adjustment =
+              Math.round(
+                (data.priceTotal - data.priceRental - acc - data.priceHaftung - data.priceShipping) * 100,
+              ) / 100;
+            const rows: { label: string; value: string }[] = [
+              { label: 'Mietpreis', value: fmtEuro(data.priceRental) },
+            ];
+            if (acc > 0) rows.push({ label: 'Zubehör / Sets', value: fmtEuro(acc) });
+            if (adjustment < -0.005) {
+              rows.push({ label: 'Rabatt / Anpassung', value: fmtEuro(adjustment) });
+            } else if (adjustment > 0.005) {
+              rows.push({ label: 'Anpassung', value: fmtEuro(adjustment) });
+            }
+            rows.push({ label: 'Versandkosten', value: fmtEuro(data.priceShipping) });
+            rows.push({ label: `Schadenspauschale (${data.haftungOption})`, value: fmtEuro(data.priceHaftung) });
+            return rows.map((r, i) => (
+              <TableRow key={`entgelt-${i}`} label={r.label} value={r.value} alt={i % 2 === 1} />
+            ));
+          })()}
           <View style={{ flexDirection: 'row', backgroundColor: NAVY, paddingVertical: 5, paddingHorizontal: 8 }}>
             <Text style={{ width: '38%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#fff' }}>Gesamtbetrag</Text>
             <Text style={{ width: '62%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#fff' }}>{fmtEuro(data.priceTotal)}</Text>

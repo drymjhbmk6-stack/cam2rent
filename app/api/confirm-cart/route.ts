@@ -276,9 +276,16 @@ export async function POST(req: NextRequest) {
                 .filter((fb) => !fb.contract_signed)
                 .map(async (fullBooking) => {
                   try {
+                    // Profil-Adresse fuer den Vertrag laden (Mieter-Block).
+                    const idemProfile = fullBooking.user_id
+                      ? await loadProfileAddressRow(supabase, fullBooking.user_id).catch(() => null)
+                      : null;
                     const result = await generateContractPDF({
                       bookingId: fullBooking.id, bookingNumber: fullBooking.id,
                       customerName: sig.signerName, customerEmail: fullBooking.customer_email || '',
+                      customerStreet: idemProfile?.address_street ?? undefined,
+                      customerZip: idemProfile?.address_zip ?? undefined,
+                      customerCity: idemProfile?.address_city ?? undefined,
                       productName: fullBooking.product_name || '',
                       accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
                       accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
@@ -1323,6 +1330,9 @@ export async function POST(req: NextRequest) {
                   bookingNumber: bookingIds[gi],
                   customerName: contractSignature.signerName,
                   customerEmail: r_email,
+                  customerStreet: profileRowCart?.address_street ?? undefined,
+                  customerZip: profileRowCart?.address_zip ?? undefined,
+                  customerCity: profileRowCart?.address_city ?? undefined,
                   productName,
                   accessories: allAccessories,
                   serialNumber,
