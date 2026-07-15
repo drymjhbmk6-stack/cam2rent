@@ -36,6 +36,7 @@ const SCHADENSART_OPTIONS = [
 ];
 
 const SCHWEREGRAD = [
+  { value: 'keine', label: 'Keine', color: '#64748b' },
   { value: 'leicht', label: 'Leicht', color: '#10b981' },
   { value: 'mittel', label: 'Mittel', color: '#f59e0b' },
   { value: 'schwer', label: 'Schwer', color: '#ef4444' },
@@ -90,6 +91,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   const [funktion, setFunktion] = useState('');
   const [festgestellt, setFestgestellt] = useState(todayIso());
   const [description, setDescription] = useState('');
+  const [befund, setBefund] = useState('');
   const [amount, setAmount] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [notifyCustomer, setNotifyCustomer] = useState(false);
@@ -103,6 +105,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   useEffect(() => {
     if (open) {
       setDescription('');
+      setBefund('');
       setAdminNotes('');
       setPhotos([]);
       setError(null);
@@ -252,7 +255,13 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     if (festgestellt) lines.push(`Festgestellt am: ${isoToDe(festgestellt)}`);
     const header = lines.join('\n');
     const body = description.trim();
-    return header ? `${header}\n\n${body}` : body;
+    const bef = befund.trim();
+    const parts: string[] = [];
+    if (header) parts.push(header);
+    // Bei zusätzlichem Befund beide Blöcke klar beschriften.
+    parts.push(bef ? `Angaben des Kunden:\n${body}` : body);
+    if (bef) parts.push(`Befund & Instandsetzung:\n${bef}`);
+    return parts.join('\n\n');
   }
 
   async function submit() {
@@ -493,10 +502,11 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
             </div>
           </div>
 
-          {/* Beschreibung */}
+          {/* Beschreibung (Angaben des Kunden) */}
           <div>
             <label className={labelCls}>
               Beschreibung <span className="text-red-500">*</span>
+              <span className="text-brand-muted font-normal"> — Angaben des Kunden</span>
             </label>
             <textarea
               value={description}
@@ -507,6 +517,24 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
               className={`${inputCls} resize-none`}
             />
             <p className="text-[11px] text-brand-muted mt-1 text-right">{description.length}/2000</p>
+          </div>
+
+          {/* Befund & Instandsetzung (Bearbeiter, kundensichtbar) */}
+          <div>
+            <label className={labelCls}>
+              Befund &amp; Instandsetzung <span className="text-brand-muted font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={befund}
+              onChange={(e) => setBefund(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Vom Bearbeiter: festgestellter Schaden bei der Prüfung + geplante/erfolgte Instandsetzungsmaßnahme…"
+              className={`${inputCls} resize-none`}
+            />
+            <p className="text-[11px] text-brand-muted mt-1">
+              Wird dem Kunden mitgeteilt (erscheint in der Kunden-E-Mail), sofern du &bdquo;Kunde per E-Mail informieren&ldquo; anhakst.
+            </p>
           </div>
 
           {/* Geschätzte Schadenshöhe */}
