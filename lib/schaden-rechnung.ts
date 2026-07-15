@@ -1,16 +1,24 @@
 /**
- * Schaden-Rechnung: dem Kunden eine echte Rechnung (mit Rechnungsnummer →
- * Buchhaltung/EÜR/DATEV) über einen Schadensbetrag stellen + Stripe-Zahlungslink.
+ * Schadensersatz-Forderung: dem Kunden die von ihm verursachten
+ * Reparaturkosten (brutto) als ECHTEN Schadensersatz in Rechnung stellen —
+ * über eine Zahlungsaufforderung/Kostenaufstellung, NICHT über eine
+ * Ausgangsrechnung.
  *
- * Technisch nutzt eine Schaden-Rechnung dieselbe Pipeline wie ein Verkauf
- * (`bookings`-Row mit `booking_type='kauf'` + `sale_items`). Dadurch greifen
- * Rechnungsnummer, invoices-Anlage, EÜR/DATEV und der Stripe-Webhook
- * automatisch — und die Miet-Ansichten (Verfügbarkeit, Gantt, Versand,
- * awaiting-payment-cancel) blenden sie ohnehin aus (booking_type='kauf').
+ * Fachlicher Hintergrund (Kleinunternehmer § 19 UStG, EÜR):
+ *  - Echter Schadensersatz ist KEIN Leistungsaustausch → kein steuerbarer
+ *    Umsatz, keine Rechnung mit fortlaufender Rechnungsnummer, kein
+ *    USt-Ausweis. Das Kundendokument ist eine Zahlungsaufforderung.
+ *  - Die Erstattung ist trotzdem eine Betriebseinnahme (die Kamera ist
+ *    Betriebsvermögen, die Reparatur war Betriebsausgabe). Sie fließt über
+ *    die `bookings`-Zeile in die EÜR — daher legen wir eine Zeile an, aber
+ *    KEINE `invoices`-Row (kein Rechnungs-Ledger-Eintrag).
+ *  - Die vom Betrieb bezahlte Reparaturrechnung bucht der Unternehmer separat
+ *    als Betriebsausgabe (Belege/Einkauf-Modul, brutto, bei Zahlung).
  *
- * Damit die Rechnung nicht wie ein "Kauf" aussieht, trägt der product_name
- * den Marker "Schadensrechnung: …" — build-invoice-data setzt daraufhin die
- * sauberen Labels ("Schadensposition" / "Rechnungsdatum").
+ * Technisch nutzen wir die `booking_type='kauf'`-Mechanik nur als
+ * Einnahme-/Zahlungslink-Träger (EÜR/DATEV zählen die bookings-Zeile; die
+ * Miet-Ansichten blenden kauf ohnehin aus). Das Kundendokument ist aber eine
+ * eigene Zahlungsaufforderung (SchadensersatzPDF), keine Rechnung.
  *
  * Die Kunden-E-Mail geht NUR raus, wenn notifyCustomer=true.
  */
@@ -23,13 +31,16 @@ import { generateBookingId } from '@/lib/booking-id';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { getBerlinDateString } from '@/lib/timezone';
-import { buildInvoiceData } from '@/lib/build-invoice-data';
-import { InvoicePDF } from '@/lib/invoice-pdf';
-import { storeInvoiceForBooking } from '@/lib/buchhaltung/store-invoice';
+import { SchadensersatzPDF } from '@/lib/schadensersatz-pdf';
 import { sendAndLog, escapeHtml, stripSubject } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 
-export interface CreateDamageInvoiceResult {
+export interface RepairInvoiceAttachment {
+  filename: string;
+  content: Buffer;
+}
+
+export interface CreateDamageChargeResult {
   success: boolean;
   bookingId?: string;
   paymentUrl?: string;
@@ -41,21 +52,29 @@ export interface CreateDamageInvoiceResult {
 
 /** Kurzform der Schadensbeschreibung für Position + Betreff. */
 function shortDesc(raw: string): string {
-  return String(raw ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 120);
+  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 
-export async function createDamageInvoice(opts: {
+function isoToDe(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return d && m && y ? `${d}.${m}.${y}` : iso;
+}
+
+/**
+ * Legt eine Schadensersatz-Forderung an (Betriebseinnahme + Stripe-Zahlungslink)
+ * und verschickt optional die Zahlungsaufforderung an den Kunden.
+ */
+export async function createDamageCharge(opts: {
   sourceBookingId: string;
   customerName: string;
   customerEmail: string;
+  customerAddress?: string;
   userId: string | null;
   amount: number;
   description: string;
   notifyCustomer: boolean;
-}): Promise<CreateDamageInvoiceResult> {
+  repairInvoice?: RepairInvoiceAttachment | null;
+}): Promise<CreateDamageChargeResult> {
   const supabase = createServiceClient();
 
   const amount = Math.round((Number(opts.amount) || 0) * 100) / 100;
@@ -68,17 +87,16 @@ export async function createDamageInvoice(opts: {
   }
   const customerName = String(opts.customerName ?? '').trim().slice(0, 200);
   const desc = shortDesc(opts.description);
-
-  const lineName = desc
-    ? `Schadensersatz — ${desc}`.slice(0, 200)
-    : `Schadensersatz zu Buchung ${opts.sourceBookingId}`.slice(0, 200);
-  const items = [{ name: lineName, qty: 1, unit_price: amount }];
+  const positionText = desc
+    ? `Schadensersatz für Reparatur: ${desc}`.slice(0, 240)
+    : `Schadensersatz für Reparatur (Buchung ${opts.sourceBookingId})`;
 
   const testMode = await isTestMode();
   const bookingId = await generateBookingId({ isTest: testMode });
   const today = getBerlinDateString();
-  // Marker "Schadensrechnung:" steuert die Beschriftung in build-invoice-data.
-  const productName = `Schadensrechnung: ${desc || `Buchung ${opts.sourceBookingId}`}`.slice(0, 240);
+  // Marker "Schadensersatz:" → build-invoice-data/interne Ansichten wissen,
+  // dass dies KEIN normaler Verkauf ist.
+  const productName = `Schadensersatz: ${desc || `Buchung ${opts.sourceBookingId}`}`.slice(0, 240);
 
   // ── Stripe Payment Link ────────────────────────────────────────────────
   let paymentLink: { id: string; url: string };
@@ -86,7 +104,7 @@ export async function createDamageInvoice(opts: {
     const stripe = await getStripe();
     const amountCents = Math.round(amount * 100);
     const stripeProduct = await stripe.products.create({
-      name: `Schadensrechnung ${bookingId}`.slice(0, 250),
+      name: `Schadensersatz ${bookingId}`.slice(0, 250),
       metadata: { booking_id: bookingId, booking_type: 'kauf' },
     });
     const stripePrice = await stripe.prices.create({
@@ -109,17 +127,17 @@ export async function createDamageInvoice(opts: {
     paymentLink = { id: pl.id, url: pl.url };
   } catch (stripeErr) {
     const msg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
-    console.error('[schaden-rechnung] Stripe-Fehler:', msg);
+    console.error('[schadensersatz] Stripe-Fehler:', msg);
     return { success: false, error: `Stripe-Fehler: ${msg}`, status: 502 };
   }
 
-  // ── bookings-Row (booking_type='kauf') ─────────────────────────────────
+  // ── bookings-Row (booking_type='kauf' als Einnahme-Träger, KEINE invoices) ─
   const { error: insErr } = await supabase.from('bookings').insert({
     id: bookingId,
     payment_intent_id: `PENDING-${bookingId}`,
     is_test: testMode,
     booking_type: 'kauf',
-    sale_items: items,
+    sale_items: [{ name: positionText, qty: 1, unit_price: amount }],
     product_id: '',
     product_name: productName,
     rental_from: today,
@@ -141,7 +159,7 @@ export async function createDamageInvoice(opts: {
     customer_email: email,
     customer_name: customerName || null,
     stripe_payment_link_id: paymentLink.id,
-    notes: `Schaden-Rechnung zu Buchung ${opts.sourceBookingId} — Zahlungslink: ${paymentLink.url}`,
+    notes: `Schadensersatz-Forderung zu Buchung ${opts.sourceBookingId} — Zahlungslink: ${paymentLink.url}`,
   });
 
   if (insErr) {
@@ -156,36 +174,29 @@ export async function createDamageInvoice(opts: {
         status: 503,
       };
     }
-    console.error('[schaden-rechnung] Insert-Fehler:', insErr.message);
+    console.error('[schadensersatz] Insert-Fehler:', insErr.message);
     return { success: false, error: `DB-Fehler: ${insErr.message}`, status: 500 };
   }
 
-  // ── invoices-Row (offen) ───────────────────────────────────────────────
-  try {
-    await storeInvoiceForBooking(supabase, {
-      id: bookingId,
-      customer_email: email,
-      customer_name: customerName || null,
-      price_total: amount,
-      payment_intent_id: `PENDING-${bookingId}`,
-      status: 'awaiting_payment',
-      is_test: testMode,
-      created_at: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('[schaden-rechnung] storeInvoiceForBooking fehlgeschlagen:', err);
-  }
+  // Bewusst KEIN storeInvoiceForBooking: echter Schadensersatz bekommt keine
+  // Ausgangsrechnung / Rechnungsnummer. Die Betriebseinnahme kommt über die
+  // bookings-Zeile in die EÜR.
 
-  // ── Optional: Rechnung-PDF + E-Mail mit Zahlungslink ───────────────────
+  // ── Optional: Zahlungsaufforderung-PDF + E-Mail mit Zahlungslink ────────
   let emailSent = false;
   let emailError: string | undefined;
   if (opts.notifyCustomer) {
     try {
-      await dispatchDamageInvoice(supabase, bookingId, opts.sourceBookingId);
+      await dispatchDamageCharge(supabase, bookingId, {
+        sourceBookingId: opts.sourceBookingId,
+        customerAddress: opts.customerAddress,
+        positionText,
+        repairInvoice: opts.repairInvoice ?? null,
+      });
       emailSent = true;
     } catch (err) {
       emailError = err instanceof Error ? err.message : String(err);
-      console.error('[schaden-rechnung] dispatchDamageInvoice fehlgeschlagen:', emailError);
+      console.error('[schadensersatz] dispatchDamageCharge fehlgeschlagen:', emailError);
     }
   }
 
@@ -193,22 +204,26 @@ export async function createDamageInvoice(opts: {
 }
 
 /**
- * Erzeugt die Schaden-Rechnung als PDF und verschickt sie mit dem
- * Stripe-Zahlungslink an den Kunden (Schaden-Wortlaut). Wird von
- * createDamageInvoice() (bei notifyCustomer) sowie dem "Erneut senden"-Pfad
- * genutzt.
+ * Erzeugt die Zahlungsaufforderung (Schadensersatz) als PDF und verschickt sie
+ * mit dem Stripe-Zahlungslink an den Kunden. Optional wird die Kopie der
+ * Reparaturrechnung mit angehängt (Punkt 3: Beleg-Verknüpfung).
  */
-export async function dispatchDamageInvoice(
+export async function dispatchDamageCharge(
   supabase: SupabaseClient,
   bookingId: string,
-  sourceBookingId?: string,
+  opts: {
+    sourceBookingId: string;
+    customerAddress?: string;
+    positionText: string;
+    repairInvoice?: RepairInvoiceAttachment | null;
+  },
 ): Promise<void> {
   const { data: booking } = await supabase
     .from('bookings')
-    .select('*')
+    .select('id, customer_name, customer_email, price_total, created_at, stripe_payment_link_id')
     .eq('id', bookingId)
     .maybeSingle();
-  if (!booking) throw new Error('Schaden-Rechnung nicht gefunden.');
+  if (!booking) throw new Error('Schadensersatz-Vorgang nicht gefunden.');
   if (!booking.customer_email) throw new Error('Keine Kunden-E-Mail hinterlegt.');
 
   let paymentUrl = '';
@@ -218,37 +233,33 @@ export async function dispatchDamageInvoice(
       const pl = await stripe.paymentLinks.retrieve(booking.stripe_payment_link_id);
       paymentUrl = pl.url ?? '';
     } catch (err) {
-      console.warn('[schaden-rechnung] Zahlungslink konnte nicht geladen werden:', err);
+      console.warn('[schadensersatz] Zahlungslink konnte nicht geladen werden:', err);
     }
   }
 
-  const invoiceData = await buildInvoiceData(supabase, booking);
+  const amount = Number(booking.price_total ?? 0);
+  const datum = isoToDe(getBerlinDateString(booking.created_at ? new Date(booking.created_at) : undefined));
+
   const pdfBuffer = await renderToBuffer(
-    createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>,
+    createElement(SchadensersatzPDF, {
+      data: {
+        vorgangsNr: bookingId,
+        datum,
+        customerName: booking.customer_name || '',
+        customerAddress: opts.customerAddress,
+        sourceBookingId: opts.sourceBookingId,
+        positionText: opts.positionText,
+        amount,
+        hasRepairInvoiceCopy: !!opts.repairInvoice,
+      },
+    }) as ReactElement<DocumentProps>,
   );
 
-  const total = Number(booking.price_total ?? 0);
-  const items = Array.isArray(booking.sale_items)
-    ? (booking.sale_items as Array<{ name: string; qty: number; unit_price: number }>)
-    : [];
   const safeName = escapeHtml(booking.customer_name || 'dort');
-  const safeInvoiceNr = escapeHtml(invoiceData.invoiceNumber ?? bookingId);
-  const safeTotal = escapeHtml(total.toFixed(2).replace('.', ','));
+  const safeVorgang = escapeHtml(bookingId);
+  const safeSource = escapeHtml(opts.sourceBookingId);
+  const safeTotal = escapeHtml(amount.toFixed(2).replace('.', ','));
   const safePaymentUrl = escapeHtml(paymentUrl);
-  const bezug = sourceBookingId
-    ? ` zu deiner Buchung <strong>${escapeHtml(sourceBookingId)}</strong>`
-    : '';
-
-  const itemRows = items
-    .map((it) => {
-      const qty = Math.max(1, Math.floor(Number(it.qty) || 1));
-      const line = (Number(it.unit_price) || 0) * qty;
-      return `<tr>
-        <td style="padding:6px 0;color:#1a1a1a;">${escapeHtml(it.name)}${qty > 1 ? ` &times; ${qty}` : ''}</td>
-        <td style="padding:6px 0;text-align:right;color:#1a1a1a;">${escapeHtml(line.toFixed(2).replace('.', ','))}&nbsp;€</td>
-      </tr>`;
-    })
-    .join('');
 
   const payButton = paymentUrl
     ? `<div style="text-align:center;margin:24px 0;">
@@ -263,24 +274,31 @@ export async function dispatchDamageInvoice(
       <div style="text-align:center;margin-bottom:24px;">
         <span style="font-weight:900;font-size:20px;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
       </div>
-      <h1 style="font-size:22px;font-weight:700;margin-bottom:8px;">Rechnung ${safeInvoiceNr} — Schadensabwicklung</h1>
+      <h1 style="font-size:22px;font-weight:700;margin-bottom:8px;">Zahlungsaufforderung – Schadensersatz</h1>
       <p style="color:#64748b;font-size:15px;line-height:1.6;margin-bottom:20px;">
         Hallo ${safeName},<br/>
-        anbei erhältst du die Rechnung über den festgestellten Schaden${bezug}.
-        Die Rechnung ist auch als PDF angehängt.
+        an der Ausrüstung deiner Buchung <strong>${safeSource}</strong> ist ein Schaden entstanden.
+        Die dadurch angefallenen Reparaturkosten machen wir hiermit als Schadensersatz geltend.
+        Die Zahlungsaufforderung${opts.repairInvoice ? ' und eine Kopie der Reparaturrechnung liegen' : ' liegt'} als PDF bei.
       </p>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">${itemRows}</table>
       <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;margin-bottom:8px;">
         <tr>
-          <td style="padding:10px 0;font-weight:700;font-size:16px;">Gesamtbetrag</td>
+          <td style="padding:10px 0;font-weight:700;font-size:16px;">Zu zahlen (Schadensersatz)</td>
           <td style="padding:10px 0;text-align:right;font-weight:700;font-size:16px;">${safeTotal}&nbsp;€</td>
         </tr>
       </table>
       ${payButton}
-      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 24px;">
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 8px;">
         ${paymentUrl
-          ? 'Bitte begleiche den Betrag bequem über den Button oben (Kreditkarte oder PayPal). Bei Fragen zum Schaden antworte einfach auf diese E-Mail.'
-          : 'Den Zahlungslink senden wir dir in einer separaten Nachricht zu.'}
+          ? 'Bitte begleiche den Betrag über den Button oben (Karte/PayPal) oder per Überweisung (Details im PDF).'
+          : 'Die Bankverbindung findest du im angehängten PDF.'}
+      </p>
+      <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0 0 24px;">
+        Vorgangsnummer: ${safeVorgang}
+      </p>
+      <p style="color:#94a3b8;font-size:11px;line-height:1.5;margin:0 0 16px;text-align:center;">
+        Es handelt sich um echten Schadensersatz (kein Leistungsaustausch), daher ohne Umsatzsteuerausweis
+        (§ 19 UStG). Bei Fragen zum Schaden antworte einfach auf diese E-Mail.
       </p>
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>
       <p style="color:#94a3b8;font-size:11px;line-height:1.5;margin:0;text-align:center;">
@@ -293,23 +311,36 @@ export async function dispatchDamageInvoice(
   const text = [
     `Hallo ${booking.customer_name || 'dort'},`,
     '',
-    `anbei die Rechnung ${invoiceData.invoiceNumber ?? bookingId} über den festgestellten Schaden${sourceBookingId ? ` zu deiner Buchung ${sourceBookingId}` : ''}.`,
-    `Gesamtbetrag: ${total.toFixed(2).replace('.', ',')} EUR`,
+    `an der Ausrüstung deiner Buchung ${opts.sourceBookingId} ist ein Schaden entstanden.`,
+    `Wir machen die Reparaturkosten als Schadensersatz geltend.`,
+    `Zu zahlen: ${amount.toFixed(2).replace('.', ',')} EUR`,
+    `Vorgangsnummer: ${bookingId}`,
     '',
     ...(paymentUrl ? ['Jetzt bezahlen:', paymentUrl, ''] : []),
+    'Echter Schadensersatz, kein Leistungsaustausch, ohne Umsatzsteuerausweis (§ 19 UStG).',
     '--',
     `${BUSINESS.owner}`,
     `${BUSINESS.street}, ${BUSINESS.zip} ${BUSINESS.city}`,
     `${BUSINESS.emailKontakt} · ${BUSINESS.phone}`,
   ].join('\n');
 
+  const attachments: { filename: string; content: Buffer }[] = [
+    { filename: `Zahlungsaufforderung-Schadensersatz-${bookingId}.pdf`, content: Buffer.from(pdfBuffer) },
+  ];
+  if (opts.repairInvoice) {
+    attachments.push({
+      filename: opts.repairInvoice.filename || `Reparaturrechnung-${bookingId}.pdf`,
+      content: opts.repairInvoice.content,
+    });
+  }
+
   await sendAndLog({
     to: booking.customer_email,
-    subject: stripSubject(`Rechnung ${invoiceData.invoiceNumber ?? bookingId} — Schadensabwicklung cam2rent`),
+    subject: stripSubject(`Zahlungsaufforderung Schadensersatz ${bookingId} — cam2rent`),
     html,
     text,
-    attachments: [{ filename: `Schaden-Rechnung-${bookingId}.pdf`, content: Buffer.from(pdfBuffer) }],
+    attachments,
     bookingId,
-    emailType: 'schaden_rechnung',
+    emailType: 'schadensersatz_forderung',
   });
 }

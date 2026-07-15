@@ -1,30 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { createDamageInvoice } from '@/lib/schaden-rechnung';
+import { createDamageCharge, type RepairInvoiceAttachment } from '@/lib/schaden-rechnung';
+import { detectFileType } from '@/lib/file-type-check';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 /**
  * POST /api/admin/damage/invoice
- * Erstellt eine echte Schaden-Rechnung (mit Rechnungsnummer → Buchhaltung/EÜR)
- * + Stripe-Zahlungslink für eine bestehende Schadensmeldung.
- * Body: { reportId, amount, notify_customer? }
- * Die Kunden-E-Mail geht NUR raus, wenn notify_customer === true.
+ * Erstellt eine Schadensersatz-Forderung (Zahlungsaufforderung, KEINE
+ * Ausgangsrechnung) + Stripe-Zahlungslink für eine bestehende Schadensmeldung.
+ * Die Betriebseinnahme fließt über die bookings-Zeile in die EÜR.
+ *
+ * FormData:
+ *   - reportId: string
+ *   - amount: string (Bruttobetrag der Reparaturkosten)
+ *   - notify_customer: 'true' | 'false'  (Mail nur bei true)
+ *   - repair_invoice?: File (PDF/Bild, optional — Kopie der Reparaturrechnung)
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const reportId = String(body.reportId ?? '').trim();
-    const amount = Math.round((Number(body.amount) || 0) * 100) / 100;
-    const notifyCustomer = body.notify_customer === true || body.notify_customer === 'true';
+    const form = await req.formData();
+    const reportId = String(form.get('reportId') ?? '').trim();
+    const amount = Math.round((Number(form.get('amount')) || 0) * 100) / 100;
+    const notifyCustomer = ['true', '1', 'on', 'yes'].includes(
+      String(form.get('notify_customer') ?? '').toLowerCase(),
+    );
 
     if (!reportId) {
       return NextResponse.json({ error: 'reportId erforderlich.' }, { status: 400 });
     }
     if (amount <= 0) {
       return NextResponse.json({ error: 'Betrag muss größer 0 sein.' }, { status: 400 });
+    }
+
+    // Optionale Kopie der Reparaturrechnung (Punkt 3: liegt dem Kunden bei).
+    let repairInvoice: RepairInvoiceAttachment | null = null;
+    const file = form.get('repair_invoice');
+    if (file instanceof File && file.size > 0) {
+      if (file.size > 10 * 1024 * 1024) {
+        return NextResponse.json({ error: 'Reparaturrechnung ist zu groß (max 10 MB).' }, { status: 400 });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const detected = detectFileType(buffer);
+      if (!detected || !['pdf', 'jpeg', 'png', 'webp'].includes(detected)) {
+        return NextResponse.json(
+          { error: 'Reparaturrechnung muss ein PDF oder Bild (JPG/PNG/WebP) sein.' },
+          { status: 400 },
+        );
+      }
+      const ext = detected === 'jpeg' ? 'jpg' : detected;
+      repairInvoice = { filename: `Reparaturrechnung.${ext}`, content: buffer };
     }
 
     const supabase = createServiceClient();
@@ -40,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     const { data: booking, error: bookErr } = await supabase
       .from('bookings')
-      .select('id, customer_name, customer_email, user_id')
+      .select('id, customer_name, customer_email, user_id, shipping_address')
       .eq('id', report.booking_id)
       .single();
     if (bookErr || !booking) {
@@ -53,24 +80,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await createDamageInvoice({
+    const result = await createDamageCharge({
       sourceBookingId: booking.id,
       customerName: booking.customer_name || '',
       customerEmail: booking.customer_email,
+      customerAddress: (booking.shipping_address as string) || undefined,
       userId: booking.user_id ?? null,
       amount,
       description: report.admin_notes || '',
       notifyCustomer,
+      repairInvoice,
     });
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
     }
 
-    // Nachvollziehbarkeit: Referenz an die Schadensmeldung hängen +
-    // Schadenshöhe übernehmen, falls noch leer.
+    // Nachvollziehbarkeit (Punkt 4): Referenz an die Schadensmeldung hängen.
     const dateStr = new Date().toISOString().slice(0, 10);
-    const noteLine = `Schaden-Rechnung ${result.bookingId} über ${amount.toFixed(2).replace('.', ',')} € erstellt am ${dateStr}${result.emailSent ? ' (Kunde per E-Mail informiert)' : ''}.`;
+    const noteLine = `Schadensersatz-Forderung ${result.bookingId} über ${amount.toFixed(2).replace('.', ',')} € erstellt am ${dateStr}${result.emailSent ? ' (Kunde per E-Mail informiert)' : ''}${repairInvoice ? ' · Reparaturrechnung beigelegt' : ''}.`;
     const newNotes = report.admin_notes ? `${report.admin_notes}\n${noteLine}` : noteLine;
     const upd: Record<string, unknown> = { admin_notes: newNotes };
     if (report.damage_amount == null) upd.damage_amount = amount;
@@ -80,7 +108,12 @@ export async function POST(req: NextRequest) {
       action: 'damage.invoice',
       entityType: 'damage',
       entityId: reportId,
-      changes: { invoice_booking_id: result.bookingId, amount, customer_notified: result.emailSent },
+      changes: {
+        charge_booking_id: result.bookingId,
+        amount,
+        customer_notified: result.emailSent,
+        repair_invoice_attached: !!repairInvoice,
+      },
       request: req,
     });
 
@@ -93,6 +126,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('POST /api/admin/damage/invoice error:', err);
-    return NextResponse.json({ error: 'Fehler beim Erstellen der Schaden-Rechnung.' }, { status: 500 });
+    return NextResponse.json({ error: 'Fehler beim Erstellen der Schadensersatz-Forderung.' }, { status: 500 });
   }
 }

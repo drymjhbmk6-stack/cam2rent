@@ -96,10 +96,13 @@ export async function buildInvoiceData(
         lineTotal: Math.round(unitPrice * qty * 100) / 100,
       };
     });
-    // Schaden-Rechnung nutzt dieselbe kauf-Pipeline (Rechnungsnummer, EÜR,
-    // Zahlungslink), soll aber sauber beschriftet sein. Marker: product_name
-    // beginnt mit "Schadensrechnung".
-    const isSchaden = String(booking.product_name ?? '').startsWith('Schadensrechnung');
+    // Schadensersatz-Vorgänge laufen technisch über die kauf-Pipeline (nur als
+    // Einnahme-/Zahlungslink-Träger). Sie bekommen aber KEINE Ausgangsrechnung
+    // (kein storeInvoiceForBooking); dieser interne Fallback-Renderer wird nur
+    // aufgerufen, wenn jemand die Buchung direkt im Rechnungs-Viewer öffnet.
+    // Dann wenigstens neutral beschriften. Marker: product_name beginnt mit
+    // "Schadensersatz" (oder Legacy "Schadensrechnung").
+    const isSchaden = /^Schadens(ersatz|rechnung)/.test(String(booking.product_name ?? ''));
     return {
       bookingId,
       invoiceNumber,

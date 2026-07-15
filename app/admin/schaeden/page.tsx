@@ -54,6 +54,7 @@ export default function AdminSchaedenPage() {
   const [notifyResolution, setNotifyResolution] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceNotify, setInvoiceNotify] = useState(false);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceResult, setInvoiceResult] = useState<{ msg: string; link?: string; ok: boolean } | null>(null);
 
@@ -80,6 +81,7 @@ export default function AdminSchaedenPage() {
     setNotifyResolution(false);
     setInvoiceAmount(report.damage_amount != null ? String(report.damage_amount) : '');
     setInvoiceNotify(false);
+    setInvoiceFile(null);
     setInvoiceResult(null);
     setEditForm({
       damage_amount: report.damage_amount?.toString() || '',
@@ -153,23 +155,25 @@ export default function AdminSchaedenPage() {
     setInvoiceBusy(true);
     setInvoiceResult(null);
     try {
-      const res = await fetch('/api/admin/damage/invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId: selectedReport.id, amount, notify_customer: invoiceNotify }),
-      });
+      const fd = new FormData();
+      fd.append('reportId', selectedReport.id);
+      fd.append('amount', String(amount));
+      fd.append('notify_customer', invoiceNotify ? 'true' : 'false');
+      if (invoiceFile) fd.append('repair_invoice', invoiceFile);
+
+      const res = await fetch('/api/admin/damage/invoice', { method: 'POST', body: fd });
       const d = await res.json();
       if (!res.ok) {
-        setInvoiceResult({ msg: d.error || 'Fehler beim Erstellen der Rechnung.', ok: false });
+        setInvoiceResult({ msg: d.error || 'Fehler beim Erstellen der Forderung.', ok: false });
         return;
       }
       const mailInfo = invoiceNotify
         ? d.emailSent ? ' Kunde per E-Mail informiert.' : ` E-Mail nicht gesendet${d.emailError ? ` (${d.emailError})` : ''}.`
         : ' (keine E-Mail versendet)';
-      setInvoiceResult({ msg: `Rechnung ${d.bookingId} über ${fmtEuro(amount)} erstellt.${mailInfo}`, link: d.paymentUrl, ok: true });
+      setInvoiceResult({ msg: `Schadensersatz-Forderung ${d.bookingId} über ${fmtEuro(amount)} erstellt.${mailInfo}`, link: d.paymentUrl, ok: true });
       fetchReports();
     } catch {
-      setInvoiceResult({ msg: 'Fehler beim Erstellen der Rechnung.', ok: false });
+      setInvoiceResult({ msg: 'Fehler beim Erstellen der Forderung.', ok: false });
     } finally {
       setInvoiceBusy(false);
     }
@@ -415,17 +419,19 @@ export default function AdminSchaedenPage() {
               </div>
             )}
 
-            {/* Schaden-Rechnung an Kunden (echte Rechnung + Zahlungslink) */}
+            {/* Schadensersatz-Forderung an Kunden (Zahlungsaufforderung + Zahlungslink) */}
             <div style={{ height: 1, background: '#1e293b', margin: '24px 0' }} />
             <div style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 12, padding: 16, marginBottom: 8 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>Schaden-Rechnung an Kunden</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>Schadensersatz-Forderung an Kunden</p>
               <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
-                Erstellt eine echte Rechnung mit Rechnungsnummer (fließt in EÜR/DATEV) + Stripe-Zahlungslink.
-                Der Kunde kann direkt per Karte oder PayPal zahlen.
+                Erstellt eine <strong>Zahlungsaufforderung (echter Schadensersatz)</strong> über die Reparaturkosten
+                brutto — <strong>keine Rechnung, keine Rechnungsnummer, ohne USt</strong> (§ 19 UStG). Die Einnahme
+                fließt als Betriebseinnahme in die EÜR, Zahlung per Stripe-Link (Karte/PayPal) oder Überweisung.
+                Die von dir bezahlte Reparaturrechnung buchst du separat als Betriebsausgabe (Einkauf/Belege).
               </p>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div style={{ flex: '1 1 180px' }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Rechnungsbetrag (€)</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Reparaturkosten brutto (€)</label>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -436,6 +442,17 @@ export default function AdminSchaedenPage() {
                   />
                 </div>
               </div>
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                  Kopie der Reparaturrechnung <span style={{ color: '#64748b' }}>(optional, PDF/Bild — wird beigelegt)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  onChange={(e) => setInvoiceFile(e.target.files?.[0] ?? null)}
+                  style={{ fontSize: 12, color: '#94a3b8' }}
+                />
+              </div>
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -444,9 +461,9 @@ export default function AdminSchaedenPage() {
                   style={{ marginTop: 2, width: 16, height: 16, accentColor: '#ef4444', flexShrink: 0 }}
                 />
                 <span style={{ fontSize: 13, color: '#e2e8f0' }}>
-                  Rechnung per E-Mail an den Kunden senden
+                  Zahlungsaufforderung per E-Mail an den Kunden senden
                   <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                    Ohne Haken wird die Rechnung nur angelegt (Zahlungslink bekommst du hier angezeigt), aber keine E-Mail verschickt.
+                    Ohne Haken wird der Vorgang nur angelegt (Zahlungslink bekommst du hier angezeigt), aber keine E-Mail verschickt.
                   </span>
                 </span>
               </label>
@@ -455,7 +472,7 @@ export default function AdminSchaedenPage() {
                 disabled={invoiceBusy}
                 style={{ marginTop: 14, padding: '10px 20px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: invoiceBusy ? 0.5 : 1 }}
               >
-                {invoiceBusy ? 'Wird erstellt…' : 'Rechnung erstellen'}
+                {invoiceBusy ? 'Wird erstellt…' : 'Zahlungsaufforderung erstellen'}
               </button>
               {invoiceResult && (
                 <div style={{
