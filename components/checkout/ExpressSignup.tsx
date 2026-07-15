@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-auth';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
+import { CountryField } from '@/components/checkout/CountryField';
+import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 
 type Mode = 'signup' | 'login';
 type Step = 'auth' | 'collect' | 'upload' | 'done';
@@ -58,6 +60,7 @@ export default function ExpressSignup({
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [zipLookupBusy, setZipLookupBusy] = useState(false);
   const [zipLookupError, setZipLookupError] = useState('');
 
@@ -173,6 +176,9 @@ export default function ExpressSignup({
     if (!street.trim()) return 'Bitte gib Straße und Hausnummer ein.';
     if (!/^\d{5}$/.test(zip.trim())) return 'Bitte gib eine gültige 5-stellige PLZ ein.';
     if (!city.trim()) return 'Bitte gib deine Stadt ein.';
+    if (!isAllowedCountry(country)) {
+      return `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`;
+    }
     if (emailExists) return 'Unter dieser E-Mail gibt es bereits ein Konto. Bitte melde dich an.';
     return null;
   }
@@ -193,6 +199,7 @@ export default function ExpressSignup({
         street: street.trim(),
         zip: zip.trim(),
         city: city.trim(),
+        country,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -827,6 +834,13 @@ export default function ExpressSignup({
             {zipLookupError && (
               <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2">{zipLookupError}</p>
             )}
+
+            <CountryField
+              value={country}
+              onChange={setCountry}
+              inputClass={inputClass}
+              labelClass={labelClass}
+            />
           </>
         )}
 

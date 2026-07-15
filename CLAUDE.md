@@ -1955,6 +1955,57 @@ Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nu
 - **Migration ausgeführt** (2026-06-21): `supabase-customer-login-history.sql`
   nach `erledigte supabase/` verschoben. Login-Verlauf wird ab jetzt erfasst.
 
+### Lieferländer-Beschränkung — nur Deutschland (Stand 2026-07-15)
+cam2rent liefert vorerst **ausschließlich innerhalb Deutschlands**. Vorher gab
+es KEINE Geo-/Ländersperre (kein Länderfeld, kein Stripe-`allowed_countries`,
+keine länderabhängige Versandlogik) — ein Kunde aus dem Ausland (z.B. USA mit
+5-stelliger ZIP) konnte sich registrieren und bestellen. Jetzt: erlaubte Länder
+kommen aus einer zentralen Liste, Registrierung + Cart-Checkout lehnen nicht
+erlaubte Länder ab.
+- **Zentrale Wahrheitsquelle** `lib/allowed-countries.ts`: `COUNTRY_OPTIONS`
+  (aktuell nur `{ code:'DE', name:'Deutschland' }`), `ALLOWED_COUNTRY_CODES`,
+  `isAllowedCountry()`, `normalizeCountry()`, `DEFAULT_COUNTRY='DE'`,
+  `SINGLE_COUNTRY` (true solange nur ein Land). **Option 2 (DE + Nachbarländer /
+  EU) später:** einfach weitere Einträge zu `COUNTRY_OPTIONS` hinzufügen — dann
+  wird aus dem „nur Deutschland"-Hinweis automatisch ein Dropdown; zusätzlich
+  sollten dann `data/shipping.ts` → `calcShipping` um zonen-/länderabhängige
+  Preise erweitert werden (bewusst noch nicht gemacht).
+- **UI** `components/checkout/CountryField.tsx` (shared): bei `SINGLE_COUNTRY`
+  ein dezenter Hinweis „🇩🇪 Lieferung nur innerhalb Deutschlands" statt eines
+  1-Options-Dropdowns; sonst ein `<select>` aus `COUNTRY_OPTIONS`. Eingebaut in
+  **Registrierung** (`ExpressSignup`, nur im signup-Mode, unter Straße/PLZ/Stadt)
+  und **Cart-Checkout** (`app/checkout/page.tsx`, in der Lieferadress-Sektion).
+- **Registrierung** (`ExpressSignup` = einziger Konto-Anlage-Pfad): `country`-
+  State (Default DE) wird an `POST /api/auth/express-signup` geschickt.
+  `validateSignupForm` blockt nicht erlaubte Länder client-seitig; der Server
+  lehnt ein explizit gesetztes, nicht erlaubtes Land mit `400
+  country_not_allowed` ab und persistiert das normalisierte Land in
+  `profiles.country` (defensiver Upsert-Retry ohne die Spalte, falls Migration
+  fehlt).
+- **Cart-Checkout** (`app/checkout/page.tsx`): `country`-State (Default DE) →
+  Client-Gate in `handleProceedToPayment` (bei `versand` + nicht erlaubtem Land
+  Fehlermeldung) + `country` im `checkoutContext`. **Server-Sperre**
+  `app/api/checkout-intent/route.ts`: bei `deliveryMode==='versand'` muss das
+  Land erlaubt sein, sonst `403 COUNTRY_NOT_ALLOWED` BEVOR der Stripe-Intent
+  entsteht. Für Abholung irrelevant (kein Versand). Fehlt das Feld (alter
+  Client) → Default DE, kein Bruch.
+- **Migration** `supabase/supabase-profiles-country.sql` (idempotent, additiv):
+  `profiles.country TEXT NOT NULL DEFAULT 'DE'`. Bestehende Profile = DE (alle
+  Bestandskunden sind deutsch). Service-role-only (NICHT im column-level
+  GRANT UPDATE → Kunde kann sein Land nicht selbst umstellen; es gibt ohnehin
+  nur Deutschland).
+- **Bewusst NICHT gemacht:** Der Direkt-Buchungsflow (`/kameras/[slug]/buchen`)
+  sammelt keine Adresse inline (nutzt die Profiladresse) und bekam KEINEN
+  eigenen Länder-Gate — der ist redundant, weil ein Konto nur DE-only angelegt
+  werden kann (Registrierung ist der einzige Konto-Pfad). Keine `bookings.country`-
+  Spalte (Land steckt implizit in der DE-only-Registrierung; für Option-2-
+  Versandzonen später ergänzen). Keine echte Adress-/Geo-Verifizierung — das
+  Land ist eine Deklaration; grobe Missbrauchsfälle fängt die Ausweis-Prüfung
+  vor dem Versand ab.
+- **Go-Live TODO:** Migration `supabase/supabase-profiles-country.sql` ausführen.
+  Ohne sie greift die Länder-Sperre trotzdem (über die App-Liste), nur das
+  Land wird nicht separat im Profil gespeichert (defensiver Retry).
+
 ### Abweichende Liefer- + Rechnungsadresse pro Kunde (Standard + pro Buchung, Stand 2026-06-10)
 Privatkunden können eine abweichende **Lieferadresse** und/oder
 **Rechnungsadresse** hinterlegen — als dauerhaften Standard im Profil UND pro
@@ -5200,6 +5251,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Lieferländer-Beschränkung (nur DE) — Migration auszuführen:**
+  `supabase/supabase-profiles-country.sql` (idempotent, additiv:
+  `profiles.country TEXT NOT NULL DEFAULT 'DE'`). Ohne sie greift die
+  Länder-Sperre trotzdem (über die App-Liste in `lib/allowed-countries.ts`),
+  nur das Land wird nicht separat im Profil gespeichert (defensiver Retry).
+  Siehe „Lieferländer-Beschränkung — nur Deutschland". Empfohlen ASAP ausführen.
 - **Mietvertrag-Erinnerung + Auto-Storno — Crontab auszuführen (keine Migration):**
   Zwei Einträge (täglich, `--resolve` umgeht Cloudflare):
   ```

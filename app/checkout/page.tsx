@@ -22,6 +22,8 @@ import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
+import { CountryField } from '@/components/checkout/CountryField';
+import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 // stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
@@ -284,6 +286,7 @@ export default function CheckoutPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
 
   // Abweichende Rechnungsadresse (optional, pro Buchung)
   const [billingDiffers, setBillingDiffers] = useState(false);
@@ -684,6 +687,10 @@ export default function CheckoutPage() {
       setIntentError('Bitte gib deine Lieferadresse ein.');
       return;
     }
+    if (deliveryMode === 'versand' && !isAllowedCountry(country)) {
+      setIntentError(`Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`);
+      return;
+    }
 
     setIsCreatingIntent(true);
     setIntentError('');
@@ -717,6 +724,7 @@ export default function CheckoutPage() {
             street,
             zip,
             city,
+            country,
             billingName: billingDiffers ? billingName : '',
             billingStreet: billingDiffers ? billingStreet : '',
             billingZip: billingDiffers ? billingZip : '',
@@ -1063,6 +1071,15 @@ export default function CheckoutPage() {
                         <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
                           className={inputClass} placeholder="Berlin" autoComplete="address-level2" />
                       </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <CountryField
+                        value={country}
+                        onChange={setCountry}
+                        inputClass={inputClass}
+                        labelClass={labelClass}
+                      />
                     </div>
 
                     {/* Abweichende Rechnungsadresse */}

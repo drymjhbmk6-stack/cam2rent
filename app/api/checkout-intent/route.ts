@@ -8,6 +8,7 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
+import { isAllowedCountry, DEFAULT_COUNTRY, countryName } from '@/lib/allowed-countries';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -75,6 +76,25 @@ export async function POST(req: NextRequest) {
     const userId = user.id;
 
     const supabase = createServiceClient();
+
+    // ── Länder-Sperre (Server-seitig) ──────────────────────────────────────
+    // cam2rent liefert vorerst nur innerhalb Deutschlands. Bei Versand muss das
+    // im Checkout gewählte Lieferland erlaubt sein (siehe lib/allowed-countries).
+    // Für Abholung irrelevant (kein Versand). Fehlt das Feld (alter Client),
+    // gilt der Default (DE) → kein Bruch.
+    const ctxDeliveryMode = (checkoutContext as { deliveryMode?: string } | undefined)?.deliveryMode;
+    if (ctxDeliveryMode === 'versand') {
+      const ctxCountry = ((checkoutContext as { country?: string } | undefined)?.country ?? DEFAULT_COUNTRY);
+      if (!isAllowedCountry(ctxCountry)) {
+        return NextResponse.json(
+          {
+            error: `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.`,
+            code: 'COUNTRY_NOT_ALLOWED',
+          },
+          { status: 403 },
+        );
+      }
+    }
 
     // ── Harte Ueberbuchungs-Sperre (Server-seitig, gegen Manipulation) ──────
     // Jeder Warenkorb-Artikel wird gegen den echten Live-Bestand geprueft. Ist

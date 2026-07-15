@@ -5,6 +5,7 @@ import { getCheckoutConfig } from '@/lib/checkout-config';
 import { sendAndLog, escapeHtml } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { isAllowedCountry, normalizeCountry, DEFAULT_COUNTRY, countryName } from '@/lib/allowed-countries';
 
 /**
  * Express-Signup — Konto-Erstellung direkt im Checkout.
@@ -32,6 +33,7 @@ type Body = {
   street?: string;
   zip?: string;
   city?: string;
+  country?: string;
 };
 
 function validateEmail(email: string): boolean {
@@ -66,6 +68,16 @@ export async function POST(req: NextRequest) {
   const street = (body.street ?? '').trim().slice(0, 120);
   const zip = (body.zip ?? '').trim();
   const city = (body.city ?? '').trim().slice(0, 80);
+  // Land: leer → Default (DE). Ein explizit gesetztes, NICHT erlaubtes Land
+  // wird hart abgelehnt (cam2rent liefert vorerst nur innerhalb Deutschlands).
+  const countryRaw = (body.country ?? '').trim();
+  if (countryRaw && !isAllowedCountry(countryRaw)) {
+    return NextResponse.json(
+      { error: 'country_not_allowed', message: `Wir liefern aktuell nur innerhalb ${countryName(DEFAULT_COUNTRY)}s.` },
+      { status: 400 },
+    );
+  }
+  const country = normalizeCountry(countryRaw);
 
   if (!email || !validateEmail(email)) {
     return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
@@ -150,19 +162,26 @@ export async function POST(req: NextRequest) {
   // Revision) — sonst muesste der Kunde alle Daten nach dem ersten Login
   // erneut eingeben, obwohl er sie bei der Registrierung schon angegeben hat.
   if (userId) {
+    const profileBase = {
+      id: userId,
+      full_name: fullName || null,
+      phone: phone,
+      address_street: street || null,
+      address_zip: zip || null,
+      address_city: city || null,
+      verification_status: 'unverified',
+    };
     try {
-      await supabase.from('profiles').upsert(
-        {
-          id: userId,
-          full_name: fullName || null,
-          phone: phone,
-          address_street: street || null,
-          address_zip: zip || null,
-          address_city: city || null,
-          verification_status: 'unverified',
-        },
+      const { error: upsertErr } = await supabase.from('profiles').upsert(
+        { ...profileBase, country },
         { onConflict: 'id', ignoreDuplicates: false },
       );
+      // Defensiv: fehlt die country-Migration (supabase-profiles-country.sql)
+      // → ohne die Spalte erneut versuchen, damit die Stammdaten trotzdem
+      // gespeichert werden. Die Länder-Sperre greift über die App-Liste weiter.
+      if (upsertErr && /country/i.test(upsertErr.message)) {
+        await supabase.from('profiles').upsert(profileBase, { onConflict: 'id', ignoreDuplicates: false });
+      }
     } catch (err) {
       console.error('[express-signup] Profil-Upsert fehlgeschlagen (nicht kritisch):', err);
     }
