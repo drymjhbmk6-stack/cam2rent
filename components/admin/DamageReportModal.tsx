@@ -10,6 +10,16 @@ interface BookingOption {
   status: string;
 }
 
+interface ItemRow {
+  key: string;
+  type: 'camera' | 'accessory';
+  qty: number;
+  name: string;
+  code?: string;          // feste SN (Kamera) / Exemplar-Nr. (Zubehör), wenn zugewiesen
+  snOptions?: string[];   // Kamera ohne feste SN → wählbare Inventar-Seriennummern
+  custom?: boolean;       // manuell hinzugefügt
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -82,9 +92,10 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
 
-  // Strukturierte Felder
-  const [items, setItems] = useState<string[]>([]); // verfügbare Gegenstände (Chips)
-  const [affected, setAffected] = useState<string[]>([]); // ausgewählte Gegenstände
+  // Strukturierte Felder — eine Zeile pro tatsächlichem Buchungs-Gegenstand.
+  const [itemRows, setItemRows] = useState<ItemRow[]>([]);
+  const [affected, setAffected] = useState<string[]>([]); // ausgewählte Row-Keys
+  const [snChoice, setSnChoice] = useState<Record<string, string>>({}); // Kamera-SN-Wahl
   const [customItem, setCustomItem] = useState('');
   const [schadensart, setSchadensart] = useState('');
   const [schweregrad, setSchweregrad] = useState('');
@@ -113,8 +124,9 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       setError(null);
       setSearch('');
       setSelectedId('');
-      setItems([]);
+      setItemRows([]);
       setAffected([]);
+      setSnChoice({});
       setCustomItem('');
       setSchadensart('');
       setSchweregrad('');
@@ -146,20 +158,20 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     return () => { cancelled = true; };
   }, [open, fixed]);
 
-  // Gegenstände der ausgewählten/fixierten Buchung laden (für Chips)
+  // Gegenstände der ausgewählten/fixierten Buchung laden — eine Zeile pro
+  // tatsächlichem Buchungs-Gegenstand (NICHT pro Inventar-Exemplar).
   useEffect(() => {
-    if (!open || !effectiveBookingId) { setItems([]); return; }
+    if (!open || !effectiveBookingId) { setItemRows([]); return; }
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(`/api/admin/booking/${encodeURIComponent(effectiveBookingId)}`);
         const json = await res.json();
         const b = json.booking || {};
-        const names: string[] = [];
+        const rows: ItemRow[] = [];
 
-        // 1) Kamera(s) — Seriennummer aus der Zuweisung, sonst die
-        //    Modell-Seriennummern aus dem Inventar als auswählbare Chips
-        //    anbieten (Buchung ohne feste unit_id → Admin wählt das Exemplar).
+        // 1) Kamera(s) — genau die Kameras der Buchung. SN aus der Zuweisung;
+        //    ohne feste Zuweisung → Dropdown mit den Inventar-Seriennummern.
         const cams: { product_name?: string; serial_number?: string | null }[] =
           Array.isArray(b.cameras_resolved) && b.cameras_resolved.length > 0
             ? b.cameras_resolved
@@ -172,35 +184,35 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
                   serial_number: i === 0 ? (b.serial_number ?? null) : null,
                 }));
 
-        const modelLookedUp = new Set<string>();
+        // Modell-Seriennummern nur einmal je Modell laden (Cache).
+        const serialCache: Record<string, string[]> = {};
+        let camIdx = 0;
         for (const c of cams) {
           const nm = (c.product_name || '').trim();
           if (!nm) continue;
+          const key = `cam-${camIdx++}`;
           if (c.serial_number) {
-            names.push(`${nm} · SN ${c.serial_number}`);
+            rows.push({ key, type: 'camera', qty: 1, name: nm, code: c.serial_number });
             continue;
           }
-          // Keine feste Zuweisung → Modell-Seriennummern aus dem Inventar holen.
-          if (modelLookedUp.has(nm.toLowerCase())) continue;
-          modelLookedUp.add(nm.toLowerCase());
-          let serials: string[] = [];
-          try {
-            const r = await fetch(
-              `/api/admin/booking/${encodeURIComponent(effectiveBookingId)}/camera-exemplars?product_name=${encodeURIComponent(nm)}`,
-            );
-            if (r.ok) {
-              const j = await r.json();
-              serials = (Array.isArray(j.units) ? j.units : [])
-                .map((u: { exemplar_code?: string }) => (u.exemplar_code || '').trim())
-                .filter(Boolean)
-                .slice(0, 20);
-            }
-          } catch { /* Inventar-Lookup optional */ }
-          if (serials.length > 0) {
-            serials.forEach((code) => names.push(`${nm} · SN ${code}`));
-          } else {
-            names.push(nm);
+          const cacheKey = nm.toLowerCase();
+          if (!(cacheKey in serialCache)) {
+            let serials: string[] = [];
+            try {
+              const r = await fetch(
+                `/api/admin/booking/${encodeURIComponent(effectiveBookingId)}/camera-exemplars?product_name=${encodeURIComponent(nm)}`,
+              );
+              if (r.ok) {
+                const j = await r.json();
+                serials = (Array.isArray(j.units) ? j.units : [])
+                  .map((u: { exemplar_code?: string }) => (u.exemplar_code || '').trim())
+                  .filter(Boolean)
+                  .slice(0, 30);
+              }
+            } catch { /* Inventar-Lookup optional */ }
+            serialCache[cacheKey] = serials;
           }
+          rows.push({ key, type: 'camera', qty: 1, name: nm, snOptions: serialCache[cacheKey] });
         }
 
         // 2) Zubehör-Exemplar-Codes je accessory_id sammeln.
@@ -212,26 +224,30 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
           },
         );
 
-        // 3) Zubehör-Positionen — nur echte Teile (Set-Container-Zeilen ohne
-        //    accessory_id werden übersprungen). Exemplar-Nr. anhängen wenn da.
+        // 3) Zubehör — nur echte Teile (Set-Container ohne accessory_id raus).
+        //    Einzeln getrackt → eine Zeile pro Exemplar-Nr.; sonst eine Zeile
+        //    mit Stückzahl.
         (Array.isArray(b.resolved_items) ? b.resolved_items : []).forEach(
-          (it: { name?: string; accessory_id?: string; qty?: number }) => {
+          (it: { name?: string; accessory_id?: string; qty?: number }, idx: number) => {
             if (!it?.name || !it.accessory_id) return;
             const codes = codesByAcc[it.accessory_id] || [];
             const qty = it.qty && it.qty > 0 ? it.qty : 1;
             if (codes.length > 0) {
-              codes.forEach((code) => names.push(`${it.name} · Nr. ${code}`));
-              for (let i = 0; i < qty - codes.length; i++) names.push(it.name!);
+              codes.forEach((code, ci) =>
+                rows.push({ key: `acc-${idx}-${it.accessory_id}-${ci}`, type: 'accessory', qty: 1, name: it.name!, code }),
+              );
+              for (let i = 0; i < qty - codes.length; i++) {
+                rows.push({ key: `acc-${idx}-${it.accessory_id}-x${i}`, type: 'accessory', qty: 1, name: it.name! });
+              }
             } else {
-              names.push(qty > 1 ? `${it.name} (×${qty})` : it.name!);
+              rows.push({ key: `acc-${idx}-${it.accessory_id}`, type: 'accessory', qty, name: it.name! });
             }
           },
         );
 
-        const unique = [...new Set(names)];
-        if (!cancelled) setItems(unique);
+        if (!cancelled) setItemRows(rows);
       } catch {
-        if (!cancelled) setItems([]);
+        if (!cancelled) setItemRows([]);
       }
     })();
     return () => { cancelled = true; };
@@ -249,17 +265,31 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     return list.slice(0, 30);
   }, [bookings, search]);
 
-  const toggleAffected = useCallback((name: string) => {
-    setAffected((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  const toggleAffected = useCallback((key: string) => {
+    setAffected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }, []);
+
+  const removeRow = useCallback((key: string) => {
+    setItemRows((prev) => prev.filter((r) => r.key !== key));
+    setAffected((prev) => prev.filter((k) => k !== key));
   }, []);
 
   const addCustomItem = useCallback(() => {
     const v = customItem.trim();
     if (!v) return;
-    setAffected((prev) => (prev.includes(v) ? prev : [...prev, v]));
-    setItems((prev) => (prev.includes(v) ? prev : [...prev, v]));
+    const key = `custom-${v.toLowerCase()}`;
+    setItemRows((prev) => (prev.some((r) => r.key === key) ? prev : [...prev, { key, type: 'accessory', qty: 1, name: v, custom: true }]));
+    setAffected((prev) => (prev.includes(key) ? prev : [...prev, key]));
     setCustomItem('');
   }, [customItem]);
+
+  // Label einer Zeile für die "Betroffen:"-Zeile.
+  const rowLabel = useCallback((r: ItemRow): string => {
+    const sn = r.code || (r.snOptions?.length ? snChoice[r.key] : '') || '';
+    const qtyP = r.qty > 1 ? `${r.qty}× ` : '';
+    const snS = sn ? ` · ${r.type === 'camera' ? 'SN' : 'Nr.'} ${sn}` : '';
+    return `${qtyP}${r.name}${snS}`;
+  }, [snChoice]);
 
   const addPhotos = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -288,7 +318,8 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   // Strukturierte Beschreibung zusammensetzen
   function buildDescription(): string {
     const lines: string[] = [];
-    if (affected.length) lines.push(`Betroffen: ${affected.join(', ')}`);
+    const affectedLabels = itemRows.filter((r) => affected.includes(r.key)).map(rowLabel);
+    if (affectedLabels.length) lines.push(`Betroffen: ${affectedLabels.join(', ')}`);
     if (schadensart) lines.push(`Schadensart: ${schadensart}`);
     if (schweregrad) {
       const s = SCHWEREGRAD.find((x) => x.value === schweregrad);
@@ -402,7 +433,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
                         <button
                           key={b.id}
                           type="button"
-                          onClick={() => { setSelectedId(b.id); setAffected([]); }}
+                          onClick={() => { setSelectedId(b.id); setAffected([]); setSnChoice({}); }}
                           className={`w-full text-left px-3 py-2 transition-colors ${
                             active
                               ? 'bg-accent-blue/10 dark:bg-accent-blue/20'
@@ -425,29 +456,61 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
             )}
           </div>
 
-          {/* Betroffene Gegenstände */}
+          {/* Betroffene Gegenstände — vertikale Liste, eine Zeile pro Gegenstand */}
           {effectiveBookingId && (
             <div>
               <label className={labelCls}>
-                Betroffene Gegenstände <span className="text-brand-muted font-normal">(auswählen)</span>
+                Betroffene Gegenstände <span className="text-brand-muted font-normal">(anhaken)</span>
               </label>
-              {items.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {items.map((name) => {
-                    const on = affected.includes(name);
+              {itemRows.length > 0 ? (
+                <div className="rounded-lg border border-brand-border dark:border-slate-700 divide-y divide-brand-border dark:divide-slate-700 overflow-hidden">
+                  {itemRows.map((row) => {
+                    const on = affected.includes(row.key);
                     return (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => toggleAffected(name)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-body border transition-colors ${
-                          on
-                            ? 'bg-rose-500 border-rose-500 text-white'
-                            : 'bg-white dark:bg-slate-900 border-brand-border dark:border-slate-700 text-brand-black dark:text-slate-200 hover:border-rose-400'
-                        }`}
+                      <div
+                        key={row.key}
+                        className={`flex items-start gap-3 px-3 py-2.5 ${on ? 'bg-rose-50/60 dark:bg-rose-950/20' : 'bg-white dark:bg-slate-900/40'}`}
                       >
-                        {on ? '✓ ' : ''}{name}
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() => toggleAffected(row.key)}
+                          className="mt-0.5 w-4 h-4 shrink-0 accent-rose-500"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-body text-brand-black dark:text-slate-200">
+                            <span className="font-semibold tabular-nums">{row.qty}×</span> {row.name}
+                            {row.code && (
+                              <span className="text-brand-muted"> · {row.type === 'camera' ? 'SN' : 'Nr.'} {row.code}</span>
+                            )}
+                          </div>
+                          {!row.code && row.type === 'camera' && (row.snOptions?.length ?? 0) > 0 && (
+                            <select
+                              value={snChoice[row.key] || ''}
+                              onChange={(e) => setSnChoice((p) => ({ ...p, [row.key]: e.target.value }))}
+                              className="mt-1.5 text-xs px-2 py-1 rounded border border-brand-border dark:border-slate-700 bg-white dark:bg-slate-900 text-brand-black dark:text-slate-100 outline-none"
+                            >
+                              <option value="">Seriennummer wählen…</option>
+                              {row.snOptions!.map((sn) => (
+                                <option key={sn} value={sn}>SN {sn}</option>
+                              ))}
+                            </select>
+                          )}
+                          {!row.code && row.type === 'camera' && (row.snOptions?.length ?? 0) === 0 && (
+                            <p className="text-[11px] text-brand-muted mt-0.5">keine Seriennummer im Inventar hinterlegt</p>
+                          )}
+                        </div>
+                        {row.custom && (
+                          <button
+                            type="button"
+                            onClick={() => removeRow(row.key)}
+                            className="text-brand-muted text-sm px-1 shrink-0"
+                            aria-label="Entfernen"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
