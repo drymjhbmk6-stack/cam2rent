@@ -293,16 +293,20 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
   const addPhotos = useCallback((files: FileList | null) => {
     if (!files) return;
-    // Manche Quellen (Dropbox, WhatsApp-Export) liefern einen LEEREN MIME-Typ.
-    // Dann per Datei-Endung erkennen, damit die Bilder nicht still verworfen
-    // werden. Der Server prüft ohnehin die echten Magic-Bytes.
+    // WICHTIG: Dateien SYNCHRON einsammeln. Der onChange-Handler setzt direkt
+    // nach diesem Aufruf `input.value = ''`, was die (live) FileList leert —
+    // würde `Array.from(files)` erst im (verzögerten) setState-Updater laufen,
+    // wäre die Liste leer und es käme nichts an ("nichts passiert").
+    // Manche Quellen (Dropbox/WhatsApp) liefern leeren MIME-Typ → Endung prüfen.
     const isImage = (f: File) =>
       f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name);
+    const picked = Array.from(files).filter(isImage);
+    if (picked.length === 0) return;
     setPhotos((prev) => {
       const next = [...prev];
-      for (const f of Array.from(files)) {
+      for (const f of picked) {
         if (next.length >= MAX_PHOTOS) break;
-        if (isImage(f)) next.push({ file: f, shared: false });
+        next.push({ file: f, shared: false });
       }
       return next;
     });
@@ -310,9 +314,12 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
   const addDocs = useCallback((files: FileList | null) => {
     if (!files) return;
+    // Synchron einsammeln (siehe addPhotos) — sonst leert value='' die Liste.
+    const picked = Array.from(files);
+    if (picked.length === 0) return;
     setDocuments((prev) => {
       const next = [...prev];
-      for (const f of Array.from(files)) {
+      for (const f of picked) {
         if (next.length >= 15) break;
         next.push({ file: f, shared: false });
       }
