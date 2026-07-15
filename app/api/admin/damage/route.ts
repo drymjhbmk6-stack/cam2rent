@@ -103,6 +103,12 @@ export async function POST(req: NextRequest) {
     const bookingId = (formData.get('bookingId') as string | null)?.trim() || '';
     const description = (formData.get('description') as string | null)?.trim() || '';
     const adminNotes = (formData.get('admin_notes') as string | null)?.trim() || '';
+    const rawAmount = (formData.get('damage_amount') as string | null)?.trim() || '';
+    let damageAmount: number | null = null;
+    if (rawAmount) {
+      const parsed = parseFloat(rawAmount.replace(',', '.'));
+      if (!Number.isNaN(parsed) && parsed >= 0) damageAmount = parsed;
+    }
 
     if (!bookingId || !description) {
       return NextResponse.json(
@@ -178,6 +184,7 @@ export async function POST(req: NextRequest) {
         description,
         photos: photoPaths,
         admin_notes: adminNotes || null,
+        damage_amount: damageAmount,
         status: 'open',
       })
       .select('id')

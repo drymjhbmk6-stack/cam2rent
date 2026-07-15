@@ -22,9 +22,55 @@ interface Props {
 
 const MAX_PHOTOS = 5;
 
+const SCHADENSART_OPTIONS = [
+  'Kratzer / Gebrauchsspuren',
+  'Bruch / Riss',
+  'Sturzschaden',
+  'Wasser- / Feuchtigkeitsschaden',
+  'Linse beschädigt',
+  'Display beschädigt',
+  'Funktionsstörung / Defekt',
+  'Fehlendes / verlorenes Teil',
+  'Starke Verschmutzung',
+  'Sonstiges',
+];
+
+const SCHWEREGRAD = [
+  { value: 'leicht', label: 'Leicht', color: '#10b981' },
+  { value: 'mittel', label: 'Mittel', color: '#f59e0b' },
+  { value: 'schwer', label: 'Schwer', color: '#ef4444' },
+];
+
+const FUNKTION = [
+  { value: 'ja', label: 'Ja' },
+  { value: 'eingeschraenkt', label: 'Eingeschränkt' },
+  { value: 'nein', label: 'Nein' },
+];
+
+const FUNKTION_LABEL: Record<string, string> = {
+  ja: 'voll funktionsfähig',
+  eingeschraenkt: 'eingeschränkt funktionsfähig',
+  nein: 'nicht funktionsfähig',
+};
+
+function todayIso(): string {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+function isoToDe(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
 /**
- * Admin erstellt im Namen des Kunden eine Schadensmeldung — spiegelt den
- * Kunden-Flow (Beschreibung + Fotos). Ohne `bookingId` erscheint ein
+ * Admin erstellt im Namen des Kunden eine ausführliche Schadensmeldung.
+ * Strukturierte Felder (betroffene Gegenstände, Schadensart, Schweregrad,
+ * Funktionsfähigkeit, Datum, geschätzte Höhe) werden zu einer sauber
+ * formatierten Schadensbeschreibung zusammengesetzt; die geschätzte Höhe
+ * fließt zusätzlich in `damage_amount`. Ohne `bookingId` erscheint ein
  * Buchungs-Picker, sonst ist die Buchung fixiert.
  */
 export default function DamageReportModal({ open, onClose, onSuccess, bookingId, bookingLabel }: Props) {
@@ -35,11 +81,22 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
 
+  // Strukturierte Felder
+  const [items, setItems] = useState<string[]>([]); // verfügbare Gegenstände (Chips)
+  const [affected, setAffected] = useState<string[]>([]); // ausgewählte Gegenstände
+  const [customItem, setCustomItem] = useState('');
+  const [schadensart, setSchadensart] = useState('');
+  const [schweregrad, setSchweregrad] = useState('');
+  const [funktion, setFunktion] = useState('');
+  const [festgestellt, setFestgestellt] = useState(todayIso());
   const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const effectiveBookingId = fixed ? bookingId! : selectedId;
 
   // Reset bei jedem Öffnen
   useEffect(() => {
@@ -50,6 +107,14 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
       setError(null);
       setSearch('');
       setSelectedId('');
+      setItems([]);
+      setAffected([]);
+      setCustomItem('');
+      setSchadensart('');
+      setSchweregrad('');
+      setFunktion('');
+      setFestgestellt(todayIso());
+      setAmount('');
     }
   }, [open]);
 
@@ -72,6 +137,35 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     return () => { cancelled = true; };
   }, [open, fixed]);
 
+  // Gegenstände der ausgewählten/fixierten Buchung laden (für Chips)
+  useEffect(() => {
+    if (!open || !effectiveBookingId) { setItems([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/booking/${encodeURIComponent(effectiveBookingId)}`);
+        const json = await res.json();
+        const b = json.booking || {};
+        const names: string[] = [];
+        // Kamera(s) aus product_name (kommagetrennt bei Multi-Kamera)
+        String(b.product_name || '')
+          .split(',')
+          .map((n: string) => n.trim())
+          .filter(Boolean)
+          .forEach((n: string) => names.push(n));
+        // Zubehör / Set-Teile aus resolved_items
+        (Array.isArray(b.resolved_items) ? b.resolved_items : []).forEach(
+          (it: { name?: string }) => { if (it?.name) names.push(it.name); },
+        );
+        const unique = [...new Set(names)];
+        if (!cancelled) setItems(unique);
+      } catch {
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, effectiveBookingId]);
+
   const filteredBookings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = q
@@ -84,7 +178,17 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     return list.slice(0, 30);
   }, [bookings, search]);
 
-  const effectiveBookingId = fixed ? bookingId! : selectedId;
+  const toggleAffected = useCallback((name: string) => {
+    setAffected((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  }, []);
+
+  const addCustomItem = useCallback(() => {
+    const v = customItem.trim();
+    if (!v) return;
+    setAffected((prev) => (prev.includes(v) ? prev : [...prev, v]));
+    setItems((prev) => (prev.includes(v) ? prev : [...prev, v]));
+    setCustomItem('');
+  }, [customItem]);
 
   const addPhotos = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -98,22 +202,33 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
     });
   }, []);
 
+  // Strukturierte Beschreibung zusammensetzen
+  function buildDescription(): string {
+    const lines: string[] = [];
+    if (affected.length) lines.push(`Betroffen: ${affected.join(', ')}`);
+    if (schadensart) lines.push(`Schadensart: ${schadensart}`);
+    if (schweregrad) {
+      const s = SCHWEREGRAD.find((x) => x.value === schweregrad);
+      lines.push(`Schweregrad: ${s?.label ?? schweregrad}`);
+    }
+    if (funktion) lines.push(`Funktionsfähig: ${FUNKTION_LABEL[funktion] ?? funktion}`);
+    if (festgestellt) lines.push(`Festgestellt am: ${isoToDe(festgestellt)}`);
+    const header = lines.join('\n');
+    const body = description.trim();
+    return header ? `${header}\n\n${body}` : body;
+  }
+
   async function submit() {
     setError(null);
-    if (!effectiveBookingId) {
-      setError('Bitte eine Buchung auswählen.');
-      return;
-    }
-    if (!description.trim()) {
-      setError('Bitte eine Beschreibung eingeben.');
-      return;
-    }
+    if (!effectiveBookingId) { setError('Bitte eine Buchung auswählen.'); return; }
+    if (!description.trim()) { setError('Bitte eine Beschreibung eingeben.'); return; }
     setBusy(true);
     try {
       const fd = new FormData();
       fd.append('bookingId', effectiveBookingId);
-      fd.append('description', description.trim());
+      fd.append('description', buildDescription());
       if (adminNotes.trim()) fd.append('admin_notes', adminNotes.trim());
+      if (amount.trim()) fd.append('damage_amount', amount.trim());
       for (const p of photos) fd.append('photos', p);
 
       const res = await fetch('/api/admin/damage', { method: 'POST', body: fd });
@@ -131,6 +246,10 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
   if (!open) return null;
 
+  const labelCls = 'block text-sm font-body font-semibold text-brand-black dark:text-slate-200 mb-1.5';
+  const inputCls =
+    'w-full px-3 py-2 rounded-lg border border-brand-border dark:border-slate-700 bg-white dark:bg-slate-900 text-base text-brand-black dark:text-slate-100 outline-none focus:border-accent-blue';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
@@ -142,12 +261,12 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
             Schadensmeldung erstellen
           </h3>
           <p className="text-xs font-body text-brand-muted mt-1">
-            Für den Kunden erfassen — Beschreibung und optional Fotos. Prüfung, Kaution und Abwicklung
-            danach wie gewohnt unter &bdquo;Schadensmeldungen&ldquo;.
+            Für den Kunden erfassen. Prüfung, Kaution und Abwicklung danach wie gewohnt unter
+            &bdquo;Schadensmeldungen&ldquo;.
           </p>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5">
           {error && (
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm font-body text-red-700 dark:text-red-300">
               {error}
@@ -156,9 +275,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
           {/* Buchung */}
           <div>
-            <label className="block text-sm font-body font-semibold text-brand-black dark:text-slate-200 mb-1.5">
-              Buchung
-            </label>
+            <label className={labelCls}>Buchung</label>
             {fixed ? (
               <div className="px-3 py-2 rounded-lg bg-brand-bg dark:bg-slate-900/40 border border-brand-border dark:border-slate-700 text-sm font-body text-brand-black dark:text-slate-200">
                 <span className="font-mono">{bookingId}</span>
@@ -171,7 +288,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buchung suchen (ID, Kunde, Kamera, E-Mail)…"
-                  className="w-full px-3 py-2 rounded-lg border border-brand-border dark:border-slate-700 bg-white dark:bg-slate-900 text-base text-brand-black dark:text-slate-100 outline-none focus:border-accent-blue"
+                  className={inputCls}
                 />
                 <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-brand-border dark:border-slate-700 divide-y divide-brand-border dark:divide-slate-700">
                   {loadingBookings ? (
@@ -185,7 +302,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
                         <button
                           key={b.id}
                           type="button"
-                          onClick={() => setSelectedId(b.id)}
+                          onClick={() => { setSelectedId(b.id); setAffected([]); }}
                           className={`w-full text-left px-3 py-2 transition-colors ${
                             active
                               ? 'bg-accent-blue/10 dark:bg-accent-blue/20'
@@ -208,9 +325,133 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
             )}
           </div>
 
+          {/* Betroffene Gegenstände */}
+          {effectiveBookingId && (
+            <div>
+              <label className={labelCls}>
+                Betroffene Gegenstände <span className="text-brand-muted font-normal">(auswählen)</span>
+              </label>
+              {items.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {items.map((name) => {
+                    const on = affected.includes(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => toggleAffected(name)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-body border transition-colors ${
+                          on
+                            ? 'bg-rose-500 border-rose-500 text-white'
+                            : 'bg-white dark:bg-slate-900 border-brand-border dark:border-slate-700 text-brand-black dark:text-slate-200 hover:border-rose-400'
+                        }`}
+                      >
+                        {on ? '✓ ' : ''}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-brand-muted">Keine Positionen geladen — nutze das Feld unten oder die Beschreibung.</p>
+              )}
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={customItem}
+                  onChange={(e) => setCustomItem(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
+                  placeholder="Weiterer Gegenstand…"
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={addCustomItem}
+                  className="px-4 py-2 rounded-lg text-sm font-heading font-semibold bg-brand-bg dark:bg-slate-700 text-brand-black dark:text-slate-200 shrink-0"
+                >
+                  + Hinzufügen
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Schadensart + Schweregrad */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Schadensart</label>
+              <select
+                value={schadensart}
+                onChange={(e) => setSchadensart(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">— bitte wählen —</option>
+                {SCHADENSART_OPTIONS.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Schweregrad</label>
+              <div className="flex gap-2">
+                {SCHWEREGRAD.map((s) => {
+                  const on = schweregrad === s.value;
+                  return (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => setSchweregrad(on ? '' : s.value)}
+                      className="flex-1 px-3 py-2 rounded-lg text-sm font-heading font-semibold border transition-colors"
+                      style={{
+                        background: on ? s.color : 'transparent',
+                        borderColor: on ? s.color : undefined,
+                        color: on ? '#fff' : undefined,
+                      }}
+                    >
+                      <span className={on ? '' : 'text-brand-black dark:text-slate-200'}>{s.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Funktionsfähigkeit + Datum */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Noch funktionsfähig?</label>
+              <div className="flex gap-2">
+                {FUNKTION.map((f) => {
+                  const on = funktion === f.value;
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setFunktion(on ? '' : f.value)}
+                      className={`flex-1 px-2 py-2 rounded-lg text-sm font-heading font-semibold border transition-colors ${
+                        on
+                          ? 'bg-accent-blue border-accent-blue text-white'
+                          : 'bg-white dark:bg-slate-900 border-brand-border dark:border-slate-700 text-brand-black dark:text-slate-200'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Schaden festgestellt am</label>
+              <input
+                type="date"
+                value={festgestellt}
+                onChange={(e) => setFestgestellt(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
           {/* Beschreibung */}
           <div>
-            <label className="block text-sm font-body font-semibold text-brand-black dark:text-slate-200 mb-1.5">
+            <label className={labelCls}>
               Beschreibung <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -218,15 +459,33 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
               maxLength={2000}
-              placeholder="Was ist beschädigt? Wo und wie ist der Schaden entstanden?"
-              className="w-full px-3 py-2 rounded-lg border border-brand-border dark:border-slate-700 bg-white dark:bg-slate-900 text-base text-brand-black dark:text-slate-100 outline-none focus:border-accent-blue resize-none"
+              placeholder="Was ist beschädigt? Wo und wie ist der Schaden entstanden? Wie äußert er sich?"
+              className={`${inputCls} resize-none`}
             />
             <p className="text-[11px] text-brand-muted mt-1 text-right">{description.length}/2000</p>
           </div>
 
+          {/* Geschätzte Schadenshöhe */}
+          <div>
+            <label className={labelCls}>
+              Geschätzte Schadenshöhe (€) <span className="text-brand-muted font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="z. B. 89,90"
+              className={`${inputCls} sm:max-w-[200px]`}
+            />
+            <p className="text-[11px] text-brand-muted mt-1">
+              Wird als vorläufige Schadenshöhe übernommen — endgültig in der Abwicklung anpassbar.
+            </p>
+          </div>
+
           {/* Fotos */}
           <div>
-            <label className="block text-sm font-body font-semibold text-brand-black dark:text-slate-200 mb-1.5">
+            <label className={labelCls}>
               Fotos <span className="text-brand-muted font-normal">(optional, max {MAX_PHOTOS})</span>
             </label>
             {photos.length > 0 && (
@@ -260,7 +519,7 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
 
           {/* Admin-Notizen */}
           <div>
-            <label className="block text-sm font-body font-semibold text-brand-black dark:text-slate-200 mb-1.5">
+            <label className={labelCls}>
               Interne Notizen <span className="text-brand-muted font-normal">(optional)</span>
             </label>
             <textarea
@@ -268,12 +527,12 @@ export default function DamageReportModal({ open, onClose, onSuccess, bookingId,
               onChange={(e) => setAdminNotes(e.target.value)}
               rows={2}
               placeholder="Nur intern sichtbar…"
-              className="w-full px-3 py-2 rounded-lg border border-brand-border dark:border-slate-700 bg-white dark:bg-slate-900 text-base text-brand-black dark:text-slate-100 outline-none focus:border-accent-blue resize-none"
+              className={`${inputCls} resize-none`}
             />
           </div>
         </div>
 
-        <div className="p-6 border-t border-brand-border dark:border-slate-700 flex justify-end gap-3">
+        <div className="p-6 border-t border-brand-border dark:border-slate-700 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-800">
           <button
             type="button"
             onClick={onClose}
