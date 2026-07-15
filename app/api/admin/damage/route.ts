@@ -320,7 +320,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reportId, status, damage_amount, deposit_retained, admin_notes, repair_until, notify_customer } = body;
+    const { reportId, status, damage_amount, deposit_retained, admin_notes, resolution_note, repair_until, notify_customer } = body;
     const notifyCustomer = notify_customer === true || notify_customer === 'true';
 
     if (!reportId) {
@@ -351,11 +351,18 @@ export async function PATCH(req: NextRequest) {
     if (damage_amount !== undefined) updates.damage_amount = damage_amount;
     if (deposit_retained !== undefined) updates.deposit_retained = deposit_retained;
     if (admin_notes !== undefined) updates.admin_notes = admin_notes;
+    if (resolution_note !== undefined) updates.resolution_note = resolution_note;
 
-    const { error: updateErr } = await supabase
+    let { error: updateErr } = await supabase
       .from('damage_reports')
       .update(updates)
       .eq('id', reportId);
+    // Defensiver Fallback, falls die resolution_note-Migration noch fehlt.
+    if (updateErr && /resolution_note|column|schema cache|PGRST/i.test(updateErr.message)) {
+      const { resolution_note: _drop, ...rest } = updates;
+      void _drop;
+      ({ error: updateErr } = await supabase.from('damage_reports').update(rest).eq('id', reportId));
+    }
 
     if (updateErr) throw updateErr;
 
@@ -388,7 +395,9 @@ export async function PATCH(req: NextRequest) {
           productName: booking.product_name || '',
           damageAmount: damage_amount ?? report.damage_amount ?? 0,
           depositRetained: deposit_retained ?? report.deposit_retained ?? 0,
-          adminNotes: admin_notes ?? report.admin_notes ?? '',
+          // NUR der kundensichtbare Abschlusstext — die internen Admin-Notizen
+          // gehen bewusst NICHT an den Kunden.
+          adminNotes: resolution_note ?? report.resolution_note ?? '',
         }).catch((e) => console.error('Damage resolution email error:', e));
       }
     }

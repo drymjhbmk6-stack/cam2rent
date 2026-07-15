@@ -1279,8 +1279,8 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
       </td></tr>`;
   const notesRow = data.adminNotes
     ? `<tr><td style="padding:16px 20px;">
-        <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Anmerkung</p>
-        <p style="margin:0;font-size:14px;color:#374151;">${h(data.adminNotes)}</p>
+        <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Das haben wir gemacht</p>
+        <p style="margin:0;font-size:14px;color:#374151;white-space:pre-wrap;">${h(data.adminNotes)}</p>
       </td></tr>`
     : '';
   const html = `

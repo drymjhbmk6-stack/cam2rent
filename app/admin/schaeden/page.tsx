@@ -15,6 +15,7 @@ interface DamageReport {
   deposit_retained: number | null;
   status: string;
   admin_notes: string | null;
+  resolution_note: string | null;
   created_at: string;
   resolved_at: string | null;
   attachments?: { path: string; filename: string; mime: string; source: string }[];
@@ -47,6 +48,7 @@ export default function AdminSchaedenPage() {
   const [editForm, setEditForm] = useState({
     damage_amount: '',
     deposit_retained: '',
+    resolution_note: '',
     admin_notes: '',
     repair_until: '',
   });
@@ -88,6 +90,7 @@ export default function AdminSchaedenPage() {
     setEditForm({
       damage_amount: report.damage_amount?.toString() || '',
       deposit_retained: report.deposit_retained?.toString() || '',
+      resolution_note: report.resolution_note || '',
       admin_notes: report.admin_notes || '',
       repair_until: '',
     });
@@ -105,6 +108,7 @@ export default function AdminSchaedenPage() {
           status: newStatus,
           damage_amount: editForm.damage_amount ? parseFloat(editForm.damage_amount) : undefined,
           deposit_retained: editForm.deposit_retained ? parseFloat(editForm.deposit_retained) : undefined,
+          resolution_note: editForm.resolution_note || undefined,
           admin_notes: editForm.admin_notes || undefined,
           repair_until: editForm.repair_until || undefined,
           notify_customer: newStatus === 'resolved' ? notifyResolution : undefined,
@@ -603,13 +607,31 @@ export default function AdminSchaedenPage() {
                   />
                 </div>
 
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                    Abschluss-Info an den Kunden <span style={{ color: '#34d399' }}>(sieht der Kunde)</span>
+                  </label>
+                  <textarea
+                    value={editForm.resolution_note}
+                    onChange={(e) => setEditForm((p) => ({ ...p, resolution_note: e.target.value }))}
+                    rows={3}
+                    placeholder="Was haben wir gemacht? z. B. Linse getauscht, Kamera wieder einsatzbereit…"
+                    style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid rgba(52,211,153,0.4)', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none', resize: 'none' }}
+                  />
+                  <p style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                    Erscheint in der Abschluss-Mail an den Kunden (nur wenn der Haken unten gesetzt ist).
+                  </p>
+                </div>
+
                 <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Admin-Notizen</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                    Admin-Notizen <span style={{ color: '#f59e0b' }}>(nur intern)</span>
+                  </label>
                   <textarea
                     value={editForm.admin_notes}
                     onChange={(e) => setEditForm((p) => ({ ...p, admin_notes: e.target.value }))}
                     rows={3}
-                    placeholder="Interne Notizen..."
+                    placeholder="Interne Notizen – gehen NICHT an den Kunden…"
                     style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none', resize: 'none' }}
                   />
                 </div>
@@ -625,7 +647,7 @@ export default function AdminSchaedenPage() {
                   <span style={{ fontSize: 13, color: '#e2e8f0' }}>
                     Kunde per E-Mail benachrichtigen (Schadensabschluss)
                     <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                      Nur beim Lösen. Sendet dem Kunden Schadenshöhe, einbehaltenen Betrag und deine Notizen. Ohne Haken geht keine Mail raus.
+                      Nur beim Abschließen. Sendet dem Kunden Schadenshöhe, einbehaltenen Betrag und die &bdquo;Abschluss-Info an den Kunden&ldquo;. Die Admin-Notizen bleiben intern. Ohne Haken geht keine Mail raus.
                     </span>
                   </span>
                 </label>
