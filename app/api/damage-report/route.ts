@@ -100,10 +100,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
     }
 
-    // Nur shipped/completed Buchungen
-    if (!['shipped', 'completed'].includes(booking.status)) {
+    // Während der Miete (Kunde hat die Kamera) + nach Abschluss.
+    // Deckt Versand (shipped/delivered) UND Abholung (picked_up) ab, damit der
+    // Kunde auch während der laufenden Miete melden kann — konsistent mit der
+    // Konto-Ansicht, die genau diese Status zur Auswahl anbietet.
+    if (!['shipped', 'delivered', 'picked_up', 'completed'].includes(booking.status)) {
       return NextResponse.json(
-        { error: 'Schadensmeldung nur für versendete oder abgeschlossene Buchungen möglich.' },
+        { error: 'Schadensmeldung nur während oder nach einer laufenden Miete möglich.' },
         { status: 400 }
       );
     }
