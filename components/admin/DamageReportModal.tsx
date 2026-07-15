@@ -20,7 +20,7 @@ interface Props {
   bookingLabel?: string;
 }
 
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 20;
 
 const SCHADENSART_OPTIONS = [
   'Kratzer / Gebrauchsspuren',

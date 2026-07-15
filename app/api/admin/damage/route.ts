@@ -145,8 +145,8 @@ export async function POST(req: NextRequest) {
     const photos = (formData.getAll('photos') as File[]).filter(
       (p) => p instanceof File && p.size > 0,
     );
-    if (photos.length > 5) {
-      return NextResponse.json({ error: 'Maximal 5 Fotos erlaubt.' }, { status: 400 });
+    if (photos.length > 20) {
+      return NextResponse.json({ error: 'Maximal 20 Fotos erlaubt.' }, { status: 400 });
     }
 
     for (const photo of photos) {
