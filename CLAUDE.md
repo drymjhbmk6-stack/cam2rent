@@ -1345,6 +1345,29 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   Buchungsstatus, damit die Retoure nicht „verschwindet". Live-Status kommt über
   die Trackingnummer (siehe oben).
 
+#### Spalten-Layout + Auto-Archiv (Stand 2026-07-16)
+Die Seite ist keine flache Liste mehr, sondern ein **Status-Board**: von links
+nach rechts **Angekündigt → Unterwegs → Zugestellt → Problem** (Konstante
+`COLUMN_ORDER`). Jede Spalte ist zweigeteilt — **oben Hinversand, unten
+Retoure** (`DirectionSection`), jeweils mit eigenem Zähler; leere Richtung zeigt
+ein dezentes „—". Sortierung je Sektion: Hinversand nach `rentalFrom`, Retoure
+nach `rentalTo` aufsteigend (nächster Termin oben). Grid ist
+`repeat(auto-fit, minmax(270px,1fr))` → auf Mobile stapeln die Spalten
+untereinander, Container auf `maxWidth: 1500`.
+- **Auto-Archiv:** Sendungen, deren **Mietende (`rentalTo`) mehr als 4 Wochen**
+  zurückliegt (`ARCHIVE_AFTER_DAYS = 28`), verschwinden automatisch aus der
+  Hauptansicht. Umschalter **„🗄 Archiv (N)"** in der Filterzeile zeigt genau
+  diese (gleiches Spalten-Layout), „← Aktuelle Sendungen" zurück. Rein
+  **client-seitig abgeleitet** — kein DB-Feld, keine Migration, kein
+  API-Change (`GET /api/admin/sendungen` unverändert, lädt weiterhin die
+  neuesten 80 Versand-Buchungen). Buchungen ohne verwertbares `rentalTo`
+  landen NIE im Archiv (defensiv sichtbar). Datum wird auf 12:00 UTC verankert
+  geparst (`parseDayMs`) → keine Tagesgrenzen-Verschiebung.
+- **Status-Filter-Kacheln entfernt:** die Spalten SIND die Status-Auswahl, die
+  Zähler sitzen im Spaltenkopf. Suche + Carrier-Filter (DHL/DPD) bleiben und
+  wirken über alle Spalten. „Unbekannt" bekommt weiterhin nur dann eine
+  (5.) Spalte, wenn es dort Sendungen gibt — sonst wären sie unsichtbar.
+
 ### Sendcloud-Etikett direkt in der Versand-Liste (Stand 2026-05-25)
 `/admin/retouren` ist seit dem Retouren-Refactor der Sidebar-Eintrag „Versand
 & Rückgabe" und damit die primäre Versand-Übersicht. Die alte

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 type Category = 'delivered' | 'transit' | 'announced' | 'problem' | 'unknown';
+type Direction = 'outbound' | 'return';
 
 interface SendungEntry {
   bookingId: string;
@@ -13,7 +14,7 @@ interface SendungEntry {
   bookingStatus: string;
   rentalFrom: string;
   rentalTo: string;
-  direction: 'outbound' | 'return';
+  direction: Direction;
   carrier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
@@ -38,10 +39,26 @@ const CAT_LABEL: Record<Category, string> = {
   unknown: 'Unbekannt',
 };
 
+/** Spalten von links nach rechts: Angekündigt → Unterwegs → Zugestellt → Probleme. */
+const COLUMN_ORDER: Category[] = ['announced', 'transit', 'delivered', 'problem'];
+
+/** Sendungen, deren Mietende länger als 4 Wochen zurückliegt, wandern ins Archiv. */
+const ARCHIVE_AFTER_DAYS = 28;
+
+const DIR_COLOR: Record<Direction, string> = { outbound: '#06b6d4', return: '#a855f7' };
+const DIR_LABEL: Record<Direction, string> = { outbound: '📤 Hinversand', return: '↩ Retoure' };
+
 function fmtDate(iso: string): string {
   if (!iso) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
+/** `YYYY-MM-DD` → Zeitstempel auf 12:00 UTC verankert (keine Tagesgrenzen-Verschiebung). */
+function parseDayMs(iso: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (!m) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
 }
 
 function normCarrier(c: string | null): string {
@@ -58,22 +75,15 @@ function carrierColor(c: string): string {
   return '#64748b';
 }
 
+type Bucket = Record<Direction, SendungEntry[]>;
+
 export default function SendungenPage() {
   const [entries, setEntries] = useState<SendungEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [carrierFilter, setCarrierFilter] = useState<'' | 'DHL' | 'DPD'>('');
-  const [catFilters, setCatFilters] = useState<Set<Category>>(new Set());
   const [q, setQ] = useState('');
-
-  const toggleCat = (cat: Category) => {
-    setCatFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
-  };
+  const [showArchive, setShowArchive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,34 +102,68 @@ export default function SendungenPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const counts = useMemo(() => {
-    const c: Record<Category, number> = { delivered: 0, transit: 0, announced: 0, problem: 0, unknown: 0 };
-    for (const e of entries) c[e.category]++;
-    return c;
+  // Aktiv vs. Archiv trennen (Mietende älter als 4 Wochen = Archiv).
+  const { active, archived } = useMemo(() => {
+    const cutoff = Date.now() - ARCHIVE_AFTER_DAYS * 86400000;
+    const a: SendungEntry[] = [];
+    const arch: SendungEntry[] = [];
+    for (const e of entries) {
+      const end = parseDayMs(e.rentalTo);
+      // Ohne verwertbares Mietende bleibt die Sendung sichtbar (nie versehentlich wegräumen).
+      if (end !== null && end < cutoff) arch.push(e);
+      else a.push(e);
+    }
+    return { active: a, archived: arch };
   }, [entries]);
+
+  const pool = showArchive ? archived : active;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return entries.filter((e) => {
+    return pool.filter((e) => {
       if (carrierFilter && normCarrier(e.carrier) !== carrierFilter) return false;
-      if (catFilters.size > 0 && !catFilters.has(e.category)) return false;
       if (needle) {
         const hay = `${e.customerName} ${e.productName} ${e.bookingId} ${e.trackingNumber ?? ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [entries, carrierFilter, catFilters, q]);
+  }, [pool, carrierFilter, q]);
+
+  // Nach Status-Spalte und darin nach Richtung gruppieren.
+  const columns = useMemo(() => {
+    const empty = (): Bucket => ({ outbound: [], return: [] });
+    const map: Record<Category, Bucket> = {
+      announced: empty(), transit: empty(), delivered: empty(), problem: empty(), unknown: empty(),
+    };
+    for (const e of filtered) map[e.category][e.direction].push(e);
+
+    // Innerhalb einer Sektion: nächster Termin zuerst.
+    for (const cat of Object.keys(map) as Category[]) {
+      map[cat].outbound.sort((x, y) => (parseDayMs(x.rentalFrom) ?? 0) - (parseDayMs(y.rentalFrom) ?? 0));
+      map[cat].return.sort((x, y) => (parseDayMs(x.rentalTo) ?? 0) - (parseDayMs(y.rentalTo) ?? 0));
+    }
+    return map;
+  }, [filtered]);
+
+  // "Unbekannt" bekommt nur eine Spalte, wenn es dort auch Sendungen gibt.
+  const visibleColumns = useMemo(() => {
+    const cols = [...COLUMN_ORDER];
+    if (columns.unknown.outbound.length + columns.unknown.return.length > 0) cols.push('unknown');
+    return cols;
+  }, [columns]);
+
+  const hasFilter = Boolean(carrierFilter || q);
 
   return (
     <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e2e8f0', padding: '20px 16px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1500, margin: '0 auto' }}>
         <AdminBackLink />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Paketverfolgung</h1>
             <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, marginBottom: 0 }}>
-              Live-Status aller Sendungen (DHL/DPD) aus Sendcloud — Hin- und Rückversand.
+              Live-Status aller Sendungen (DHL/DPD) aus Sendcloud — je Spalte oben Hinversand, unten Retoure.
             </p>
           </div>
           <button
@@ -135,36 +179,8 @@ export default function SendungenPage() {
           </button>
         </div>
 
-        {/* Status-Kacheln (Mehrfachauswahl als Filter) */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-          {([
-            'transit', 'announced', 'problem', 'delivered',
-            ...(counts.unknown > 0 ? ['unknown' as Category] : []),
-          ] as Category[]).map((cat) => {
-            const active = catFilters.has(cat);
-            return (
-              <button
-                key={cat}
-                onClick={() => toggleCat(cat)}
-                style={{
-                  background: active ? CAT_COLOR[cat] : '#111827',
-                  color: active ? '#0a0a0a' : CAT_COLOR[cat],
-                  border: `1px solid ${CAT_COLOR[cat]}${active ? 'ff' : '55'}`, borderRadius: 10, padding: '8px 14px',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center',
-                }}
-              >
-                {active ? '✓ ' : ''}{CAT_LABEL[cat]}
-                <span style={{ fontWeight: 800 }}>{counts[cat]}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px' }}>
-          Mehrere Status gleichzeitig wählbar (z.B. Unterwegs + Angekündigt).
-        </p>
-
-        {/* Filterzeile */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+        {/* Filterzeile + Archiv-Umschalter */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -183,15 +199,31 @@ export default function SendungenPage() {
             <option value="DHL">DHL</option>
             <option value="DPD">DPD</option>
           </select>
-          {(catFilters.size > 0 || carrierFilter || q) && (
+          <button
+            onClick={() => setShowArchive((v) => !v)}
+            style={{
+              background: showArchive ? '#334155' : '#111827',
+              color: showArchive ? '#e2e8f0' : '#94a3b8',
+              border: '1px solid #334155', borderRadius: 8, padding: '8px 12px',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {showArchive ? '← Aktuelle Sendungen' : `🗄 Archiv (${archived.length})`}
+          </button>
+          {hasFilter && (
             <button
-              onClick={() => { setCatFilters(new Set()); setCarrierFilter(''); setQ(''); }}
+              onClick={() => { setCarrierFilter(''); setQ(''); }}
               style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 8, padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}
             >
               Filter zurücksetzen
             </button>
           )}
         </div>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 16px' }}>
+          {showArchive
+            ? 'Archiv: Sendungen, deren Mietende länger als 4 Wochen zurückliegt.'
+            : 'Sendungen wandern automatisch ins Archiv, sobald das Mietende länger als 4 Wochen zurückliegt.'}
+        </p>
 
         {error && (
           <div style={{ background: '#7f1d1d', color: '#fecaca', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
@@ -203,85 +235,179 @@ export default function SendungenPage() {
           <p style={{ color: '#94a3b8' }}>Lädt…</p>
         ) : filtered.length === 0 ? (
           <div style={{ background: '#111827', borderRadius: 12, padding: 32, textAlign: 'center', border: '1px solid #1e293b' }}>
-            {entries.length > 0 ? (
+            {hasFilter && pool.length > 0 ? (
               <>
                 <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine Treffer für die aktiven Filter.</p>
                 <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 12 }}>
-                  Es gibt {entries.length} Sendung{entries.length === 1 ? '' : 'en'} — sie passen nur nicht zu deiner Auswahl.
+                  Es gibt {pool.length} Sendung{pool.length === 1 ? '' : 'en'} — sie passen nur nicht zu deiner Auswahl.
                 </p>
                 <button
-                  onClick={() => { setCatFilters(new Set()); setCarrierFilter(''); setQ(''); }}
+                  onClick={() => { setCarrierFilter(''); setQ(''); }}
                   style={{ background: '#06b6d4', color: '#0a0a0a', fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
                 >
                   Filter zurücksetzen
                 </button>
               </>
+            ) : showArchive ? (
+              <>
+                <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Das Archiv ist leer.</p>
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+                  Hier landen Sendungen, deren Mietende länger als 4 Wochen zurückliegt.
+                </p>
+              </>
             ) : (
               <>
-                <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine Sendungen gefunden.</p>
+                <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine aktuellen Sendungen.</p>
                 <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
                   Sendungen erscheinen hier, sobald ein Versandetikett (Sendcloud) erstellt wurde.
+                  {archived.length > 0 && ` ${archived.length} ältere Sendung${archived.length === 1 ? '' : 'en'} liegen im Archiv.`}
                 </p>
               </>
             )}
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {filtered.map((e, idx) => {
-              const carrier = normCarrier(e.carrier);
-              const dirLabel = e.direction === 'outbound' ? 'Hinversand' : 'Retoure';
-              const dirColor = e.direction === 'outbound' ? '#06b6d4' : '#a855f7';
-              const statusText = e.statusMessage ?? (e.parcelId ? 'Status wird geladen…' : 'Kein Live-Status');
-              return (
-                <div
-                  key={`${e.bookingId}-${e.direction}-${idx}`}
-                  style={{
-                    background: '#111827', border: '1px solid #1e293b', borderLeft: `3px solid ${CAT_COLOR[e.category]}`,
-                    borderRadius: 10, padding: '14px 16px',
-                    display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: '1 1 240px' }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-                      <Link href={`/admin/buchungen/${e.bookingId}`} style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
-                        {e.productName || 'Buchung'}
-                      </Link>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: dirColor, background: `${dirColor}1a`, border: `1px solid ${dirColor}40`, padding: '2px 8px', borderRadius: 6 }}>
-                        {dirLabel}
-                      </span>
-                      {carrier && (
-                        <span style={{ fontSize: 11, fontWeight: 800, color: carrierColor(carrier), background: `${carrierColor(carrier)}1a`, border: `1px solid ${carrierColor(carrier)}40`, padding: '2px 8px', borderRadius: 6 }}>
-                          {carrier}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {e.customerName} · {e.bookingId} · {fmtDate(e.rentalFrom)}–{fmtDate(e.rentalTo)}
-                    </div>
-                    {e.trackingNumber && (
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontFamily: 'monospace' }}>
-                        {e.trackingNumber}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: CAT_COLOR[e.category], background: `${CAT_COLOR[e.category]}1a`, border: `1px solid ${CAT_COLOR[e.category]}40`, padding: '4px 10px', borderRadius: 8, whiteSpace: 'nowrap' }}>
-                      {CAT_LABEL[e.category]}
-                    </span>
-                    <span style={{ fontSize: 12, color: '#cbd5e1', maxWidth: 220, textAlign: 'right' }}>{statusText}</span>
-                    {e.trackingUrl && (
-                      <a href={e.trackingUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#06b6d4', textDecoration: 'none' }}>
-                        Sendung verfolgen →
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
+              gap: 12,
+              alignItems: 'start',
+            }}
+          >
+            {visibleColumns.map((cat) => (
+              <StatusColumn key={cat} category={cat} bucket={columns[cat]} />
+            ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Eine Status-Spalte: Kopf mit Zähler, darunter Hinversand (oben) und Retoure (unten). */
+function StatusColumn({ category, bucket }: { category: Category; bucket: Bucket }) {
+  const color = CAT_COLOR[category];
+  const total = bucket.outbound.length + bucket.return.length;
+
+  return (
+    <div
+      style={{
+        background: '#0f172a',
+        border: '1px solid #1e293b',
+        borderTop: `3px solid ${color}`,
+        borderRadius: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          padding: '10px 12px', borderBottom: '1px solid #1e293b', background: `${color}12`,
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+          {CAT_LABEL[category]}
+        </span>
+        <span
+          style={{
+            fontSize: 12, fontWeight: 800, color: '#0a0a0a', background: color,
+            borderRadius: 999, padding: '1px 8px', minWidth: 22, textAlign: 'center',
+          }}
+        >
+          {total}
+        </span>
+      </div>
+
+      <DirectionSection direction="outbound" entries={bucket.outbound} />
+      <div style={{ height: 1, background: '#1e293b' }} />
+      <DirectionSection direction="return" entries={bucket.return} />
+    </div>
+  );
+}
+
+/** Richtungs-Block innerhalb einer Spalte (Hinversand bzw. Retoure). */
+function DirectionSection({ direction, entries }: { direction: Direction; entries: SendungEntry[] }) {
+  const color = DIR_COLOR[direction];
+  return (
+    <div style={{ padding: '10px 10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color, letterSpacing: 0.3 }}>{DIR_LABEL[direction]}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>{entries.length}</span>
+      </div>
+      {entries.length === 0 ? (
+        <p style={{ fontSize: 11, color: '#475569', margin: 0, padding: '6px 0', textAlign: 'center' }}>—</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {entries.map((e, idx) => (
+            <SendungCard key={`${e.bookingId}-${e.direction}-${idx}`} entry={e} accent={color} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Kompakte Sendungs-Karte für die Spaltenansicht. */
+function SendungCard({ entry: e, accent }: { entry: SendungEntry; accent: string }) {
+  const carrier = normCarrier(e.carrier);
+  const statusText = e.statusMessage ?? (e.parcelId ? 'Status wird geladen…' : 'Kein Live-Status');
+
+  return (
+    <div
+      style={{
+        background: '#111827',
+        border: '1px solid #1e293b',
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: 8,
+        padding: '10px 10px 10px 12px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 4 }}>
+        <Link
+          href={`/admin/buchungen/${e.bookingId}`}
+          style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 13, textDecoration: 'none', lineHeight: 1.3 }}
+        >
+          {e.productName || 'Buchung'}
+        </Link>
+        {carrier && (
+          <span
+            style={{
+              fontSize: 10, fontWeight: 800, color: carrierColor(carrier), background: `${carrierColor(carrier)}1a`,
+              border: `1px solid ${carrierColor(carrier)}40`, padding: '1px 6px', borderRadius: 5,
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            {carrier}
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {e.customerName}
+      </div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+        {e.bookingId} · {fmtDate(e.rentalFrom)}–{fmtDate(e.rentalTo)}
+      </div>
+      {e.trackingNumber && (
+        <div style={{ fontSize: 10, color: '#475569', marginTop: 3, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+          {e.trackingNumber}
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 6 }}>{statusText}</div>
+      {e.trackingUrl && (
+        <a
+          href={e.trackingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 11, color: '#06b6d4', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}
+        >
+          Sendung verfolgen →
+        </a>
+      )}
     </div>
   );
 }
