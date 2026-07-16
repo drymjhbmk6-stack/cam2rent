@@ -590,6 +590,7 @@ interface QueueBooking {
   rental_from: string;
   rental_to: string;
   tracking_number?: string | null;
+  return_label_url?: string | null;
   // Status-Übersicht (Dashboard-Aufgaben-Widget)
   verified?: boolean;
   contract_signed?: boolean;
@@ -607,6 +608,13 @@ interface QueueAction {
   kind?: 'link' | 'mark-shipped';
 }
 
+// Beide Versandetiketten fertig? Versandlabel = hinterlegtes Tracking
+// (Sendcloud-Etikett erstellt), Retourenlabel = hochgeladenes return_label_url.
+// Erst wenn beide da sind, kann versendet werden.
+function shippingLabelsComplete(b: QueueBooking): boolean {
+  return Boolean(b.tracking_number) && Boolean(b.return_label_url);
+}
+
 // Spiegelt die "Nächste Aktion"-Logik der Buchungsdetailseite (NextActionBar),
 // aber rein als Navigations-Link — kein Button-Handler nötig.
 function queueActionForBooking(b: QueueBooking): QueueAction | null {
@@ -620,10 +628,12 @@ function queueActionForBooking(b: QueueBooking): QueueAction | null {
         : { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'preparing_shipment':
       // Paket ist gepackt + kontrolliert → nächster Schritt ist der Versand.
-      // Ohne hinterlegtes Tracking zuerst zum Etikett leiten (Versand & Rückgabe),
-      // damit die Versandbestätigung an den Kunden den Trackinglink enthält.
-      // Erst wenn ein Tracking da ist → Button, der Status auf 'shipped' setzt + mailt.
-      return b.tracking_number
+      // Solange nicht BEIDE Etiketten da sind (Versand-Tracking + Retourenlabel),
+      // zuerst zum Etikett-Erstellen leiten (Versand & Rückgabe) — damit die
+      // Versandbestätigung den Trackinglink enthält UND der Kunde ein
+      // Rücksendeetikett hat. Erst wenn beide da sind → Button, der Status auf
+      // 'shipped' setzt + mailt.
+      return shippingLabelsComplete(b)
         ? { label: '🚚 Als versendet markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 2, kind: 'mark-shipped' }
         : { label: '🏷 Versand- & Retourenlabel erstellen', href: `/admin/retouren`, color: C.cyan, weight: 2 };
     case 'awaiting_pickup':
@@ -814,10 +824,11 @@ export function ActionQueueWidget({ data, loading }: {
     }
 
     // Zusätzliche Etikett-Aufgabe: Versand- + Retourenlabel schon beim Packen
-    // (Status confirmed) als eigene Aufgabe zeigen, solange noch kein
-    // Versand-Tracking hinterlegt ist. Ab preparing_shipment ist das Etikett
-    // bereits die Hauptaktion (siehe queueActionForBooking) → nicht doppeln.
-    if (b.delivery_mode === 'versand' && b.status === 'confirmed' && !b.tracking_number) {
+    // (Status confirmed) als eigene Aufgabe zeigen, solange noch nicht BEIDE
+    // Etiketten fertig sind (Versand-Tracking + Retourenlabel). Ab
+    // preparing_shipment ist das Etikett bereits die Hauptaktion (siehe
+    // queueActionForBooking) → nicht doppeln.
+    if (b.delivery_mode === 'versand' && b.status === 'confirmed' && !shippingLabelsComplete(b)) {
       out.push({
         key: `label-${b.id}`,
         title,
