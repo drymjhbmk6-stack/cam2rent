@@ -625,7 +625,7 @@ function queueActionForBooking(b: QueueBooking): QueueAction | null {
       // Erst wenn ein Tracking da ist → Button, der Status auf 'shipped' setzt + mailt.
       return b.tracking_number
         ? { label: '🚚 Als versendet markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 2, kind: 'mark-shipped' }
-        : { label: '🏷 Etikett erstellen', href: `/admin/retouren`, color: C.cyan, weight: 2 };
+        : { label: '🏷 Versand- & Retourenlabel erstellen', href: `/admin/retouren`, color: C.cyan, weight: 2 };
     case 'awaiting_pickup':
       return { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'delivered':
@@ -786,25 +786,50 @@ export function ActionQueueWidget({ data, loading }: {
     bucket: bucketForDays(daysUntilDue(c.due_date, today)),
   }));
 
-  const bookingRows: QueueRow[] = (data?.items ?? [])
-    .map((b) => ({ b, action: queueActionForBooking(b) }))
-    .filter((r): r is { b: QueueBooking; action: QueueAction } => r.action !== null)
-    .map(({ b, action }) => ({
-      key: b.id,
-      // Name + Datum fett ganz oben, Produkt darunter.
-      title: `${b.customer_name || 'Kunde'} · ${formatDate(b.rental_from)} – ${formatDate(b.rental_to)}`,
-      subtitle: b.product_name || 'Buchung',
-      action,
-      sortDate: dueDateForBooking(b),
-      bucket: bucketForDays(daysUntilDue(dueDateForBooking(b), today)),
-      checks: {
-        verified: b.verified ?? false,
-        signed: b.contract_signed ?? false,
-        checked: b.contract_checked ?? false,
-        paid: b.paid ?? false,
-        isVersand: b.delivery_mode === 'versand',
-      },
-    }));
+  const bookingRows: QueueRow[] = (data?.items ?? []).flatMap((b) => {
+    const out: QueueRow[] = [];
+    const title = `${b.customer_name || 'Kunde'} · ${formatDate(b.rental_from)} – ${formatDate(b.rental_to)}`;
+    const subtitle = b.product_name || 'Buchung';
+    const sortDate = dueDateForBooking(b);
+    const bucket = bucketForDays(daysUntilDue(sortDate, today));
+
+    const action = queueActionForBooking(b);
+    if (action) {
+      out.push({
+        // Name + Datum fett ganz oben, Produkt darunter.
+        key: b.id,
+        title,
+        subtitle,
+        action,
+        sortDate,
+        bucket,
+        checks: {
+          verified: b.verified ?? false,
+          signed: b.contract_signed ?? false,
+          checked: b.contract_checked ?? false,
+          paid: b.paid ?? false,
+          isVersand: b.delivery_mode === 'versand',
+        },
+      });
+    }
+
+    // Zusätzliche Etikett-Aufgabe: Versand- + Retourenlabel schon beim Packen
+    // (Status confirmed) als eigene Aufgabe zeigen, solange noch kein
+    // Versand-Tracking hinterlegt ist. Ab preparing_shipment ist das Etikett
+    // bereits die Hauptaktion (siehe queueActionForBooking) → nicht doppeln.
+    if (b.delivery_mode === 'versand' && b.status === 'confirmed' && !b.tracking_number) {
+      out.push({
+        key: `label-${b.id}`,
+        title,
+        subtitle,
+        action: { label: '🏷 Versand- & Retourenlabel erstellen', href: '/admin/retouren', color: C.cyan, weight: 3 },
+        sortDate,
+        bucket,
+      });
+    }
+
+    return out;
+  });
 
   // Lokaler State für die "Als versendet markieren"-Buttons: erledigte Zeilen
   // werden optimistisch ausgeblendet, ohne dass der Parent neu laden muss.
