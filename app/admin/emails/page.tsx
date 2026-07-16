@@ -84,6 +84,8 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   weekly_report: { label: 'Wochenbericht', color: '#06b6d4', bg: '#06b6d414' },
   verification_reminder: { label: 'Verifizierungs-Erinnerung', color: '#f59e0b', bg: '#f59e0b14' },
   verification_reminder_manual: { label: 'Verifizierungs-Erinnerung (manuell)', color: '#f59e0b', bg: '#f59e0b14' },
+  account_unverified_warning: { label: 'Konto: Lösch-Frist (unverifiziert)', color: '#ea580c', bg: '#ea580c14' },
+  account_inactive_warning: { label: 'Konto: Inaktiv-Warnung', color: '#94a3b8', bg: '#94a3b814' },
   verification_auto_cancel: { label: 'Verifizierung: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
   verification_rejected: { label: 'Verifizierung: Abgelehnt', color: '#ef4444', bg: '#ef444414' },
   contract_resign_request: { label: 'Mietvertrag: Bitte neu unterschreiben', color: '#ef4444', bg: '#ef444414' },

@@ -2564,3 +2564,75 @@ export async function sendAppointmentReminder(data: AppointmentReminderData) {
   });
 }
 
+
+// ─── Account-Lifecycle: Auto-Cleanup Kundenkonten ───────────────────────────
+
+/**
+ * Letzte Erinnerung an ein noch NICHT verifiziertes Konto (ohne Buchung),
+ * das seit `unverified_warn_after_days` besteht. Wird KEIN Ausweis innerhalb
+ * von `unverified_grace_hours` hochgeladen, loescht der Cron das Konto.
+ */
+export async function sendUnverifiedDeletionWarning(params: {
+  to: string;
+  name?: string | null;
+  graceHours?: number;
+}) {
+  const grace = params.graceHours && params.graceHours > 0 ? params.graceHours : 48;
+  const graceLabel = grace % 24 === 0 ? `${grace / 24} Tagen` : `${grace} Stunden`;
+  const safeName = h(params.name || 'Kunde');
+  const subject = stripSubject('Letzte Erinnerung: Bitte Ausweis hochladen — sonst wird dein Konto gelöscht');
+  const html = `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:24px 32px;">
+    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">cam<span style="color:#06b6d4;">2</span>rent</p>
+  </td></tr>
+  <tr><td style="background:#ffffff;padding:32px;">
+    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#9a3412;">Letzte Erinnerung — dein Konto ist noch nicht verifiziert</h1>
+    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">du hast dich vor einiger Zeit bei cam2rent registriert, aber deinen Ausweis noch nicht hochgeladen. Damit dein Konto aktiv bleibt und du Kameras mieten kannst, brauchen wir eine kurze Verifizierung.</p>
+    <p style="margin:0 0 24px;"><a href="https://cam2rent.de/konto/verifizierung" style="display:inline-block;padding:14px 28px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">Ausweis jetzt hochladen</a></p>
+    <p style="margin:0 0 8px;font-size:14px;color:#374151;"><strong>Wichtig:</strong> Wenn wir innerhalb der nächsten <strong>${graceLabel}</strong> keinen Ausweis von dir erhalten, wird dein Konto automatisch gelöscht. Du kannst dich danach jederzeit erneut registrieren.</p>
+    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Fragen? Einfach auf diese Mail antworten.</p>
+  </td></tr>
+  <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Action-Cam Verleih</p>
+  </td></tr>
+</table></td></tr></table></body></html>`;
+  await sendAndLog({ to: params.to, subject, html, emailType: 'account_unverified_warning' });
+}
+
+/**
+ * Inaktivitaets-Warnung an ein Konto, das seit `inactive_warn_after_days` nicht
+ * mehr eingeloggt war. Meldet sich der Kunde nicht innerhalb von
+ * `inactive_grace_days` an, wird das Konto DEAKTIVIERT (nicht geloescht) und
+ * verschwindet aus der aktiven Liste. Ein Login reaktiviert es automatisch.
+ */
+export async function sendInactiveDeactivationWarning(params: {
+  to: string;
+  name?: string | null;
+  graceDays?: number;
+}) {
+  const grace = params.graceDays && params.graceDays > 0 ? params.graceDays : 14;
+  const safeName = h(params.name || 'Kunde');
+  const subject = stripSubject('Dein cam2rent-Konto wird bald deaktiviert');
+  const html = `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:24px 32px;">
+    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">cam<span style="color:#06b6d4;">2</span>rent</p>
+  </td></tr>
+  <tr><td style="background:#ffffff;padding:32px;">
+    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#0a0a0a;">Wir vermissen dich</h1>
+    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">du warst über ein Jahr nicht mehr bei cam2rent eingeloggt. Wenn du dein Konto behalten möchtest, melde dich einfach innerhalb der nächsten <strong>${grace} Tage</strong> einmal an — damit bleibt alles beim Alten.</p>
+    <p style="margin:0 0 24px;"><a href="https://cam2rent.de/login" style="display:inline-block;padding:14px 28px;background:#06b6d4;color:#0a0a0a;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">Konto behalten — jetzt einloggen</a></p>
+    <p style="margin:0 0 8px;font-size:14px;color:#374151;">Meldest du dich nicht, setzen wir dein Konto auf <strong>inaktiv</strong>. Deine Daten bleiben erhalten — du kannst dein Konto jederzeit wieder aktivieren, indem du dich erneut einloggst.</p>
+    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Fragen? Einfach auf diese Mail antworten.</p>
+  </td></tr>
+  <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Action-Cam Verleih</p>
+  </td></tr>
+</table></td></tr></table></body></html>`;
+  await sendAndLog({ to: params.to, subject, html, emailType: 'account_inactive_warning' });
+}

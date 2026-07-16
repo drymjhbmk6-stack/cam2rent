@@ -13,16 +13,25 @@ export async function GET(req: NextRequest) {
 
     // Alle Profile laden — nur Listen-relevante Spalten (Ausweisbilder etc. nicht nötig)
     const COLS_FULL =
-      'id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, is_tester, special_discount_percent, special_discount_valid_until, created_at';
+      'id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, is_tester, special_discount_percent, special_discount_valid_until, deactivated_at, created_at';
     const COLS_FALLBACK =
       'id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, is_tester, created_at';
 
-    const buildQuery = (cols: string) => {
+    // Inaktiv-gesetzte Konten (deactivated_at) sind aus der Liste raus — sichtbar
+    // nur, wenn explizit der Filter "inactive" gewaehlt ist.
+    const buildQuery = (cols: string, withLifecycle: boolean) => {
       let q = supabase.from('profiles').select(cols).order('created_at', { ascending: false });
       if (statusFilter === 'blacklisted') {
         q = q.eq('blacklisted', true);
       } else if (statusFilter && ['pending', 'verified', 'rejected', 'none'].includes(statusFilter)) {
         q = q.eq('verification_status', statusFilter);
+      }
+      if (withLifecycle) {
+        if (statusFilter === 'inactive') {
+          q = q.not('deactivated_at', 'is', null);
+        } else {
+          q = q.is('deactivated_at', null);
+        }
       }
       return q;
     };
@@ -40,13 +49,23 @@ export async function GET(req: NextRequest) {
       is_tester: boolean | null;
       special_discount_percent?: number | null;
       special_discount_valid_until?: string | null;
+      deactivated_at?: string | null;
       created_at: string;
     };
 
-    let res = await buildQuery(COLS_FULL);
-    // Defensiv: fehlt die Sonderkonditions-Migration → ohne die Spalten neu laden.
+    let res = await buildQuery(COLS_FULL, true);
+    // Defensiv: fehlt die Sonderkonditions-Migration → ohne die Spalten neu laden
+    // (deactivated_at bleibt drin, ist eine eigene Migration).
     if (res.error && /special_discount/i.test(res.error.message)) {
-      res = await buildQuery(COLS_FALLBACK);
+      res = await buildQuery(
+        'id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, is_tester, deactivated_at, created_at',
+        true,
+      );
+    }
+    // Defensiv: fehlt die Account-Lifecycle-Migration → ganz ohne deactivated_at
+    // + ohne den Lifecycle-Filter neu laden.
+    if (res.error && /deactivated_at/i.test(res.error.message)) {
+      res = await buildQuery(COLS_FALLBACK, false);
     }
 
     if (res.error) {
@@ -105,6 +124,7 @@ export async function GET(req: NextRequest) {
       is_tester: p.is_tester || false,
       special_discount_percent: p.special_discount_percent ?? null,
       special_discount_valid_until: p.special_discount_valid_until ?? null,
+      deactivated_at: p.deactivated_at ?? null,
       booking_count: countMap.get(p.id) || 0,
       created_at: p.created_at,
       last_login: lastLoginMap.get(p.id) || null,

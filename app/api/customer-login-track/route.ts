@@ -61,6 +61,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
 
+    // Reaktivierung: war das Konto wegen Inaktivitaet auf "inaktiv" gesetzt oder
+    // stand eine Inaktivitaets-Warnung an, wird durch diesen Login beides
+    // zurueckgesetzt → Konto ist wieder aktiv, Inaktivitaets-Uhr laeuft neu.
+    // Defensiv: fehlt die Migration (Spalten), wird der Fehler ignoriert.
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('deactivated_at, inactive_warning_sent_at')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (prof && (prof.deactivated_at || prof.inactive_warning_sent_at)) {
+        await supabase
+          .from('profiles')
+          .update({ deactivated_at: null, inactive_warning_sent_at: null })
+          .eq('id', user.id);
+      }
+    } catch {
+      /* Spalten fehlen (Migration) → kein Reaktivierungs-Reset noetig */
+    }
+
     // Dedupe: existiert in den letzten 10 Minuten schon ein Login fuer diesen User?
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: recent, error: recentErr } = await supabase

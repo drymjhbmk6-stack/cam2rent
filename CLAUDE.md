@@ -1955,6 +1955,60 @@ Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nu
 - **Migration ausgeführt** (2026-06-21): `supabase-customer-login-history.sql`
   nach `erledigte supabase/` verschoben. Login-Verlauf wird ab jetzt erfasst.
 
+### Auto-Cleanup von Kundenkonten — unverifiziert löschen + inaktiv setzen (Stand 2026-07-16)
+Ein täglicher Cron räumt Karteileichen auf: **nicht verifizierte** Konten ohne
+Buchung werden nach einer letzten Erinnerung endgültig gelöscht, **inaktive**
+Konten (kein Login seit 1 Jahr) werden nach einer Vorwarnung auf **inaktiv**
+gesetzt (nicht gelöscht) und verschwinden aus der aktiven Kundenliste — der
+Kunde reaktiviert sie automatisch beim nächsten Login.
+- **Migration `supabase/supabase-account-lifecycle.sql`** (idempotent, additiv,
+  KEINE neue Tabelle): 3 Spalten auf `profiles` — `unverified_warning_sent_at`,
+  `inactive_warning_sent_at`, `deactivated_at` (alle TIMESTAMPTZ, service-role-
+  only, NICHT im column-level GRANT → Kunde kann sie nicht selbst setzen).
+- **Config** `admin_settings.account_lifecycle_config`
+  (`lib/account-lifecycle-config.ts`, `loadAccountLifecycleConfig`):
+  `{ enabled, unverified_warn_after_days=28, unverified_grace_hours=48,
+  inactive_warn_after_days=365, inactive_grace_days=14 }`. Ohne Setting greifen
+  diese Defaults. Komplett abschalten: `{ "enabled": false }`.
+- **Cron `/api/cron/account-cleanup`** (täglich, `verifyCronAuth` +
+  `acquireCronLock('account-cleanup')`, defensiv bei fehlender Migration →
+  No-Op) — 4 Schritte:
+  1. **Unverifiziert warnen:** Konten mit `verification_status IS NULL/'none'`,
+     älter als 28 Tage, **ohne jede Buchung** → letzte Erinnerungs-Mail
+     (`account_unverified_warning`) + Marker `unverified_warning_sent_at`.
+     `pending` (Ausweis liegt, wartet auf Admin) + `rejected` + `verified` sind
+     ausgenommen; ebenso Tester/gesperrte/bereits anonymisierte Konten.
+  2. **Unverifiziert löschen:** Warnung > 48 h her, immer noch unverifiziert,
+     weiterhin ohne Buchung → `anonymizeCustomerCore` (geteilte Lib, DSGVO:
+     Storage/Ausweis/UGC/email_log/Audit-Scrub, Auth gebannt + E-Mail
+     umbenannt → Original-Adresse wieder frei) + Profil-Zeile + konto-gebundene
+     Hilfstabellen entfernt → Konto ist aus der Liste weg. Audit
+     `customer.auto_delete_unverified`.
+  3. **Inaktiv warnen:** letzter Login (`auth.users.last_sign_in_at`, sonst
+     `created_at`) älter als 365 Tage, keine offene Buchung → Warn-Mail
+     (`account_inactive_warning`, CTA „Konto behalten — jetzt einloggen") +
+     Marker `inactive_warning_sent_at`.
+  4. **Inaktiv deaktivieren:** Warnung > 14 Tage her, kein Neu-Login → nur
+     `deactivated_at = now()` (NICHT gelöscht, Daten bleiben). Audit
+     `customer.auto_deactivate`.
+- **Anonymisierung geteilt:** `lib/anonymize-customer.ts` → `anonymizeCustomerCore`
+  wurde aus `/api/admin/anonymize-customer` extrahiert; Admin-Button + Cron
+  nutzen jetzt exakt dieselbe Logik (Route behält Owner-Guard + Audit).
+- **Reaktivierung beim Login:** `/api/customer-login-track` (feuert bei jedem
+  Kunden-Login) leert `deactivated_at` + `inactive_warning_sent_at`, falls
+  gesetzt → Konto wieder aktiv, Inaktivitäts-Uhr läuft neu. Defensiv ohne
+  Migration.
+- **Kundenliste** (`/admin/kunden`): inaktiv gesetzte Konten sind aus „Alle"/
+  „Aktive"/„Gesperrte" raus; neuer Filter-Tab **„Inaktiv"** (`?status=inactive`
+  → `GET /api/admin/kunden` filtert `deactivated_at IS NOT NULL`, sonst
+  `IS NULL`). „Inaktiv"-Badge + Button **„↻ Reaktivieren"** pro Zeile →
+  `POST /api/admin/kunden/reactivate` (Permission `kunden`, Audit
+  `customer.reactivate`). Defensiver Fallback ohne Migration.
+- **E-Mails** registriert in `/admin/emails` (`TYPE_LABELS`) +
+  `lib/email-previews.ts` (Katalog → vorab ansehbar/anpassbar):
+  `account_unverified_warning`, `account_inactive_warning`.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Lieferländer-Beschränkung — nur Deutschland (Stand 2026-07-15)
 cam2rent liefert vorerst **ausschließlich innerhalb Deutschlands**. Vorher gab
 es KEINE Geo-/Ländersperre (kein Länderfeld, kein Stripe-`allowed_countries`,
@@ -5287,6 +5341,18 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Konto-Auto-Cleanup — Migration + Cron auszuführen:** Migration
+  `supabase/supabase-account-lifecycle.sql` (idempotent, additiv: 3
+  `profiles`-Spalten) + Crontab-Eintrag (täglich, `--resolve` umgeht
+  Cloudflare):
+  ```
+  30 7 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/account-cleanup
+  ```
+  Ohne Migration ist der Cron ein No-Op (die UI-Filter laufen defensiv weiter);
+  ohne Cron passiert nichts (keine Warnung, keine Löschung/Deaktivierung).
+  Verhalten/Fristen siehe „Auto-Cleanup von Kundenkonten". Zum Deaktivieren:
+  `admin_settings.account_lifecycle_config` → `{ "enabled": false }`. Empfohlen
+  ASAP ausführen.
 - **Mietvertrag-Erinnerung + Auto-Storno — Crontab auszuführen (keine Migration):**
   Zwei Einträge (täglich, `--resolve` umgeht Cloudflare):
   ```

@@ -19,6 +19,7 @@ interface Customer {
   is_tester: boolean;
   special_discount_percent: number | null;
   special_discount_valid_until: string | null;
+  deactivated_at: string | null;
   booking_count: number;
   created_at: string;
   last_login: string | null;
@@ -78,6 +79,7 @@ const FILTERS = [
   { value: '', label: 'Alle' },
   { value: 'active', label: 'Aktive' },
   { value: 'blacklisted', label: 'Gesperrte' },
+  { value: 'inactive', label: 'Inaktiv' },
 ];
 
 export default function KundenPage() {
@@ -91,12 +93,37 @@ export default function KundenPage() {
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
-    const params = filter === 'blacklisted' ? '?status=blacklisted' : '';
+    const params =
+      filter === 'blacklisted' ? '?status=blacklisted'
+      : filter === 'inactive' ? '?status=inactive'
+      : '';
     const res = await fetch(`/api/admin/kunden${params}`);
     const data = await res.json();
     setCustomers(data.customers || []);
     setLoading(false);
   }, [filter]);
+
+  // Inaktives Konto wieder aktivieren (leert deactivated_at).
+  const handleReactivate = useCallback(async (c: Customer) => {
+    if (!confirm(`Konto von ${c.full_name || c.email} wieder aktivieren?`)) return;
+    setResettingId(c.id);
+    try {
+      const res = await fetch('/api/admin/kunden/reactivate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: c.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Reaktivierung fehlgeschlagen.');
+        return;
+      }
+      // Aus der Inaktiv-Liste entfernen (bzw. neu laden).
+      setCustomers((prev) => prev.filter((x) => x.id !== c.id));
+    } finally {
+      setResettingId(null);
+    }
+  }, []);
 
   // Tester-Konto zuruecksetzen → E-Mail freigeben + Profil/Ausweis-Fotos
   // loeschen, damit man sich mit derselben E-Mail neu registrieren kann.
@@ -426,6 +453,22 @@ export default function KundenPage() {
                             >
                               Gesperrt
                             </span>
+                          ) : c.deactivated_at ? (
+                            <span
+                              title={`Inaktiv seit ${fmtDateTime(c.deactivated_at)}`}
+                              style={{
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#94a3b8',
+                                background: '#94a3b814',
+                                border: '1px solid #94a3b833',
+                              }}
+                            >
+                              Inaktiv
+                            </span>
                           ) : (
                             <span
                               style={{
@@ -440,6 +483,26 @@ export default function KundenPage() {
                             >
                               Aktiv
                             </span>
+                          )}
+                          {c.deactivated_at && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleReactivate(c); }}
+                              disabled={resettingId === c.id}
+                              title="Konto wieder aktivieren (erscheint wieder in der aktiven Liste)"
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#10b981',
+                                background: '#10b98114',
+                                border: '1px solid #10b98144',
+                                cursor: resettingId === c.id ? 'default' : 'pointer',
+                                opacity: resettingId === c.id ? 0.6 : 1,
+                              }}
+                            >
+                              {resettingId === c.id ? 'Aktiviere…' : '↻ Reaktivieren'}
+                            </button>
                           )}
                           {c.is_tester && (
                             <span

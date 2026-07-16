@@ -41,6 +41,8 @@ import {
   sendContractSignReminder,
   sendVerificationReminder,
   sendAppointmentReminder,
+  sendUnverifiedDeletionWarning,
+  sendInactiveDeactivationWarning,
   sendCreditNote,
   sendInboundReply,
   escapeHtml,
@@ -996,6 +998,29 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Beim Verkauf von Zubehör (z.B. gebrauchte Speicherkarte) über /admin/verkauf — Kunde bekommt die Rechnung + Stripe-Zahlungslink, Rechnung zusätzlich als PDF-Anhang.',
     recipient: 'customer',
     render: () => withOverride('kauf_rechnung', async () => previewSaleInvoice()),
+  },
+  // Konto-Lifecycle (Auto-Cleanup)
+  {
+    id: 'account_unverified_warning',
+    name: 'Konto — Lösch-Frist (unverifiziert)',
+    description: 'Cron /api/cron/account-cleanup: letzte Erinnerung an ein noch nicht verifiziertes Konto (ohne Buchung) nach 4 Wochen. Ohne Ausweis-Upload wird das Konto 48 h später gelöscht.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendUnverifiedDeletionWarning(d); }, {
+      to: 'max.mustermann@example.de',
+      name: 'Max Mustermann',
+      graceHours: 48,
+    }),
+  },
+  {
+    id: 'account_inactive_warning',
+    name: 'Konto — Inaktiv-Warnung',
+    description: 'Cron /api/cron/account-cleanup: Warnung an ein Konto, das seit über 1 Jahr nicht mehr eingeloggt war. Ohne Login innerhalb von 14 Tagen wird das Konto auf inaktiv gesetzt (nicht gelöscht).',
+    recipient: 'customer',
+    render: () => renderEmailPreview(async (d) => { await sendInactiveDeactivationWarning(d); }, {
+      to: 'max.mustermann@example.de',
+      name: 'Max Mustermann',
+      graceDays: 14,
+    }),
   },
   // Mietvertrag
   {
