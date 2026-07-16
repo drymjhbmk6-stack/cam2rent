@@ -51,6 +51,15 @@ interface FulfillmentBooking {
 
 interface ShippingMethod { id: number; name: string; carrier: string }
 interface LabelForm { name: string; address: string; city: string; postalCode: string; email: string; methodId: number; weightKg: number }
+
+// Standard-Versandmethode: bevorzugt DHL Paket 0-2kg, sonst irgendeine DHL-Methode, sonst die erste.
+function pickDefaultMethodId(methods: ShippingMethod[]): number {
+  if (!methods || methods.length === 0) return 0;
+  const isDhl = (m: ShippingMethod) => (m.carrier ?? '').toLowerCase().startsWith('dhl');
+  const dhl02 = methods.find((m) => isDhl(m) && /0\s*-?\s*2/.test(m.name ?? ''));
+  const dhlAny = methods.find(isDhl);
+  return (dhl02 ?? dhlAny ?? methods[0]).id;
+}
 interface LabelResult { labelUrl: string | null; returnLabelUrl: string | null; returnError?: string }
 
 const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -250,7 +259,7 @@ export default function AdminVersandRueckgabePage() {
       city: parsedCity,
       postalCode: parsedZip,
       email: b.customer_email ?? '',
-      methodId: shippingMethods[0]?.id ?? 0,
+      methodId: pickDefaultMethodId(shippingMethods),
       weightKg: prefillWeight,
     });
     if (shippingMethods.length === 0) {
@@ -259,7 +268,7 @@ export default function AdminVersandRueckgabePage() {
         const r = await fetch('/api/admin/sendcloud?action=methods');
         const d = await r.json();
         setShippingMethods(d.methods ?? []);
-        setLabelForm((f) => ({ ...f, methodId: d.methods?.[0]?.id ?? 0 }));
+        setLabelForm((f) => ({ ...f, methodId: pickDefaultMethodId(d.methods ?? []) }));
       } catch { /* silent */ }
       finally { setMethodsLoading(false); }
     }
