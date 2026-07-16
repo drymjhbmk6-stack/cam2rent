@@ -32,6 +32,7 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   firmware_update_available: 'katalog',
   pickup_coordination: 'tagesgeschaeft',
   return_coordination: 'tagesgeschaeft',
+  return_arrived: 'tagesgeschaeft',
 };
 
 /**

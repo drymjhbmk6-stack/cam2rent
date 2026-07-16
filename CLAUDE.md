@@ -1226,6 +1226,58 @@ Rückgabe-Prüfung unter `/admin/retouren` (`return-booking`) setzt `completed`/
 - Status-Whitelist von `PATCH /api/admin/booking/[id]` + `update-booking-status`
   um `delivered` erweitert.
 
+### Versand-/Retoure-Status automatisch via Sendcloud (Stand 2026-07-16)
+Der Sendcloud-Live-Status (DHL/DPD) wird jetzt nicht nur angezeigt (siehe
+Paketverfolgung unten), sondern schaltet die Buchung automatisch weiter — der
+Admin muss „Als versendet markieren"/„Zugestellt" nicht mehr von Hand klicken.
+- **Cron `GET/POST /api/cron/sendcloud-status-sync`** (`verifyCronAuth` +
+  `acquireCronLock('sendcloud-status-sync')`, `isTestMode`-Filter, `maxDuration=300`):
+  lädt Versand-Buchungen (`delivery_mode='versand'`, Status
+  `confirmed|preparing_shipment|shipped|delivered`, neueste 80) und holt pro
+  Buchung den Live-Status via `fetchParcelsByOrderNumber(booking.id)`
+  (`lib/sendcloud-tracking.ts`, deckt Hin- + Panel-Retouren ab).
+  - **Hinversand → `shipped`:** Buchung `confirmed`/`preparing_shipment` +
+    Hinpaket erstmals in Bewegung (Sendcloud-Kategorie **`transit` ODER
+    `delivered`** — also DHL hat es angenommen/gescannt, NICHT nur `announced`/
+    Label erstellt) → atomarer Flip `status='shipped'` + `shipped_at` +
+    **Versandbestätigung an den Kunden** (`sendShippingConfirmation` mit
+    Trackinglink). Fehlt der Buchung noch eine `tracking_number` (z.B. Etikett
+    im Sendcloud-Panel erstellt), wird sie aus dem Parcel nachgetragen
+    (`tracking_number`/`tracking_url`/`tracking_carrier`). Audit `booking.ship`
+    (`source: 'sendcloud_auto'`).
+  - **Hinversand → `delivered`:** Buchung `shipped` + Hinpaket `delivered` →
+    atomarer Flip `status='delivered'` (keine Kundenmail; interner
+    Zwischenstatus vor der Retoure). Audit `booking.delivered`.
+  - **Retoure → Erinnerung:** Retoure-Paket (`is_return`) `delivered` (= bei
+    cam2rent eingetroffen) → EINE Admin-Notification `return_arrived`
+    („📦 Retoure eingetroffen, bitte prüfen", Permission `tagesgeschaeft`,
+    grünes Karton-Icon, Link auf `/admin/retouren/[id]/pruefen`). **Status
+    bleibt unverändert und die Kaution reserviert** — die physische Zustands-/
+    Schadensprüfung läuft bewusst weiter manuell über `return-booking`. Dedup
+    über den atomaren Claim `bookings.return_arrived_at`
+    (Migration `supabase/supabase-bookings-return-arrived.sql`).
+- **Idempotenz durchgängig:** jeder Statuswechsel über atomaren Guard
+  (`.eq('status', vorher)` bzw. `.is('return_arrived_at', null)`) → mehrere
+  Läufe/Races lösen nichts doppelt aus. `announced` (nur Voranmeldung/Label)
+  triggert bewusst KEIN `shipped` — erst echte Carrier-Bewegung.
+- **Defensiv ohne Migration:** fehlt `return_arrived_at` (und/oder
+  `tracking_carrier`), lädt der Cron per Select-Retry ohne die Spalte(n) und
+  **überspringt nur den Retoure-Teil** — die Versand-Automatik (shipped/
+  delivered) läuft trotzdem. Kein Sendcloud-Key / kein Parcel zur Buchung →
+  die Buchung wird still übersprungen (Fremdversand bleibt manuell).
+- **Manuelle Fallbacks bleiben:** „Als versendet markieren" (`mark-shipped`),
+  Tracking-Eingabe (`ship-booking`) und der freie Statuswechsel
+  (`update-booking-status`) funktionieren unverändert — die Automatik nimmt dem
+  Admin nur die Routine ab.
+- **Go-Live TODO:**
+  1. Migration `supabase/supabase-bookings-return-arrived.sql` ausführen (nur
+     für die Retoure-Erinnerung; Versand-Automatik läuft auch ohne).
+  2. Hetzner-Crontab (alle 10 Min, `--resolve` umgeht Cloudflare):
+     ```
+     */10 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/sendcloud-status-sync
+     ```
+     Ohne den Crontab-Eintrag passiert nichts (kein Auto-Statuswechsel).
+
 ### Paketverfolgung — Live-Sendungsstatus DHL/DPD (Stand 2026-06-09)
 Eigene Admin-Übersicht `/admin/sendungen` („Paketverfolgung", Sidebar-Gruppe
 „Tagesgeschäft" nach „Versand & Rückgabe") zeigt **alle aktiven Sendungen mit
@@ -5341,6 +5393,17 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Versand-/Retoure-Automatik — Migration + Cron auszuführen:** Migration
+  `supabase/supabase-bookings-return-arrived.sql` (idempotent, additiv:
+  `bookings.return_arrived_at`) + Crontab-Eintrag (alle 10 Min, `--resolve`
+  umgeht Cloudflare):
+  ```
+  */10 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/sendcloud-status-sync
+  ```
+  Ohne Cron kein Auto-Statuswechsel (Versand/Zustellung bleiben manuell); ohne
+  Migration läuft die Versand-Automatik trotzdem, nur die Retoure-Erinnerung ist
+  inaktiv. Details siehe „Versand-/Retoure-Status automatisch via Sendcloud".
+  Empfohlen ASAP ausführen.
 - **Konto-Auto-Cleanup — Migration + Cron auszuführen:** Migration
   `supabase/supabase-account-lifecycle.sql` (idempotent, additiv: 3
   `profiles`-Spalten) + Crontab-Eintrag (täglich, `--resolve` umgeht
