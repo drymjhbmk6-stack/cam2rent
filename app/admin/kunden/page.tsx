@@ -1,588 +1,186 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDateTime } from '@/lib/format-utils';
+import { useState } from 'react';
+import {
+  Search, MessageSquare, Star, Image as ImageIcon, Plus, Mail, MessageCircle,
+} from 'lucide-react';
+import { PageHeader, Panel, Tabs, DataTable, StatusChip, MiniStat, Button } from '@/components/admin/ui';
+import type { Column, TabDef } from '@/components/admin/ui';
+import { CUSTOMERS, MESSAGES, WAITLIST, type Customer } from '@/lib/admin-mock';
 
-interface Customer {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string;
-  address_city: string;
-  verification_status: 'none' | 'pending' | 'verified' | 'rejected';
-  verified_at: string | null;
-  blacklisted: boolean;
-  blacklist_reason: string;
-  blacklisted_at: string | null;
-  is_tester: boolean;
-  special_discount_percent: number | null;
-  special_discount_valid_until: string | null;
-  deactivated_at: string | null;
-  booking_count: number;
-  created_at: string;
-  last_login: string | null;
-}
+/* cam2rent Admin 2.0 — Kunden & Kommunikation (6 Tabs, statisch). */
 
-// "vor X …" — wie lange der letzte Login her ist
-function relativeAgo(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '—';
-  const sec = Math.floor((Date.now() - then) / 1000);
-  if (sec < 60) return 'gerade eben';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `vor ${min} Min.`;
-  const std = Math.floor(min / 60);
-  if (std < 24) return `vor ${std} Std.`;
-  const tage = Math.floor(std / 24);
-  if (tage < 30) return `vor ${tage} ${tage === 1 ? 'Tag' : 'Tagen'}`;
-  const monate = Math.floor(tage / 30);
-  if (monate < 12) return `vor ${monate} ${monate === 1 ? 'Monat' : 'Monaten'}`;
-  const jahre = Math.floor(tage / 365);
-  return `vor ${jahre} ${jahre === 1 ? 'Jahr' : 'Jahren'}`;
-}
-
-// Farbton je nach Inaktivität (frisch = grün, alt = rot)
-function agoColor(iso: string | null): string {
-  if (!iso) return '#475569';
-  const tage = (Date.now() - new Date(iso).getTime()) / 86400000;
-  if (tage < 7) return '#10b981';
-  if (tage < 30) return '#f59e0b';
-  return '#ef4444';
-}
-
-// Vollen Namen in Nachname + Vorname zerlegen (letztes Wort = Nachname)
-function splitName(full: string): { last: string; first: string } {
-  const parts = (full || '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { last: '', first: '' };
-  if (parts.length === 1) return { last: parts[0], first: '' };
-  return { last: parts[parts.length - 1], first: parts.slice(0, -1).join(' ') };
-}
-
-// Anzeige "Nachname, Vorname" (ohne Nachname → Vorname/Name pur)
-function displayName(full: string): string {
-  const { last, first } = splitName(full);
-  if (!last) return '';
-  return first ? `${last}, ${first}` : last;
-}
-
-const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  none: { label: 'Nicht verifiziert', color: '#94a3b8', bg: '#94a3b814' },
-  pending: { label: 'Ausstehend', color: '#f59e0b', bg: '#f59e0b14' },
-  verified: { label: 'Verifiziert', color: '#10b981', bg: '#10b98114' },
-  rejected: { label: 'Abgelehnt', color: '#ef4444', bg: '#ef444414' },
-};
-
-const FILTERS = [
-  { value: '', label: 'Alle' },
-  { value: 'active', label: 'Aktive' },
-  { value: 'blacklisted', label: 'Gesperrte' },
-  { value: 'inactive', label: 'Inaktiv' },
+const TABS: TabDef[] = [
+  { key: 'kunden', label: 'Kunden' },
+  { key: 'nachrichten', label: 'Nachrichten' },
+  { key: 'warteliste', label: 'Warteliste' },
+  { key: 'material', label: 'Material' },
+  { key: 'bewertungen', label: 'Bewertungen' },
+  { key: 'schaeden', label: 'Schäden' },
 ];
 
 export default function KundenPage() {
-  const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('');
-  const [search, setSearch] = useState('');
-  const [letter, setLetter] = useState('');
-  const [resettingId, setResettingId] = useState<string | null>(null);
-
-  const fetchCustomers = useCallback(async () => {
-    setLoading(true);
-    const params =
-      filter === 'blacklisted' ? '?status=blacklisted'
-      : filter === 'inactive' ? '?status=inactive'
-      : '';
-    const res = await fetch(`/api/admin/kunden${params}`);
-    const data = await res.json();
-    setCustomers(data.customers || []);
-    setLoading(false);
-  }, [filter]);
-
-  // Inaktives Konto wieder aktivieren (leert deactivated_at).
-  const handleReactivate = useCallback(async (c: Customer) => {
-    if (!confirm(`Konto von ${c.full_name || c.email} wieder aktivieren?`)) return;
-    setResettingId(c.id);
-    try {
-      const res = await fetch('/api/admin/kunden/reactivate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: c.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data.error || 'Reaktivierung fehlgeschlagen.');
-        return;
-      }
-      // Aus der Inaktiv-Liste entfernen (bzw. neu laden).
-      setCustomers((prev) => prev.filter((x) => x.id !== c.id));
-    } finally {
-      setResettingId(null);
-    }
-  }, []);
-
-  // Tester-Konto zuruecksetzen → E-Mail freigeben + Profil/Ausweis-Fotos
-  // loeschen, damit man sich mit derselben E-Mail neu registrieren kann.
-  const handleResetTester = useCallback(async (c: Customer) => {
-    const ok = window.confirm(
-      `Test-Konto „${c.full_name || c.email}" zurücksetzen?\n\n` +
-      `Das Konto wird gelöscht und die E-Mail ${c.email} wieder freigegeben — ` +
-      `man kann sich damit danach neu registrieren.\n\n` +
-      `Buchungen bleiben in der Datenbank, tauchen unter dem neuen Konto aber nicht mehr auf.`,
-    );
-    if (!ok) return;
-    setResettingId(c.id);
-    try {
-      const res = await fetch('/api/admin/kunden/reset-tester', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: c.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data?.error || 'Zurücksetzen fehlgeschlagen.');
-        return;
-      }
-      await fetchCustomers();
-    } catch {
-      alert('Netzwerkfehler beim Zurücksetzen.');
-    } finally {
-      setResettingId(null);
-    }
-  }, [fetchCustomers]);
-
-  // Recovery: eine bereits halb-gelöschte Test-E-Mail per Adresse freigeben
-  // (Profil schon weg, Auth-User hängt noch) → erscheint nicht mehr in der Liste.
-  const handleFreeEmail = useCallback(async () => {
-    const email = window.prompt(
-      'Test-E-Mail freigeben (Recovery)\n\n' +
-      'E-Mail-Adresse eingeben, die für eine Neuregistrierung freigegeben werden soll:',
-    );
-    if (!email || !email.trim()) return;
-    try {
-      const res = await fetch('/api/admin/kunden/reset-tester', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data?.error || 'Freigeben fehlgeschlagen.');
-        return;
-      }
-      alert(`E-Mail freigegeben. Es kann jetzt eine Neuregistrierung mit „${email.trim()}" erfolgen.`);
-      await fetchCustomers();
-    } catch {
-      alert('Netzwerkfehler beim Freigeben.');
-    }
-  }, [fetchCustomers]);
-
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
-
-  // Anfangsbuchstabe für die A–Z-Reiter (Nachname, sonst E-Mail; nicht A–Z → '#')
-  const firstLetter = (c: Customer): string => {
-    const base = (splitName(c.full_name).last || c.email || '').trim();
-    const ch = base.charAt(0).toUpperCase();
-    return ch >= 'A' && ch <= 'Z' ? ch : '#';
-  };
-
-  // Status + Suche, dann alphabetisch nach Nachname (leere Namen ans Ende)
-  const base = customers
-    .filter((c) => {
-      if (filter === 'active' && c.blacklisted) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        return (
-          (c.full_name || '').toLowerCase().includes(q) ||
-          (c.email || '').toLowerCase().includes(q) ||
-          (c.address_city || '').toLowerCase().includes(q) ||
-          (c.phone || '').toLowerCase().includes(q)
-        );
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const a1 = splitName(a.full_name);
-      const b1 = splitName(b.full_name);
-      if (!a1.last && !b1.last) return (a.email || '').localeCompare(b.email || '', 'de');
-      if (!a1.last) return 1;
-      if (!b1.last) return -1;
-      const byLast = a1.last.localeCompare(b1.last, 'de', { sensitivity: 'base' });
-      if (byLast !== 0) return byLast;
-      return a1.first.localeCompare(b1.first, 'de', { sensitivity: 'base' });
-    });
-
-  // Vorhandene Anfangsbuchstaben (für aktive/disabled Reiter)
-  const availableLetters = new Set(base.map(firstLetter));
-
-  // Buchstaben-Filter greift nur ohne aktive Suche
-  const filtered = letter && !search.trim()
-    ? base.filter((c) => firstLetter(c) === letter)
-    : base;
-
-  const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
-
+  const [tab, setTab] = useState('kunden');
   return (
-    <div style={{ padding: '20px 16px' }}>
-      <AdminBackLink label="Zurück" />
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>
-            Kunden
-          </h1>
-          <p style={{ fontSize: 14, color: '#64748b', marginTop: 4, marginBottom: 0 }}>
-            {filtered.length} Kunden {search ? 'gefunden' : 'insgesamt'}
-          </p>
-        </div>
-        <button
-          onClick={handleFreeEmail}
-          title="Eine bereits gelöschte Test-E-Mail für eine Neuregistrierung freigeben"
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            color: '#94a3b8',
-            background: '#111827',
-            border: '1px solid #1e293b',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          🔑 Test-E-Mail freigeben
-        </button>
-      </div>
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader title="Kunden & Kommunikation" subtitle="25 Kunden · Anfragen, Warteliste, Material, Schäden." />
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      {tab === 'kunden' && <KundenTab />}
+      {tab === 'nachrichten' && <NachrichtenTab />}
+      {tab === 'warteliste' && <WartelisteTab />}
+      {tab === 'material' && <EmptyState icon={ImageIcon} title="Kundenmaterial" text="Von Kunden hochgeladene Fotos/Videos — prüfen, freigeben, feature-markieren. Aktuell keine Einreichungen." filters={['Wartet', 'Freigegeben', 'Veröffentlicht', 'Abgelehnt']} />}
+      {tab === 'bewertungen' && <EmptyState icon={Star} title="Bewertungen" text="Kundenbewertungen prüfen, genehmigen und beantworten. Aktuell keine vorhanden." filters={['Alle', 'Ausstehend', 'Genehmigt']} />}
+      {tab === 'schaeden' && <SchaedenTab />}
+    </div>
+  );
+}
 
-      {/* Search + Filter */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24, alignItems: 'center' }}>
-        {/* Search */}
-        <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: 400 }}>
-          <svg
-            width="16" height="16" fill="none" stroke="#64748b" viewBox="0 0 24 24"
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, E-Mail, Stadt suchen..."
-            style={{
-              width: '100%',
-              padding: '10px 12px 10px 38px',
-              background: '#111827',
-              border: '1px solid #1e293b',
-              borderRadius: 8,
-              color: '#e2e8f0',
-              fontSize: 14,
-              boxSizing: 'border-box',
-              outline: 'none',
-            }}
-          />
+function KundenTab() {
+  const columns: Column<Customer>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      cell: (k) => (
+        <span className="flex items-center gap-2 font-medium text-slate-900">
+          {k.name}
+          {k.tester && <span className="text-[9px] px-1.5 py-0.5 rounded bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-200">Tester</span>}
+        </span>
+      ),
+    },
+    { key: 'mail', header: 'E-Mail', cell: (k) => <span className="text-slate-500 text-[12px]">{k.mail}</span>, className: 'hidden sm:table-cell' },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'right',
+      cell: (k) => <StatusChip tone={k.status === 'aktiv' ? 'emerald' : k.status === 'gesperrt' ? 'rose' : 'slate'}>{k.status}</StatusChip>,
+    },
+  ];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px] px-2.5 py-1.5 rounded border border-slate-200 bg-white text-slate-400 text-[12px]">
+          <Search size={13} />Name, E-Mail, Stadt…
         </div>
-
-        {/* Filter buttons */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-                background: filter === f.value ? '#1e293b' : 'transparent',
-                color: filter === f.value ? '#22d3ee' : '#64748b',
-                transition: 'all 0.2s',
-              }}
-            >
-              {f.label}
-            </button>
+        <div className="flex gap-1">
+          {['Alle', 'Aktive', 'Gesperrte', 'Inaktiv'].map((f, i) => (
+            <button key={f} className={`px-2.5 py-1 rounded text-[11px] ${i === 0 ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{f}</button>
           ))}
         </div>
       </div>
+      <DataTable columns={columns} rows={CUSTOMERS} rowKey={(k) => k.mail} onRowClick={() => {}} />
+    </div>
+  );
+}
 
-      {/* A–Z-Reiter (bei aktiver Suche ausgeblendet) */}
-      {!search.trim() && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 4,
-            flexWrap: 'wrap',
-            marginBottom: 20,
-          }}
-        >
-          <button
-            onClick={() => setLetter('')}
-            style={{
-              minWidth: 34,
-              padding: '6px 10px',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-              background: letter === '' ? '#06b6d4' : '#111827',
-              color: letter === '' ? '#0a0f1e' : '#94a3b8',
-            }}
-          >
-            Alle
-          </button>
-          {ALPHABET.map((l) => {
-            const has = availableLetters.has(l);
-            const active = letter === l;
-            return (
-              <button
-                key={l}
-                onClick={() => has && setLetter(active ? '' : l)}
-                disabled={!has}
-                style={{
-                  minWidth: 34,
-                  padding: '6px 0',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  border: 'none',
-                  cursor: has ? 'pointer' : 'default',
-                  background: active ? '#06b6d4' : has ? '#111827' : 'transparent',
-                  color: active ? '#0a0f1e' : has ? '#e2e8f0' : '#334155',
-                }}
-              >
-                {l}
-              </button>
-            );
-          })}
+function NachrichtenTab() {
+  return (
+    <Panel title="Konversationen" noBody>
+      <div className="divide-y divide-slate-100">
+        {MESSAGES.map((n, i) => (
+          <div key={i} className="flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer">
+            <MessageSquare size={15} className={`mt-0.5 shrink-0 ${n.offen ? 'text-cyan-500' : 'text-slate-300'}`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-900">{n.name}</span>
+                <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                  {n.kanal === 'email' ? <><Mail size={9} />E-Mail</> : <><MessageCircle size={9} />Konto</>}
+                </span>
+                {n.offen ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 font-semibold">OFFEN</span>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Geschlossen</span>
+                )}
+                <span className="ml-auto text-[11px] text-slate-400">vor {n.vor}</span>
+              </div>
+              <div className="text-[12px] text-slate-700 truncate">{n.betreff}</div>
+              <div className="text-[11px] text-slate-400 truncate">{n.preview}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function WartelisteTab() {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-3 text-[12px] flex-wrap">
+        <MiniStat value="5" label="Einträge" />
+        <MiniStat value="2" label="Produkte" />
+        <MiniStat value="5" label="offen zu benachrichtigen" tone="accent" />
+      </div>
+      {WAITLIST.map((w, i) => (
+        <Panel key={i} title={<span className="flex items-center gap-2"><span className="font-semibold text-slate-700 normal-case tracking-normal text-[13px]">{w.produkt}</span><span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">{w.leute.length} Interessenten</span></span>} noBody>
+          <table className="w-full">
+            <tbody>
+              {w.leute.map((p, j) => (
+                <tr key={j} className={j % 2 ? 'bg-slate-50/40' : ''}>
+                  <td className="py-2 px-3 text-cyan-700 text-[12px]">{p.mail}</td>
+                  <td className="py-2 px-3 text-slate-500 text-[12px]">{p.useCase}</td>
+                  <td className="py-2 px-3 text-right text-slate-400 text-[11px]">Produktkarte</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      ))}
+      <p className="text-slate-500 text-[12px]">Dein Nachfrage-Signal: 3 Leute warten auf die Ace Pro 2 — direkter Hinweis, wo Bestand fehlt.</p>
+    </div>
+  );
+}
+
+function SchaedenTab() {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-3 text-[12px] flex-1">
+          <MiniStat value="0" label="Offen" tone="accent" />
+          <MiniStat value="0" label="Bestätigt" />
+          <MiniStat value="1" label="Abgeschlossen" />
+        </div>
+        <Button variant="warning" size="sm" icon={Plus}>Neue Schadensmeldung</Button>
+      </div>
+      <Panel noBody title={undefined}>
+        <table className="w-full">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
+              <th className="text-left font-medium py-2 px-3">Buchung</th>
+              <th className="text-left font-medium py-2 px-3">Kamera</th>
+              <th className="text-left font-medium py-2 px-3">Kunde</th>
+              <th className="text-right font-medium py-2 px-3">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="hover:bg-slate-50 cursor-pointer">
+              <td className="py-2.5 px-3 font-mono text-[12px] text-cyan-700">C2R-2624-006<div className="text-[10px] text-slate-400 font-sans">Vom Admin</div></td>
+              <td className="py-2.5 px-3">OSMO Action 5 Pro</td>
+              <td className="py-2.5 px-3">Kai Röhlig</td>
+              <td className="py-2.5 px-3 text-right"><StatusChip tone="emerald">Abgeschlossen</StatusChip></td>
+            </tr>
+          </tbody>
+        </table>
+      </Panel>
+      <p className="text-slate-500 text-[12px]">Schadensmeldung startet aus der Buchung heraus (positionsgenaue Wiederbeschaffung). Prüfung → Kaution → Reparatur.</p>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, text, filters }: { icon: typeof Star; title: string; text: string; filters?: string[] }) {
+  return (
+    <div className="space-y-3">
+      {filters && (
+        <div className="flex gap-2 flex-wrap">
+          {filters.map((f, i) => (
+            <button key={f} className={`px-3 py-1.5 rounded-full border text-[12px] ${i === 0 ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>{f}</button>
+          ))}
         </div>
       )}
-
-      {/* Tabelle */}
-      <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Laden...</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Keine Kunden gefunden.</div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: 1040, borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Letzter Login', 'Login her'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '10px 14px',
-                        textAlign: 'left',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        color: '#64748b',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c, i) => {
-                  const st = STATUS_LABELS[c.verification_status] || STATUS_LABELS.none;
-                  return (
-                    <tr
-                      key={c.id}
-                      onClick={() => router.push(`/admin/kunden/${c.id}`)}
-                      style={{
-                        borderBottom: i < filtered.length - 1 ? '1px solid #1e293b' : 'none',
-                        cursor: 'pointer',
-                        animation: `fadeIn 0.3s ease ${i * 0.03}s both`,
-                      }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#1e293b44'; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                    >
-                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
-                        {displayName(c.full_name) || '—'}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
-                        {c.email}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
-                        {c.address_city || '—'}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
-                        {c.booking_count}
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 10px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: st.color,
-                            background: st.bg,
-                          }}
-                        >
-                          {st.label}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {c.blacklisted ? (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#ef4444',
-                                background: '#ef444414',
-                              }}
-                            >
-                              Gesperrt
-                            </span>
-                          ) : c.deactivated_at ? (
-                            <span
-                              title={`Inaktiv seit ${fmtDateTime(c.deactivated_at)}`}
-                              style={{
-                                display: 'inline-block',
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#94a3b8',
-                                background: '#94a3b814',
-                                border: '1px solid #94a3b833',
-                              }}
-                            >
-                              Inaktiv
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#10b981',
-                                background: '#10b98114',
-                              }}
-                            >
-                              Aktiv
-                            </span>
-                          )}
-                          {c.deactivated_at && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleReactivate(c); }}
-                              disabled={resettingId === c.id}
-                              title="Konto wieder aktivieren (erscheint wieder in der aktiven Liste)"
-                              style={{
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#10b981',
-                                background: '#10b98114',
-                                border: '1px solid #10b98144',
-                                cursor: resettingId === c.id ? 'default' : 'pointer',
-                                opacity: resettingId === c.id ? 0.6 : 1,
-                              }}
-                            >
-                              {resettingId === c.id ? 'Aktiviere…' : '↻ Reaktivieren'}
-                            </button>
-                          )}
-                          {c.is_tester && (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#ec4899',
-                                background: '#ec489914',
-                                border: '1px solid #ec489933',
-                              }}
-                            >
-                              Tester
-                            </span>
-                          )}
-                          {c.special_discount_percent != null && c.special_discount_percent > 0 &&
-                            (!c.special_discount_valid_until ||
-                              c.special_discount_valid_until >=
-                                new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' })) && (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#818cf8',
-                                background: '#6366f114',
-                                border: '1px solid #6366f133',
-                              }}
-                              title="Sonderkondition (individueller Rabatt)"
-                            >
-                              Sonderkondition {c.special_discount_percent}%
-                            </span>
-                          )}
-                          {c.is_tester && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleResetTester(c); }}
-                              disabled={resettingId === c.id}
-                              title="Konto löschen, damit man sich mit dieser E-Mail neu registrieren kann"
-                              style={{
-                                padding: '3px 10px',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: '#f59e0b',
-                                background: '#f59e0b14',
-                                border: '1px solid #f59e0b44',
-                                cursor: resettingId === c.id ? 'default' : 'pointer',
-                                opacity: resettingId === c.id ? 0.6 : 1,
-                              }}
-                            >
-                              {resettingId === c.id ? 'Setzt zurück…' : '↻ Zurücksetzen'}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b', whiteSpace: 'nowrap' }}>
-                        {c.last_login ? fmtDateTime(c.last_login) : '—'}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: agoColor(c.last_login), whiteSpace: 'nowrap' }}>
-                        {relativeAgo(c.last_login)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center">
+        <Icon size={22} className="mx-auto text-slate-300 mb-2" />
+        <p className="font-medium text-slate-700">{title}</p>
+        <p className="text-slate-400 mt-1 text-[12px] max-w-sm mx-auto">{text}</p>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }
