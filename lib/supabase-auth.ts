@@ -6,9 +6,11 @@ import { createBrowserClient } from '@supabase/ssr';
  * Die Session wird automatisch mit dem Middleware-Cookie synchronisiert.
  */
 export function createAuthBrowserClient() {
+  // Fallback-Platzhalter für den lokalen Design-Vorschau-Modus ohne `.env`
+  // (in Produktion sind die Variablen immer gesetzt → Fallback greift nie).
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'local-preview-anon-key',
     {
       auth: {
         flowType: 'implicit',

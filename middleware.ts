@@ -315,6 +315,18 @@ function requiredApiPermission(pathname: string): string | null {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // ── Lokaler Design-Vorschau-Modus (Website 2.0) ───────────────────────────
+  // NUR bei `next dev` (NODE_ENV=development): Admin-Bereich + Admin-APIs ohne
+  // Login öffnen, damit der statische Design-Prototyp ohne Konto und ohne
+  // `.env` durchklickbar ist. In Produktion (Coolify-Build, NODE_ENV=production)
+  // ist dieser Zweig NIE aktiv — die normale Auth-Prüfung greift dort unverändert.
+  if (
+    process.env.NODE_ENV === 'development' &&
+    (pathname.startsWith('/admin') || pathname.startsWith('/api/admin'))
+  ) {
+    return NextResponse.next();
+  }
+
   // ── Wartungsmodus ─────────────────────────────────────────────────────────
   if (process.env.MAINTENANCE_MODE === 'true') {
     const isExcluded =
