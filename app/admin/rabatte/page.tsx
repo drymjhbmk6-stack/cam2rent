@@ -1,715 +1,91 @@
-'use client';
+import { Plus } from 'lucide-react';
+import { PageHeader, Panel, Button, StatusChip } from '@/components/admin/ui';
 
-import { useState, useEffect } from 'react';
-import type { DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+/* cam2rent Admin 2.0 — Rabatte & Aktionen (Auto-Rabatt-Regeln, statisch). */
 
-interface ProductOption { id: string; name: string; }
-interface AccessoryOption { id: string; name: string; category?: string; }
-interface SetOption { id: string; name: string; productIds: string[]; }
+type Aktion = { name: string; wert: string; gueltig: string; exklusiv: boolean };
+const AKTIONEN: Aktion[] = [
+  { name: 'Sommeraktion — 25 % auf alles', wert: '25 %', gueltig: '01.06.–31.08.2026', exklusiv: true },
+  { name: 'Insta360 X5 — Launch-Rabatt', wert: '15 %', gueltig: 'bis 15.05.2026', exklusiv: false },
+  { name: 'GoPro-Sets — Bundle-Preis', wert: '10 %', gueltig: 'dauerhaft', exklusiv: false },
+];
 
-const S = {
-  input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
-  select: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  row: { background: '#0a0f1e', borderRadius: 8, padding: '10px 12px', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } as React.CSSProperties,
-  section: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 } as React.CSSProperties,
-  cyan: '#06b6d4',
-};
+type Stufe = { ab: string; rabatt: string };
+const MENGE: Stufe[] = [
+  { ab: 'ab 7 Tagen', rabatt: '5 %' },
+  { ab: 'ab 14 Tagen', rabatt: '10 %' },
+  { ab: 'ab 30 Tagen', rabatt: '15 %' },
+];
+const FRUEH: Stufe[] = [
+  { ab: 'ab 2 Wochen Vorlauf', rabatt: '3 %' },
+  { ab: 'ab 4 Wochen Vorlauf', rabatt: '5 %' },
+  { ab: 'ab 8 Wochen Vorlauf', rabatt: '8 %' },
+];
+const TREUE: Stufe[] = [
+  { ab: 'ab 3 Buchungen', rabatt: '5 %' },
+  { ab: 'ab 10 Buchungen', rabatt: '10 %' },
+];
 
-function toDateInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-// Datum-String (YYYY-MM-DD) auf Tag-Beginn bzw. Tag-Ende klemmen, damit der Rabatt den ganzen Tag gilt
-function dayStartIso(dateStr: string): string | null {
-  if (!dateStr) return null;
-  return new Date(`${dateStr}T00:00:00`).toISOString();
-}
-function dayEndIso(dateStr: string): string | null {
-  if (!dateStr) return null;
-  return new Date(`${dateStr}T23:59:59`).toISOString();
-}
-
-function getDiscountStatus(d: ProductDiscount): { label: string; color: string; bg: string } {
-  const now = new Date();
-  if (!d.active) return { label: 'Deaktiviert', color: '#94a3b8', bg: '#33415544' };
-  if (d.valid_from && new Date(d.valid_from) > now) {
-    const days = Math.ceil((new Date(d.valid_from).getTime() - now.getTime()) / 86400000);
-    return { label: days > 0 ? `Startet in ${days} Tag${days === 1 ? '' : 'en'}` : 'Wartet auf Start', color: '#fbbf24', bg: '#f59e0b22' };
-  }
-  if (d.valid_until && new Date(d.valid_until) < now) {
-    return { label: 'Abgelaufen', color: '#ef4444', bg: '#ef444422' };
-  }
-  return { label: 'Aktiv jetzt', color: '#10b981', bg: '#10b98122' };
-}
-
-function PillButton({
-  active,
-  onClick,
-  label,
-  tone = 'cyan',
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  tone?: 'cyan' | 'violet' | 'amber';
-}) {
-  const accent = tone === 'violet' ? '#a855f7' : tone === 'amber' ? '#f59e0b' : '#06b6d4';
+function StufenListe({ stufen }: { stufen: Stufe[] }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        fontSize: 12,
-        fontWeight: 600,
-        color: active ? 'white' : '#94a3b8',
-        background: active ? accent : 'transparent',
-        border: `1px solid ${active ? accent : '#334155'}`,
-        borderRadius: 999,
-        padding: '6px 12px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        transition: 'all 0.15s',
-      }}
-    >
-      {active ? '✓ ' : ''}{label}
-    </button>
+    <div className="divide-y divide-slate-100">
+      {stufen.map((s) => (
+        <div key={s.ab} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
+          <span className="text-[13px] text-slate-700">{s.ab}</span>
+          <span className="font-mono text-[13px] font-semibold text-cyan-700">{s.rabatt}</span>
+        </div>
+      ))}
+      <div className="pt-3">
+        <Button variant="secondary" size="sm" icon={Plus}>Stufe hinzufügen</Button>
+      </div>
+    </div>
   );
 }
 
-export default function AdminRabattePage() {
-  // ─── Kundenrabatte ─────────────────────────────────────────────────────────
-  const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscount[]>([]);
-  const [durationLoading, setDurationLoading] = useState(true);
-  const [durationSaving, setDurationSaving] = useState(false);
-  const [durationSuccess, setDurationSuccess] = useState('');
-
-  const [loyaltyDiscounts, setLoyaltyDiscounts] = useState<LoyaltyDiscount[]>([]);
-  const [loyaltyLoading, setLoyaltyLoading] = useState(true);
-  const [loyaltySaving, setLoyaltySaving] = useState(false);
-  const [loyaltySuccess, setLoyaltySuccess] = useState('');
-
-  const [earlyBirdDiscounts, setEarlyBirdDiscounts] = useState<EarlyBirdDiscount[]>([]);
-  const [earlyBirdLoading, setEarlyBirdLoading] = useState(true);
-  const [earlyBirdSaving, setEarlyBirdSaving] = useState(false);
-  const [earlyBirdSuccess, setEarlyBirdSuccess] = useState('');
-
-  // ─── Produktrabatte ────────────────────────────────────────────────────────
-  const [productDiscounts, setProductDiscounts] = useState<ProductDiscount[]>([]);
-  const [productLoading, setProductLoading] = useState(true);
-  const [productSaving, setProductSaving] = useState(false);
-  const [productSuccess, setProductSuccess] = useState('');
-
-  // ─── Empfehlungsbonus ──────────────────────────────────────────────────────
-  const [rewardValue, setRewardValue] = useState(10);
-  const [rewardLoading, setRewardLoading] = useState(true);
-  const [rewardSaving, setRewardSaving] = useState(false);
-  const [rewardSuccess, setRewardSuccess] = useState('');
-
-  // ─── Produkt-Dropdown Daten ────────────────────────────────────────────────
-  const [products, setProducts] = useState<ProductOption[]>([]);
-  const [accessories, setAccessories] = useState<AccessoryOption[]>([]);
-  const [sets, setSets] = useState<SetOption[]>([]);
-  const [openDiscountIdx, setOpenDiscountIdx] = useState<number | null>(null);
-
-  useEffect(() => {
-    // /api/admin/config?key=... liefert den Wert direkt zurueck (nicht
-    // {value: ...} eingewickelt). Bisheriger Code hat d.value gelesen → war
-    // immer undefined → Aktionen wurden nie aus der DB geladen.
-    fetch('/api/admin/config?key=duration_discounts').then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setDurationDiscounts(d); setDurationLoading(false); })
-      .catch(() => setDurationLoading(false));
-
-    fetch('/api/admin/config?key=loyalty_discounts').then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setLoyaltyDiscounts(d); setLoyaltyLoading(false); })
-      .catch(() => setLoyaltyLoading(false));
-
-    fetch('/api/admin/config?key=early_bird_discounts').then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setEarlyBirdDiscounts(d); setEarlyBirdLoading(false); })
-      .catch(() => setEarlyBirdLoading(false));
-
-    fetch('/api/admin/config?key=product_discounts').then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setProductDiscounts(d); setProductLoading(false); })
-      .catch(() => setProductLoading(false));
-
-    fetch('/api/admin/config?key=referral_reward_value').then((r) => r.json())
-      .then((d) => { if (typeof d === 'number') setRewardValue(d); setRewardLoading(false); })
-      .catch(() => setRewardLoading(false));
-
-    // Produkte laden für Dropdown
-    fetch('/api/admin/config?key=products').then((r) => r.json())
-      .then((d) => {
-        if (d && typeof d === 'object') {
-          const prods = Object.values(d) as { id: string; name: string }[];
-          setProducts(prods.map((p) => ({ id: p.id, name: p.name })));
-        }
-      })
-      .catch(() => {});
-
-    // Zubehoer laden — fuer Mehrfach-Auswahl in Aktionen
-    fetch('/api/accessories').then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d.accessories)) {
-          setAccessories(d.accessories.map((a: { id: string; name: string; category?: string }) => ({
-            id: a.id,
-            name: a.name,
-            category: a.category,
-          })));
-        }
-      })
-      .catch(() => {});
-
-    // Sets laden — Sets gehen als pseudo-Zubehoer in cart.accessories rein,
-    // matchen aber ueber set_ids[] in der Aktion. Plus product_ids fuer
-    // eindeutige Pill-Labels (mehrere Sets haben oft gleichen Namen).
-    fetch('/api/sets').then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d.sets)) {
-          setSets(d.sets.map((s: { id: string; name: string; product_ids?: string[] }) => ({
-            id: s.id,
-            name: s.name,
-            productIds: Array.isArray(s.product_ids) ? s.product_ids : [],
-          })));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  /** Migriert Legacy product_id auf product_ids[] beim ersten Render. */
-  function getProductIds(d: ProductDiscount): string[] {
-    if (Array.isArray(d.product_ids) && d.product_ids.length > 0) return d.product_ids;
-    if (d.product_id && d.product_id !== 'all') return [d.product_id];
-    return [];
-  }
-  function getAccessoryIds(d: ProductDiscount): string[] {
-    return Array.isArray(d.accessory_ids) ? d.accessory_ids : [];
-  }
-  function getSetIds(d: ProductDiscount): string[] {
-    return Array.isArray(d.set_ids) ? d.set_ids : [];
-  }
-  function toggleSetId(i: number, setId: string) {
-    setProductDiscounts((prev) => {
-      const a = [...prev];
-      const cur = getSetIds(a[i]);
-      const next = cur.includes(setId) ? cur.filter((x) => x !== setId) : [...cur, setId];
-      a[i] = { ...a[i], set_ids: next, product_id: undefined };
-      return a;
-    });
-  }
-  function setDiscountType(i: number, type: 'percent' | 'fixed' | 'free') {
-    setProductDiscounts((prev) => {
-      const a = [...prev];
-      a[i] = { ...a[i], discount_type: type };
-      return a;
-    });
-  }
-  function isAllSelected(d: ProductDiscount): boolean {
-    if (d.product_id === 'all') return true;
-    return getProductIds(d).length === 0
-      && getAccessoryIds(d).length === 0
-      && (Array.isArray(d.set_ids) ? d.set_ids.length === 0 : true)
-      && !d.product_id;
-  }
-  function toggleProductId(i: number, productId: string) {
-    setProductDiscounts((prev) => {
-      const a = [...prev];
-      const cur = getProductIds(a[i]);
-      const next = cur.includes(productId) ? cur.filter((x) => x !== productId) : [...cur, productId];
-      // Legacy product_id raeumen, sobald Multi-Select aktiv ist
-      a[i] = { ...a[i], product_ids: next, product_id: undefined };
-      return a;
-    });
-  }
-  function toggleAccessoryId(i: number, accessoryId: string) {
-    setProductDiscounts((prev) => {
-      const a = [...prev];
-      const cur = getAccessoryIds(a[i]);
-      const next = cur.includes(accessoryId) ? cur.filter((x) => x !== accessoryId) : [...cur, accessoryId];
-      a[i] = { ...a[i], accessory_ids: next, product_id: undefined };
-      return a;
-    });
-  }
-  function selectAllCameras(i: number) {
-    setProductDiscounts((prev) => {
-      const a = [...prev];
-      a[i] = { ...a[i], product_ids: [], accessory_ids: [], set_ids: [], product_id: 'all' };
-      return a;
-    });
-  }
-
-  async function saveConfig(key: string, value: unknown, setSaving: (v: boolean) => void, setSuccess: (v: string) => void) {
-    setSaving(true); setSuccess('');
-    try {
-      await fetch('/api/admin/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
-      setSuccess('Gespeichert!'); setTimeout(() => setSuccess(''), 3000);
-    } catch { /* ignore */ }
-    finally { setSaving(false); }
-  }
-
-  // ─── Render ────────────────────────────────────────────────────────────────
-
+export default function RabattePage() {
   return (
-    <div style={{ padding: '20px 16px', maxWidth: 750, margin: '0 auto' }}>
-      <AdminBackLink label="Zurück" />
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>Rabatte</h1>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 28 }}>
-        Automatische Kunden- und Produktrabatte konfigurieren
-      </p>
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader
+        title="Rabatte & Aktionen"
+        subtitle="Automatische Preisnachlässe — Aktionen, Mengen-, Frühbucher- und Treuerabatt."
+      />
 
-      {/* ━━━ BEREICH 1: KUNDENRABATTE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <div style={{ marginBottom: 36 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#06b6d414', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="16" height="16" fill="none" stroke="#06b6d4" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Kundenrabatte</h2>
-            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Automatisch basierend auf Mietdauer, Treue und Empfehlungen</p>
-          </div>
-        </div>
-
-        {/* Mengenrabatte */}
-        <div style={S.section}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <svg width="18" height="18" fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Mengenrabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Bei längerer Mietdauer</span>
-          </div>
-          {durationLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {durationDiscounts.map((d, i) => (
-                <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
-                  <input type="number" min="1" value={d.min_days}
-                    onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], min_days: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Tagen</span>
-                  <input type="number" min="0" max="100" value={d.discount_percent}
-                    onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
-                  <input type="text" value={d.label}
-                    onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], label: e.target.value }; setDurationDiscounts(a); }}
-                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
-                  <button onClick={() => setDurationDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Panel
+          title="Produktaktionen"
+          right={<Button variant="secondary" size="sm" icon={Plus}>Aktion</Button>}
+          className="md:col-span-2"
+        >
+          <div className="divide-y divide-slate-100">
+            {AKTIONEN.map((a) => (
+              <div key={a.name} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-medium text-slate-900">{a.name}</span>
+                    {a.exklusiv && <StatusChip tone="amber">nicht kombinierbar</StatusChip>}
+                  </div>
+                  <div className="text-slate-400 text-[11px]">{a.gueltig}</div>
                 </div>
-              ))}
-              <button onClick={() => setDurationDiscounts((p) => [...p, { min_days: p.length ? Math.max(...p.map((d) => d.min_days)) + 5 : 5, discount_percent: 5, label: 'Neuer Mengenrabatt' }])}
-                style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', background: 'none', border: '1px dashed #f59e0b44', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>
-                + Stufe hinzufügen
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                <button onClick={() => saveConfig('duration_discounts', durationDiscounts, setDurationSaving, setDurationSuccess)} disabled={durationSaving}
-                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: durationSaving ? 0.5 : 1 }}>
-                  {durationSaving ? 'Speichern...' : 'Speichern'}
-                </button>
-                {durationSuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{durationSuccess}</span>}
+                <span className="font-mono text-[13px] font-semibold text-cyan-700 shrink-0">{a.wert}</span>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Treuerabatte */}
-        <div style={S.section}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <svg width="18" height="18" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Treuerabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Nach Anzahl Buchungen</span>
+            ))}
           </div>
-          {loyaltyLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {loyaltyDiscounts.map((d, i) => (
-                <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
-                  <input type="number" min="1" value={d.min_bookings}
-                    onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], min_bookings: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Buchungen</span>
-                  <input type="number" min="0" max="100" value={d.discount_percent}
-                    onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
-                  <input type="text" value={d.label}
-                    onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], label: e.target.value }; setLoyaltyDiscounts(a); }}
-                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
-                  <button onClick={() => setLoyaltyDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => setLoyaltyDiscounts((p) => [...p, { min_bookings: p.length ? Math.max(...p.map((d) => d.min_bookings)) + 5 : 3, discount_percent: 5, label: 'Neuer Treuerabatt' }])}
-                style={{ fontSize: 12, fontWeight: 600, color: '#8b5cf6', background: 'none', border: '1px dashed #8b5cf644', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>
-                + Stufe hinzufügen
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                <button onClick={() => saveConfig('loyalty_discounts', loyaltyDiscounts, setLoyaltySaving, setLoyaltySuccess)} disabled={loyaltySaving}
-                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: loyaltySaving ? 0.5 : 1 }}>
-                  {loyaltySaving ? 'Speichern...' : 'Speichern'}
-                </button>
-                {loyaltySuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{loyaltySuccess}</span>}
-              </div>
-            </div>
-          )}
-        </div>
+        </Panel>
 
-        {/* Frühbucherrabatte */}
-        <div style={S.section}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <svg width="18" height="18" fill="none" stroke="#10b981" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Frühbucherrabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Bei Vorlauf vor Mietbeginn</span>
-          </div>
-          {earlyBirdLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {earlyBirdDiscounts.map((d, i) => (
-                <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
-                  <input type="number" min="1" value={d.min_weeks}
-                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], min_weeks: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Wochen voraus</span>
-                  <input type="number" min="0" max="100" value={d.discount_percent}
-                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
-                  <input type="text" value={d.label}
-                    onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], label: e.target.value }; setEarlyBirdDiscounts(a); }}
-                    style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
-                  <button onClick={() => setEarlyBirdDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => setEarlyBirdDiscounts((p) => [...p, { min_weeks: p.length ? Math.max(...p.map((d) => d.min_weeks)) + 2 : 2, discount_percent: 5, label: 'Neuer Frühbucherrabatt' }])}
-                style={{ fontSize: 12, fontWeight: 600, color: '#10b981', background: 'none', border: '1px dashed #10b98144', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>
-                + Stufe hinzufügen
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                <button onClick={() => saveConfig('early_bird_discounts', earlyBirdDiscounts, setEarlyBirdSaving, setEarlyBirdSuccess)} disabled={earlyBirdSaving}
-                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: earlyBirdSaving ? 0.5 : 1 }}>
-                  {earlyBirdSaving ? 'Speichern...' : 'Speichern'}
-                </button>
-                {earlyBirdSuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{earlyBirdSuccess}</span>}
-              </div>
-            </div>
-          )}
-        </div>
+        <Panel title="Mengenrabatt">
+          <p className="text-slate-500 text-[12px] mb-3">Je länger gemietet wird, desto günstiger.</p>
+          <StufenListe stufen={MENGE} />
+        </Panel>
 
-        {/* Empfehlungsbonus */}
-        <div style={S.section}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <svg width="18" height="18" fill="none" stroke="#10b981" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Empfehlungsbonus</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Gutscheinwert pro erfolgreicher Empfehlung</span>
-          </div>
-          {rewardLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={S.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>Gutscheinwert</span>
-                <input type="number" min="0" step="1" value={rewardValue}
-                  onChange={(e) => setRewardValue(parseInt(e.target.value) || 0)}
-                  style={{ ...S.input, width: 80, textAlign: 'center' }} />
-                <span style={{ fontSize: 12, color: '#64748b' }}>EUR</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                <button onClick={() => saveConfig('referral_reward_value', rewardValue, setRewardSaving, setRewardSuccess)} disabled={rewardSaving}
-                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: rewardSaving ? 0.5 : 1 }}>
-                  {rewardSaving ? 'Speichern...' : 'Speichern'}
-                </button>
-                {rewardSuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{rewardSuccess}</span>}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+        <Panel title="Frühbucherrabatt">
+          <p className="text-slate-500 text-[12px] mb-3">Belohnt Vorlauf zwischen Buchung und Mietbeginn.</p>
+          <StufenListe stufen={FRUEH} />
+        </Panel>
 
-      {/* ━━━ BEREICH 2: PRODUKTRABATTE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f59e0b14', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="16" height="16" fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-            </svg>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Produktrabatte</h2>
-            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Aktionen auf Mietpreise (z.B. Black Friday, Sommer-Sale)</p>
-          </div>
-        </div>
-
-        <div style={S.section}>
-          {productLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {productDiscounts.map((d, i) => {
-                const isOpen = openDiscountIdx === i;
-                const status = getDiscountStatus(d);
-                return (
-                <div key={d.id} style={{ background: '#0a0f1e', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
-                  {/* Header-Zeile: Aktiv-Toggle + Status + Toggle + Entfernen */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: isOpen ? 14 : 0, paddingBottom: isOpen ? 10 : 0, borderBottom: isOpen ? '1px solid #1e293b' : 'none' }}>
-                    <button type="button"
-                      onClick={() => setOpenDiscountIdx(isOpen ? null : i)}
-                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, padding: 0, textAlign: 'left' }}>
-                      <span style={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {d.name || 'Unbenannte Aktion'}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: status.bg, color: status.color, flexShrink: 0 }}>
-                        {status.label}
-                      </span>
-                    </button>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
-                      <input type="checkbox" checked={d.active}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], active: e.target.checked }; setProductDiscounts(a); }}
-                        style={{ width: 16, height: 16, accentColor: S.cyan }} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
-                        {d.active ? 'Aktiv' : 'Inaktiv'}
-                      </span>
-                    </label>
-                  </div>
-
-                  {isOpen && (<>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                    <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
-                      style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
-                      Entfernen
-                    </button>
-                  </div>
-
-                  {/* Name (full-width) */}
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={S.label}>Aktionsname</label>
-                    <input type="text" value={d.name}
-                      onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], name: e.target.value }; setProductDiscounts(a); }}
-                      placeholder="z.B. Black Friday"
-                      style={{ ...S.input, width: '100%' }} />
-                  </div>
-
-                  {/* Rabatt-Typ + Wert (full-width) */}
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={S.label}>Rabatt</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {(['percent', 'fixed', 'free'] as const).map((t) => {
-                          const cur = d.discount_type ?? 'percent';
-                          const labels = { percent: '%', fixed: '€', free: 'Gratis' };
-                          return (
-                            <button key={t} type="button" onClick={() => setDiscountType(i, t)}
-                              style={{
-                                fontSize: 13, fontWeight: 600, padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-                                background: cur === t ? S.cyan : 'transparent',
-                                color: cur === t ? 'white' : '#94a3b8',
-                                border: `1px solid ${cur === t ? S.cyan : '#334155'}`,
-                                minWidth: 48,
-                              }}>
-                              {labels[t]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {(d.discount_type ?? 'percent') === 'percent' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <input type="number" min="0" max="100" value={d.discount_percent}
-                            inputMode="decimal"
-                            onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setProductDiscounts(a); }}
-                            style={{ ...S.input, width: 90, textAlign: 'center' }} />
-                          <span style={{ fontSize: 13, color: '#94a3b8' }}>%</span>
-                        </div>
-                      )}
-                      {d.discount_type === 'fixed' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <input type="number" min="0" step="0.01" value={d.discount_amount ?? ''}
-                            inputMode="decimal"
-                            onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_amount: parseFloat(e.target.value) || 0 }; setProductDiscounts(a); }}
-                            style={{ ...S.input, width: 110, textAlign: 'center' }}
-                            placeholder="0,00" />
-                          <span style={{ fontSize: 13, color: '#94a3b8' }}>€</span>
-                        </div>
-                      )}
-                      {d.discount_type === 'free' && (
-                        <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>Position wird kostenfrei.</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Datums-Range — Mobile gestapelt, Desktop nebeneinander */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
-                    <div>
-                      <label style={S.label}>Gültig ab</label>
-                      <input type="date" value={toDateInput(d.valid_from)}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_from: dayStartIso(e.target.value) }; setProductDiscounts(a); }}
-                        style={{ ...S.input, width: '100%' }} />
-                    </div>
-                    <div>
-                      <label style={S.label}>Gültig bis</label>
-                      <input type="date" value={toDateInput(d.valid_until)}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_until: dayEndIso(e.target.value) }; setProductDiscounts(a); }}
-                        style={{ ...S.input, width: '100%' }} />
-                    </div>
-                  </div>
-
-                  {/* Gilt-fuer Multi-Select */}
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={S.label}>Gilt für</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <PillButton
-                        active={isAllSelected(d)}
-                        onClick={() => selectAllCameras(i)}
-                        label="Alle Kameras"
-                      />
-                      {products.map((p) => {
-                        const isOn = !isAllSelected(d) && getProductIds(d).includes(p.id);
-                        return (
-                          <PillButton key={p.id} active={isOn}
-                            onClick={() => toggleProductId(i, p.id)}
-                            label={p.name} />
-                        );
-                      })}
-                    </div>
-                    {accessories.length > 0 && (
-                      <>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Zubehör (Mehrfach möglich)
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {accessories.map((a) => {
-                            const isOn = getAccessoryIds(d).includes(a.id);
-                            return (
-                              <PillButton key={a.id} active={isOn}
-                                onClick={() => toggleAccessoryId(i, a.id)}
-                                label={a.name}
-                                tone="violet" />
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                    {sets.length > 0 && (
-                      <>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Sets (Mehrfach möglich)
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {sets.map((s) => {
-                            const isOn = getSetIds(d).includes(s.id);
-                            // Mehrere Sets haben oft den gleichen Namen (z.B. "Basic Set"
-                            // pro Kamera). Disambiguieren ueber das erste kompatible
-                            // Kamera-Modell — sonst sind die Pillen ununterscheidbar.
-                            const compat = s.productIds.map((pid) => products.find((p) => p.id === pid)?.name).filter(Boolean) as string[];
-                            const suffix = compat.length === 0 ? '' : compat.length === 1 ? ` · ${compat[0]}` : ` · ${compat[0]} +${compat.length - 1}`;
-                            return (
-                              <PillButton key={s.id} active={isOn}
-                                onClick={() => toggleSetId(i, s.id)}
-                                label={`${s.name}${suffix}`}
-                                tone="amber" />
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 10 }}>
-                      Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile/Sets.
-                      Mehrere Aktionen können gleichzeitig aktiv sein und stacken (höchste pro Kategorie gewinnt).
-                    </p>
-                  </div>
-
-                  {/* Cart-Level Toggle */}
-                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
-                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={!!d.applies_to_cart}
-                        onChange={(e) => {
-                          const a = [...productDiscounts];
-                          a[i] = { ...a[i], applies_to_cart: e.target.checked };
-                          setProductDiscounts(a);
-                        }}
-                        style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Auf Warenkorb-Gesamt anwenden</span>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
-                          Wenn aktiviert, gilt der Rabatt auf den Gesamtbetrag (Mietpreis + Zubehör) der Buchung — unabhängig von den Targets oben.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Not-combinable Toggle */}
-                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
-                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={!!d.not_combinable}
-                        onChange={(e) => {
-                          const a = [...productDiscounts];
-                          a[i] = { ...a[i], not_combinable: e.target.checked };
-                          setProductDiscounts(a);
-                        }}
-                        style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar</span>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
-                          Wenn aktiviert, deaktiviert diese Aktion automatisch den Mietdauer- und Stammkunden-Rabatt — z.B. damit eine „50 %-Aktion&ldquo; exakt 50 % bedeutet und nicht durch andere Rabatte zusätzlich vergünstigt wird.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                  </>)}
-                </div>
-              );
-              })}
-
-              <button onClick={() => {
-                setProductDiscounts((p) => {
-                  const next = [...p, {
-                    id: `pd-${Date.now().toString(36)}`,
-                    name: '',
-                    discount_type: 'percent' as const,
-                    discount_percent: 10,
-                    discount_amount: 0,
-                    product_ids: [],
-                    accessory_ids: [],
-                    set_ids: [],
-                    product_id: 'all',
-                    valid_from: null,
-                    valid_until: null,
-                    active: true,
-                  }];
-                  // Neu angelegte Aktion direkt aufklappen, alte zuklappen
-                  setOpenDiscountIdx(next.length - 1);
-                  return next;
-                });
-              }}
-                style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', background: 'none', border: '1px dashed #f59e0b44', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', alignSelf: 'flex-start' }}>
-                + Neue Aktion anlegen
-              </button>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <button onClick={() => saveConfig('product_discounts', productDiscounts, setProductSaving, setProductSuccess)} disabled={productSaving}
-                  style={{ background: S.cyan, color: 'white', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', opacity: productSaving ? 0.5 : 1 }}>
-                  {productSaving ? 'Speichern...' : 'Speichern'}
-                </button>
-                {productSuccess && <span style={{ fontSize: 13, color: '#10b981' }}>{productSuccess}</span>}
-              </div>
-
-              {productDiscounts.length === 0 && (
-                <div style={{ padding: '12px 16px', borderRadius: 8, background: '#f59e0b08', border: '1px solid #f59e0b20', color: '#94a3b8', fontSize: 12 }}>
-                  <strong style={{ color: '#fbbf24' }}>Tipp:</strong> Erstelle z.B. eine Black-Friday-Aktion mit 25% auf alle Kameras
-                  und setze ein Start-/Enddatum. Der Rabatt wird automatisch auf den Mietpreis im Checkout angezeigt.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <Panel title="Treuerabatt" className="md:col-span-2">
+          <p className="text-slate-500 text-[12px] mb-3">Stammkunden bekommen ab einer Zahl abgeschlossener Buchungen einen Nachlass.</p>
+          <StufenListe stufen={TREUE} />
+        </Panel>
       </div>
     </div>
   );

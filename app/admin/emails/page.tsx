@@ -1,487 +1,96 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
-import Link from 'next/link';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDateTime } from '@/lib/format-utils';
+import { useState } from 'react';
+import { Search } from 'lucide-react';
+import { PageHeader, FilterPills, DataTable, StatusChip, MiniStat } from '@/components/admin/ui';
+import type { Column, PillDef, ChipTone } from '@/components/admin/ui';
 
-interface EmailEntry {
+/* cam2rent Admin 2.0 — E-Mail-Protokoll (Design-Prototyp, statisch). */
+
+type Email = {
   id: string;
-  booking_id: string | null;
-  customer_email: string;
-  email_type: string;
-  subject: string | null;
-  sent_at: string;
+  sentAt: string;
+  type: string;
+  typeTone: ChipTone;
+  recipient: string;
+  subject: string;
+  booking: string | null;
   status: 'sent' | 'failed';
-  resend_message_id: string | null;
-  error_message: string | null;
-}
-
-type ResendEvent =
-  | 'sent'
-  | 'delivered'
-  | 'delivery_delayed'
-  | 'complained'
-  | 'bounced'
-  | 'opened'
-  | 'clicked';
-
-interface ResendStatus {
-  loading: boolean;
-  last_event?: ResendEvent | null;
-  bounce?: { message?: string; type?: string; subType?: string } | null;
-  error?: string;
-  restricted?: boolean;
-  hint?: string;
-  dashboardUrl?: string;
-}
-
-const RESEND_EVENT_LABELS: Record<ResendEvent, { label: string; color: string; hint: string }> = {
-  sent: { label: 'Von Resend angenommen', color: '#64748b', hint: 'Resend hat die Mail in die Warteschlange genommen, aber noch nicht an den Empfaenger-Mailserver ausgeliefert.' },
-  delivered: { label: 'Zugestellt', color: '#10b981', hint: 'Der Empfaenger-Mailserver hat die Mail angenommen. Kommt sie trotzdem nicht an, hat der Mailprovider (z.B. Outlook) sie still in Junk/Quarantaene geschoben.' },
-  delivery_delayed: { label: 'Zustellung verzoegert', color: '#f59e0b', hint: 'Empfaenger-Mailserver hat die Mail temporaer abgelehnt, Resend versucht es erneut.' },
-  complained: { label: 'Als Spam markiert', color: '#ef4444', hint: 'Der Empfaenger hat die Mail als Spam gemeldet.' },
-  bounced: { label: 'Bounced (unzustellbar)', color: '#ef4444', hint: 'Der Empfaenger-Mailserver hat die Mail dauerhaft abgelehnt — Details unten.' },
-  opened: { label: 'Geoeffnet', color: '#10b981', hint: 'Der Empfaenger hat die Mail geoeffnet.' },
-  clicked: { label: 'Link angeklickt', color: '#10b981', hint: 'Der Empfaenger hat einen Link angeklickt.' },
 };
 
-const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  booking_confirmation: { label: 'Buchungsbestätigung', color: '#06b6d4', bg: '#06b6d414' },
-  booking_admin: { label: 'Buchung (Admin)', color: '#8b5cf6', bg: '#8b5cf614' },
-  cancellation_customer: { label: 'Stornierung', color: '#ef4444', bg: '#ef444414' },
-  cancellation_admin: { label: 'Stornierung (Admin)', color: '#ef4444', bg: '#ef444414' },
-  auto_cancel: { label: 'Auto-Storno', color: '#ef4444', bg: '#ef444414' },
-  auto_cancel_payment: { label: 'Auto-Storno (unbezahlt)', color: '#ef4444', bg: '#ef444414' },
-  shipping_confirmation: { label: 'Versandbestätigung', color: '#10b981', bg: '#10b98114' },
-  wbw_confirmation: { label: 'Wiederbeschaffungswerte (final)', color: '#06b6d4', bg: '#06b6d414' },
-  invoice_adjustment: { label: 'Rechnungsanpassung', color: '#06b6d4', bg: '#06b6d414' },
-  credit_note: { label: 'Stornierungsbeleg / Gutschrift', color: '#dc2626', bg: '#dc262614' },
-  damage_report_customer: { label: 'Schadensmeldung', color: '#f97316', bg: '#f9731614' },
-  damage_report_admin: { label: 'Schadensmeldung (Admin)', color: '#f97316', bg: '#f9731614' },
-  damage_documented_customer: { label: 'Schaden dokumentiert (an Kunde)', color: '#f97316', bg: '#f9731614' },
-  schadensersatz_forderung: { label: 'Schadensersatz-Forderung', color: '#ef4444', bg: '#ef444414' },
-  damage_resolution: { label: 'Schadensauflösung', color: '#f59e0b', bg: '#f59e0b14' },
-  referral_reward: { label: 'Empfehlung', color: '#ec4899', bg: '#ec489914' },
-  message_admin: { label: 'Nachricht (Admin)', color: '#6366f1', bg: '#6366f114' },
-  message_customer: { label: 'Nachricht (Kunde)', color: '#6366f1', bg: '#6366f114' },
-  inbound_received: { label: 'E-Mail empfangen', color: '#0ea5e9', bg: '#0ea5e914' },
-  inbound_reply: { label: 'E-Mail-Antwort', color: '#0ea5e9', bg: '#0ea5e914' },
-  extension_confirmation: { label: 'Verlängerung', color: '#06b6d4', bg: '#06b6d414' },
-  completion_confirmation: { label: 'Abschlussbestätigung', color: '#10b981', bg: '#10b98114' },
-  review_request: { label: 'Bewertungsanfrage', color: '#f59e0b', bg: '#f59e0b14' },
-  review_reward_coupon: { label: 'Bewertungs-Gutschein', color: '#f59e0b', bg: '#f59e0b14' },
-  abandoned_cart: { label: 'Warenkorbabbruch', color: '#94a3b8', bg: '#94a3b814' },
-  return_reminder_2d: { label: 'Rückgabe-Erinnerung (2T)', color: '#f59e0b', bg: '#f59e0b14' },
-  return_reminder_0d: { label: 'Rückgabe heute', color: '#f97316', bg: '#f9731614' },
-  return_checklist: { label: 'Rückgabe-Checkliste (letzter Tag)', color: '#f97316', bg: '#f9731614' },
-  overdue_1d: { label: 'Überfällig (1T)', color: '#ef4444', bg: '#ef444414' },
-  overdue_3d: { label: 'Überfällig (3T)', color: '#dc2626', bg: '#dc262614' },
-  payment_link: { label: 'Zahlungs-Link', color: '#0ea5e9', bg: '#0ea5e914' },
-  contract_signed: { label: 'Vertrag unterschrieben', color: '#10b981', bg: '#10b98114' },
-  manual_documents: { label: 'Dokumente (manuell)', color: '#8b5cf6', bg: '#8b5cf614' },
-  kauf_rechnung: { label: 'Verkaufsrechnung', color: '#06b6d4', bg: '#06b6d414' },
-  weekly_report: { label: 'Wochenbericht', color: '#06b6d4', bg: '#06b6d414' },
-  verification_reminder: { label: 'Verifizierungs-Erinnerung', color: '#f59e0b', bg: '#f59e0b14' },
-  verification_reminder_manual: { label: 'Verifizierungs-Erinnerung (manuell)', color: '#f59e0b', bg: '#f59e0b14' },
-  account_unverified_warning: { label: 'Konto: Lösch-Frist (unverifiziert)', color: '#ea580c', bg: '#ea580c14' },
-  account_inactive_warning: { label: 'Konto: Inaktiv-Warnung', color: '#94a3b8', bg: '#94a3b814' },
-  verification_auto_cancel: { label: 'Verifizierung: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
-  verification_rejected: { label: 'Verifizierung: Abgelehnt', color: '#ef4444', bg: '#ef444414' },
-  contract_resign_request: { label: 'Mietvertrag: Bitte neu unterschreiben', color: '#ef4444', bg: '#ef444414' },
-  contract_sign_reminder: { label: 'Mietvertrag: Erinnerung unterschreiben', color: '#f59e0b', bg: '#f59e0b14' },
-  contract_auto_cancel: { label: 'Mietvertrag: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
-  ugc_approved: { label: 'Kundenmaterial: Freigabe + Gutschein', color: '#10b981', bg: '#10b98114' },
-  ugc_featured: { label: 'Kundenmaterial: Feature-Bonus', color: '#9333ea', bg: '#9333ea14' },
-  ugc_rejected: { label: 'Kundenmaterial: Absage', color: '#ef4444', bg: '#ef444414' },
-  newsletter_confirm: { label: 'Newsletter: Bestätigung', color: '#3b82f6', bg: '#3b82f614' },
-  newsletter_campaign: { label: 'Newsletter: Kampagne', color: '#3b82f6', bg: '#3b82f614' },
-  newsletter_test: { label: 'Newsletter: Test', color: '#94a3b8', bg: '#94a3b814' },
-  test: { label: 'Test-E-Mail', color: '#94a3b8', bg: '#94a3b814' },
-};
+const EMAILS: Email[] = [
+  { id: 'e1', sentAt: '21.07.2026 14:32', type: 'Buchungsbestätigung', typeTone: 'cyan', recipient: 'amreswar.v@gmail.com', subject: 'Deine Buchung C2R-2629-004 ist bestätigt', booking: 'C2R-2629-004', status: 'sent' },
+  { id: 'e2', sentAt: '21.07.2026 14:31', type: 'Buchung (Admin)', typeTone: 'blue', recipient: 'kontakt@cam2rent.de', subject: 'Neue Buchung — GoPro Hero13 Black', booking: 'C2R-2629-004', status: 'sent' },
+  { id: 'e3', sentAt: '21.07.2026 11:08', type: 'Versandbestätigung', typeTone: 'emerald', recipient: 'j.jungbluth@web.de', subject: 'Dein Paket ist unterwegs — DHL', booking: 'C2R-2629-002', status: 'sent' },
+  { id: 'e4', sentAt: '21.07.2026 09:47', type: 'Rückgabe-Checkliste', typeTone: 'amber', recipient: 'peter.vieler@t-online.de', subject: 'Heute ist Rückgabetag — deine Checkliste', booking: 'C2R-2628-011', status: 'sent' },
+  { id: 'e5', sentAt: '20.07.2026 18:20', type: 'Zahlungs-Link', typeTone: 'blue', recipient: 'sandra.k@outlook.de', subject: 'Bitte Zahlung abschließen — C2R-2628-009', booking: 'C2R-2628-009', status: 'failed' },
+  { id: 'e6', sentAt: '20.07.2026 16:03', type: 'Bewertungsanfrage', typeTone: 'amber', recipient: 'kai.roehlig@gmx.de', subject: 'Wie war deine Miete? 10 % Gutschein', booking: 'C2R-2626-006', status: 'sent' },
+  { id: 'e7', sentAt: '20.07.2026 08:15', type: 'Newsletter: Kampagne', typeTone: 'slate', recipient: '412 Empfänger', subject: 'Sommer-Aktion: 15 % auf alle Action-Cams', booking: null, status: 'sent' },
+  { id: 'e8', sentAt: '19.07.2026 22:41', type: 'Wochenbericht', typeTone: 'cyan', recipient: 'kontakt@cam2rent.de', subject: 'Wochenbericht KW 29', booking: null, status: 'sent' },
+];
 
-export default function AdminEmailLogPage() {
-  const [emails, setEmails] = useState<EmailEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [resendStatusMap, setResendStatusMap] = useState<Record<string, ResendStatus>>({});
+const TYPE_PILLS: PillDef[] = [
+  { key: 'alle', label: 'Alle', count: EMAILS.length },
+  { key: 'buchung', label: 'Buchung', tone: 'cyan' },
+  { key: 'versand', label: 'Versand', tone: 'emerald' },
+  { key: 'zahlung', label: 'Zahlung', tone: 'blue' },
+  { key: 'marketing', label: 'Marketing', tone: 'amber' },
+];
 
-  useEffect(() => {
-    loadEmails();
-  }, [page, typeFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+export default function EmailLogPage() {
+  const [filter, setFilter] = useState('alle');
 
-  async function loadEmails() {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(page), limit: '50' });
-      if (typeFilter) params.set('type', typeFilter);
-      if (statusFilter) params.set('status', statusFilter);
-      if (search) params.set('search', search);
-      const res = await fetch(`/api/admin/email-log?${params}`);
-      const data = await res.json();
-      setEmails(data.emails ?? []);
-      setTotalPages(data.totalPages ?? 1);
-      setTotal(data.total ?? 0);
-    } catch {
-      setEmails([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    setPage(1);
-    loadEmails();
-  }
-
-  async function fetchResendStatus(logId: string) {
-    setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: true } }));
-    try {
-      const res = await fetch(`/api/admin/email-log/${logId}/resend-status`);
-      const data = await res.json();
-      if (!res.ok) {
-        setResendStatusMap((prev) => ({
-          ...prev,
-          [logId]: {
-            loading: false,
-            error: data.error || 'Abfrage fehlgeschlagen',
-            restricted: data.restricted,
-            hint: data.hint,
-            dashboardUrl: data.dashboardUrl,
-          },
-        }));
-        return;
-      }
-      setResendStatusMap((prev) => ({
-        ...prev,
-        [logId]: {
-          loading: false,
-          last_event: data.last_event,
-          bounce: data.bounce,
-          dashboardUrl: data.dashboardUrl,
-        },
-      }));
-    } catch {
-      setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: false, error: 'Netzwerkfehler' } }));
-    }
-  }
-
-  function handleExpand(email: EmailEntry) {
-    const nextId = expandedId === email.id ? null : email.id;
-    setExpandedId(nextId);
-    // Beim Aufklappen automatisch den Resend-Zustellstatus nachladen
-    if (nextId && email.resend_message_id && !resendStatusMap[email.id]) {
-      fetchResendStatus(email.id);
-    }
-  }
-
-  const sentCount = emails.filter((e) => e.status === 'sent').length;
-  const failedCount = emails.filter((e) => e.status === 'failed').length;
+  const columns: Column<Email>[] = [
+    {
+      key: 'sentAt',
+      header: 'Zeitpunkt',
+      cell: (e) => (
+        <span className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${e.status === 'failed' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+          <span className="font-mono text-[11px] text-slate-500 whitespace-nowrap">{e.sentAt}</span>
+        </span>
+      ),
+    },
+    { key: 'type', header: 'Typ', cell: (e) => <StatusChip tone={e.typeTone}>{e.type}</StatusChip> },
+    { key: 'recipient', header: 'Empfänger', cell: (e) => <span className="text-slate-700 text-[12px]">{e.recipient}</span>, className: 'hidden md:table-cell' },
+    {
+      key: 'subject',
+      header: 'Betreff',
+      cell: (e) => <span className="text-slate-500 text-[12px] block max-w-[280px] truncate" title={e.subject}>{e.subject}</span>,
+    },
+    {
+      key: 'booking',
+      header: 'Buchung',
+      cell: (e) => (e.booking ? <span className="font-mono text-[11px] text-cyan-700">{e.booking}</span> : <span className="text-slate-300">–</span>),
+      className: 'hidden lg:table-cell',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'right',
+      cell: (e) => <StatusChip tone={e.status === 'failed' ? 'rose' : 'emerald'}>{e.status === 'failed' ? 'Fehler' : 'Gesendet'}</StatusChip>,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-brand-bg">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <AdminBackLink label="Zurück" />
-        <div className="mb-6">
-          <h1 className="font-heading font-bold text-2xl text-brand-black">E-Mail-Protokoll</h1>
-          <p className="text-sm font-body text-brand-muted mt-0.5">
-            Alle gesendeten E-Mails — {total} Einträge
-          </p>
-        </div>
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader title="E-Mail-Protokoll" subtitle="Alle automatisch versendeten E-Mails — 1.284 Einträge." />
 
-        {/* Stat Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-brand-border p-4">
-            <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-1">Gesamt</p>
-            <p className="font-heading font-bold text-2xl text-brand-black">{total}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-brand-border p-4">
-            <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-1">Gesendet</p>
-            <p className="font-heading font-bold text-2xl text-green-600">{sentCount}</p>
-          </div>
-          <div className={`rounded-xl border p-4 ${failedCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-brand-border'}`}>
-            <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-1">Fehlgeschlagen</p>
-            <p className={`font-heading font-bold text-2xl ${failedCount > 0 ? 'text-red-600' : 'text-brand-black'}`}>{failedCount}</p>
-          </div>
-        </div>
+      <div className="flex gap-3 flex-wrap">
+        <MiniStat value="1.284" label="Gesamt" />
+        <MiniStat value="1.271" label="Gesendet" tone="emerald" />
+        <MiniStat value="13" label="Fehlgeschlagen" tone="rose" />
+      </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl border border-brand-border p-4 mb-6">
-          <form onSubmit={handleSearch} className="flex flex-wrap gap-3 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-1">Suche</label>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="E-Mail, Buchungsnr., Betreff..."
-                className="w-full text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-1">Typ</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-                className="text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black"
-              >
-                <option value="">Alle Typen</option>
-                {Object.entries(TYPE_LABELS).map(([key, { label }]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                className="text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black"
-              >
-                <option value="">Alle</option>
-                <option value="sent">Gesendet</option>
-                <option value="failed">Fehlgeschlagen</option>
-              </select>
-            </div>
-            <button type="submit" className="px-4 py-2 bg-brand-black text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors">
-              Suchen
-            </button>
-          </form>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-brand-muted font-body">Lädt...</div>
-          ) : emails.length === 0 ? (
-            <div className="p-8 text-center text-brand-muted font-body">Keine E-Mails gefunden.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-brand-border bg-brand-bg">
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Zeitpunkt</th>
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Typ</th>
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Empfänger</th>
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Betreff</th>
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Buchung</th>
-                    <th className="text-left py-3 px-4 font-heading font-semibold text-brand-muted text-xs uppercase tracking-wider">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {emails.map((email) => {
-                    const typeInfo = TYPE_LABELS[email.email_type] ?? { label: email.email_type, color: '#94a3b8', bg: '#94a3b814' };
-                    const isExpanded = expandedId === email.id;
-                    const isFailed = email.status === 'failed';
-                    return (
-                      <Fragment key={email.id}>
-                        <tr
-                          onClick={() => handleExpand(email)}
-                          className={`border-b border-brand-border/50 hover:bg-brand-bg/50 transition-colors cursor-pointer ${isExpanded ? 'bg-brand-bg/40' : ''}`}
-                        >
-                          <td className="py-3 px-4 font-body text-brand-steel whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {/* Status-Punkt immer links sichtbar — auch wenn Tabelle abgeschnitten ist */}
-                              <span
-                                className={`w-2 h-2 rounded-full flex-shrink-0 ${isFailed ? 'bg-red-500' : 'bg-green-500'}`}
-                                title={isFailed ? 'Fehlgeschlagen' : 'Gesendet'}
-                              />
-                              {fmtDateTime(email.sent_at)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-heading font-semibold"
-                              style={{ color: typeInfo.color, backgroundColor: typeInfo.bg }}
-                            >
-                              {typeInfo.label}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-body text-brand-black">
-                            {email.customer_email}
-                          </td>
-                          <td className="py-3 px-4 font-body text-brand-steel max-w-[250px] truncate" title={email.subject ?? ''}>
-                            {email.subject || '–'}
-                          </td>
-                          <td className="py-3 px-4">
-                            {email.booking_id ? (
-                              <Link
-                                href={`/admin/buchungen/${email.booking_id}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="font-body text-accent-blue hover:underline text-xs font-semibold"
-                              >
-                                {email.booking_id}
-                              </Link>
-                            ) : (
-                              <span className="text-brand-muted">–</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            {email.status === 'sent' ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-green-600">
-                                <span className="w-2 h-2 rounded-full bg-green-500" />
-                                Gesendet
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-red-600">
-                                <span className="w-2 h-2 rounded-full bg-red-500" />
-                                Fehler
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr className="border-b border-brand-border/50 bg-brand-bg/30">
-                            <td colSpan={6} className="py-4 px-6">
-                              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-body">
-                                <div>
-                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Empfänger</dt>
-                                  <dd className="text-brand-black break-all mt-0.5">{email.customer_email || '–'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Buchung</dt>
-                                  <dd className="text-brand-black mt-0.5">
-                                    {email.booking_id ? (
-                                      <Link href={`/admin/buchungen/${email.booking_id}`} className="text-accent-blue hover:underline">
-                                        {email.booking_id}
-                                      </Link>
-                                    ) : '–'}
-                                  </dd>
-                                </div>
-                                <div className="sm:col-span-2">
-                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Betreff</dt>
-                                  <dd className="text-brand-black break-words mt-0.5">{email.subject || '–'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</dt>
-                                  <dd className={`font-heading font-semibold mt-0.5 ${isFailed ? 'text-red-600' : 'text-green-600'}`}>
-                                    {isFailed ? 'Fehlgeschlagen' : 'Gesendet'}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Resend-ID</dt>
-                                  <dd className="text-brand-steel break-all mt-0.5 font-mono">{email.resend_message_id || '–'}</dd>
-                                </div>
-                                {email.resend_message_id && (() => {
-                                  const rs = resendStatusMap[email.id];
-                                  const eventInfo = rs?.last_event ? RESEND_EVENT_LABELS[rs.last_event] : null;
-                                  return (
-                                    <div className="sm:col-span-2 mt-1 bg-white dark:bg-slate-900 border border-brand-border dark:border-slate-700 rounded-lg p-3">
-                                      <div className="flex items-center justify-between gap-2 mb-1">
-                                        <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider text-xs">Zustellstatus (Resend)</dt>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => { e.stopPropagation(); fetchResendStatus(email.id); }}
-                                          disabled={rs?.loading}
-                                          className="text-xs font-heading font-semibold text-accent-blue hover:underline disabled:opacity-40"
-                                        >
-                                          {rs?.loading ? 'Lädt...' : (rs ? 'Neu laden' : 'Prüfen')}
-                                        </button>
-                                      </div>
-                                      {rs?.loading && !rs?.last_event && (
-                                        <p className="text-brand-muted">Frage Resend...</p>
-                                      )}
-                                      {rs?.error && (
-                                        <div className={`rounded border p-2 ${rs.restricted ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
-                                          <p className={`font-heading font-semibold ${rs.restricted ? 'text-amber-800' : 'text-red-700'}`}>
-                                            {rs.restricted ? 'API-Key ist schreibgeschuetzt' : 'Fehler'}
-                                          </p>
-                                          <p className={`mt-1 text-xs font-mono break-words ${rs.restricted ? 'text-amber-900' : 'text-red-900'}`}>{rs.error}</p>
-                                          {rs.hint && (
-                                            <p className="mt-2 text-xs text-brand-steel leading-relaxed">{rs.hint}</p>
-                                          )}
-                                          {rs.dashboardUrl && (
-                                            <a
-                                              href={rs.dashboardUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="inline-flex items-center gap-1 mt-2 px-3 py-1.5 bg-sky-500 text-white text-xs font-heading font-semibold rounded-btn hover:bg-sky-600 transition-colors"
-                                            >
-                                              ↗ Im Resend-Dashboard öffnen
-                                            </a>
-                                          )}
-                                        </div>
-                                      )}
-                                      {eventInfo && (
-                                        <>
-                                          <p className="font-heading font-semibold" style={{ color: eventInfo.color }}>
-                                            {eventInfo.label}
-                                          </p>
-                                          <p className="text-brand-muted mt-1 text-xs leading-relaxed">{eventInfo.hint}</p>
-                                          {rs?.bounce && (
-                                            <div className="mt-2 rounded bg-red-50 border border-red-200 p-2 font-mono text-xs text-red-900 whitespace-pre-wrap">
-                                              {rs.bounce.type && <div><strong>Typ:</strong> {rs.bounce.type}{rs.bounce.subType ? ` / ${rs.bounce.subType}` : ''}</div>}
-                                              {rs.bounce.message && <div className="break-words"><strong>Grund:</strong> {rs.bounce.message}</div>}
-                                            </div>
-                                          )}
-                                          {rs?.dashboardUrl && (
-                                            <a
-                                              href={rs.dashboardUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="inline-block mt-2 text-xs text-accent-blue hover:underline"
-                                            >
-                                              Im Resend-Dashboard öffnen ↗
-                                            </a>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                {email.error_message && (
-                                  <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg p-3 mt-1">
-                                    <dt className="font-heading font-semibold text-red-700 uppercase tracking-wider text-xs">Fehlermeldung (Resend)</dt>
-                                    <dd className="text-red-900 break-words mt-1 font-mono text-xs whitespace-pre-wrap">{email.error_message}</dd>
-                                  </div>
-                                )}
-                              </dl>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-brand-border">
-              <p className="text-xs font-body text-brand-muted">
-                Seite {page} von {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page <= 1}
-                  className="px-3 py-1.5 text-xs font-heading font-semibold border border-brand-border rounded-btn hover:bg-brand-bg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Zurück
-                </button>
-                <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page >= totalPages}
-                  className="px-3 py-1.5 text-xs font-heading font-semibold border border-brand-border rounded-btn hover:bg-brand-bg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Weiter
-                </button>
-              </div>
-            </div>
-          )}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px] px-2.5 py-1.5 rounded border border-slate-200 bg-white text-slate-400 text-[12px]">
+          <Search size={13} />E-Mail, Buchungsnr., Betreff…
         </div>
       </div>
+
+      <FilterPills pills={TYPE_PILLS} active={filter} onChange={setFilter} />
+
+      <DataTable columns={columns} rows={EMAILS} rowKey={(e) => e.id} onRowClick={() => {}} />
     </div>
   );
 }

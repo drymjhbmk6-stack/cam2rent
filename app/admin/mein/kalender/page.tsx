@@ -1,716 +1,138 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
+import { useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, List, Plus } from 'lucide-react';
+import { PageHeader, Panel, Segmented, StatusChip, Button } from '@/components/admin/ui';
+import type { ChipTone, TabDef } from '@/components/admin/ui';
 
-interface Appointment {
-  id: string;
-  admin_user_id: string;
-  title: string;
-  description: string | null;
-  location: string | null;
-  starts_at: string;
-  ends_at: string | null;
-  all_day: boolean;
-  color: string | null;
-  reminder_minutes_before: number | null;
-  reminder_push: boolean;
-  reminder_email: boolean;
-  reminder_sent_at: string | null;
-  shared_with: string[];
-  series_id: string | null;
-  is_owner: boolean;
-  owner_name: string | null;
-}
+/* cam2rent Admin 2.0 — Mein Kalender (privater Bereich, statisch, Juli 2026). */
 
-interface Employee {
-  id: string;
-  name: string;
-  role: 'owner' | 'employee';
-}
-
-const REMINDER_OPTIONS = [
-  { value: '', label: 'Keine Erinnerung' },
-  { value: '5', label: '5 Minuten vorher' },
-  { value: '15', label: '15 Minuten vorher' },
-  { value: '30', label: '30 Minuten vorher' },
-  { value: '60', label: '1 Stunde vorher' },
-  { value: '120', label: '2 Stunden vorher' },
-  { value: '240', label: '4 Stunden vorher' },
-  { value: '1440', label: '1 Tag vorher' },
-  { value: '2880', label: '2 Tage vorher' },
+const VIEWS: TabDef[] = [
+  { key: 'monat', label: 'Monat', icon: CalendarDays },
+  { key: 'liste', label: 'Liste', icon: List },
 ];
 
-const RECURRENCE_OPTIONS = [
-  { value: '', label: 'Keine Wiederholung' },
-  { value: 'daily', label: 'Täglich' },
-  { value: 'weekly', label: 'Wöchentlich' },
-  { value: 'biweekly', label: 'Alle 2 Wochen' },
-  { value: 'monthly', label: 'Monatlich' },
+const WOCHENTAGE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const HEUTE = 21;
+const LEADING = 2; // Juli 2026 beginnt an einem Mittwoch (Mo-first)
+const TAGE_IM_MONAT = 31;
+
+type Termin = { tag: number; zeit?: string; titel: string; tone: ChipTone };
+
+const TERMINE: Termin[] = [
+  { tag: 3, zeit: '09:00', titel: 'Retoure C2R-2627-004 prüfen', tone: 'cyan' },
+  { tag: 8, zeit: '11:30', titel: 'Übergabe Kai Röhlig', tone: 'emerald' },
+  { tag: 15, titel: 'Wartung GoPro Hero 13', tone: 'amber' },
+  { tag: 21, zeit: '14:00', titel: 'Team-Sync', tone: 'blue' },
+  { tag: 24, titel: 'Firmware-Runde Q3', tone: 'rose' },
+  { tag: 29, zeit: '10:00', titel: 'Telefonat Steuerberater', tone: 'cyan' },
 ];
 
-const COLOR_PRESETS: { value: string; label: string; bg: string }[] = [
-  { value: 'default', label: 'Cyan', bg: '#06b6d4' },
-  { value: 'amber', label: 'Gelb', bg: '#f59e0b' },
-  { value: 'emerald', label: 'Grün', bg: '#10b981' },
-  { value: 'pink', label: 'Pink', bg: '#ec4899' },
-  { value: 'violet', label: 'Lila', bg: '#8b5cf6' },
-  { value: 'red', label: 'Rot', bg: '#ef4444' },
-];
-
-function colorBg(color: string | null): string {
-  if (!color || color === 'default') return '#06b6d4';
-  return COLOR_PRESETS.find((c) => c.value === color)?.bg ?? '#06b6d4';
-}
-
-// Monats-Layout: Höhe der Tagesnummer-Zeile + Termin-Balken pro Woche.
-const MAX_LANES = 4;   // max. übereinander sichtbare Balken pro Woche
-const HEADER_H = 22;   // Platz für die Tageszahl oben
-const LANE_H = 18;     // Höhe eines Balkens
-const LANE_GAP = 2;    // Abstand zwischen Balken
-
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
-}
-
-function fmtDateLong(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
-}
-
-function berlinDateKey(date: Date): string {
-  // Verwendet Intl, um Berlin-Tag als YYYY-MM-DD zu bekommen
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
-  return fmt.format(date);
-}
+const BAR: Record<ChipTone, string> = {
+  emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  cyan: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  blue: 'bg-blue-100 text-blue-700 border-blue-200',
+  amber: 'bg-amber-100 text-amber-700 border-amber-200',
+  rose: 'bg-rose-100 text-rose-700 border-rose-200',
+  slate: 'bg-slate-100 text-slate-600 border-slate-200',
+};
 
 export default function MeinKalenderPage() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [warn, setWarn] = useState<string | null>(null);
-  const [view, setView] = useState<'month' | 'list'>('month');
-  const [cursor, setCursor] = useState<Date>(() => new Date());
-  const [editing, setEditing] = useState<Appointment | null>(null);
-  const [creatingOnDate, setCreatingOnDate] = useState<string | null>(null);
+  const [view, setView] = useState('monat');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const from = new Date(); from.setDate(from.getDate() - 90);
-      const to = new Date(); to.setMonth(to.getMonth() + 6);
-      const [tRes, eRes] = await Promise.all([
-        fetch(`/api/admin/mein/termine?from=${from.toISOString()}&to=${to.toISOString()}`, { cache: 'no-store' }),
-        fetch('/api/admin/mein/employees', { cache: 'no-store' }),
-      ]);
-      const tJson = await tRes.json();
-      const eJson = await eRes.json();
-      if (tJson.legacy) setWarn('Du bist mit dem Notfall-Login angemeldet. Bitte mit Mitarbeiter-Konto einloggen, um deinen persönlichen Kalender zu nutzen.');
-      else if (tJson.migration_pending) setWarn('Die Migration supabase-employee-personal.sql ist noch nicht eingespielt — Termine können noch nicht gespeichert werden.');
-      else setWarn(null);
-      setAppointments(tJson.appointments ?? []);
-      setEmployees(eJson.employees ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const cells: (number | null)[] = [
+    ...Array.from({ length: LEADING }, () => null),
+    ...Array.from({ length: TAGE_IM_MONAT }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
 
-  useEffect(() => { void load(); }, [load]);
-
-  const monthCells = useMemo(() => {
-    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const start = new Date(first);
-    // Montag-Start
-    const dow = (first.getDay() + 6) % 7; // 0=Mo
-    start.setDate(first.getDate() - dow);
-    const cells: { date: Date; key: string; inMonth: boolean }[] = [];
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      cells.push({ date: d, key: berlinDateKey(d), inMonth: d.getMonth() === cursor.getMonth() });
-    }
-    return cells;
-  }, [cursor]);
-
-  // Wochen-Layout: pro Woche werden Termine als durchgezogene Balken (über
-  // mehrere Spalten gespannt) mit Lane-Packing berechnet. Mehrtägige Termine,
-  // die über das Wochenende laufen, brechen am Wochenende in ein neues Segment.
-  const weeks = useMemo(() => {
-    return Array.from({ length: 6 }, (_, w) => {
-      const cells = monthCells.slice(w * 7, w * 7 + 7);
-      const weekStart = cells[0].key;
-      const weekEnd = cells[6].key;
-      const segs = appointments
-        .map((a) => {
-          const startKey = berlinDateKey(new Date(a.starts_at));
-          const endKey = a.ends_at ? berlinDateKey(new Date(a.ends_at)) : startKey;
-          if (endKey < weekStart || startKey > weekEnd) return null;
-          const sIdx = cells.findIndex((c) => c.key === startKey);
-          const eIdx = cells.findIndex((c) => c.key === endKey);
-          return {
-            a,
-            startCol: sIdx === -1 ? 0 : sIdx,
-            endCol: eIdx === -1 ? 6 : eIdx,
-            continuesLeft: startKey < weekStart,
-            continuesRight: endKey > weekEnd,
-            isStartSeg: startKey >= weekStart,
-          };
-        })
-        .filter((s): s is NonNullable<typeof s> => s !== null);
-      // Lange/frühe Segmente zuerst → kompaktes Lane-Packing
-      segs.sort((x, y) =>
-        x.startCol - y.startCol ||
-        (y.endCol - y.startCol) - (x.endCol - x.startCol) ||
-        new Date(x.a.starts_at).getTime() - new Date(y.a.starts_at).getTime());
-      const laneEnds: number[] = [];
-      const placed = segs.map((s) => {
-        let lane = laneEnds.findIndex((end) => s.startCol > end);
-        if (lane === -1) { lane = laneEnds.length; laneEnds.push(s.endCol); }
-        else laneEnds[lane] = s.endCol;
-        return { ...s, lane };
-      });
-      const overflowByCol = new Array(7).fill(0) as number[];
-      for (const b of placed) {
-        if (b.lane >= MAX_LANES) for (let c = b.startCol; c <= b.endCol; c++) overflowByCol[c]++;
-      }
-      return {
-        cells,
-        bars: placed.filter((b) => b.lane < MAX_LANES),
-        overflowByCol,
-        laneCount: Math.min(laneEnds.length, MAX_LANES),
-      };
-    });
-  }, [monthCells, appointments]);
-
-  const today = berlinDateKey(new Date());
-  const upcoming = useMemo(() => {
-    const now = Date.now();
-    return appointments
-      .filter((a) => new Date(a.starts_at).getTime() >= now - 1800_000)
-      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
-      .slice(0, 50);
-  }, [appointments]);
+  const terminAm = (tag: number) => TERMINE.filter((t) => t.tag === tag);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0f172a', color: '#e2e8f0' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px 80px' }}>
-        <AdminBackLink />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>📅 Mein Kalender</h1>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: 2 }}>
-              <button onClick={() => setView('month')} style={{ background: view === 'month' ? '#06b6d4' : 'transparent', color: view === 'month' ? '#0a0a0a' : '#cbd5e1', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Monat</button>
-              <button onClick={() => setView('list')} style={{ background: view === 'list' ? '#06b6d4' : 'transparent', color: view === 'list' ? '#0a0a0a' : '#cbd5e1', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Liste</button>
-            </div>
-            <button
-              onClick={() => setCreatingOnDate(today)}
-              disabled={!!warn && warn.startsWith('Du bist')}
-              style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
-            >
-              + Neuer Termin
-            </button>
-          </div>
+    <div className="space-y-4 max-w-5xl">
+      <PageHeader
+        title="Mein Kalender"
+        subtitle="Deine persönlichen Termine mit Erinnerung."
+        actions={<Button variant="primary" size="sm" icon={Plus}>Neuer Termin</Button>}
+      />
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" icon={ChevronLeft} />
+          <span className="text-[13px] font-semibold text-slate-900 min-w-[110px] text-center">Juli 2026</span>
+          <Button variant="ghost" size="sm" icon={ChevronRight} />
+          <Button variant="secondary" size="sm" className="ml-1">Heute</Button>
         </div>
-
-        {warn && (
-          <div style={{ background: '#78350f', color: '#fde68a', padding: '12px 16px', borderRadius: 8, marginBottom: 16, fontSize: 14 }}>
-            ⚠ {warn}
-          </div>
-        )}
-
-        {view === 'month' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} style={navBtnStyle}>‹</button>
-              <button onClick={() => setCursor(new Date())} style={{ ...navBtnStyle, padding: '6px 14px' }}>Heute</button>
-              <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} style={navBtnStyle}>›</button>
-              <h2 style={{ margin: 0, fontSize: 18, color: '#f8fafc' }}>
-                {cursor.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' })}
-              </h2>
-            </div>
-
-            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: 4 }}>
-              {/* Wochentag-Kopfzeile */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', columnGap: 4, marginBottom: 4 }}>
-                {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                  <div key={d} style={{ padding: '4px 0', fontSize: 11, fontWeight: 700, color: '#94a3b8', textAlign: 'center', textTransform: 'uppercase' }}>{d}</div>
-                ))}
-              </div>
-
-              {/* Wochen-Reihen mit durchgezogenen Termin-Balken */}
-              {weeks.map((week, wi) => {
-                const lanes = Math.max(1, week.laneCount);
-                const weekHeight = Math.max(72, HEADER_H + lanes * LANE_H + (lanes - 1) * LANE_GAP + 14);
-                return (
-                  <div key={wi} style={{ position: 'relative', marginBottom: 4 }}>
-                    {/* Tag-Hintergründe + Tageszahl */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', columnGap: 4 }}>
-                      {week.cells.map((cell, ci) => {
-                        const isToday = cell.key === today;
-                        return (
-                          <div
-                            key={cell.key}
-                            onClick={() => setCreatingOnDate(cell.key)}
-                            style={{
-                              position: 'relative',
-                              minHeight: weekHeight,
-                              background: cell.inMonth ? '#0f172a' : '#1e293b',
-                              border: isToday ? '2px solid #facc15' : '1px solid #1e293b',
-                              borderRadius: 6,
-                              padding: 4,
-                              cursor: 'pointer',
-                              opacity: cell.inMonth ? 1 : 0.5,
-                            }}
-                          >
-                            <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? '#facc15' : '#94a3b8', padding: '0 2px' }}>
-                              {cell.date.getDate()}
-                            </div>
-                            {week.overflowByCol[ci] > 0 && (
-                              <div style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 9, color: '#94a3b8' }}>+{week.overflowByCol[ci]}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Termin-Balken-Overlay (gleiches 7-Spalten-Raster) */}
-                    <div style={{
-                      position: 'absolute', top: HEADER_H, left: 0, right: 0,
-                      display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                      columnGap: 4, rowGap: LANE_GAP, gridAutoRows: `${LANE_H}px`,
-                      pointerEvents: 'none',
-                    }}>
-                      {week.bars.map((bar) => (
-                        <div
-                          key={`${bar.a.id}-${wi}`}
-                          onClick={(e) => { e.stopPropagation(); setEditing(bar.a); }}
-                          title={`${bar.a.title}${bar.a.is_owner ? '' : ' (von ' + bar.a.owner_name + ')'}`}
-                          style={{
-                            gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
-                            gridRow: bar.lane + 1,
-                            background: colorBg(bar.a.color),
-                            color: 'white',
-                            fontSize: 10,
-                            fontWeight: 600,
-                            padding: '0 6px',
-                            height: LANE_H,
-                            lineHeight: `${LANE_H}px`,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            cursor: 'pointer',
-                            pointerEvents: 'auto',
-                            opacity: bar.a.is_owner ? 1 : 0.9,
-                            borderTopLeftRadius: bar.continuesLeft ? 0 : 4,
-                            borderBottomLeftRadius: bar.continuesLeft ? 0 : 4,
-                            borderTopRightRadius: bar.continuesRight ? 0 : 4,
-                            borderBottomRightRadius: bar.continuesRight ? 0 : 4,
-                            borderLeft: bar.a.is_owner ? undefined : '3px solid #fff',
-                            boxSizing: 'border-box',
-                          }}
-                        >
-                          {bar.continuesLeft && <span style={{ opacity: 0.7 }}>◂ </span>}
-                          {!bar.a.all_day && bar.isStartSeg && <span style={{ opacity: 0.85 }}>{fmtTime(bar.a.starts_at)} </span>}
-                          {bar.a.title}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {view === 'list' && (
-          <div>
-            {loading ? (
-              <p style={{ color: '#94a3b8' }}>Lädt…</p>
-            ) : upcoming.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
-                <p style={{ fontSize: 48, margin: 0 }}>🗓</p>
-                <p style={{ marginTop: 12 }}>Keine bevorstehenden Termine.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {upcoming.map((a) => (
-                  <div
-                    key={a.id}
-                    onClick={() => a.is_owner && setEditing(a)}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderLeft: `4px solid ${colorBg(a.color)}`,
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      cursor: a.is_owner ? 'pointer' : 'default',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>
-                          {fmtDateLong(a.starts_at)}{!a.all_day ? ` · ${fmtTime(a.starts_at)}` : ' · ganztägig'}
-                        </div>
-                        <h3 style={{ margin: '0 0 4px', fontSize: 15, color: '#f8fafc' }}>
-                          {a.title}
-                          {!a.is_owner && <span style={{ marginLeft: 8, background: '#4c1d95', color: '#ddd6fe', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>von {a.owner_name}</span>}
-                        </h3>
-                        {a.location && <p style={{ margin: '0 0 4px', fontSize: 13, color: '#cbd5e1' }}>📍 {a.location}</p>}
-                        {a.description && <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', whiteSpace: 'pre-wrap' }}>{a.description}</p>}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        {a.reminder_minutes_before != null && (
-                          <span style={{ fontSize: 10, color: '#06b6d4' }}>
-                            ⏰ {a.reminder_minutes_before < 60 ? `${a.reminder_minutes_before} min` : a.reminder_minutes_before < 1440 ? `${a.reminder_minutes_before / 60} h` : `${a.reminder_minutes_before / 1440} d`} vorher
-                          </span>
-                        )}
-                        {a.shared_with.length > 0 && (
-                          <span style={{ fontSize: 10, color: '#a78bfa' }}>👥 {a.shared_with.length} geteilt</span>
-                        )}
-                        {a.series_id && (
-                          <span style={{ fontSize: 10, color: '#22d3ee' }}>🔁 Serie</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="ml-auto">
+          <Segmented tabs={VIEWS} active={view} onChange={setView} />
+        </div>
       </div>
 
-      {(editing || creatingOnDate) && (
-        <AppointmentEditModal
-          appointment={editing}
-          initialDate={creatingOnDate}
-          employees={employees}
-          onClose={() => { setEditing(null); setCreatingOnDate(null); }}
-          onSaved={() => { setEditing(null); setCreatingOnDate(null); void load(); }}
-        />
+      {view === 'monat' ? (
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-slate-200">
+            {WOCHENTAGE.map((w) => (
+              <div key={w} className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 font-medium text-center">
+                {w}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {cells.map((tag, i) => {
+              const heute = tag === HEUTE;
+              const events = tag ? terminAm(tag) : [];
+              return (
+                <div
+                  key={i}
+                  className={`min-h-[92px] border-b border-r border-slate-100 p-1.5 ${
+                    tag === null ? 'bg-slate-50/40' : ''
+                  } ${(i + 1) % 7 === 0 ? 'border-r-0' : ''}`}
+                >
+                  {tag !== null && (
+                    <div
+                      className={`text-[11px] font-mono mb-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded ${
+                        heute ? 'bg-white text-cyan-700 border border-cyan-400 font-semibold' : 'text-slate-400'
+                      }`}
+                    >
+                      {tag}
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    {events.map((e, j) => (
+                      <div
+                        key={j}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border truncate ${BAR[e.tone]}`}
+                        title={`${e.zeit ? e.zeit + ' — ' : ''}${e.titel}`}
+                      >
+                        {e.zeit && <span className="font-mono opacity-70">{e.zeit} </span>}
+                        {e.titel}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <Panel title="Nächste Termine" noBody>
+          <div className="divide-y divide-slate-100">
+            {TERMINE.map((t, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50">
+                <div className="w-14 shrink-0 text-center">
+                  <div className="text-[15px] font-mono font-semibold text-slate-900">{t.tag}.</div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400">Juli</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-slate-900 truncate">{t.titel}</div>
+                  <div className="text-[11px] text-slate-400 font-mono">{t.zeit ?? 'ganztägig'}</div>
+                </div>
+                <StatusChip tone={t.tone}>Termin</StatusChip>
+              </div>
+            ))}
+          </div>
+        </Panel>
       )}
     </div>
   );
 }
-
-const navBtnStyle: React.CSSProperties = {
-  background: '#1e293b',
-  border: '1px solid #334155',
-  color: '#e2e8f0',
-  padding: '6px 10px',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontWeight: 600,
-};
-
-function AppointmentEditModal({ appointment, initialDate, employees, onClose, onSaved }: {
-  appointment: Appointment | null;
-  initialDate: string | null;
-  employees: Employee[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const defaultStart = appointment
-    ? utcToBerlinLocalInput(appointment.starts_at)
-    : initialDate
-      ? `${initialDate}T09:00`
-      : '';
-
-  const [title, setTitle] = useState(appointment?.title ?? '');
-  const [description, setDescription] = useState(appointment?.description ?? '');
-  const [location, setLocation] = useState(appointment?.location ?? '');
-  const [startsAt, setStartsAt] = useState(defaultStart);
-  const [endsAt, setEndsAt] = useState(appointment?.ends_at ? utcToBerlinLocalInput(appointment.ends_at) : '');
-  const [allDay, setAllDay] = useState(appointment?.all_day ?? false);
-  const [color, setColor] = useState(appointment?.color ?? 'default');
-  const [reminder, setReminder] = useState<string>(appointment?.reminder_minutes_before?.toString() ?? '');
-  const [reminderPush, setReminderPush] = useState(appointment?.reminder_push ?? true);
-  const [reminderEmail, setReminderEmail] = useState(appointment?.reminder_email ?? false);
-  const [shared, setShared] = useState<string[]>(appointment?.shared_with ?? []);
-  const [recurrence, setRecurrence] = useState('');
-  const [recurrenceCount, setRecurrenceCount] = useState('8');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const canEdit = appointment ? appointment.is_owner : true;
-  const isNew = !appointment;
-  const isSeries = !!appointment?.series_id;
-
-  async function save() {
-    setSaving(true);
-    setErr(null);
-    try {
-      if (!title.trim()) { setErr('Titel erforderlich.'); return; }
-      if (!startsAt) { setErr(allDay ? 'Datum erforderlich.' : 'Startzeit erforderlich.'); return; }
-
-      // Ganztägig: Uhrzeit fällt weg → Start auf 00:00, Ende auf 23:59 des
-      // jeweiligen Tages klemmen (ohne Ende: gleicher Tag wie Start).
-      const startInput = allDay ? `${startsAt.slice(0, 10)}T00:00` : startsAt;
-      const endInput = allDay
-        ? `${(endsAt || startsAt).slice(0, 10)}T23:59`
-        : (endsAt || '');
-
-      const payload = {
-        title: title.trim(),
-        description: description || null,
-        location: location || null,
-        starts_at: berlinLocalInputToUTC(startInput),
-        ends_at: endInput ? berlinLocalInputToUTC(endInput) : null,
-        all_day: allDay,
-        color,
-        reminder_minutes_before: reminder ? parseInt(reminder, 10) : null,
-        reminder_push: reminderPush,
-        reminder_email: reminderEmail,
-        shared_with: shared,
-        // Wiederholung nur beim Neuanlegen (materialisiert N Einzeltermine)
-        ...(isNew && recurrence ? { recurrence, recurrence_count: parseInt(recurrenceCount, 10) || 2 } : {}),
-      };
-
-      const url = appointment ? `/api/admin/mein/termine/${appointment.id}` : '/api/admin/mein/termine';
-      const method = appointment ? 'PATCH' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) { setErr(json.error ?? 'Fehler'); return; }
-      onSaved();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function del(scope: 'single' | 'series' = 'single') {
-    if (!appointment) return;
-    const msg = scope === 'series'
-      ? `Die GANZE Serie von "${appointment.title}" wirklich löschen?`
-      : `Termin "${appointment.title}" wirklich löschen?`;
-    if (!confirm(msg)) return;
-    setSaving(true);
-    const url = `/api/admin/mein/termine/${appointment.id}${scope === 'series' ? '?scope=series' : ''}`;
-    const res = await fetch(url, { method: 'DELETE' });
-    if (res.ok) onSaved();
-    else { setErr('Löschen fehlgeschlagen.'); setSaving(false); }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16, overflowY: 'auto' }}
-      onClick={onClose}>
-      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90dvh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, color: '#f8fafc' }}>
-          {isNew ? 'Neuer Termin' : (canEdit ? 'Termin bearbeiten' : 'Termin (geteilt)')}
-        </h2>
-
-        {!canEdit && appointment?.owner_name && (
-          <div style={{ background: '#4c1d95', color: '#ddd6fe', padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-            📤 Geteilt von {appointment.owner_name} — nur Leseansicht.
-          </div>
-        )}
-
-        <Field label="Titel *">
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} disabled={!canEdit} style={inputStyle} />
-        </Field>
-
-        {allDay ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Beginn (Tag) *">
-              <input
-                type="date"
-                value={startsAt.slice(0, 10)}
-                onChange={(e) => setStartsAt(e.target.value ? `${e.target.value}T00:00` : '')}
-                disabled={!canEdit}
-                style={inputStyle}
-              />
-            </Field>
-            <Field label="Ende (Tag, optional)">
-              <input
-                type="date"
-                value={endsAt.slice(0, 10)}
-                min={startsAt.slice(0, 10) || undefined}
-                onChange={(e) => setEndsAt(e.target.value ? `${e.target.value}T23:59` : '')}
-                disabled={!canEdit}
-                style={inputStyle}
-              />
-            </Field>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Beginn *">
-              <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
-            </Field>
-            <Field label="Ende (optional)">
-              <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
-            </Field>
-          </div>
-        )}
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14, marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            checked={allDay}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setAllDay(checked);
-              // Beim Aktivieren Uhrzeit wegklemmen, damit die Tages-Felder
-              // sauber gefüllt sind (Start 00:00, Ende 23:59).
-              if (checked) {
-                if (startsAt) setStartsAt(`${startsAt.slice(0, 10)}T00:00`);
-                if (endsAt) setEndsAt(`${endsAt.slice(0, 10)}T23:59`);
-              }
-            }}
-            disabled={!canEdit}
-          />
-          Ganztägig
-        </label>
-
-        <Field label="Ort (optional)">
-          <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={200} disabled={!canEdit} style={inputStyle} />
-        </Field>
-
-        <Field label="Beschreibung (optional)">
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} disabled={!canEdit} style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} />
-        </Field>
-
-        <Field label="Farbe">
-          <div style={{ display: 'flex', gap: 6 }}>
-            {COLOR_PRESETS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                disabled={!canEdit}
-                title={c.label}
-                style={{
-                  width: 28, height: 28, borderRadius: 14, background: c.bg,
-                  border: color === c.value ? '3px solid white' : '1px solid #475569',
-                  cursor: canEdit ? 'pointer' : 'default',
-                  opacity: canEdit ? 1 : 0.6,
-                }}
-              />
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Erinnerung">
-          <select value={reminder} onChange={(e) => setReminder(e.target.value)} disabled={!canEdit} style={inputStyle}>
-            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </Field>
-
-        {reminder && (
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12, paddingLeft: 4 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 13 }}>
-              <input type="checkbox" checked={reminderPush} onChange={(e) => setReminderPush(e.target.checked)} disabled={!canEdit} />
-              📱 Push-Notification
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 13 }}>
-              <input type="checkbox" checked={reminderEmail} onChange={(e) => setReminderEmail(e.target.checked)} disabled={!canEdit} />
-              ✉ E-Mail
-            </label>
-          </div>
-        )}
-
-        {isNew && (
-          <>
-            <Field label="Wiederholung">
-              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} style={inputStyle}>
-                {RECURRENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </Field>
-            {recurrence && (
-              <Field label="Anzahl Termine (inkl. erstem)">
-                <input
-                  type="number" min={2} max={52} value={recurrenceCount}
-                  onChange={(e) => setRecurrenceCount(e.target.value)}
-                  style={inputStyle}
-                />
-                <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
-                  Jeder Termin der Serie bekommt eine eigene Erinnerung/Push. Max. 52.
-                </p>
-              </Field>
-            )}
-          </>
-        )}
-
-        {isSeries && (
-          <div style={{ background: '#0e7490', color: '#cffafe', padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-            🔁 Teil einer Terminserie. Änderungen gelten nur für diesen Termin.
-          </div>
-        )}
-
-        {employees.length > 0 && (
-          <Field label={`Teilen mit Kollegen (${shared.length} gewählt)`}>
-            <div style={{ maxHeight: 140, overflowY: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: 8 }}>
-              {employees.map((emp) => (
-                <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', color: '#cbd5e1', fontSize: 13, cursor: canEdit ? 'pointer' : 'default' }}>
-                  <input
-                    type="checkbox"
-                    checked={shared.includes(emp.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setShared([...shared, emp.id]);
-                      else setShared(shared.filter((id) => id !== emp.id));
-                    }}
-                    disabled={!canEdit}
-                  />
-                  {emp.name}
-                  {emp.role === 'owner' && <span style={{ fontSize: 10, color: '#facc15' }}>OWNER</span>}
-                </label>
-              ))}
-            </div>
-            <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>Geteilte Kollegen sehen den Termin (read-only) und bekommen die Erinnerung.</p>
-          </Field>
-        )}
-
-        {err && <p style={{ color: '#f87171', fontSize: 13, margin: '0 0 12px' }}>⚠ {err}</p>}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 12 }}>
-          {canEdit && appointment && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => del('single')} disabled={saving} style={{ background: '#7f1d1d', color: '#fecaca', border: 0, padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
-                🗑 Löschen
-              </button>
-              {isSeries && (
-                <button onClick={() => del('series')} disabled={saving} style={{ background: '#991b1b', color: '#fecaca', border: '1px solid #ef4444', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
-                  🔁 Ganze Serie löschen
-                </button>
-              )}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            <button onClick={onClose} disabled={saving} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
-              {canEdit ? 'Abbrechen' : 'Schließen'}
-            </button>
-            {canEdit && (
-              <button onClick={save} disabled={saving || !title.trim() || !startsAt} style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
-                {saving ? 'Speichert…' : 'Speichern'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 10px',
-  borderRadius: 6,
-  border: '1px solid #334155',
-  background: '#1e293b',
-  color: '#e2e8f0',
-  fontSize: 14,
-};

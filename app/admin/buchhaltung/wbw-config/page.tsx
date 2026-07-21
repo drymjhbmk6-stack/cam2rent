@@ -1,128 +1,104 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useState } from 'react';
+import { Save, GitBranch } from 'lucide-react';
+import {
+  PageHeader, Panel, DataTable, Button,
+} from '@/components/admin/ui';
+import type { Column } from '@/components/admin/ui';
 
-interface WbwConfig {
-  floor_percent: number;
-  useful_life_months: number;
-}
+/* cam2rent Admin 2.0 — Wiederbeschaffungswert-Konfiguration (statisch). */
 
-export default function WbwConfigPage() {
-  const [cfg, setCfg] = useState<WbwConfig>({ floor_percent: 40, useful_life_months: 36 });
-  const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+type KatCfg = { key: string; label: string; floor: number; monate: number };
 
-  useEffect(() => {
-    fetch('/api/admin/settings/wbw-config').then((r) => r.json()).then((d) => {
-      if (d.config) setCfg(d.config);
-      setLoaded(true);
-    });
-  }, []);
+const KATEGORIEN: KatCfg[] = [
+  { key: 'action-cam', label: 'Action-Cam', floor: 40, monate: 36 },
+  { key: '360-cam', label: '360°-Kamera', floor: 45, monate: 36 },
+  { key: 'zubehoer', label: 'Zubehör', floor: 30, monate: 24 },
+];
 
-  async function save() {
-    setBusy(true);
-    setError(null);
-    const res = await fetch('/api/admin/settings/wbw-config', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg),
-    });
-    if (!res.ok) {
-      setError((await res.json()).error ?? 'Fehler');
-    } else {
-      setSavedAt(Date.now());
-    }
-    setBusy(false);
-  }
+type Vorschau = { monate: string; wert: string; hinweis?: boolean };
+const VORSCHAU: Vorschau[] = [
+  { monate: '0 (Kauf)', wert: '399,00 €' },
+  { monate: '6 Monate', wert: '359,10 €' },
+  { monate: '12 Monate', wert: '319,20 €' },
+  { monate: '24 Monate', wert: '239,40 €' },
+  { monate: '36 Monate', wert: '159,60 €', hinweis: true },
+  { monate: '48 Monate', wert: '159,60 €', hinweis: true },
+];
 
-  // Live-Vorschau
-  function previewWbw(kaufpreis: number, monthsAlt: number): number {
-    const floor = (cfg.floor_percent / 100) * kaufpreis;
-    if (monthsAlt >= cfg.useful_life_months) return floor;
-    return kaufpreis - (kaufpreis - floor) * (monthsAlt / cfg.useful_life_months);
-  }
-
+function NumField({ value, suffix }: { value: number; suffix: string }) {
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
-      <AdminBackLink href="/admin/buchhaltung" />
-      <div className="max-w-3xl mx-auto mt-4 space-y-6">
-        <h1 className="text-2xl font-heading">Wiederbeschaffungswert-Berechnung</h1>
-
-        <div className="bg-[#111827] border border-slate-800 rounded p-4 space-y-3">
-          <p className="text-sm text-slate-400">
-            Bestimmt, wie der Wiederbeschaffungswert für nicht manuell gesetzte Inventar-Stücke
-            berechnet wird. Linearer Verfall vom Kaufpreis bis zum Restwert-Floor über die
-            definierte Nutzungsdauer, danach konstant.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm mb-1">Restwert-Floor (%)</label>
-              <input
-                type="number" min={0} max={100}
-                value={cfg.floor_percent}
-                onChange={(e) => setCfg((c) => ({ ...c, floor_percent: parseFloat(e.target.value || '0') }))}
-                className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Auf welchen Prozentsatz vom Kaufpreis sinkt der Wert minimal? (z.B. 40 = WBW endet bei 40% vom Kaufpreis)
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm mb-1">Nutzungsdauer (Monate)</label>
-              <input
-                type="number" min={1}
-                value={cfg.useful_life_months}
-                onChange={(e) => setCfg((c) => ({ ...c, useful_life_months: parseInt(e.target.value || '1', 10) }))}
-                className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Über wie viele Monate erfolgt die lineare Wertminderung?
-              </p>
-            </div>
-          </div>
-
-          {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
-
-          <div className="flex items-center gap-3">
-            <button onClick={save} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold">
-              {busy ? 'Speichert…' : 'Speichern'}
-            </button>
-            {savedAt && Date.now() - savedAt < 5000 && (
-              <span className="text-emerald-400 text-sm">✓ Gespeichert</span>
-            )}
-          </div>
-        </div>
-
-        {loaded && (
-          <div className="bg-[#111827] border border-slate-800 rounded p-4">
-            <h2 className="font-semibold mb-3">Live-Vorschau</h2>
-            <div className="space-y-2 text-sm">
-              <Preview kaufpreis={449} months={6} compute={previewWbw} />
-              <Preview kaufpreis={449} months={18} compute={previewWbw} />
-              <Preview kaufpreis={449} months={cfg.useful_life_months + 6} compute={previewWbw} />
-              <Preview kaufpreis={1299} months={12} compute={previewWbw} />
-              <Preview kaufpreis={89} months={24} compute={previewWbw} />
-            </div>
-          </div>
-        )}
-
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-sm">
-          ⚠ Änderungen wirken sich nur auf Inventar-Stücke ohne manuellen Override aus.
-          Bestehende manuell gesetzte Werte bleiben unverändert.
-        </div>
-      </div>
-    </div>
+    <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1">
+      <span className="font-mono text-[13px] text-slate-800 tabular-nums">{value}</span>
+      <span className="text-[11px] text-slate-400">{suffix}</span>
+    </span>
   );
 }
 
-function Preview({ kaufpreis, months, compute }: { kaufpreis: number; months: number; compute: (k: number, m: number) => number }) {
-  const wbw = compute(kaufpreis, months);
+export default function WbwConfigPage() {
+  const [saved] = useState(false);
+
+  const columns: Column<Vorschau>[] = [
+    { key: 'monate', header: 'Alter', cell: (r) => <span className="text-slate-600 text-[12px]">{r.monate}</span> },
+    { key: 'wert', header: 'Zeitwert', align: 'right', cell: (r) => <span className={`font-mono font-semibold ${r.hinweis ? 'text-amber-600' : 'text-slate-800'}`}>{r.wert}</span> },
+    { key: 'note', header: '', align: 'right', cell: (r) => (r.hinweis ? <span className="text-[10px] text-amber-600">Floor erreicht</span> : null), className: 'hidden sm:table-cell' },
+  ];
+
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-slate-400">Kaufpreis {kaufpreis} €, {months} Monate alt</span>
-      <span className="font-mono">→ {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(wbw)}</span>
+    <div className="space-y-4 max-w-4xl">
+      <PageHeader
+        title="Wiederbeschaffungswert (WBW)"
+        subtitle="Floor-Prozent und Nutzungsdauer je Kategorie — Basis für Kaution, Vertrag und Schadensersatz."
+        actions={<Button variant="primary" size="sm" icon={Save}>Speichern</Button>}
+      />
+
+      <Panel title="Floor &amp; Nutzungsdauer je Kategorie">
+        <div className="divide-y divide-slate-100">
+          {KATEGORIEN.map((k) => (
+            <div key={k.key} className="flex items-center gap-3 py-2.5 flex-wrap">
+              <span className="font-medium text-slate-900 w-32 shrink-0">{k.label}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] uppercase tracking-wider text-slate-400">Floor</span>
+                <NumField value={k.floor} suffix="%" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] uppercase tracking-wider text-slate-400">Nutzungsdauer</span>
+                <NumField value={k.monate} suffix="Monate" />
+              </div>
+            </div>
+          ))}
+        </div>
+        {saved && <p className="text-emerald-600 text-[12px] mt-2">Gespeichert.</p>}
+      </Panel>
+
+      <Panel title="Live-Vorschau · Action-Cam, Kaufpreis 399,00 €">
+        <p className="text-[12px] text-slate-500 mb-2">
+          Lineare Wertminderung von 399,00 € auf den Floor (40 % = 159,60 €) über 36 Monate, danach konstant.
+        </p>
+        <DataTable columns={columns} rows={VORSCHAU} rowKey={(r) => r.monate} />
+      </Panel>
+
+      <Panel title="Entscheidungsbaum">
+        <ol className="space-y-2 text-[12px] text-slate-600">
+          <li className="flex gap-2">
+            <span className="font-mono font-semibold text-cyan-600 shrink-0">1.</span>
+            <span><span className="font-medium text-slate-800">Override gesetzt?</span> — Ein manuell hinterlegter Wert hat immer Vorrang und wird direkt zurückgegeben.</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-mono font-semibold text-cyan-600 shrink-0">2.</span>
+            <span><span className="font-medium text-slate-800">Kein Kaufpreis?</span> — Ohne Netto-Kaufpreis liefert die Berechnung „Nicht gesetzt“, keine geratene Zahl.</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-mono font-semibold text-cyan-600 shrink-0">3.</span>
+            <span><span className="font-medium text-slate-800">Sonst:</span> lineare Formel bis zum Floor-Prozent des Kaufpreises über die Nutzungsdauer — danach bleibt der Wert konstant.</span>
+          </li>
+        </ol>
+        <p className="text-slate-500 text-[12px] mt-3 flex items-center gap-1.5">
+          <GitBranch size={13} className="text-slate-400" />
+          Der WBW lebt getrennt vom steuerlichen Buchwert (AfA) — abgeschrieben heißt nicht wertlos.
+        </p>
+      </Panel>
     </div>
   );
 }

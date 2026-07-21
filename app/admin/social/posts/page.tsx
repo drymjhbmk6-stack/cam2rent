@@ -1,148 +1,96 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDateTime } from '@/lib/format-utils';
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { PageHeader, ButtonLink, FilterPills, DataTable, StatusChip } from '@/components/admin/ui';
+import type { Column, PillDef, ChipTone } from '@/components/admin/ui';
 
-interface SocialPost {
+/* cam2rent Admin 2.0 — Social Posts (Liste, statisch). */
+
+type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
+
+type SocialPost = {
   id: string;
+  platforms: ('fb' | 'ig')[];
   caption: string;
-  media_urls: string[];
-  status: string;
-  platforms: string[];
-  scheduled_at?: string | null;
-  published_at?: string | null;
-  created_at: string;
-  source_type: string;
-  ai_generated: boolean;
-  error_message?: string | null;
-}
+  typ: string;
+  status: PostStatus;
+  datum: string;
+};
 
-const STATUS_FILTERS = [
-  { value: '', label: 'Alle' },
-  { value: 'draft', label: 'Entwürfe' },
-  { value: 'scheduled', label: 'Geplant' },
-  { value: 'published', label: 'Veröffentlicht' },
-  { value: 'failed', label: 'Fehler' },
+const STATUS: Record<PostStatus, { label: string; tone: ChipTone }> = {
+  draft: { label: 'Entwurf', tone: 'slate' },
+  scheduled: { label: 'Geplant', tone: 'cyan' },
+  published: { label: 'Veröffentlicht', tone: 'emerald' },
+  failed: { label: 'Fehler', tone: 'rose' },
+};
+
+const POSTS: SocialPost[] = [
+  { id: 'sp-1', platforms: ['fb', 'ig'], caption: 'Wintersport steht vor der Tür — sicher dir jetzt deine Insta360 X4 fürs nächste Abenteuer auf der Piste. 🎿❄️', typ: 'Produkt', status: 'scheduled', datum: '24.07. 09:00' },
+  { id: 'sp-2', platforms: ['ig'], caption: 'Kundenmaterial der Woche: unser Mieter hat die GoPro Hero 13 mit an den Gardasee genommen. Traumhafte Aufnahmen! 🌊', typ: 'Community', status: 'published', datum: '21.07. 18:30' },
+  { id: 'sp-3', platforms: ['fb', 'ig'], caption: 'Neu im Verleih: das DJI Osmo Action 5 Pro Basic Set — perfekt für Einsteiger. Jetzt zum Aktionspreis mieten.', typ: 'Aktion', status: 'draft', datum: '—' },
+  { id: 'sp-4', platforms: ['fb'], caption: '5 Tipps, wie du das Beste aus deiner Action-Cam am Strand herausholst. Neuer Blog-Artikel ist online! ☀️', typ: 'Blog', status: 'published', datum: '19.07. 12:00' },
+  { id: 'sp-5', platforms: ['fb', 'ig'], caption: 'Sommer-Special: Gratis-Versand ab 79 € Mietwert. Nur noch bis Ende Juli. Code: SOMMER25', typ: 'Aktion', status: 'failed', datum: '18.07. 10:00' },
+  { id: 'sp-6', platforms: ['ig'], caption: 'Frage an euch: Wassersport oder Bergtour — wofür würdet ihr eure nächste Cam mieten? 👇', typ: 'Frage', status: 'draft', datum: '—' },
 ];
 
-export default function SocialPostsList() {
-  const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [loading, setLoading] = useState(true);
+const PILLS: PillDef[] = [
+  { key: 'alle', label: 'Alle', count: 6 },
+  { key: 'draft', label: 'Entwurf', count: 2, tone: 'slate' },
+  { key: 'scheduled', label: 'Geplant', count: 1, tone: 'cyan' },
+  { key: 'published', label: 'Veröffentlicht', count: 2, tone: 'emerald' },
+  { key: 'failed', label: 'Fehler', count: 1, tone: 'rose' },
+];
 
-  async function load() {
-    setLoading(true);
-    const url = new URL('/api/admin/social/posts', window.location.origin);
-    if (statusFilter) url.searchParams.set('status', statusFilter);
-    url.searchParams.set('limit', '100');
-    const res = await fetch(url.toString());
-    const data = await res.json();
-    setPosts(data.posts ?? []);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
-
+function PlatformBadges({ platforms }: { platforms: ('fb' | 'ig')[] }) {
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <AdminBackLink />
-      <div className="flex items-center justify-between mb-4 mt-4">
-        <h1 className="text-2xl font-bold text-white">Posts</h1>
-        <Link
-          href="/admin/social/neu"
-          className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500"
-        >
-          + Neuer Post
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setStatusFilter(f.value)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium border"
-            style={
-              statusFilter === f.value
-                ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', borderColor: '#06b6d4' }
-                : { background: 'transparent', color: '#94a3b8', borderColor: '#334155' }
-            }
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {loading && <p className="text-slate-400">Lade…</p>}
-
-      {!loading && posts.length === 0 && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
-          <p className="text-slate-400">Keine Posts in dieser Kategorie.</p>
-        </div>
+    <span className="inline-flex gap-1">
+      {platforms.includes('fb') && (
+        <span className="inline-flex items-center justify-center px-1.5 h-5 rounded bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-semibold" title="Facebook">FB</span>
       )}
-
-      {!loading && posts.length > 0 && (
-        <div className="space-y-2">
-          {posts.map((p) => (
-            <Link
-              key={p.id}
-              href={`/admin/social/posts/${p.id}`}
-              className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 border border-slate-800 hover:border-slate-700"
-            >
-              {p.media_urls[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.media_urls[0]} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center text-slate-600 text-xs">
-                  Text
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-200 line-clamp-2">{p.caption || '(leer)'}</p>
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 flex-wrap">
-                  <StatusBadge status={p.status} />
-                  <span>•</span>
-                  <span>{(p.platforms ?? []).map((pl) => (pl === 'facebook' ? 'FB' : 'IG')).join(' + ')}</span>
-                  <span>•</span>
-                  <span>
-                    {p.published_at
-                      ? fmtDateTime(p.published_at)
-                      : p.scheduled_at
-                      ? 'Geplant: ' + fmtDateTime(p.scheduled_at)
-                      : fmtDateTime(p.created_at)}
-                  </span>
-                  {p.ai_generated && <span className="px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 text-[10px]">KI</span>}
-                  {p.source_type !== 'manual' && (
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{p.source_type}</span>
-                  )}
-                </div>
-                {p.error_message && (
-                  <p className="text-xs text-red-400 mt-1 line-clamp-1">⚠ {p.error_message}</p>
-                )}
-              </div>
-            </Link>
-          ))}
-        </div>
+      {platforms.includes('ig') && (
+        <span className="inline-flex items-center justify-center px-1.5 h-5 rounded bg-rose-50 text-rose-600 border border-rose-200 text-[10px] font-semibold" title="Instagram">IG</span>
       )}
-    </div>
+    </span>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    draft: { label: 'Entwurf', className: 'bg-slate-800 text-slate-300' },
-    scheduled: { label: 'Geplant', className: 'bg-cyan-900/40 text-cyan-300' },
-    publishing: { label: 'Wird veröffentlicht', className: 'bg-amber-900/40 text-amber-300' },
-    published: { label: 'Veröffentlicht', className: 'bg-emerald-900/40 text-emerald-300' },
-    partial: { label: 'Teilweise', className: 'bg-amber-900/40 text-amber-300' },
-    failed: { label: 'Fehler', className: 'bg-red-900/40 text-red-300' },
-  };
-  const cfg = map[status] ?? { label: status, className: 'bg-slate-800 text-slate-300' };
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.className}`}>{cfg.label}</span>;
+export default function SocialPostsPage() {
+  const [filter, setFilter] = useState('alle');
+  const rows = filter === 'alle' ? POSTS : POSTS.filter((p) => p.status === filter);
+
+  const columns: Column<SocialPost>[] = [
+    { key: 'platforms', header: 'Kanäle', width: '72px', cell: (p) => <PlatformBadges platforms={p.platforms} /> },
+    {
+      key: 'caption',
+      header: 'Caption',
+      cell: (p) => <span className="block max-w-md truncate text-slate-700 text-[13px]">{p.caption}</span>,
+    },
+    {
+      key: 'typ',
+      header: 'Typ',
+      className: 'hidden md:table-cell',
+      cell: (p) => <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">{p.typ}</span>,
+    },
+    { key: 'status', header: 'Status', cell: (p) => <StatusChip tone={STATUS[p.status].tone}>{STATUS[p.status].label}</StatusChip> },
+    {
+      key: 'datum',
+      header: 'Datum',
+      align: 'right',
+      className: 'hidden sm:table-cell',
+      cell: (p) => <span className="font-mono text-[11px] text-slate-400">{p.datum}</span>,
+    },
+  ];
+
+  return (
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader
+        title="Social Posts"
+        subtitle="Facebook &amp; Instagram — Entwürfe, geplante und veröffentlichte Beiträge."
+        actions={<ButtonLink href="/admin/social/neu" variant="primary" icon={Plus}>Neuer Post</ButtonLink>}
+      />
+      <FilterPills pills={PILLS} active={filter} onChange={setFilter} />
+      <DataTable columns={columns} rows={rows} rowKey={(p) => p.id} onRowClick={() => {}} empty="Keine Posts in dieser Kategorie." />
+    </div>
+  );
 }

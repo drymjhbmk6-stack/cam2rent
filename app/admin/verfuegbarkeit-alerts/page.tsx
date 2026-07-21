@@ -1,293 +1,137 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDateTime } from '@/lib/format-utils';
+import { useState } from 'react';
+import { PackageX } from 'lucide-react';
+import { PageHeader, FilterPills, Panel, StatusChip, Button } from '@/components/admin/ui';
+import type { PillDef, ChipTone } from '@/components/admin/ui';
 
-interface UnavailableItem {
-  accessory_id: string;
-  name: string;
-  needed: number;
-  remaining: number;
-}
+/* cam2rent Admin 2.0 — Verfügbarkeits-Alerts (Design-Prototyp, statisch).
+   Signalisiert, wo Kunden buchen wollten, aber Bestand fehlte. */
 
-interface Alert {
+type MissingItem = { name: string; needed: number; remaining: number };
+
+type Alert = {
   id: string;
-  alert_type: 'no_basic_set' | 'basic_set_unavailable' | 'set_unavailable' | 'accessory_unavailable';
-  product_id: string | null;
-  product_name: string | null;
-  set_id: string | null;
-  set_name: string | null;
-  accessory_id: string | null;
-  accessory_name: string | null;
-  rental_from: string | null;
-  rental_to: string | null;
-  customer_email: string | null;
-  occurrence_count: number;
-  first_seen_at: string;
-  last_seen_at: string;
-  resolved_at: string | null;
-  resolved_note: string | null;
-  details: { unavailable_items?: UnavailableItem[] } | null;
-}
-
-const TYPE_LABEL: Record<Alert['alert_type'], string> = {
-  no_basic_set: 'Basis-Set fehlt',
-  basic_set_unavailable: 'Basis-Set ausgebucht',
-  set_unavailable: 'Set ausgebucht',
-  accessory_unavailable: 'Zubehör ausgebucht',
+  type: string;
+  typeTone: ChipTone;
+  subject: string;
+  range: string;
+  count: number;
+  status: 'offen' | 'erledigt';
+  missing?: MissingItem[];
 };
 
-const TYPE_HINT: Record<Alert['alert_type'], string> = {
-  no_basic_set: 'Für diese Kamera ist kein Basis-Set hinterlegt. Im Admin unter "Sets" ein Set als Basis-Set für diese Kamera markieren.',
-  basic_set_unavailable: 'Das Basis-Set für diese Kamera ist im gewünschten Zeitraum ausgebucht. Inventar prüfen oder Zubehör nachbestellen.',
-  set_unavailable: 'Ein Set ist im Zeitraum ausgebucht. Inventar prüfen.',
-  accessory_unavailable: 'Zubehör ist im Zeitraum ausgebucht. Inventar prüfen.',
-};
+const ALERTS: Alert[] = [
+  {
+    id: 'v1',
+    type: 'Basis-Set ausgebucht',
+    typeTone: 'rose',
+    subject: 'GoPro Hero13 Black · Wassersport Set',
+    range: '24.07. – 28.07.2026',
+    count: 6,
+    status: 'offen',
+    missing: [
+      { name: 'Tauchgehäuse', needed: 1, remaining: 0 },
+      { name: 'Zusatz-Akku', needed: 3, remaining: 1 },
+    ],
+  },
+  {
+    id: 'v2',
+    type: 'Basis-Set fehlt',
+    typeTone: 'amber',
+    subject: 'Insta360 Ace Pro 2',
+    range: '—',
+    count: 3,
+    status: 'offen',
+  },
+  {
+    id: 'v3',
+    type: 'Zubehör ausgebucht',
+    typeTone: 'amber',
+    subject: '512 GB Speicherkarte',
+    range: '22.07. – 25.07.2026',
+    count: 2,
+    status: 'offen',
+  },
+  {
+    id: 'v4',
+    type: 'Set ausgebucht',
+    typeTone: 'amber',
+    subject: 'DJI Osmo Action 5 Pro · Vlog Set',
+    range: '14.07. – 18.07.2026',
+    count: 4,
+    status: 'erledigt',
+  },
+];
 
-const TYPE_COLOR: Record<Alert['alert_type'], string> = {
-  no_basic_set: '#ef4444',
-  basic_set_unavailable: '#f97316',
-  set_unavailable: '#f59e0b',
-  accessory_unavailable: '#eab308',
-};
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '';
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  return `${m[3]}.${m[2]}.${m[1]}`;
-}
+const STATUS_PILLS: PillDef[] = [
+  { key: 'offen', label: 'Offen', tone: 'rose', count: ALERTS.filter((a) => a.status === 'offen').length },
+  { key: 'erledigt', label: 'Erledigt', tone: 'emerald', count: ALERTS.filter((a) => a.status === 'erledigt').length },
+];
 
 export default function VerfuegbarkeitAlertsPage() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showResolved, setShowResolved] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/availability-alerts?open=${!showResolved}`);
-      if (res.ok) {
-        const json = await res.json();
-        setAlerts(Array.isArray(json.alerts) ? json.alerts : []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [showResolved]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleResolve(id: string) {
-    const note = window.prompt('Optional: Kurzer Kommentar zur Lösung (z.B. "Zubehör nachgekauft", "Set umkonfiguriert"):');
-    if (note === null) return; // Abbruch
-    setBusy(id);
-    try {
-      const res = await fetch('/api/admin/availability-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'resolve', note: note || undefined }),
-      });
-      if (res.ok) await load();
-      else alert('Fehler beim Markieren als erledigt.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleReopen(id: string) {
-    setBusy(id);
-    try {
-      const res = await fetch('/api/admin/availability-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'reopen' }),
-      });
-      if (res.ok) await load();
-      else alert('Fehler beim Wiedereröffnen.');
-    } finally {
-      setBusy(null);
-    }
-  }
+  const [filter, setFilter] = useState('offen');
+  const rows = ALERTS.filter((a) => a.status === filter);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e2e8f0', padding: '20px 16px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <AdminBackLink />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Verfügbarkeits-Alerts</h1>
-            <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, marginBottom: 0 }}>
-              Buchungen, die wegen ausgebuchter Sets/Zubehör oder fehlender Basis-Sets nicht abgeschlossen werden konnten.
-            </p>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showResolved}
-              onChange={(e) => setShowResolved(e.target.checked)}
-              style={{ accentColor: '#06b6d4' }}
-            />
-            Auch erledigte anzeigen
-          </label>
-        </div>
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader
+        title="Verfügbarkeits-Alerts"
+        subtitle="Wo Kunden buchen wollten, aber Bestand fehlte — Nachfrage-Signal für den Einkauf."
+      />
 
-        {loading ? (
-          <p style={{ color: '#94a3b8' }}>Lädt…</p>
-        ) : alerts.length === 0 ? (
-          <div style={{ background: '#111827', borderRadius: 12, padding: 32, textAlign: 'center', border: '1px solid #1e293b' }}>
-            <p style={{ color: '#10b981', fontSize: 18, fontWeight: 700, margin: 0 }}>
-              ✓ Keine offenen Verfügbarkeits-Alerts
-            </p>
-            <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
-              Alle Sets und das Zubehör sind aktuell für alle Buchungen verfügbar.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {alerts.map((a) => {
-              const period = a.rental_from
-                ? `${fmtDate(a.rental_from)}${a.rental_to && a.rental_to !== a.rental_from ? ` – ${fmtDate(a.rental_to)}` : ''}`
-                : null;
-              const isResolved = !!a.resolved_at;
-              return (
-                <div
-                  key={a.id}
-                  style={{
-                    background: '#111827',
-                    borderRadius: 12,
-                    padding: 16,
-                    border: `1px solid ${isResolved ? '#1e293b' : '#7f1d1d'}`,
-                    opacity: isResolved ? 0.65 : 1,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 220 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                        <span style={{
-                          padding: '3px 10px',
-                          borderRadius: 999,
-                          background: TYPE_COLOR[a.alert_type],
-                          color: '#fff',
-                          fontSize: 11,
-                          fontWeight: 700,
-                        }}>
-                          {TYPE_LABEL[a.alert_type]}
-                        </span>
-                        {a.occurrence_count > 1 && (
-                          <span style={{ fontSize: 11, color: '#fda4af' }}>
-                            {a.occurrence_count}× gemeldet
-                          </span>
-                        )}
-                        {isResolved && (
-                          <span style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>
-                            ✓ Erledigt {fmtDateTime(a.resolved_at!)}
-                          </span>
-                        )}
-                      </div>
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-                        {a.product_name ?? a.set_name ?? a.accessory_name ?? '—'}
-                      </p>
-                      <div style={{ marginTop: 6, fontSize: 13, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {a.set_name && a.product_name && <span>Set: {a.set_name}</span>}
-                        {a.accessory_name && (a.product_name || a.set_name) && <span>Zubehör: {a.accessory_name}</span>}
-                        {period && <span>Zeitraum: {period}</span>}
-                        {a.customer_email && <span>Kunde: {a.customer_email}</span>}
-                        <span style={{ color: '#64748b' }}>Erstmals: {fmtDateTime(a.first_seen_at)} · Zuletzt: {fmtDateTime(a.last_seen_at)}</span>
-                      </div>
-                      {a.alert_type === 'basic_set_unavailable' && a.details?.unavailable_items && a.details.unavailable_items.length > 0 ? (
-                        <div style={{ marginTop: 10, padding: '10px 12px', background: '#1f2937', border: '1px solid #7f1d1d', borderRadius: 8 }}>
-                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fca5a5' }}>
-                            Diese Bestandteile fehlen:
-                          </p>
-                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#fecaca' }}>
-                            {a.details.unavailable_items.map((it) => (
-                              <li key={it.accessory_id} style={{ marginBottom: 2 }}>
-                                <span style={{ color: '#fff', fontWeight: 600 }}>{it.name}</span>
-                                {' — '}
-                                <span>benötigt {it.needed}, frei {it.remaining}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : (
-                        <p style={{ margin: '10px 0 0', fontSize: 12, color: '#fca5a5', fontStyle: 'italic' }}>
-                          {TYPE_HINT[a.alert_type]}
-                        </p>
-                      )}
-                      {a.resolved_note && (
-                        <p style={{ margin: '8px 0 0', fontSize: 12, color: '#86efac' }}>
-                          Lösungs-Notiz: {a.resolved_note}
-                        </p>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {!isResolved ? (
-                        <button
-                          type="button"
-                          onClick={() => handleResolve(a.id)}
-                          disabled={busy === a.id}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#10b981',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: busy === a.id ? 'wait' : 'pointer',
-                            opacity: busy === a.id ? 0.6 : 1,
-                          }}
-                        >
-                          Als erledigt
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleReopen(a.id)}
-                          disabled={busy === a.id}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#475569',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: busy === a.id ? 'wait' : 'pointer',
-                            opacity: busy === a.id ? 0.6 : 1,
-                          }}
-                        >
-                          Wiedereröffnen
-                        </button>
-                      )}
-                      {a.alert_type === 'no_basic_set' && (
-                        <a
-                          href="/admin/sets"
-                          style={{
-                            padding: '6px 12px',
-                            background: '#0891b2',
-                            color: '#fff',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            textDecoration: 'none',
-                            textAlign: 'center',
-                          }}
-                        >
-                          Sets öffnen
-                        </a>
-                      )}
-                    </div>
+      <FilterPills pills={STATUS_PILLS} active={filter} onChange={setFilter} />
+
+      {rows.length === 0 ? (
+        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center">
+          <PackageX size={22} className="mx-auto text-slate-300 mb-2" />
+          <p className="font-medium text-slate-700">Keine Alerts</p>
+          <p className="text-slate-400 mt-1 text-[12px]">In dieser Ansicht ist gerade nichts offen.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((a) => (
+            <Panel key={a.id}>
+              <div className="flex items-start gap-3 flex-wrap">
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StatusChip tone={a.typeTone}>{a.type}</StatusChip>
+                    <span className="font-medium text-slate-900">{a.subject}</span>
+                  </div>
+                  <div className="text-[12px] text-slate-500 flex items-center gap-3 flex-wrap">
+                    <span>Zeitraum: {a.range}</span>
+                    <span className="font-mono">{a.count}× aufgetreten</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <div className="flex items-center gap-2">
+                  <StatusChip tone={a.status === 'offen' ? 'rose' : 'emerald'}>
+                    {a.status === 'offen' ? 'Offen' : 'Erledigt'}
+                  </StatusChip>
+                  {a.status === 'offen' && <Button size="sm" variant="secondary">Erledigt</Button>}
+                </div>
+              </div>
+
+              {a.missing && a.missing.length > 0 && (
+                <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-3">
+                  <div className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold mb-1.5">Fehlende Bestandteile</div>
+                  <ul className="space-y-1">
+                    {a.missing.map((m) => (
+                      <li key={m.name} className="flex items-center justify-between text-[12px] text-amber-900">
+                        <span>{m.name}</span>
+                        <span className="font-mono">
+                          benötigt {m.needed}, frei {m.remaining}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Panel>
+          ))}
+        </div>
+      )}
+
+      <p className="text-slate-400 text-[11px]">Design-Prototyp · Beispieldaten.</p>
     </div>
   );
 }

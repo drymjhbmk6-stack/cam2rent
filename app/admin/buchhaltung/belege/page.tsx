@@ -1,569 +1,88 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
-import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
-import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
+import { useState } from 'react';
+import { FileUp, ScanLine, CheckCircle2 } from 'lucide-react';
+import {
+  PageHeader, DataTable, StatusChip, FilterPills, Button,
+} from '@/components/admin/ui';
+import type { Column, PillDef, ChipTone } from '@/components/admin/ui';
 
-interface Beleg {
-  id: string;
-  beleg_nr: string;
-  beleg_datum: string;
-  rechnungsnummer_lieferant: string | null;
-  summe_brutto: number;
-  status: 'offen' | 'teilweise' | 'klassifiziert' | 'festgeschrieben';
-  quelle: string;
-  positions_total: number;
-  positions_pending: number;
-  lieferant: { name: string } | null;
-  ist_eigenbeleg: boolean;
-  ocr_status?: 'pending' | 'running' | 'done' | 'failed' | null;
-  ocr_error?: string | null;
-  verdacht_duplikat_beleg_id?: string | null;
-  verdacht_duplikat_dismissed_at?: string | null;
-}
+/* cam2rent Admin 2.0 — Belege-Liste (statisch). */
 
-const STATUS_LABEL: Record<string, string> = {
-  offen: 'Offen',
-  teilweise: 'Teilweise',
-  klassifiziert: 'Klassifiziert',
-  festgeschrieben: 'Festgeschrieben',
-};
-const STATUS_COLOR: Record<string, string> = {
-  offen: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-  teilweise: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
-  klassifiziert: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
-  festgeschrieben: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+type Beleg = {
+  nr: string;
+  lieferant: string;
+  datum: string;
+  monat: string;
+  brutto: string;
+  bruttoNum: number;
+  status: 'festgeschrieben' | 'entwurf';
+  ocr: 'ok' | 'laeuft' | 'fehler';
 };
 
-// Reihenfolge fuer Status-Sortierung: offen (oben/neu) → festgeschrieben (unten/erledigt)
-const STATUS_ORDER: Record<string, number> = {
-  offen: 0,
-  teilweise: 1,
-  klassifiziert: 2,
-  festgeschrieben: 3,
-};
-
-type SortKey = 'beleg_nr' | 'beleg_datum' | 'lieferant' | 'summe_brutto' | 'klassifizierung' | 'status';
-type SortDir = 'asc' | 'desc';
-
-// Zentrale Helper aus lib/format-utils
-const fmtEuro = formatCurrency;
-const fmtDate = fmtDateCanonical;
-
-const MONATS_NAMEN = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+const BELEGE: Beleg[] = [
+  { nr: 'BELEG-2026-00042', lieferant: 'DJI Store Europe', datum: '14.06.2026', monat: 'jun', brutto: '396,00 €', bruttoNum: 396.0, status: 'entwurf', ocr: 'ok' },
+  { nr: 'BELEG-2026-00041', lieferant: 'Amazon Business', datum: '11.06.2026', monat: 'jun', brutto: '89,70 €', bruttoNum: 89.7, status: 'entwurf', ocr: 'laeuft' },
+  { nr: 'BELEG-2026-00040', lieferant: 'Verpackungsmarkt24', datum: '04.06.2026', monat: 'jun', brutto: '31,80 €', bruttoNum: 31.8, status: 'festgeschrieben', ocr: 'ok' },
+  { nr: 'BELEG-2026-00039', lieferant: 'Stripe Payments', datum: '02.06.2026', monat: 'jun', brutto: '8,42 €', bruttoNum: 8.42, status: 'festgeschrieben', ocr: 'ok' },
+  { nr: 'BELEG-2026-00038', lieferant: 'Rode Microphones', datum: '18.05.2026', monat: 'mai', brutto: '279,00 €', bruttoNum: 279.0, status: 'festgeschrieben', ocr: 'fehler' },
+  { nr: 'BELEG-2026-00037', lieferant: 'Adobe Systems', datum: '10.05.2026', monat: 'mai', brutto: '59,49 €', bruttoNum: 59.49, status: 'festgeschrieben', ocr: 'ok' },
 ];
 
-// 'YYYY-MM' → 'Mai 2026'
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split('-');
-  const idx = Number(m) - 1;
-  if (!y || idx < 0 || idx > 11) return ym;
-  return `${MONATS_NAMEN[idx]} ${y}`;
+const STATUS: Record<Beleg['status'], { tone: ChipTone; label: string }> = {
+  festgeschrieben: { tone: 'emerald', label: 'Festgeschrieben' },
+  entwurf: { tone: 'amber', label: 'Entwurf' },
+};
+
+const OCR: Record<Beleg['ocr'], { cls: string; label: string }> = {
+  ok: { cls: 'bg-slate-100 text-slate-500 border-slate-200', label: 'OCR ✓' },
+  laeuft: { cls: 'bg-cyan-50 text-cyan-700 border-cyan-200', label: 'OCR läuft' },
+  fehler: { cls: 'bg-rose-50 text-rose-700 border-rose-200', label: 'OCR-Fehler' },
+};
+
+const MONATE: PillDef[] = [
+  { key: 'alle', label: 'Alle 2026', count: 6 },
+  { key: 'jun', label: 'Juni', count: 4, tone: 'cyan' },
+  { key: 'mai', label: 'Mai', count: 2 },
+];
+
+function euro(n: number) {
+  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 }
 
-// 'YYYY-MM' → 'Mai' (nur Monatsname, ohne Jahr)
-function monthNameOnly(ym: string): string {
-  const idx = Number(ym.slice(5, 7)) - 1;
-  return idx >= 0 && idx <= 11 ? MONATS_NAMEN[idx] : ym;
-}
+export default function BelegePage() {
+  const [monat, setMonat] = useState('alle');
+  const rows = monat === 'alle' ? BELEGE : BELEGE.filter((b) => b.monat === monat);
+  const summe = rows.reduce((s, b) => s + b.bruttoNum, 0);
 
-function getSortValue(b: Beleg, key: SortKey): string | number {
-  switch (key) {
-    case 'beleg_nr': return b.beleg_nr ?? '';
-    case 'beleg_datum': return b.beleg_datum ?? '';   // ISO YYYY-MM-DD ist lex-sortierbar
-    case 'lieferant': return (b.lieferant?.name ?? '').toLocaleLowerCase('de-DE');
-    case 'summe_brutto': return Number(b.summe_brutto ?? 0);
-    case 'klassifizierung': return b.positions_total === 0 ? 0 : (b.positions_total - b.positions_pending) / b.positions_total;
-    case 'status': return STATUS_ORDER[b.status] ?? 99;
-  }
-}
-
-export default function BelegeListePage() {
-  const [belege, setBelege] = useState<Beleg[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [q, setQ] = useState('');
-  const [scanResult, setScanResult] = useState<{ scanned: number; flagged: number } | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const [retryStatus, setRetryStatus] = useState<{ done: number; remaining: number; succeeded: number } | null>(null);
-  const retryAbortRef = useRef(false);
-  // Default: neueste oben — Datum absteigend.
-  const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [previewBelegId, setPreviewBelegId] = useState<string | null>(null);
-  // Jahr-Dropdown (null = noch nicht initialisiert → springt auf neuestes Jahr)
-  const [yearFilter, setYearFilter] = useState<string | null>(null);
-  // Monats-Reiter: 'YYYY-MM' oder '' (= alle Monate des gewaehlten Jahres)
-  const [monthFilter, setMonthFilter] = useState<string>('');
-  const initRef = useRef(false);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const sp = new URLSearchParams();
-      if (statusFilter) sp.set('status', statusFilter);
-      if (q) sp.set('q', q);
-      sp.set('limit', '200');
-      const res = await fetch(`/api/admin/belege?${sp.toString()}`);
-      const data = await res.json();
-      setBelege(data.belege ?? []);
-      setLoading(false);
-    };
-    const debounce = setTimeout(load, 300);
-    return () => clearTimeout(debounce);
-  }, [statusFilter, q]);
-
-  const failedOcrCount = useMemo(
-    () => belege.filter((b) => b.ocr_status === 'failed').length,
-    [belege],
-  );
-
-  async function refreshList() {
-    const sp = new URLSearchParams();
-    if (statusFilter) sp.set('status', statusFilter);
-    if (q) sp.set('q', q);
-    sp.set('limit', '200');
-    const r = await fetch(`/api/admin/belege?${sp.toString()}`);
-    setBelege((await r.json()).belege ?? []);
-  }
-
-  async function handleRetryFailed() {
-    if (retrying) {
-      // Zweiter Klick = abbrechen
-      retryAbortRef.current = true;
-      return;
-    }
-    setRetrying(true);
-    retryAbortRef.current = false;
-    let done = 0;
-    let succeeded = 0;
-    let remaining = failedOcrCount;
-    setRetryStatus({ done, remaining, succeeded });
-
-    while (remaining > 0 && !retryAbortRef.current) {
-      try {
-        const res = await fetch('/api/admin/belege/retry-failed-ocr', { method: 'POST' });
-        if (!res.ok) {
-          alert('Retry fehlgeschlagen — bitte später erneut versuchen.');
-          break;
-        }
-        const data = await res.json();
-        done += data.retried ?? 0;
-        succeeded += data.succeeded ?? 0;
-        remaining = data.remaining ?? 0;
-        setRetryStatus({ done, remaining, succeeded });
-        if ((data.retried ?? 0) === 0) break; // Sicherheits-Bremse
-      } catch {
-        alert('Netzwerkfehler beim Retry — bitte erneut versuchen.');
-        break;
-      }
-    }
-
-    await refreshList();
-    setRetrying(false);
-  }
-
-  // Client-seitige Sortierung — bei 100 Eintraegen vernachlaessigbarer Aufwand
-  // gegenueber dem Network-Roundtrip einer Server-Sortierung.
-  const sortedBelege = useMemo(() => {
-    const arr = [...belege];
-    arr.sort((a, b) => {
-      const va = getSortValue(a, sortKey);
-      const vb = getSortValue(b, sortKey);
-      if (va === vb) return 0;
-      const cmp = typeof va === 'number' && typeof vb === 'number'
-        ? va - vb
-        : String(va).localeCompare(String(vb), 'de-DE');
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return arr;
-  }, [belege, sortKey, sortDir]);
-
-  // Verfuegbare Jahre aus den geladenen Belegen (neueste zuerst).
-  const years = useMemo(() => {
-    const set = new Set<string>();
-    for (const b of belege) {
-      const y = (b.beleg_datum ?? '').slice(0, 4);
-      if (y.length === 4) set.add(y);
-    }
-    return [...set].sort((a, b) => b.localeCompare(a));
-  }, [belege]);
-
-  // Beim ersten Laden auf das neueste Jahr + dessen neuesten Monat springen.
-  useEffect(() => {
-    if (initRef.current || belege.length === 0) return;
-    initRef.current = true;
-    const newestYear = years[0] ?? '';
-    setYearFilter(newestYear);
-    const newestMonth = belege
-      .map((b) => (b.beleg_datum ?? '').slice(0, 7))
-      .filter((k) => k.length === 7 && k.slice(0, 4) === newestYear)
-      .sort((a, b) => b.localeCompare(a))[0] ?? '';
-    setMonthFilter(newestMonth);
-  }, [belege, years]);
-
-  // Bei aktiver Suche: Jahr-/Monatsfilter ignorieren (Treffer aus allen Zeitraeumen).
-  const searching = q.trim().length > 0;
-  const effYear = searching ? '' : (yearFilter ?? '');
-  const effectiveMonth = searching ? '' : monthFilter;
-
-  // Monate des gewaehlten Jahres (neueste zuerst) inkl. Anzahl.
-  const monthsForYear = useMemo(() => {
-    if (!effYear) return [];
-    const map = new Map<string, number>();
-    for (const b of belege) {
-      const key = (b.beleg_datum ?? '').slice(0, 7);
-      if (key.length !== 7 || key.slice(0, 4) !== effYear) continue;
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-    return [...map.entries()]
-      .map(([ym, count]) => ({ ym, count }))
-      .sort((a, b) => b.ym.localeCompare(a.ym));
-  }, [belege, effYear]);
-
-  const yearCount = useMemo(
-    () => belege.filter((b) => (b.beleg_datum ?? '').slice(0, 4) === effYear).length,
-    [belege, effYear],
-  );
-
-  const visibleBelege = useMemo(() => {
-    if (searching) return sortedBelege;
-    return sortedBelege.filter((b) => {
-      const d = b.beleg_datum ?? '';
-      if (effYear && d.slice(0, 4) !== effYear) return false;
-      if (effectiveMonth && d.slice(0, 7) !== effectiveMonth) return false;
-      return true;
-    });
-  }, [sortedBelege, searching, effYear, effectiveMonth]);
-
-  const visibleSum = useMemo(
-    () => visibleBelege.reduce((acc, b) => acc + Number(b.summe_brutto ?? 0), 0),
-    [visibleBelege],
-  );
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      // gleicher Key → Richtung wechseln
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      // neuer Key → bei Datum/Brutto/Klassifizierung default desc, sonst asc
-      setSortKey(key);
-      setSortDir(key === 'beleg_datum' || key === 'summe_brutto' || key === 'klassifizierung' ? 'desc' : 'asc');
-    }
-  }
-
-  function SortHeader({
-    label, k, align,
-  }: { label: string; k: SortKey; align?: 'left' | 'right' }) {
-    const active = sortKey === k;
-    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
-    return (
-      <th className={`px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-        <button
-          onClick={() => toggleSort(k)}
-          className={`inline-flex items-center gap-1 uppercase text-xs font-semibold tracking-wider transition-colors ${
-            active ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
-          }`}
-          aria-label={`Sortieren nach ${label}${active ? `, aktuell ${sortDir === 'asc' ? 'aufsteigend' : 'absteigend'}` : ''}`}
-        >
-          <span>{label}</span>
-          <span className={active ? '' : 'opacity-50'}>{arrow}</span>
-        </button>
-      </th>
-    );
-  }
+  const columns: Column<Beleg>[] = [
+    { key: 'nr', header: 'Beleg-Nr.', cell: (b) => <span className="font-mono text-[11px] text-cyan-700">{b.nr}</span> },
+    { key: 'lieferant', header: 'Lieferant', cell: (b) => <span className="font-medium text-slate-900">{b.lieferant}</span> },
+    { key: 'datum', header: 'Datum', cell: (b) => <span className="text-slate-500 text-[12px]">{b.datum}</span>, className: 'hidden sm:table-cell' },
+    { key: 'brutto', header: 'Brutto', align: 'right', cell: (b) => <span className="font-mono font-semibold">{b.brutto}</span> },
+    { key: 'ocr', header: 'OCR', align: 'center', cell: (b) => <span className={`text-[10px] px-1.5 py-0.5 rounded border ${OCR[b.ocr].cls}`}>{OCR[b.ocr].label}</span>, className: 'hidden md:table-cell' },
+    { key: 'status', header: 'Status', align: 'right', cell: (b) => <StatusChip tone={STATUS[b.status].tone}>{STATUS[b.status].label}</StatusChip> },
+  ];
 
   return (
-    <div className="min-h-dvh bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
-      <AdminBackLink href="/admin/buchhaltung" />
-      <div className="max-w-7xl mx-auto mt-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-heading">Belege</h1>
-          <div className="flex gap-2 flex-wrap">
-            {failedOcrCount > 0 && (
-              <button
-                onClick={handleRetryFailed}
-                className="px-4 py-2 bg-rose-500 hover:bg-rose-400 text-slate-900 rounded font-semibold"
-                title="Re-triggert OCR mit Throttle (3 parallel max), umgeht Rate-Limits."
-              >
-                {retrying
-                  ? `⏸ Stoppen (${retryStatus?.done ?? 0}/${(retryStatus?.done ?? 0) + (retryStatus?.remaining ?? 0)})`
-                  : `🔄 OCR-Fehler neu starten (${failedOcrCount})`}
-              </button>
-            )}
-            <button
-              onClick={async () => {
-                if (scanning) return;
-                setScanning(true);
-                setScanResult(null);
-                try {
-                  const res = await fetch('/api/admin/belege/scan-duplicates', { method: 'POST' });
-                  const data = await res.json();
-                  if (res.ok) {
-                    setScanResult({ scanned: data.scanned ?? 0, flagged: data.flagged ?? 0 });
-                    await refreshList();
-                  } else {
-                    alert(data.error ?? 'Scan fehlgeschlagen');
-                  }
-                } finally {
-                  setScanning(false);
-                }
-              }}
-              disabled={scanning}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold"
-              title="Sucht inhaltliche Duplikate im gesamten Bestand und markiert sie"
-            >
-              {scanning ? 'Scanne…' : '🔍 Duplikate scannen'}
-            </button>
-            <Link
-              href="/admin/buchhaltung/belege/bulk"
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-semibold"
-            >
-              📚 Mehrere hochladen
-            </Link>
-            <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
-              + Neuer Beleg
-            </Link>
-          </div>
-        </div>
-        {scanResult && (
-          <div className={`p-3 rounded text-sm mb-4 ${
-            scanResult.flagged > 0
-              ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
-              : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-          }`}>
-            {scanResult.flagged > 0
-              ? <>⚠ <b>{scanResult.flagged}</b> verdächtige Duplikate gefunden (von {scanResult.scanned} geprüften Belegen). Markierte Belege haben jetzt einen ⚠-Badge.</>
-              : <>✓ Keine Duplikate gefunden (alle {scanResult.scanned} offenen Belege geprüft).</>
-            }
-          </div>
-        )}
-        {retryStatus && (
-          <div className={`p-3 rounded text-sm mb-4 ${
-            retrying
-              ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-200'
-              : retryStatus.remaining === 0 && retryStatus.succeeded > 0
-                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                : 'bg-amber-500/10 border border-amber-500/30 text-amber-200'
-          }`}>
-            {retrying ? (
-              <>⏳ Retry läuft… {retryStatus.done} verarbeitet, {retryStatus.succeeded} erfolgreich, noch {retryStatus.remaining} übrig.</>
-            ) : retryStatus.remaining === 0 ? (
-              <>✓ Alle OCR-Retries fertig — {retryStatus.succeeded} von {retryStatus.done} erfolgreich.</>
-            ) : (
-              <>⏸ Retry gestoppt — {retryStatus.done} verarbeitet ({retryStatus.succeeded} erfolgreich), {retryStatus.remaining} noch fehlgeschlagen.</>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Suchen…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base flex-1 min-w-[200px]"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base"
-          >
-            <option value="">Alle Status</option>
-            <option value="offen">Offen</option>
-            <option value="teilweise">Teilweise</option>
-            <option value="klassifiziert">Klassifiziert</option>
-            <option value="festgeschrieben">Festgeschrieben</option>
-          </select>
-          {!searching && years.length > 0 && (
-            <select
-              value={yearFilter ?? ''}
-              onChange={(e) => { setYearFilter(e.target.value); setMonthFilter(''); }}
-              className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base"
-              aria-label="Jahr wählen"
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Monats-Reiter fuer das gewaehlte Jahr. Bei aktiver Suche ausgeblendet. */}
-        {!searching && monthsForYear.length > 0 && (
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
-            <button
-              onClick={() => setMonthFilter('')}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                effectiveMonth === ''
-                  ? 'bg-cyan-500 text-slate-900 border-cyan-500'
-                  : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
-              }`}
-              style={{ scrollSnapAlign: 'start' }}
-            >
-              Alle ({yearCount})
-            </button>
-            {monthsForYear.map((m) => (
-              <button
-                key={m.ym}
-                onClick={() => setMonthFilter(m.ym)}
-                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
-                  effectiveMonth === m.ym
-                    ? 'bg-cyan-500 text-slate-900 border-cyan-500'
-                    : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
-                }`}
-                style={{ scrollSnapAlign: 'start' }}
-              >
-                {monthNameOnly(m.ym)} ({m.count})
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Summen-Zeile fuer die aktuelle Ansicht */}
-        {!loading && visibleBelege.length > 0 && (
-          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3 text-sm">
-            <span className="text-slate-400">
-              {searching
-                ? `${visibleBelege.length} Treffer`
-                : effectiveMonth
-                  ? `${monthLabel(effectiveMonth)} · ${visibleBelege.length} Beleg(e)`
-                  : `${effYear} · ${visibleBelege.length} Beleg(e)`}
-            </span>
-            <span className="text-slate-300">
-              Summe brutto: <b className="text-white">{fmtEuro(visibleSum)}</b>
-            </span>
-          </div>
-        )}
-
-        {loading ? (
-          <p className="text-slate-400">Lädt…</p>
-        ) : visibleBelege.length === 0 ? (
-          <p className="text-slate-400">Keine Belege gefunden.</p>
-        ) : (
-          // overflow-x-auto + min-w auf der Tabelle = horizontal scrollbar auf
-          // schmalen Viewports, Lieferanten-Namen werden nicht mehr umbrochen.
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-slate-900 text-left">
-                <tr>
-                  <SortHeader label="Beleg-Nr" k="beleg_nr" />
-                  <SortHeader label="Datum" k="beleg_datum" />
-                  <SortHeader label="Lieferant" k="lieferant" />
-                  <SortHeader label="Brutto" k="summe_brutto" align="right" />
-                  <SortHeader label="Klassif." k="klassifizierung" />
-                  <SortHeader label="Status" k="status" />
-                  <th className="px-3 py-2 text-xs font-semibold text-slate-400 whitespace-nowrap">Beleg</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleBelege.map((b) => (
-                  <tr
-                    key={b.id}
-                    className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
-                    onClick={() => { window.location.href = `/admin/buchhaltung/belege/${b.id}`; }}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{b.beleg_nr}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(b.beleg_datum)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {b.lieferant?.name ?? <span className="text-slate-500 italic">–</span>}
-                      {b.ist_eigenbeleg && <span className="ml-2 text-xs text-amber-400">(Eigenbeleg)</span>}
-                      {(b.ocr_status === 'running' || b.ocr_status === 'pending') && (
-                        <span
-                          className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-violet-500/15 text-violet-300 border border-violet-500/30"
-                          title="Die KI liest den Beleg gerade aus — eine Push-Notification kommt, sobald fertig."
-                        >
-                          <span className="inline-block w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
-                          KI läuft
-                        </span>
-                      )}
-                      {b.ocr_status === 'failed' && (
-                        <span
-                          className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-red-500/15 text-red-300 border border-red-500/30"
-                          title={b.ocr_error ?? 'OCR-Fehler — Daten manuell ergänzen.'}
-                        >
-                          OCR-Fehler
-                        </span>
-                      )}
-                      {b.verdacht_duplikat_beleg_id && !b.verdacht_duplikat_dismissed_at && (
-                        <span
-                          className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                          title="Verdacht auf Duplikat — gleicher Lieferant + Datum/Rg-Nr/Betrag wie ein anderer Beleg. Bitte im Detail prüfen."
-                        >
-                          ⚠ Duplikat-Verdacht
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">{fmtEuro(Number(b.summe_brutto))}</td>
-                    <td className="px-3 py-2 text-xs whitespace-nowrap">
-                      {b.positions_pending > 0
-                        ? <span className="text-amber-400">{b.positions_total - b.positions_pending}/{b.positions_total}</span>
-                        : <span className="text-emerald-400">{b.positions_total}/{b.positions_total} ✓</span>}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs border ${STATUS_COLOR[b.status]}`}>
-                        {STATUS_LABEL[b.status]}
-                      </span>
-                    </td>
-                    <td
-                      className="px-3 py-2 text-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => setPreviewBelegId(b.id)}
-                        title="Rechnung ansehen"
-                        aria-label="Rechnung ansehen"
-                        className="text-slate-400 hover:text-cyan-300 text-base"
-                      >
-                        👁
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="space-y-4 max-w-6xl">
+      <PageHeader
+        title="Belege"
+        subtitle="Jede Ausgabe entsteht über einen Beleg — KI-OCR, Klassifizierung, dann lückenlose Belegnummer."
+        actions={<Button variant="primary" size="sm" icon={FileUp}>Beleg hochladen</Button>}
+      />
+      <FilterPills pills={MONATE} active={monat} onChange={setMonat} />
+      <DataTable columns={columns} rows={rows} rowKey={(b) => b.nr} onRowClick={() => {}} />
+      <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-2.5">
+        <span className="text-[12px] text-slate-500">{rows.length} Belege{monat !== 'alle' ? ` · ${monat === 'jun' ? 'Juni' : 'Mai'} 2026` : ' · 2026'}</span>
+        <span className="font-mono font-semibold text-slate-800">Summe brutto: {euro(summe)}</span>
       </div>
-
-      {previewBelegId && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-          onClick={() => setPreviewBelegId(null)}
-        >
-          <div
-            className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[88vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-3 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="font-semibold text-white text-sm">Rechnung ansehen</h2>
-              <div className="flex items-center gap-3">
-                <Link
-                  href={`/admin/buchhaltung/belege/${previewBelegId}`}
-                  className="text-cyan-400 hover:text-cyan-300 text-xs"
-                >
-                  Zum Beleg →
-                </Link>
-                <button
-                  onClick={() => setPreviewBelegId(null)}
-                  className="text-slate-500 hover:text-slate-300 text-xl leading-none"
-                  aria-label="Schließen"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div className="p-3 overflow-y-auto">
-              <BelegDokumentVorschau belegId={previewBelegId} height={620} />
-            </div>
-          </div>
-        </div>
-      )}
+      <p className="text-slate-500 text-[12px] flex items-center gap-1.5">
+        <ScanLine size={13} className="text-slate-400" />
+        Duplikat-Erkennung greift bei gleicher Rechnungsnummer oder gleicher Summe + Datum. Festgeschriebene Belege
+        <CheckCircle2 size={12} className="inline text-emerald-500 mx-0.5" />
+        sind gesperrt und tragen eine lückenlose Belegnummer.
+      </p>
     </div>
   );
 }
