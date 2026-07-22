@@ -1,14 +1,12 @@
 /**
- * DB auslesen: listet alle Tabellen (public-Schema) + Zeilenzahl + Beispielzeilen.
+ * DB-Struktur auslesen: listet alle Tabellen (public-Schema) + ihre Spalten (Felder + Typ).
+ * KEINE Daten/Beispielzeilen — nur was jede Tabelle aufnimmt.
  *
  * Nutzt SUPABASE_URL + SERVICE_ROLE_KEY aus der Umgebung (.env / Coolify).
  * Aufruf:
- *   node scripts/db-inspect.mjs                 -> alle Tabellen, je 3 Beispielzeilen
- *   node scripts/db-inspect.mjs bookings        -> nur diese Tabelle, 10 Zeilen
- *   node scripts/db-inspect.mjs --rows 5        -> alle Tabellen, je 5 Beispielzeilen
- *
- * .env laden (falls nicht schon gesetzt):
- *   node --env-file=.env scripts/db-inspect.mjs
+ *   node --env-file=.env scripts/db-inspect.mjs             -> alle Tabellen + Spalten
+ *   node --env-file=.env scripts/db-inspect.mjs bookings    -> nur diese Tabelle
+ *   node --env-file=.env scripts/db-inspect.mjs --md         -> als Markdown (zum Speichern)
  */
 
 const URL =
@@ -23,68 +21,47 @@ if (!URL || !KEY) {
   process.exit(1);
 }
 
-// Argumente
 const args = process.argv.slice(2);
-let sampleRows = 3;
-const only = [];
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--rows') sampleRows = parseInt(args[++i], 10) || 3;
-  else only.push(args[i]);
-}
+const md = args.includes('--md');
+const only = args.filter((a) => !a.startsWith('--'));
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 
-// 1) Tabellennamen aus dem PostgREST-OpenAPI-Schema holen
-async function listTables() {
+async function main() {
   const res = await fetch(`${URL}/rest/v1/`, { headers });
   if (!res.ok) throw new Error(`Schema-Abruf fehlgeschlagen: ${res.status}`);
   const spec = await res.json();
-  return Object.keys(spec.definitions || spec.components?.schemas || {}).sort();
-}
+  const defs = spec.definitions || spec.components?.schemas || {};
 
-// 2) Zeilenzahl (exakt, nur Header) + Beispielzeilen
-async function inspect(table) {
-  // Count via Content-Range Header (Prefer: count=exact, head)
-  const countRes = await fetch(
-    `${URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`,
-    { headers: { ...headers, Prefer: 'count=exact', Range: '0-0' } }
-  );
-  const range = countRes.headers.get('content-range') || '*/?';
-  const total = range.split('/')[1];
-
-  // Beispielzeilen
-  let sample = [];
-  if (sampleRows > 0) {
-    const r = await fetch(
-      `${URL}/rest/v1/${encodeURIComponent(table)}?select=*&limit=${sampleRows}`,
-      { headers }
-    );
-    if (r.ok) sample = await r.json();
-  }
-  return { total, sample };
-}
-
-async function main() {
-  let tables = await listTables();
+  let tables = Object.keys(defs).sort();
   if (only.length) tables = tables.filter((t) => only.includes(t));
 
-  console.log(`\n📊 ${tables.length} Tabellen in ${URL}\n`);
+  if (md) console.log(`# DB-Struktur (${tables.length} Tabellen)\n`);
+  else console.log(`\n${tables.length} Tabellen in ${URL}\n`);
 
   for (const t of tables) {
-    try {
-      const { total, sample } = await inspect(t);
-      console.log(`\n=== ${t}  (${total} Zeilen) ===`);
-      if (sample.length) {
-        console.log('Spalten:', Object.keys(sample[0]).join(', '));
-        console.dir(sample, { depth: 2, maxArrayLength: sampleRows });
-      } else {
-        console.log('(leer oder keine Leserechte)');
+    const props = defs[t].properties || {};
+    const cols = Object.keys(props);
+    if (md) {
+      console.log(`\n## ${t}  (${cols.length} Spalten)\n`);
+      console.log('| Spalte | Typ | Hinweis |');
+      console.log('|---|---|---|');
+      for (const c of cols) {
+        const p = props[c];
+        const typ = p.format || p.type || '';
+        const note = (p.description || '').split('\n')[0].replace(/\|/g, '\\|');
+        console.log(`| ${c} | ${typ} | ${note} |`);
       }
-    } catch (e) {
-      console.log(`\n=== ${t}  — Fehler: ${e.message}`);
+    } else {
+      console.log(`\n=== ${t}  (${cols.length} Spalten) ===`);
+      for (const c of cols) {
+        const p = props[c];
+        const typ = p.format || p.type || '';
+        console.log(`  ${c.padEnd(32)} ${typ}`);
+      }
     }
   }
-  console.log('\n✅ Fertig.\n');
+  if (!md) console.log('\n✅ Fertig.\n');
 }
 
 main().catch((e) => {
