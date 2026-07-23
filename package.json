@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:studio": "supabase status",
+    "db:seed": "node --env-file=.env.local scripts/local-db/seed.mjs",
+    "db:reset": "bash scripts/local-db/reset.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
@@ -52,6 +57,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "postcss": "^8.4.47",
+    "supabase": "^2.109.1",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^4.1.4"
