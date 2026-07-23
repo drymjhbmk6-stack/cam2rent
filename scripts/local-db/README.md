@@ -22,8 +22,8 @@ von der Live-Seite**. Die Live-DB wird nie berührt.
 |---|---|
 | `npm run db:start` | Lokale Supabase hochfahren |
 | `npm run db:stop`  | Herunterfahren |
-| `npm run db:seed`  | Testdaten neu einspielen |
-| `npm run db:reset` | DB komplett neu aufbauen (Schema + Rechte + Testdaten) |
+| `npm run db:seed`  | Beispiel-Testdaten einspielen (nur wenn gewünscht) |
+| `npm run db:reset` | DB komplett neu aufbauen — **leer** (Schema + Rechte, KEINE Daten) |
 | `npm run db:studio`| Zugangsdaten/Status anzeigen |
 
 ## Dateien

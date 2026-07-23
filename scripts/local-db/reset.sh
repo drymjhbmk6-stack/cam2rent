@@ -35,8 +35,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
 SQL
 
-echo "4/4  Testdaten anlegen..."
-node --env-file=.env.local scripts/local-db/seed.mjs 2>&1 | grep -vE "Assertion failed|async\.c"
+if [ "${1:-}" = "--seed" ]; then
+  echo "4/4  Testdaten anlegen (--seed)..."
+  node --env-file=.env.local scripts/local-db/seed.mjs 2>&1 | grep -vE "Assertion failed|async\.c"
+else
+  echo "4/4  Ohne Testdaten (leere DB). Fuer Beispieldaten: npm run db:seed"
+fi
 
 echo ""
 echo "Fertig. Lokale DB neu aufgebaut."
