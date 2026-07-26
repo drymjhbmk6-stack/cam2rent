@@ -425,9 +425,9 @@ export async function sendAdminNotification(data: BookingEmailData) {
 
 
 function haftungLabel(h: string) {
-  if (h === 'standard') return 'Standard-Haftungsoption';
-  if (h === 'premium') return 'Premium-Haftungsoption';
-  return 'Keine Haftungsbegrenzung';
+  if (h === 'standard') return 'Basis-Haftungsschutz';
+  if (h === 'premium') return 'Premium-Haftungsschutz';
+  return 'Ohne Haftungsschutz';
 }
 
 function shippingLabel(method: string | undefined, mode: string) {

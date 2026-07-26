@@ -34,9 +34,18 @@ git reset --hard origin/master
 ## Wichtige Regeln
 
 ### Haftungsschutz — NIEMALS "Versicherung" sagen
-Die Haftungsoptionen (15 € Standard / 25 € Premium) dürfen NICHT als "Versicherung", "versichert" oder "Vollversichert" bezeichnet werden.
+Die Haftungsoptionen (15 € Basis / 25 € Premium) dürfen NICHT als "Versicherung", "versichert" oder "Vollversichert" bezeichnet werden.
 Immer verwenden: "Haftungsschutz", "Haftungsbegrenzung", "Haftungsoption", "abgesichert".
-**Warum:** cam2rent ist kein Versicherungsunternehmen. Die Prämien bilden ein eigenes Reparaturdepot.
+**Warum:** cam2rent ist kein Versicherungsunternehmen. Der Haftungsschutz ist eine vertragliche Begrenzung der Ersatzpflicht des Mieters; den über den Höchstbetrag hinausgehenden Schaden trägt cam2rent.
+
+**Verbindliche Terminologie (Rechtstexte-Compliance-Sweep 2026-07-26):**
+- **Optionsnamen einheitlich:** „Ohne Haftungsschutz" / „Basis-Haftungsschutz" / „Premium-Haftungsschutz" (NICHT mehr „Standard-Haftung(soption)", „Keine Haftungsbegrenzung" als Option-Label).
+- **Verboten in UI/PDF/Mails:** „Schadenspauschale" → „Haftungsschutz"; „Selbstbeteiligung"/„Eigenbeteiligung" → „Höchstbetrag der Ersatzpflicht"; „Reparaturdepot" → ersatzlos gestrichen (Restschaden „trägt cam2rent").
+- **„keine Versicherung im Sinne des VVG"** bleibt Pflicht-Wortlaut (rechtlich zwingende Negation) — NICHT entfernen.
+- **DB-Feld-WERTE unverändert:** `bookings.haftung` bleibt `'standard'`/`'premium'`/`'none'`, `<option value="standard">`, `shipping_method='standard'` — nur die Anzeige-Labels wurden umbenannt.
+- **ODR-Plattform (ec.europa.eu/consumers/odr) restlos entfernt** (EU-Plattform seit 20.07.2025 eingestellt); nur der VSBG-Satz (§ 36 VSBG) bleibt.
+- **Alt-Recht → aktuell:** § 5/§ 7/§§ 7–10 DDG (statt TMG), § 18 Abs. 2 MStV (statt § 55 RStV), TDDDG (statt TTDSG).
+- ⚠️ **Stale Rechtstext-Fallbacks:** `getParagraphen()` (contract-template.tsx) + AGB-Fallback (`app/agb/page.tsx`) sind noch die ALTE Nummerierung (19-§ Vertrag / 20-§ AGB). Autoritativ ist die DB-Fassung (V9, §§1-24 Vertrag / §§1-25 AGB). Beim Sweep wurde nur die Terminologie im Fallback angepasst, NICHT die Nummerierung — die Fallbacks aus der DB regenerieren, wenn die autoritativen Texte vorliegen.
 
 ### Expressversand ist immer kostenpflichtig
 Expressversand kostet immer 12,99 € — auch wenn der Gratis-Versand-Schwellwert erreicht ist.
@@ -2435,7 +2444,7 @@ validity-gefilterte `getDiscountMatchesForItem`).
   - **3 Aufrufer** nutzen den Helper: `/api/invoice/[bookingId]`, `/api/admin/booking/[id]/send-email`, `lib/email.ts` (Buchungsbestaetigung, laedt Booking defensiv per `bookingId`). `InvoiceData` hat zwei neue optionale Felder `cameraLines`/`accessoryLines`; ohne sie greift im PDF der alte Fallback-Pfad (keine Regression fuer Altaufrufer).
   - **Rechnungs-Versionierung + „Rechnungsanpassung“ (Stand 2026-05-19):** Jede Fassung der Kundenrechnung wird intern **unveränderlich archiviert** (Snapshot + PDF). Migration `supabase/supabase-invoice-versions.sql` legt Tabelle `invoice_versions` an (id, booking_id, invoice_number, version_number, is_current, lines JSONB inkl. `fingerprint`, gross/net/tax, reason, trigger_source, pdf_path, sent_to_customer_at/email; RLS no-UPDATE/DELETE außer service-role, partial-unique `(booking_id) WHERE is_current`). Neuer Builder `lib/build-invoice-data.ts` → `buildInvoiceData(supabase, booking)` ist jetzt die **einzige Quelle** für `InvoiceData` (Steuer+Adresse+Zeilen+EPC-QR) — `/api/invoice/[bookingId]` wurde darauf umgestellt (reine Extraktion, byte-gleich). `lib/invoice-versions.ts` → `snapshotInvoiceVersion(supabase, bookingId, {reason, triggerSource, previousBooking, request})` ist **non-blocking** (fängt alle Fehler selbst ab — eine Buchungsänderung darf nie an der Versionierung scheitern), eingehängt am Ende der erfolgreichen Zweige `accessory_edit` + `booking_edit` (`app/api/admin/booking/[id]/route.ts`) und in `app/api/confirm-extension/route.ts`. **Lazy-Baseline:** existiert noch keine Version, wird v1 aus `previousBooking` (= Zustand VOR der Änderung) erzeugt, dann v2 aus dem frischen Stand — so ist die „Vorher“-Fassung auch für Altbuchungen erhalten. **Dedupe** über `fingerprint` (Zeilen+Summen+Zeitraum): keine neue Version bei nicht-rechnungsrelevanten Edits. PDF (`lib/invoice-pdf.tsx`) bekam optionale Felder `adjustmentVersion`/`adjustmentReason`/`replacesDate`: ab v≥2 Titel **„Rechnungsanpassung“** + „Anpassung Nr. X · ersetzt die Fassung vom …“, **gleiche Rechnungsnummer** (GoBD-Nummern bleiben laut Projektregel unangetastet). Versand **bewusst manuell**: `GET/POST /api/admin/booking/[id]/invoice-versions` (GET = Liste + frische Signed-URLs, POST = aktuelle/gewählte Fassung als `sendInvoiceAdjustment`-Mail, emailType `invoice_adjustment`, setzt sent_to_*; defensiver 503 bei fehlender Migration). Admin-UI: Section **„Rechnungsversionen“** (`InvoiceVersionsPanel` in `/admin/buchungen/[id]`, erscheint erst ab ≥2 Fassungen) mit PDF-Download je Fassung + Senden/Erneut-Senden-Button. Buchhaltungs-`invoices`/`credit_notes` + Stripe-Zahlung/Refund **nicht** angefasst (steuerliche Korrektur weiter über Gutschrift-Workflow). Audit: `booking.invoice_version`, `booking.invoice_send`.
 - **Mietvertrag-PDF** (`lib/contracts/contract-template.tsx`):
-  - React-PDF Template mit 19 Paragraphen
+  - React-PDF Template mit den Vertragsparagraphen aus der DB (autoritativ; hardcoded `getParagraphen()`-Fallback ist ALT-Nummerierung, siehe Compliance-Hinweis oben)
   - Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr
   - Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
   - `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)

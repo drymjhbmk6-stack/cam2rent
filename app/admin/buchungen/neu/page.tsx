@@ -77,8 +77,8 @@ interface StaticProduct {
 }
 
 const HAFTUNG_OPTIONS = [
-  { value: 'none', label: 'Keine Haftungsbegrenzung' },
-  { value: 'standard', label: 'Standard-Haftungsschutz' },
+  { value: 'none', label: 'Ohne Haftungsschutz' },
+  { value: 'standard', label: 'Basis-Haftungsschutz' },
   { value: 'premium', label: 'Premium-Haftungsschutz' },
 ];
 
@@ -478,7 +478,7 @@ export default function ManualBookingPage() {
       // Haftung
       const hp = getHaftungPrice(prod.haftung);
       if (hp > 0) {
-        const label = prod.haftung === 'standard' ? 'Standard-Haftungsoption' : 'Premium-Haftungsoption';
+        const label = prod.haftung === 'standard' ? 'Basis-Haftungsschutz' : 'Premium-Haftungsschutz';
         items.push({ description: `${label} (${p?.name ?? prod.id})`, amount: hp * prod.qty });
       }
       // Notiz

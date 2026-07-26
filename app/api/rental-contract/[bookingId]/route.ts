@@ -207,9 +207,9 @@ export async function GET(
     timeZone: 'Europe/Berlin',
   });
 
-  const haftungLabel = booking.haftung === 'standard' ? 'Basis-Schadenspauschale'
-    : booking.haftung === 'premium' ? 'Premium-Schadenspauschale'
-    : 'Ohne Schadenspauschale';
+  const haftungLabel = booking.haftung === 'standard' ? 'Basis-Haftungsschutz'
+    : booking.haftung === 'premium' ? 'Premium-Haftungsschutz'
+    : 'Ohne Haftungsschutz';
 
   // Seriennummer laden falls Unit zugeordnet
   let serialNumber = '';
@@ -250,11 +250,11 @@ export async function GET(
     priceHaftung: booking.price_haftung || 0,
     priceTotal: booking.price_total || 0,
     haftungOption: haftungLabel,
-    haftungDescription: haftungLabel === 'Ohne Schadenspauschale'
-      ? 'Keine Schadenspauschale gewählt. Haftung bis zum Wiederbeschaffungswert.'
-      : haftungLabel === 'Basis-Schadenspauschale'
-      ? `Ersatzpflicht auf max. ${eigenbeteiligung} EUR je Schadensereignis begrenzt.`
-      : 'Volle Haftungsfreistellung – keine Selbstbeteiligung.',
+    haftungDescription: haftungLabel === 'Ohne Haftungsschutz'
+      ? 'Kein Haftungsschutz gewählt. Haftung bis zum Wiederbeschaffungswert.'
+      : haftungLabel === 'Basis-Haftungsschutz'
+      ? `Ersatzpflicht auf max. ${eigenbeteiligung} EUR je Schadensereignis begrenzt (Höchstbetrag der Ersatzpflicht).`
+      : 'Volle Haftungsfreistellung – Höchstbetrag der Ersatzpflicht: 0 EUR.',
     eigenbeteiligung,
     stripePaymentIntentId: booking.payment_intent_id || '',
     signatureDataUrl,

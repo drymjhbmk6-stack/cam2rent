@@ -296,15 +296,16 @@ const faqSections: FaqSection[] = [
       {
         question: 'Was passiert bei einem Schaden?',
         answer:
-          'Normaler Verschleiß ist kein Problem. Bei Beschädigungen haftest du im Rahmen deiner gewählten Haftungsoption — höchstens bis zur jeweiligen Selbstbeteiligung, ohne gewählten Haftungsschutz bis zum Wiederbeschaffungswert. Du wirst vorab per E-Mail über den Schadensbetrag informiert. Schäden bitte immer sofort melden.',
+          'Normaler Verschleiß ist kein Problem. Bei Beschädigungen haftest du im Rahmen deines gewählten Haftungsschutzes — höchstens bis zum jeweiligen Höchstbetrag der Ersatzpflicht, ohne gewählten Haftungsschutz bis zum Wiederbeschaffungswert. Du wirst vorab per E-Mail über den Schadensbetrag informiert. Schäden bitte immer sofort melden.',
       },
       {
         question: 'Gibt es einen Haftungsschutz?',
         answer: (
           <>
-            Ja! Bei der Buchung kannst du zwischen Standard-Haftung (max. 200 € Selbstbeteiligung,
-            bei 360°-Kameras 300 €) und Premium-Haftung (keine Selbstbeteiligung) wählen. Ohne
-            gewählte Haftungsoption haftest du für den vollen Wiederbeschaffungswert. Es handelt
+            Ja! Bei der Buchung kannst du zwischen Basis-Haftungsschutz (Höchstbetrag der
+            Ersatzpflicht max. 200 €, bei 360°-Kameras 300 €) und Premium-Haftungsschutz
+            (Höchstbetrag der Ersatzpflicht 0 €) wählen. Ohne
+            gewählten Haftungsschutz haftest du für den vollen Wiederbeschaffungswert. Es handelt
             sich dabei nicht um eine Versicherung, sondern um eine Haftungsbegrenzung. Details
             findest du in unseren{' '}
             <Link href="/haftungsbedingungen" className="text-accent-blue hover:underline font-medium">Haftungsbedingungen</Link>.

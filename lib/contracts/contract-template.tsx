@@ -52,7 +52,7 @@ export interface RentalContractData {
   priceHaftung: number;
   priceTotal: number;
   // Haftung
-  haftungOption: string;         // 'Ohne Schadenspauschale' | 'Basis-Schadenspauschale' | 'Premium-Schadenspauschale'
+  haftungOption: string;         // 'Ohne Haftungsschutz' | 'Basis-Haftungsschutz' | 'Premium-Haftungsschutz'
   haftungDescription: string;
   // Eigenbeteiligung (dynamisch pro Kategorie)
   eigenbeteiligung?: number;
@@ -80,7 +80,7 @@ export interface RentalContractData {
   // admin_settings.environment_mode geladen (siehe generate-contract.ts).
   testMode?: boolean;
   // Globaler Schadens-Modus aus admin_settings.deposit_mode.
-  // 'kaution' = echte Pre-Auth via Stripe; 'haftung' = nur Schadenspauschale.
+  // 'kaution' = echte Pre-Auth via Stripe; 'haftung' = nur Haftungsschutz.
   // Steuert Hinweistexte im Vertrag (kein "Kaution wird nicht erhoben"-Satz
   // im Kaution-Modus, dafuer Pre-Auth-Hinweis).
   depositMode?: 'kaution' | 'haftung';
@@ -275,7 +275,7 @@ export function getParagraphen(eigenbeteiligung: number = 200): { title: string;
   { title: '\u00a7 4 Mietdauer, \u00dcbergabe, R\u00fcckgabe', text: '(1) Die Mietdauer ergibt sich aus den Buchungsdaten dieses Vertrags.\n(2) Bei Versand beginnt die Mietdauer mit dem vereinbarten Mietbeginn, unabh\u00e4ngig vom tats\u00e4chlichen Zustelldatum.\n(3) Bei Abholung beginnt die Mietdauer mit der tats\u00e4chlichen \u00dcbergabe.\n(4) Die R\u00fcckgabe erfolgt fristgerecht, wenn der Mieter die Mietsache am letzten Miettag bis 18:00 Uhr nachweislich an den Versanddienstleister \u00fcbergibt oder pers\u00f6nlich zur\u00fcckgibt.\n(5) Die R\u00fcckgabe umfasst die Mietsache, s\u00e4mtliches Zubeh\u00f6r und die Originalverpackung.' },
   { title: '\u00a7 5 Gefahr\u00fcbergang beim Versand', text: '(1) Der Vermieter tr\u00e4gt das Risiko des Hinversands bis zur Zustellung.\n(2) Das Risiko beim R\u00fcckversand tr\u00e4gt der Vermieter ab \u00dcbergabe an den Versanddienstleister, sofern der Mieter den bereitgestellten R\u00fccksendeschein und eine transportsichere Verpackung verwendet.' },
   { title: '\u00a7 6 Pflichten des Mieters', text: '(1) Der Mieter verpflichtet sich, die Mietsache pfleglich, bestimmungsgem\u00e4\u00df und unter Beachtung der Herstellerangaben zu behandeln.\n(2) Untersagt sind insbesondere: a) Nutzung entgegen Herstellerangaben, b) \u00d6ffnen, Modifizieren oder Reparieren der Mietsache, c) Weitergabe an Dritte ohne Zustimmung, d) gewerbliche Nutzung ohne Zustimmung, e) rechtswidrige Nutzung.\n(3) Der Mieter sch\u00fctzt die Mietsache vor Verlust, Diebstahl und Witterungseinfl\u00fcssen.\n(4) Zuwiderhandlungen berechtigen zur fristlosen K\u00fcndigung.' },
-  { title: '\u00a7 7 Haftung des Mieters, Schadenspauschale', text: `(1) Der Mieter haftet f\u00fcr Sch\u00e4den, Verlust, Zerst\u00f6rung oder Diebstahl der Mietsache w\u00e4hrend der Mietdauer.\n(2) Die gew\u00e4hlte Schadenspauschale bestimmt die Haftungsobergrenze:\na) Ohne Schadenspauschale: Haftung bis zum Zeitwert (Wiederbeschaffungswert).\nb) Basis-Schadenspauschale: Ersatzpflicht auf ${eigenbeteiligung} EUR je Schadensereignis begrenzt.\nc) Premium-Schadenspauschale: Ersatzpflicht auf 0 EUR begrenzt.\n(2a) Die Tagespauschalen sind nach Mietdauer gestaffelt:\n\u2022 Basis: 15 EUR/Tag (1\u20137 Tage), 20 EUR/Tag (8\u201314), 25 EUR/Tag (15\u201321), +5 EUR/Tag je weitere 7 Tage.\n\u2022 Premium: 25 EUR/Tag (1\u20137 Tage), 35 EUR/Tag (8\u201314), 45 EUR/Tag (15\u201321), +10 EUR/Tag je weitere 7 Tage.\n(3) Schadensh\u00f6he: a) bei reparablen Sch\u00e4den die Reparaturkosten, b) bei Totalschaden/Verlust der Zeitwert.\n(4) Die Haftungsbegrenzung gilt NICHT bei: a) Vorsatz/grobe Fahrl\u00e4ssigkeit, b) bestimmungswidriger Nutzung, c) Versto\u00df gegen \u00a7 6, d) unterlassener Schadensmeldung, e) Diebstahl ohne Anzeige.\n(5) Die Schadenspauschale ist KEINE Versicherung im Sinne des VVG.` },
+  { title: '\u00a7 7 Haftung des Mieters, Haftungsschutz', text: `(1) Der Mieter haftet f\u00fcr Sch\u00e4den, Verlust, Zerst\u00f6rung oder Diebstahl der Mietsache w\u00e4hrend der Mietdauer.\n(2) Der gew\u00e4hlte Haftungsschutz bestimmt die Haftungsobergrenze:\na) Ohne Haftungsschutz: Haftung bis zum Zeitwert (Wiederbeschaffungswert).\nb) Basis-Haftungsschutz: Ersatzpflicht auf ${eigenbeteiligung} EUR je Schadensereignis begrenzt.\nc) Premium-Haftungsschutz: Ersatzpflicht auf 0 EUR begrenzt.\n(2a) Die Tagespauschalen sind nach Mietdauer gestaffelt:\n\u2022 Basis: 15 EUR/Tag (1\u20137 Tage), 20 EUR/Tag (8\u201314), 25 EUR/Tag (15\u201321), +5 EUR/Tag je weitere 7 Tage.\n\u2022 Premium: 25 EUR/Tag (1\u20137 Tage), 35 EUR/Tag (8\u201314), 45 EUR/Tag (15\u201321), +10 EUR/Tag je weitere 7 Tage.\n(3) Schadensh\u00f6he: a) bei reparablen Sch\u00e4den die Reparaturkosten, b) bei Totalschaden/Verlust der Zeitwert.\n(4) Die Haftungsbegrenzung gilt NICHT bei: a) Vorsatz/grobe Fahrl\u00e4ssigkeit, b) bestimmungswidriger Nutzung, c) Versto\u00df gegen \u00a7 6, d) unterlassener Schadensmeldung, e) Diebstahl ohne Anzeige.\n(5) Der Haftungsschutz ist KEINE Versicherung im Sinne des VVG.` },
   { title: '\u00a7 8 Schadensmeldung', text: '(1) Sch\u00e4den, Verlust oder Diebstahl sind dem Vermieter unverz\u00fcglich, sp\u00e4testens innerhalb von 48 Stunden, per E-Mail an kontakt@cam2rent.de zu melden.\n(2) Bei Diebstahl ist zus\u00e4tzlich Strafanzeige zu erstatten. Eine Kopie ist binnen 7 Tagen vorzulegen.\n(3) Der Vermieter dokumentiert den Schaden nachvollziehbar und \u00fcbermittelt die Nachweise vor Geltendmachung.' },
   { title: '\u00a7 9 Schadensabrechnung, Zahlungsmodalit\u00e4ten', text: '(1) Weder eine Kaution noch eine Kreditkartenvorautorisierung wird erhoben. Anspr\u00fcche werden separat abgerechnet.\n(2) Im Schadensfall stellt der Vermieter eine Rechnung mit Aufstellung, Fotodokumentation und ggf. Kostenvoranschlag. Zahlungsfrist: 14 Tage.\n(3) Der Mieter erh\u00e4lt die Schadensdokumentation zur Pr\u00fcfung und kann binnen 14 Tagen widersprechen.\n(4) Bei Zahlungsverzug gelten die gesetzlichen Regelungen (\u00a7\u00a7 286 ff. BGB).\n(5) Der Mieter bleibt verpflichtet, die Mietsache fristgerecht zur\u00fcckzugeben. Ein Zur\u00fcckbehaltungsrecht besteht nicht.' },
   { title: '\u00a7 10 M\u00e4ngel der Mietsache', text: '(1) Bei M\u00e4ngeln stehen dem Mieter die gesetzlichen Rechte nach \u00a7\u00a7 536 ff. BGB zu.\n(2) Offensichtliche M\u00e4ngel sollten m\u00f6glichst zeitnah angezeigt werden. Gesetzliche Rechte bleiben unber\u00fchrt.\n(3) Kann der Vermieter die Mietsache nicht bereitstellen, werden gezahlte Betr\u00e4ge binnen 14 Tagen erstattet.' },
@@ -286,7 +286,7 @@ export function getParagraphen(eigenbeteiligung: number = 200): { title: string;
   { title: '\u00a7 15 Aufrechnung, Zur\u00fcckbehaltungsrecht', text: 'Der Mieter kann nur mit unbestrittenen oder rechtskr\u00e4ftig festgestellten Gegenforderungen aufrechnen. Ein Zur\u00fcckbehaltungsrecht besteht nur bei Gegenansprüchen aus demselben Vertragsverh\u00e4ltnis.' },
   { title: '\u00a7 16 Datenschutz', text: '(1) Der Vermieter verarbeitet Daten zur Vertragsdurchf\u00fchrung (Art. 6 Abs. 1 lit. b DSGVO), zur Betrugspr\u00e4vention (Art. 6 Abs. 1 lit. f DSGVO) und zur Erf\u00fcllung gesetzlicher Pflichten (Art. 6 Abs. 1 lit. c DSGVO).\n(2) Empf\u00e4nger: Stripe (Zahlung), Resend (E-Mail), Sendcloud (Versand). Auftragsverarbeitungsvertr\u00e4ge bestehen.\n(3) Einzelheiten unter www.cam2rent.de/datenschutz.' },
   { title: '\u00a7 17 Elektronischer Vertragsschluss, Textform', text: '(1) Der Vertrag wird elektronisch geschlossen. Die Best\u00e4tigung erfolgt per E-Mail.\n(2) Der Vertragstext wird gespeichert und dem Mieter als PDF \u00fcbermittelt.\n(3) \u00c4nderungen bed\u00fcrfen der Textform (E-Mail gen\u00fcgt).\n(4) Eine handschriftliche Unterschrift ist zur Wirksamkeit nicht erforderlich.' },
-  { title: '\u00a7 18 Online-Streitbeilegung, Verbraucherschlichtung', text: '(1) Die Europ\u00e4ische Kommission stellt eine Plattform zur Online-Streitbeilegung bereit: https://ec.europa.eu/consumers/odr/\n(2) Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (\u00a7 36 VSBG).' },
+  { title: '\u00a7 18 Verbraucherschlichtung', text: 'Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (\u00a7 36 VSBG).' },
   { title: '\u00a7 19 Anwendbares Recht, Schlussbestimmungen', text: '(1) Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Zwingende Verbraucherschutzvorschriften bleiben unber\u00fchrt.\n(2) Eine Gerichtsstandsvereinbarung wird nicht getroffen; es gelten die gesetzlichen Regelungen.\n(3) Sollten einzelne Bestimmungen unwirksam sein, bleibt die Wirksamkeit der \u00fcbrigen Bestimmungen unber\u00fchrt (Salvatorische Klausel).\n(4) M\u00fcndliche Nebenabreden bestehen nicht.' },
   ];
 }
@@ -443,7 +443,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         </View>
 
         {/* Wiederbeschaffungswerte */}
-        <Text style={{ fontSize: 8, color: GRAY, marginBottom: 4 }}>Zur Transparenz: Die folgenden Zeitwerte dienen als Obergrenze der Ersatzpflicht bei Totalschaden oder Verlust (Option Ohne Schadenspauschale, siehe § 7). Berechnung pauschal nach Wertminderungsformel: linear sinkend vom Kaufpreis ueber 36 Monate auf 40 % Restwert (Floor); danach konstant. Der Mieter kann im Schadensfall einen geringeren Marktwert nachweisen — dann gilt der echte Wert.</Text>
+        <Text style={{ fontSize: 8, color: GRAY, marginBottom: 4 }}>Zur Transparenz: Die folgenden Zeitwerte dienen als Obergrenze der Ersatzpflicht bei Totalschaden oder Verlust (Option Ohne Haftungsschutz). Berechnung pauschal nach Wertminderungsformel: linear sinkend vom Kaufpreis ueber 36 Monate auf 40 % Restwert (Floor); danach konstant. Der Mieter kann im Schadensfall einen geringeren Marktwert nachweisen — dann gilt der echte Wert.</Text>
         <Text style={{ fontSize: 8, color: GRAY, marginBottom: 4, fontFamily: 'Helvetica-Bold' }}>Die ausgewiesenen Wiederbeschaffungswerte stellen eine vorläufige Schätzung zum Zeitpunkt der Buchung dar. Der Mieter erhält spätestens zum Zeitpunkt der Versandbestätigung eine automatische E-Mail mit den finalen Wiederbeschaffungswerten. Maßgeblich für eine etwaige Ersatzpflicht ist ausschließlich der in dieser E-Mail ausgewiesene finale Wiederbeschaffungswert.</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', backgroundColor: NAVY, paddingVertical: 3, paddingHorizontal: 6 }}>
@@ -482,7 +482,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
               rows.push({ label: 'Anpassung', value: fmtEuro(adjustment) });
             }
             rows.push({ label: 'Versandkosten', value: fmtEuro(data.priceShipping) });
-            rows.push({ label: `Schadenspauschale (${data.haftungOption})`, value: fmtEuro(data.priceHaftung) });
+            rows.push({ label: `Haftungsschutz (${data.haftungOption})`, value: fmtEuro(data.priceHaftung) });
             return rows.map((r, i) => (
               <TableRow key={`entgelt-${i}`} label={r.label} value={r.value} alt={i % 2 === 1} />
             ));
@@ -502,7 +502,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           </Text>
         ) : (
           <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>
-            Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben. Etwaige Schadenersatzansprueche werden nach § 9 dieses Vertrags separat abgerechnet.
+            Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben. Etwaige Schadenersatzansprueche werden nach den Bestimmungen dieses Vertrags separat abgerechnet.
           </Text>
         )}
 
@@ -515,22 +515,22 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         {/* Konkrete Haftungsgrenze fuer diese Buchung */}
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, padding: 10, marginBottom: 16 }}>
           <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: NAVY, marginBottom: 6 }}>Konkrete Schadensregel fuer diese Buchung</Text>
-          {data.haftungOption === 'Premium-Schadenspauschale' ? (
+          {data.haftungOption === 'Premium-Haftungsschutz' ? (
             <>
               <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
-                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> 0,00 EUR
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Höchstbetrag der Ersatzpflicht des Mieters je Schadensereignis:</Text> 0,00 EUR
               </Text>
               <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
-                Bei Premium-Schadenspauschale traegt cam2rent jeden Schaden vollstaendig — ausgenommen Vorsatz, grobe Fahrlaessigkeit oder bestimmungswidrige Nutzung (siehe § 7 Abs. 4).
+                Bei Premium-Haftungsschutz traegt cam2rent jeden Schaden vollstaendig — ausgenommen Vorsatz, grobe Fahrlaessigkeit oder bestimmungswidrige Nutzung (Ausnahmen siehe Haftungsregelung dieses Vertrags).
               </Text>
             </>
-          ) : data.haftungOption === 'Basis-Schadenspauschale' ? (
+          ) : data.haftungOption === 'Basis-Haftungsschutz' ? (
             <>
               <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
-                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> {fmtEuro(data.eigenbeteiligung ?? 200)}
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Höchstbetrag der Ersatzpflicht des Mieters je Schadensereignis:</Text> {fmtEuro(data.eigenbeteiligung ?? 200)}
               </Text>
               <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
-                Bei reparablen Schaeden traegt der Mieter die Reparaturkosten bis zu diesem Betrag. Bei Totalschaden / Verlust ebenfalls bis zu diesem Betrag — der Restschaden wird durch das Reparaturdepot gedeckt. Ausnahmen siehe § 7 Abs. 4.
+                Bei reparablen Schaeden traegt der Mieter die Reparaturkosten bis zu diesem Betrag. Bei Totalschaden / Verlust ebenfalls bis zu diesem Betrag — den darueber hinausgehenden Restschaden traegt cam2rent. Ausnahmen siehe Haftungsregelung dieses Vertrags.
               </Text>
             </>
           ) : (
@@ -539,7 +539,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
                 <Text style={{ fontFamily: 'Helvetica-Bold' }}>Haftung des Mieters:</Text> bis zum Wiederbeschaffungswert pro Position (siehe Tabelle &bdquo;Wiederbeschaffungswerte&ldquo; oben).
               </Text>
               <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
-                Ohne Schadenspauschale haftet der Mieter im Schadens- oder Verlustfall in voller Hoehe. Reparable Schaeden = Reparaturkosten bis zum Wiederbeschaffungswert; Totalschaden / Verlust = voller Wiederbeschaffungswert pro Position.
+                Ohne Haftungsschutz haftet der Mieter im Schadens- oder Verlustfall in voller Hoehe. Reparable Schaeden = Reparaturkosten bis zum Wiederbeschaffungswert; Totalschaden / Verlust = voller Wiederbeschaffungswert pro Position.
               </Text>
             </>
           )}

@@ -47,7 +47,7 @@ function getHaftungsoptionen(eigenbeteiligung: number): HaftungOption[] {
   return [
     {
       id: 'none',
-      name: 'Keine Haftungsbegrenzung',
+      name: 'Ohne Haftungsschutz',
       basePrice: 0,
       liability: 'Volle Haftung bis zum Wiederbeschaffungswert',
       description:
@@ -55,9 +55,9 @@ function getHaftungsoptionen(eigenbeteiligung: number): HaftungOption[] {
     },
     {
       id: 'standard',
-      name: 'Standard-Haftungsoption',
+      name: 'Basis-Haftungsschutz',
       basePrice: 15,
-      liability: `Max. ${eigenbeteiligung} € Eigenbeteiligung pro Schadensfall`,
+      liability: `Höchstbetrag der Ersatzpflicht: max. ${eigenbeteiligung} € pro Schadensfall`,
       description:
         'Deckt Sturz-, Stoß-, Wasser- und Elektronikschäden bei ordnungsgemäßer Nutzung ab.',
       badge: 'Beliebt',
@@ -65,11 +65,11 @@ function getHaftungsoptionen(eigenbeteiligung: number): HaftungOption[] {
     },
     {
       id: 'premium',
-      name: 'Premium-Haftungsoption',
+      name: 'Premium-Haftungsschutz',
       basePrice: 25,
-      liability: 'Keine Eigenbeteiligung',
+      liability: 'Höchstbetrag der Ersatzpflicht: 0 €',
       description:
-        'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – ohne Selbstbeteiligung.',
+        'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – Höchstbetrag der Ersatzpflicht: 0 €.',
       badge: 'Vollschutz',
       badgeColor: 'bg-accent-teal text-white',
     },

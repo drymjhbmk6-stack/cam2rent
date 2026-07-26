@@ -108,7 +108,7 @@ const C = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function haftungLabel(h: string) {
-  if (h === 'standard') return 'Standard-Haftungsschutz (pauschal)';
+  if (h === 'standard') return 'Basis-Haftungsschutz (pauschal)';
   if (h === 'premium') return 'Premium-Haftungsschutz (pauschal)';
   return null;
 }

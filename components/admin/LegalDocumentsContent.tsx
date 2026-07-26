@@ -170,7 +170,7 @@ export default function LegalDocumentsContent() {
             <div className="flex-1 min-w-0">
               <p className="font-heading font-semibold text-sm text-white">Vertragsparagraphen</p>
               <p className="text-xs font-body text-gray-500 mt-0.5">
-                19 Paragraphen des Mietvertrags — werden bei Vertragsabschluss in das PDF eingebettet
+                Die Paragraphen des Mietvertrags — werden bei Vertragsabschluss in das PDF eingebettet
               </p>
             </div>
             <svg className="w-4 h-4 flex-shrink-0" style={{ color: '#475569' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

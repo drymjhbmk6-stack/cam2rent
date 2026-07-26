@@ -116,7 +116,7 @@ export const BUSINESS = new Proxy({} as BusinessConfig & {
       case 'cancellation': return {
         freeDaysBefore: 7, freeRefundPercent: 100,
         partialDaysBefore: 3, partialRefundPercent: 50,
-        lateFee: 'Keine Erstattung',
+        lateFee: '10 % Erstattung (90 % Stornopauschale)',
       };
       default: return (c as unknown as Record<string, unknown>)[prop];
     }

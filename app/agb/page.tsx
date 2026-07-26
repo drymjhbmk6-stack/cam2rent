@@ -42,7 +42,7 @@ function AGBFallback() {
           <h2>§ 3 Zustandekommen des Vertrags, Zahlung als aufschiebende Bedingung</h2>
           <p>(1) Die Darstellung der Mietgegenstände auf der Website stellt kein bindendes Angebot, sondern eine Aufforderung zur Abgabe eines Angebots dar.</p>
           <p>(2) Durch Klick auf den Button &quot;zahlungspflichtig buchen&quot; und erfolgreichen Abschluss des Zahlungsvorgangs über den Zahlungsdienstleister gibt der Mieter ein verbindliches Angebot ab.</p>
-          <p>(3) Der Vertrag kommt erst zustande, wenn kumulativ folgende Voraussetzungen erfüllt sind: a) der vollständige Mietpreis inklusive Versandkosten und gewählter Schadenspauschale ist beim Zahlungsdienstleister erfolgreich autorisiert und eingezogen, b) der Vermieter hat dem Mieter eine Buchungsbestätigung per E-Mail zugesandt. Eine automatische Eingangsbestätigung über den Buchungseingang stellt noch keine Annahme des Angebots dar.</p>
+          <p>(3) Der Vertrag kommt erst zustande, wenn kumulativ folgende Voraussetzungen erfüllt sind: a) der vollständige Mietpreis inklusive Versandkosten und gewähltem Haftungsschutz ist beim Zahlungsdienstleister erfolgreich autorisiert und eingezogen, b) der Vermieter hat dem Mieter eine Buchungsbestätigung per E-Mail zugesandt. Eine automatische Eingangsbestätigung über den Buchungseingang stellt noch keine Annahme des Angebots dar.</p>
           <p>(4) Schlägt die Zahlung fehl oder wird sie zurückgebucht, gilt das Angebot als nicht abgegeben; ein Vertrag kommt in diesem Fall nicht zustande.</p>
           <p>(5) Der Vermieter ist berechtigt, Buchungen innerhalb von 48 Stunden nach Zahlungseingang ohne Angabe von Gründen abzulehnen. Der bereits gezahlte Betrag wird in diesem Fall unverzüglich, spätestens binnen 14 Tagen, vollständig erstattet.</p>
           <p>(6) Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben. Die Abrechnung etwaiger Schadenersatzansprüche erfolgt nach § 10 separat.</p>
@@ -75,13 +75,13 @@ function AGBFallback() {
           <p>(4) Zuwiderhandlungen gegen Absatz 2 berechtigen den Vermieter zur fristlosen Kündigung des Mietvertrags und zur sofortigen Rückforderung der Mietsache. Schadensersatzansprüche bleiben unberührt.</p>
           <p>(5) Schäden, Verlust oder Diebstahl sind dem Vermieter unverzüglich, spätestens innerhalb von 48 Stunden nach Kenntnis, per E-Mail an {BUSINESS.emailKontakt} zu melden. Bei Diebstahl ist zusätzlich unverzüglich Strafanzeige bei der Polizei zu erstatten; eine Kopie der Anzeige ist dem Vermieter binnen 7 Tagen vorzulegen.</p>
 
-          <h2 id="haftung">§ 9 Haftung des Mieters, Schadenspauschale</h2>
+          <h2 id="haftung">§ 9 Haftung des Mieters, Haftungsschutz</h2>
           <p>(1) Der Mieter haftet nach den gesetzlichen Vorschriften für Schäden, Verlust, Zerstörung oder Diebstahl der Mietsache während der Mietdauer, soweit er diese zu vertreten hat. Maßgeblich ist der Zeitraum zwischen Übergabe und vertragsgemäßer Rückgabe.</p>
-          <p>(2) Der Mieter kann bei Buchung eine Schadenspauschale wählen, die seine Ersatzpflicht der Höhe nach begrenzt. Es gelten: a) Ohne Schadenspauschale: Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert). b) Basis-Schadenspauschale: Die Ersatzpflicht des Mieters ist im Schadensfall auf 200 EUR je Schadensereignis begrenzt (Selbstbeteiligung). c) Premium-Schadenspauschale: Die Ersatzpflicht des Mieters ist im Schadensfall auf 0 EUR begrenzt (keine Selbstbeteiligung).</p>
+          <p>(2) Der Mieter kann bei Buchung einen Haftungsschutz wählen, der seine Ersatzpflicht der Höhe nach begrenzt. Es gelten: a) Ohne Haftungsschutz: Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert). b) Basis-Haftungsschutz: Die Ersatzpflicht des Mieters ist im Schadensfall auf 200 EUR je Schadensereignis begrenzt (Höchstbetrag der Ersatzpflicht). c) Premium-Haftungsschutz: Die Ersatzpflicht des Mieters ist im Schadensfall auf 0 EUR begrenzt (Höchstbetrag der Ersatzpflicht: 0 EUR).</p>
           <p>(3) Die Tagespauschalen sind nach Mietdauer gestaffelt: Basis: 15 EUR/Tag (1–7 Tage), 20 EUR/Tag (8–14 Tage), 25 EUR/Tag (15–21 Tage) sowie Erhöhung um 5 EUR/Tag je weiteren angefangenen Zeitraum von 7 Tagen. Premium: 25 EUR/Tag (1–7 Tage), 35 EUR/Tag (8–14 Tage), 45 EUR/Tag (15–21 Tage) sowie Erhöhung um 10 EUR/Tag je weiteren angefangenen Zeitraum von 7 Tagen. Der Gesamtbetrag wird vor Vertragsschluss auf der Website und im Mietvertrag ausgewiesen.</p>
           <p>(4) Als Schadenshöhe werden angesetzt: bei reparablen Schäden die nachgewiesenen Reparaturkosten, bei Totalschaden, Verlust oder Diebstahl der Zeitwert der Mietsache zum Schadenszeitpunkt. Der Zeitwert wird nachvollziehbar aus Anschaffungspreis, Alter und Zustand ermittelt und dem Mieter auf Verlangen dargelegt.</p>
           <p>(5) Die Haftungsbegrenzung nach Absatz 2 gilt NICHT bei: a) vorsätzlich oder grob fahrlässig verursachten Schäden, b) bestimmungswidriger Nutzung entgegen Herstellerangaben, c) Verstoß gegen § 8 Absatz 2, d) unterlassener oder erheblich verspäteter Schadensmeldung, soweit dies die Schadensfeststellung wesentlich erschwert, e) Diebstahl ohne unverzügliche polizeiliche Anzeige. In diesen Fällen haftet der Mieter in voller Höhe.</p>
-          <p>(6) Die Schadenspauschale ist KEINE Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG), sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters gegenüber dem Vermieter.</p>
+          <p>(6) Der Haftungsschutz ist KEINE Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG), sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters gegenüber dem Vermieter.</p>
 
           <h2>§ 10 Schadensabrechnung</h2>
           <p>(1) Zur Sicherung etwaiger Ansprüche des Vermieters wird weder eine Kaution noch eine Kreditkartenvorautorisierung erhoben.</p>
@@ -134,9 +134,8 @@ function AGBFallback() {
           <p>(3) Änderungen und Ergänzungen bedürfen der Textform (E-Mail genügt). Dies gilt auch für die Aufhebung dieser Textformklausel.</p>
           <p>(4) Eine handschriftliche Unterschrift ist zur Wirksamkeit des Vertrags nicht erforderlich.</p>
 
-          <h2>§ 19 Online-Streitbeilegung, Verbraucherschlichtung</h2>
-          <p>(1) Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung bereit: <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer" className="text-accent-blue hover:underline">https://ec.europa.eu/consumers/odr/</a></p>
-          <p>(2) Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).</p>
+          <h2>§ 19 Verbraucherschlichtung</h2>
+          <p>Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).</p>
 
           <h2>§ 20 Anwendbares Recht, Schlussbestimmungen</h2>
           <p>(1) Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Zwingende Verbraucherschutzvorschriften des Staates, in dem der Mieter seinen gewöhnlichen Aufenthalt hat, bleiben unberührt.</p>

@@ -231,7 +231,7 @@ export function HaftungsbedingungenPDF() {
         {/* Option 1: Ohne */}
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: GRAY }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: DARK }}>Ohne Haftungsbegrenzung</Text>
+            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: DARK }}>Ohne Haftungsschutz</Text>
             <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: DARK }}>0 {'\u20ac'}</Text>
           </View>
           <Text style={{ fontSize: 8, color: GRAY, marginBottom: 3 }}>
@@ -245,14 +245,14 @@ export function HaftungsbedingungenPDF() {
         {/* Option 2: Standard */}
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: CYAN }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: DARK }}>Standard-Haftungsschutz</Text>
+            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: DARK }}>Basis-Haftungsschutz</Text>
             <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: CYAN }}>15 {'\u20ac'} / Miete</Text>
           </View>
           <Text style={{ fontSize: 8, color: GRAY, marginBottom: 3 }}>
-            Deckt Sch{'\u00e4'}den bei sachgem{'\u00e4'}{'\u00df'}er Nutzung ab (z.B. Sturz-, Sto{'\u00df'}-, Wasser- oder Elektroniksch{'\u00e4'}den). Selbstbeteiligung: maximal 150 {'\u20ac'} pro Schadensfall.
+            Deckt Sch{'\u00e4'}den bei sachgem{'\u00e4'}{'\u00df'}er Nutzung ab (z.B. Sturz-, Sto{'\u00df'}-, Wasser- oder Elektroniksch{'\u00e4'}den). H{'\u00f6'}chstbetrag der Ersatzpflicht: maximal 150 {'\u20ac'} pro Schadensfall.
           </Text>
           <View style={{ backgroundColor: '#eff6ff', borderRadius: 2, paddingVertical: 2, paddingHorizontal: 6, alignSelf: 'flex-start' }}>
-            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: CYAN }}>Max. 150 {'\u20ac'} Selbstbeteiligung</Text>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: CYAN }}>Max. 150 {'\u20ac'} Ersatzpflicht</Text>
           </View>
         </View>
 
@@ -263,10 +263,10 @@ export function HaftungsbedingungenPDF() {
             <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#22c55e' }}>25 {'\u20ac'} / Miete</Text>
           </View>
           <Text style={{ fontSize: 8, color: GRAY, marginBottom: 3 }}>
-            Vollschutz bei bestimmungsgem{'\u00e4'}{'\u00df'}er Nutzung {'\u2014'} keine Selbstbeteiligung im Schadensfall.
+            Vollschutz bei bestimmungsgem{'\u00e4'}{'\u00df'}er Nutzung {'\u2014'} H{'\u00f6'}chstbetrag der Ersatzpflicht: 0 {'\u20ac'} im Schadensfall.
           </Text>
           <View style={{ backgroundColor: '#f0fdf4', borderRadius: 2, paddingVertical: 2, paddingHorizontal: 6, alignSelf: 'flex-start' }}>
-            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#22c55e' }}>Keine Selbstbeteiligung</Text>
+            <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#22c55e' }}>Ersatzpflicht 0 {'\u20ac'}</Text>
           </View>
         </View>
 
@@ -317,17 +317,17 @@ export function HaftungsbedingungenPDF() {
         {/* § 8 Haftungsgrenzen — Zusammenfassung */}
         <Text style={s.sectionHeading}>{'\u00a7'} 8 Haftungsgrenzen {'\u2014'} Zusammenfassung</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-          <TableRow cells={['Option', 'Preis / Miete', 'Selbstbeteiligung']} header />
-          <TableRow cells={['Ohne Haftungsbegrenzung', `0 ${'\u20ac'}`, 'Voller Wiederbeschaffungswert']} />
-          <TableRow cells={[`Standard-Haftungsschutz`, `15 ${'\u20ac'}`, `Max. 150 ${'\u20ac'}`]} alt />
-          <TableRow cells={[`Premium-Haftungsschutz`, `25 ${'\u20ac'}`, 'Keine']} />
+          <TableRow cells={['Option', 'Preis / Miete', 'H\u00f6chstbetrag der Ersatzpflicht']} header />
+          <TableRow cells={['Ohne Haftungsschutz', `0 ${'\u20ac'}`, 'Voller Wiederbeschaffungswert']} />
+          <TableRow cells={[`Basis-Haftungsschutz`, `15 ${'\u20ac'}`, `Max. 150 ${'\u20ac'}`]} alt />
+          <TableRow cells={[`Premium-Haftungsschutz`, `25 ${'\u20ac'}`, '0 \u20ac']} />
         </View>
 
         {/* Wichtiger Hinweis */}
         <View style={[s.highlightBox, { marginTop: 12 }]}>
           <Text style={s.highlightTitle}>Wichtiger Hinweis</Text>
           <Text style={s.highlightText}>
-            Die Haftungsoptionen von cam2rent stellen keine Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG) dar. Die Haftungsbegrenzung wird durch ein selbstfinanziertes Reparaturdepot von cam2rent getragen. Die erhobenen Geb{'\u00fc'}hren f{'\u00fc'}r Standard- und Premium-Haftungsschutz flie{'\u00df'}en in dieses Depot und dienen ausschlie{'\u00df'}lich der Deckung von Reparatur- und Ersatzkosten.
+            Die Haftungsoptionen von cam2rent stellen keine Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG) dar, sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters. Der {'\u00fc'}ber den H{'\u00f6'}chstbetrag der Ersatzpflicht hinausgehende Schaden wird von cam2rent getragen.
           </Text>
         </View>
 

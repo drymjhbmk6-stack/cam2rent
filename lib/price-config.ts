@@ -23,7 +23,7 @@ export const DEFAULT_SHIPPING: ShippingPriceConfig = {
 // ─── Haftungsoptionen ─────────────────────────────────────────────────────────
 
 export interface HaftungConfig {
-  /** Basispreis Standard-Haftungsschutz (1-7 Tage) */
+  /** Basispreis Basis-Haftungsschutz (1-7 Tage) */
   standard: number;
   /** Aufschlag Standard pro weitere Woche */
   standardIncrement: number;

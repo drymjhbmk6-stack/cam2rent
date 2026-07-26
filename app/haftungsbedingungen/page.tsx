@@ -4,7 +4,7 @@ import LegalPage from '@/components/LegalPage';
 
 export const metadata: Metadata = {
   title: 'Haftungsbedingungen',
-  description: 'Haftungsbedingungen von Cam2Rent – Informationen zu Haftungsoptionen, Selbstbeteiligung und Schadensregelungen.',
+  description: 'Haftungsbedingungen von Cam2Rent – Informationen zu Haftungsoptionen, Höchstbetrag der Ersatzpflicht und Schadensregelungen.',
 };
 
 export default function HaftungsbedingungenPage() {
@@ -56,7 +56,7 @@ function HaftungsbedingungenFallback() {
           <div className="space-y-3">
             <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5 border-l-4 border-brand-muted">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Ohne Haftungsbegrenzung</h3>
+                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Ohne Haftungsschutz</h3>
                 <span className="font-body font-semibold text-brand-black dark:text-white text-sm">0 €</span>
               </div>
               <p className="font-body text-brand-steel dark:text-gray-300 text-sm mb-2">
@@ -69,28 +69,28 @@ function HaftungsbedingungenFallback() {
 
             <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5 border-l-4 border-accent-blue">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Standard-Haftung</h3>
+                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Basis-Haftungsschutz</h3>
                 <span className="font-body font-semibold text-accent-blue text-sm">15 € / Miete</span>
               </div>
               <p className="font-body text-brand-steel dark:text-gray-300 text-sm mb-2">
                 Deckt Schäden bei sachgemäßer Nutzung ab (z.B. Sturz-, Stoß-, Wasser- oder
-                Elektronikschäden). Selbstbeteiligung: maximal 150 € pro Schadensfall.
+                Elektronikschäden). Höchstbetrag der Ersatzpflicht: maximal 150 € pro Schadensfall.
               </p>
               <div className="inline-block bg-accent-blue/10 text-accent-blue text-xs font-body font-medium px-2 py-1 rounded">
-                Max. 150 € Selbstbeteiligung
+                Max. 150 € Ersatzpflicht
               </div>
             </div>
 
             <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5 border-l-4 border-status-success">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Premium-Haftung</h3>
+                <h3 className="font-heading font-semibold text-brand-black dark:text-white">Premium-Haftungsschutz</h3>
                 <span className="font-body font-semibold text-status-success text-sm">25 € / Miete</span>
               </div>
               <p className="font-body text-brand-steel dark:text-gray-300 text-sm mb-2">
-                Vollschutz bei bestimmungsgemäßer Nutzung — keine Selbstbeteiligung im Schadensfall.
+                Vollschutz bei bestimmungsgemäßer Nutzung — Höchstbetrag der Ersatzpflicht: 0 € im Schadensfall.
               </p>
               <div className="inline-block bg-status-success/10 text-status-success text-xs font-body font-medium px-2 py-1 rounded">
-                Keine Selbstbeteiligung
+                Ersatzpflicht 0 €
               </div>
             </div>
           </div>
@@ -219,17 +219,17 @@ function HaftungsbedingungenFallback() {
                 <tr className="border-b-2 border-brand-border dark:border-white/10">
                   <th className="text-left py-3 px-3 font-semibold text-brand-black dark:text-white">Option</th>
                   <th className="text-left py-3 px-3 font-semibold text-brand-black dark:text-white">Preis / Miete</th>
-                  <th className="text-left py-3 px-3 font-semibold text-brand-black dark:text-white">Selbstbeteiligung</th>
+                  <th className="text-left py-3 px-3 font-semibold text-brand-black dark:text-white">Höchstbetrag der Ersatzpflicht</th>
                 </tr>
               </thead>
               <tbody className="text-brand-steel dark:text-gray-300">
                 <tr className="border-b border-brand-border dark:border-white/10/50">
-                  <td className="py-3 px-3">Ohne Haftungsbegrenzung</td>
+                  <td className="py-3 px-3">Ohne Haftungsschutz</td>
                   <td className="py-3 px-3">0 €</td>
                   <td className="py-3 px-3 text-status-error font-medium">Voller Wiederbeschaffungswert</td>
                 </tr>
                 <tr className="border-b border-brand-border dark:border-white/10/50">
-                  <td className="py-3 px-3">Standard</td>
+                  <td className="py-3 px-3">Basis</td>
                   <td className="py-3 px-3">15 €</td>
                   <td className="py-3 px-3 text-accent-blue font-medium">Max. 150 €</td>
                 </tr>
@@ -250,10 +250,9 @@ function HaftungsbedingungenFallback() {
           <div className="bg-brand-bg dark:bg-white/5 rounded-xl p-5 border border-brand-border dark:border-white/10">
             <p className="font-body text-brand-steel dark:text-gray-300 leading-relaxed">
               Die Haftungsoptionen von cam2rent stellen <strong>keine Versicherung</strong> im Sinne des
-              Versicherungsvertragsgesetzes (VVG) dar. Die Haftungsbegrenzung wird durch ein
-              <strong> selbstfinanziertes Reparaturdepot</strong> von cam2rent getragen. Die erhobenen
-              Gebühren für Standard- und Premium-Haftungsschutz fließen in dieses Depot und dienen
-              ausschließlich der Deckung von Reparatur- und Ersatzkosten.
+              Versicherungsvertragsgesetzes (VVG) dar, sondern eine vertragliche Begrenzung der
+              Ersatzpflicht des Mieters. Der über den Höchstbetrag der Ersatzpflicht hinausgehende
+              Schaden wird von cam2rent getragen.
             </p>
           </div>
         </section>

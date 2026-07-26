@@ -18,7 +18,7 @@ function ImpressumFallback() {
     <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white mb-2">Impressum</h1>
-        <p className="text-sm font-body text-brand-muted dark:text-gray-400 mb-10">Angaben gemäß § 5 TMG</p>
+        <p className="text-sm font-body text-brand-muted dark:text-gray-400 mb-10">Angaben gemäß § 5 DDG</p>
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">Anbieter</h2>
@@ -59,29 +59,17 @@ function ImpressumFallback() {
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
-            Streitschlichtung
+            Verbraucherschlichtung
           </h2>
-          <p className="font-body text-brand-steel dark:text-gray-300 mb-3">
-            Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS)
-            bereit:{' '}
-            <a
-              href="https://ec.europa.eu/consumers/odr/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent-blue hover:underline"
-            >
-              https://ec.europa.eu/consumers/odr/
-            </a>
-          </p>
           <p className="font-body text-brand-steel dark:text-gray-300">
             Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer
-            Verbraucherschlichtungsstelle teilzunehmen.
+            Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).
           </p>
         </section>
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
-            Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
+            Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
           </h2>
           <div className="font-body text-brand-steel dark:text-gray-300 space-y-1">
             <p>{BUSINESS.owner}</p>
@@ -95,8 +83,8 @@ function ImpressumFallback() {
             Haftung für Inhalte
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300">
-            Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten
-            nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als
+            Als Diensteanbieter sind wir gemäß § 7 Abs. 1 DDG für eigene Inhalte auf diesen Seiten
+            nach den allgemeinen Gesetzen verantwortlich. Nach §§ 7 bis 10 DDG sind wir als
             Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde
             Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige
             Tätigkeit hinweisen.

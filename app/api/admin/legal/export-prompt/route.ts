@@ -90,6 +90,7 @@ export async function GET() {
     freeRefundPercent: 100,
     partialDaysBefore: 3,
     partialRefundPercent: 50,
+    lastMinuteRefundPercent: 10,
   };
 
   // ─── Prompt zusammenbauen ────────────────────────────────────────────
@@ -111,8 +112,8 @@ export async function GET() {
 
   lines.push('## Wichtige Regeln');
   lines.push('- NIEMALS "Versicherung" sagen — immer "Haftungsschutz", "Haftungsbegrenzung" oder "Haftungsoption"');
-  lines.push('- Die Haftungsprämien bilden ein eigenes Reparaturdepot, cam2rent ist KEIN Versicherungsunternehmen');
-  lines.push(`- Stornierung: >7 Tage = ${cancellation.freeRefundPercent}% Erstattung, 3-7 Tage = ${cancellation.partialRefundPercent}%, <3 Tage = keine Erstattung`);
+  lines.push('- Die Haftungsoptionen sind eine vertragliche Begrenzung der Ersatzpflicht des Mieters, cam2rent ist KEIN Versicherungsunternehmen');
+  lines.push(`- Stornierung: >7 Tage = ${cancellation.freeRefundPercent}% Erstattung, 3-7 Tage = ${cancellation.partialRefundPercent}%, <3 Tage = ${cancellation.lastMinuteRefundPercent}% Erstattung`);
   lines.push('');
 
   if (haftungConfig?.value) {
@@ -139,7 +140,7 @@ export async function GET() {
   // Vertragsparagraphen
   lines.push(`## Vertragsparagraphen (${paragraphSource})`);
   lines.push('');
-  lines.push('Diese 19 Paragraphen stehen im Mietvertrag-PDF das der Kunde unterschreibt:');
+  lines.push(`Diese ${paragraphs.length} Paragraphen stehen im Mietvertrag-PDF das der Kunde unterschreibt:`);
   lines.push('');
   for (const p of paragraphs) {
     lines.push(`### ${p.title}`);
@@ -181,7 +182,7 @@ export async function GET() {
   lines.push('5. **Wiederbeschaffungswerte-Tabelle:** Artikel + Zeitwert (Obergrenze Ersatzpflicht)');
   lines.push('6. **Entgelt und Zahlung:** Mietpreis, Versandkosten, Haftungsschutz, Gesamtbetrag, Zahlungsart');
   lines.push('7. **Gewählte Haftungsoption:** Hervorgehobene Box mit Beschreibung');
-  lines.push('8. **Vertragsbedingungen:** Einleitungstext + die 19 Paragraphen (siehe oben)');
+  lines.push(`8. **Vertragsbedingungen:** Einleitungstext + die ${paragraphs.length} Paragraphen (siehe oben)`);
   lines.push('9. **Bestätigungstext:** Mieter bestätigt AGB, Widerruf, Haftung, Datenschutz gelesen zu haben');
   lines.push('10. **Digitale Signatur:** Name, Datum, IP-Adresse, SHA-256 Hash, Unterschrift-Bild');
   lines.push('');

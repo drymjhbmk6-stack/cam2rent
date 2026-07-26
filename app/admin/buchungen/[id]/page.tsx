@@ -1298,7 +1298,7 @@ export default function BuchungDetailPage() {
                 {booking.extended_at && <InfoRow label="Verlängert" value={`Ursprünglich bis ${booking.original_rental_to ? fmtDateWd(booking.original_rental_to) : '\u2013'}`} highlight />}
                 <InfoRow label="Lieferart" value={booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'} />
                 {booking.shipping_method && <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />}
-                <InfoRow label="Haftungsoption" value={booking.haftung === 'standard' ? 'Standard-Haftungsschutz' : booking.haftung === 'premium' ? 'Premium-Haftungsschutz' : 'Keine Haftungsbegrenzung'} />
+                <InfoRow label="Haftungsoption" value={booking.haftung === 'standard' ? 'Basis-Haftungsschutz' : booking.haftung === 'premium' ? 'Premium-Haftungsschutz' : 'Ohne Haftungsschutz'} />
               </div>
               {booking.payment_intent_id && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
@@ -2547,7 +2547,7 @@ export default function BuchungDetailPage() {
                   { key: 'widerruf' as const, label: 'Widerrufsbelehrung', desc: 'Widerrufsrecht und Muster-Widerrufsformular' },
                   { key: 'haftung' as const, label: 'Haftungsbedingungen', desc: 'Haftungsschutz und Schadensbedingungen' },
                   { key: 'datenschutz' as const, label: 'Datenschutzerklärung', desc: 'DSGVO-konforme Datenschutzhinweise' },
-                  { key: 'impressum' as const, label: 'Impressum', desc: 'Anbieterkennzeichnung nach §5 TMG' },
+                  { key: 'impressum' as const, label: 'Impressum', desc: 'Anbieterkennzeichnung nach § 5 DDG' },
                 ].map(doc => (
                   <label key={doc.key} className="flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     <input type="checkbox" checked={emailAttachments[doc.key]} onChange={(e) => setEmailAttachments(prev => ({ ...prev, [doc.key]: e.target.checked }))} className="w-4 h-4 accent-blue-600" />
@@ -3362,8 +3362,8 @@ function BookingEditSection({
             onChange={(e) => { setHaftung(e.target.value as 'none' | 'standard' | 'premium'); setPreview(null); }}
             className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
           >
-            <option value="none">Keine Haftungsbegrenzung</option>
-            <option value="standard">Standard-Haftungsschutz</option>
+            <option value="none">Ohne Haftungsschutz</option>
+            <option value="standard">Basis-Haftungsschutz</option>
             <option value="premium">Premium-Haftungsschutz</option>
           </select>
         </div>
@@ -3843,7 +3843,7 @@ function LiabilitySection({
           <p className="text-xs text-brand-muted leading-relaxed">{summary.customer_max_note}</p>
           {haftung !== 'premium' && summary.customer_max_liability < summary.total_wbw && (
             <p className="text-xs text-brand-muted mt-1.5 pt-1.5 border-t border-brand-border">
-              Differenz <strong>{fmtEuro(summary.total_wbw - summary.customer_max_liability)}</strong> traegt das Reparaturdepot bzw. muss bei &bdquo;Ohne Schadenspauschale&ldquo; manuell eingefordert werden.
+              Differenz <strong>{fmtEuro(summary.total_wbw - summary.customer_max_liability)}</strong> traegt cam2rent bzw. muss bei &bdquo;Ohne Haftungsschutz&ldquo; manuell eingefordert werden.
             </p>
           )}
         </div>

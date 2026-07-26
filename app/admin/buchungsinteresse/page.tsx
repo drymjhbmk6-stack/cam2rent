@@ -49,7 +49,7 @@ const DURATION_LABEL: Record<string, string> = {
 
 const HAFTUNG_LABEL: Record<string, string> = {
   premium: 'Premium-Haftungsschutz',
-  standard: 'Standard-Haftungsschutz',
+  standard: 'Basis-Haftungsschutz',
   none: 'Ohne Haftungsschutz',
 };
 

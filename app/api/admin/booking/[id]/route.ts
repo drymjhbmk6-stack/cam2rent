@@ -438,7 +438,7 @@ export async function GET(
 /**
  * Berechnet pro Buchung den realen Wiederbeschaffungswert (Kamera +
  * jedes Zubehoer) und wieviel der Kunde maximal haftet (je nach
- * gewaehlter Schadenspauschale).
+ * gewaehltem Haftungsschutz).
  *
  * Quellen:
  *   - Kamera-WBW: assets.replacement_value_estimate (mit Vorrang) ODER
@@ -726,8 +726,8 @@ async function computeLiabilitySummary(
   let customerMaxNote = '';
   if (haftung === 'premium') {
     customerMax = 0;
-    customerMaxLabel = 'Premium-Schadenspauschale';
-    customerMaxNote = 'Kunde haftet 0 € — alles ueber das Reparaturdepot.';
+    customerMaxLabel = 'Premium-Haftungsschutz';
+    customerMaxNote = 'Kunde haftet 0 € — den Rest traegt cam2rent.';
   } else if (haftung === 'standard') {
     // Eigenbeteiligung ueber haftung_config + product.category
     const { data: setting } = await supabase
@@ -740,11 +740,11 @@ async function computeLiabilitySummary(
     // geladenen admin_config.products bestimmen.
     const category: string | undefined = allProducts.find((p) => p.id === cameraId)?.category;
     customerMax = getEigenbeteiligung(haftungConfig, category);
-    customerMaxLabel = 'Basis-Schadenspauschale';
-    customerMaxNote = `Eigenbeteiligung des Mieters je Schadensereignis. Restschaden ueber das Reparaturdepot.`;
+    customerMaxLabel = 'Basis-Haftungsschutz';
+    customerMaxNote = `Höchstbetrag der Ersatzpflicht des Mieters je Schadensereignis. Restschaden traegt cam2rent.`;
   } else {
     customerMax = totalWbw;
-    customerMaxLabel = 'Ohne Schadenspauschale';
+    customerMaxLabel = 'Ohne Haftungsschutz';
     customerMaxNote = 'Kunde haftet bis zum vollen Wiederbeschaffungswert pro Position. Forderung manuell.';
   }
 

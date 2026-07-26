@@ -257,7 +257,7 @@ async function loadAssetCurrentValue(unitId: string | null, productId?: string |
 
 /**
  * Laedt den globalen Schadens-Modus aus admin_settings.deposit_mode.
- * 'kaution' = echte Stripe-Pre-Auth, 'haftung' = nur Schadenspauschale.
+ * 'kaution' = echte Stripe-Pre-Auth, 'haftung' = nur Haftungsschutz.
  * Default = 'haftung' (sicherer Fallback, wenn Setting fehlt).
  */
 async function loadDepositMode(): Promise<'kaution' | 'haftung'> {
@@ -556,9 +556,9 @@ export async function generateContractPDF(opts: {
 
   // Haftungsoption bestimmen
   const haftungOption = opts.haftungOption || (
-    opts.priceHaftung === 0 ? 'Ohne Schadenspauschale'
-    : opts.priceHaftung <= 20 ? 'Basis-Schadenspauschale'
-    : 'Premium-Schadenspauschale'
+    opts.priceHaftung === 0 ? 'Ohne Haftungsschutz'
+    : opts.priceHaftung <= 20 ? 'Basis-Haftungsschutz'
+    : 'Premium-Haftungsschutz'
   );
 
   // Eigenbeteiligung dynamisch: explizit > Kategorie+haftung_config > Konfig-Default > 200
@@ -570,11 +570,11 @@ export async function generateContractPDF(opts: {
     eb = getEigenbeteiligung(haftungConfig, opts.productCategory);
   }
   const haftungDescription = opts.haftungDescription || (
-    haftungOption === 'Ohne Schadenspauschale'
-      ? 'Keine Schadenspauschale gewählt. Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert).'
-    : haftungOption === 'Basis-Schadenspauschale'
-      ? `Ersatzpflicht im Schadensfall auf max. ${eb} EUR je Schadensereignis begrenzt (Selbstbeteiligung). Gilt bei bestimmungsgemäßer Nutzung.`
-    : 'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – keine Selbstbeteiligung.'
+    haftungOption === 'Ohne Haftungsschutz'
+      ? 'Kein Haftungsschutz gewählt. Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert).'
+    : haftungOption === 'Basis-Haftungsschutz'
+      ? `Ersatzpflicht im Schadensfall auf max. ${eb} EUR je Schadensereignis begrenzt (Höchstbetrag der Ersatzpflicht). Gilt bei bestimmungsgemäßer Nutzung.`
+    : 'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – Höchstbetrag der Ersatzpflicht: 0 EUR.'
   );
 
   // Benutzerdefinierte Vertragsparagraphen aus DB laden
@@ -583,7 +583,7 @@ export async function generateContractPDF(opts: {
   // Test-Modus: expliziter Override oder aus admin_settings.environment_mode
   const testMode = opts.forceTestMode !== undefined ? opts.forceTestMode : await isTestMode();
 
-  // Schadens-Modus: kaution = echte Stripe-Pre-Auth, haftung = nur Schadenspauschale
+  // Schadens-Modus: kaution = echte Stripe-Pre-Auth, haftung = nur Haftungsschutz
   const depositMode = await loadDepositMode();
 
   const data: RentalContractData = {

@@ -58,7 +58,7 @@ export async function GET() {
     priceShipping: 0,
     priceTotal: 84,
     deposit: 0,
-    haftungOption: 'Basis-Schadenspauschale',
+    haftungOption: 'Basis-Haftungsschutz',
     taxMode: 'kleinunternehmer',
     signatureDataUrl: null,
     signatureMethod: 'typed',

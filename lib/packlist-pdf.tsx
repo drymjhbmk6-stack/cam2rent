@@ -290,7 +290,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
       : data.accessories.map((id) => ({ label: accName(id) }));
 
   // Haftung Label
-  const haftungLabel = data.haftung === 'standard' ? 'Standard-Haftungsschutz'
+  const haftungLabel = data.haftung === 'standard' ? 'Basis-Haftungsschutz'
     : data.haftung === 'premium' ? 'Premium-Haftungsschutz' : null;
 
   // Workflow-Status: Sind die Schritte fertig signiert? Die UI erzwingt, dass

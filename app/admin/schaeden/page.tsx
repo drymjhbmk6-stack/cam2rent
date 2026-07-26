@@ -378,7 +378,7 @@ export default function AdminSchaedenPage() {
                 <p style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600 }}>{fmtEuro(selectedReport.booking?.deposit || 0)}</p>
                 {!selectedReport.booking?.deposit_intent_id && (selectedReport.booking?.price_haftung ?? 0) > 0 && (
                   <p style={{ fontSize: 11, color: '#f59e0b', marginTop: 2 }}>
-                    Schadenspauschale-Modus · keine Pre-Auth
+                    Haftungsschutz-Modus · keine Pre-Auth
                   </p>
                 )}
               </div>
@@ -538,7 +538,7 @@ export default function AdminSchaedenPage() {
                     background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
                     borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#fde68a', lineHeight: 1.55,
                   }}>
-                    <strong>Schadenspauschale-Modus</strong> — Der Kunde hat eine Schadenspauschale gewählt, es ist <strong>keine Kaution per Stripe geblockt</strong>. Stripe-Capture aus der Pre-Auth ist nicht möglich. Wenn ein Schaden über die Eigenbeteiligung des Kunden hinaus geht, deckt das interne Reparaturdepot — andernfalls musst du den Mieter manuell zur Zahlung auffordern.
+                    <strong>Haftungsschutz-Modus</strong> — Der Kunde hat einen Haftungsschutz gewählt, es ist <strong>keine Kaution per Stripe geblockt</strong>. Stripe-Capture aus der Pre-Auth ist nicht möglich. Wenn ein Schaden über den Höchstbetrag der Ersatzpflicht des Kunden hinaus geht, trägt cam2rent den Rest — andernfalls musst du den Mieter manuell zur Zahlung auffordern.
                   </div>
                 )}
                 {!selectedReport.booking?.deposit_intent_id && (selectedReport.booking?.price_haftung ?? 0) === 0 && (
@@ -546,7 +546,7 @@ export default function AdminSchaedenPage() {
                     background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
                     borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#fca5a5', lineHeight: 1.55,
                   }}>
-                    <strong>Ohne Schadenspauschale</strong> — Der Kunde haftet bis zum Wiederbeschaffungswert. Es ist aber keine Stripe-Pre-Auth vorhanden, daher kein automatischer Capture moeglich. Forderung muss schriftlich an den Mieter gehen.
+                    <strong>Ohne Haftungsschutz</strong> — Der Kunde haftet bis zum Wiederbeschaffungswert. Es ist aber keine Stripe-Pre-Auth vorhanden, daher kein automatischer Capture moeglich. Forderung muss schriftlich an den Mieter gehen.
                   </div>
                 )}
 

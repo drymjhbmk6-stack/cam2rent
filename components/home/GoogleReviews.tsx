@@ -234,7 +234,7 @@ function GoogleCardBody({ review }: { review: GoogleReview }) {
       )}
       <div className="flex items-center gap-2">
         {/* Sweep 8 K14: Google-Profilfotos werden NICHT mehr direkt vom
-            googleusercontent.com-CDN geladen — DSGVO/§ 25 TTDSG-Konflikt
+            googleusercontent.com-CDN geladen — DSGVO/§ 25 TDDDG-Konflikt
             (Drittland-Fluss vor Cookie-Consent). Fallback: Initialen-Avatar. */}
         <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden flex-shrink-0">
           <span className="text-xs font-heading font-bold text-accent-blue">

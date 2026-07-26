@@ -96,7 +96,7 @@ export default function HaftungContent() {
 
             <div className="space-y-5">
               <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
-                <p className="font-heading font-semibold text-sm text-brand-black">Standard-Haftungsschutz</p>
+                <p className="font-heading font-semibold text-sm text-brand-black">Basis-Haftungsschutz</p>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Basispreis (1-7 Tage)" value={haftung.standard} onChange={(v) => setHaftung((h) => ({ ...h, standard: v }))} />
                   <Field label="Aufschlag pro Woche" value={haftung.standardIncrement} onChange={(v) => setHaftung((h) => ({ ...h, standardIncrement: v }))} />

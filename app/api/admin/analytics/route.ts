@@ -840,7 +840,7 @@ export async function GET(req: NextRequest) {
     // Blog-Aufrufe (Range-bezogen). Primaerquelle ist die `blog_views`-Tabelle
     // (zeitgestempelte, anonyme Aufruf-Events — gleiche Datenbasis wie der
     // kumulative blog_posts.view_count, consent-unabhaengig). Vorher kam die
-    // Zahl aus `page_views`, das aber per § 25 TTDSG nur bei Cookie-Consent
+    // Zahl aus `page_views`, das aber per § 25 TDDDG nur bei Cookie-Consent
     // befuellt wird → fast leer trotz realer Aufrufe. Fallback auf `page_views`,
     // falls die Migration supabase-blog-views.sql noch nicht durch ist oder
     // noch keine Events erfasst wurden (Backward-Compat).
