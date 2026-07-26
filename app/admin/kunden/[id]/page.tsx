@@ -125,6 +125,7 @@ const BOOKING_STATUS: Record<string, { label: string; color: string; bg: string 
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   active: { label: 'Aktiv', color: '#10b981', bg: '#10b98114' },
   returned: { label: 'Zurückgegeben', color: '#64748b', bg: '#64748b14' },
+  postponed: { label: 'Verlegt', color: '#d97706', bg: '#d9770614' },
   completed: { label: 'Abgeschlossen', color: '#10b981', bg: '#10b98114' },
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#ef4444', bg: '#ef444414' },

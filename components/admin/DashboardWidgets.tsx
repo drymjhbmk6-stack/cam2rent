@@ -219,6 +219,7 @@ function statusLabel(status: string): { label: string; color: string } {
     cancelled: { label: 'Storniert', color: C.red },
     damaged: { label: 'Beschädigt', color: C.red },
     returned: { label: 'Retourniert', color: C.purple },
+    postponed: { label: 'Verlegt', color: C.yellow },
   };
   return map[status] || { label: status, color: C.textDim };
 }
