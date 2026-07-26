@@ -5512,6 +5512,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Admin-Storno-Dokumentation — Migration auszuführen (idempotent, additiv):**
+  `supabase/supabase-bookings-cancellation-record.sql`. Legt `bookings.cancellation_record JSONB`
+  an (Storno-Doku: vorgeschlagener vs. erstatteter Betrag, Abweichung,
+  Begründung, Grund-Kategorie, Anker-Datum, Admin, Zeitstempel). Der Admin-Storno
+  belegt den Erstattungsbetrag aus der AGB-Staffel vor (rechnet gegen den Anker),
+  verlangt bei Erstattung UNTER dem Vorschlag eine Begründung (422 ohne) und
+  belegt bei Voll-Erstattungs-Gründen (§§ 12/11/3/19) 100 % vor. Ohne die
+  Migration läuft der Storno weiter (Betrag/Refund/Beleg unverändert), nur die
+  strukturierte Doku wird nicht persistiert (defensiver Retry, Audit-Log enthält
+  sie trotzdem). Empfohlen ASAP ausführen.
 - **Storno-Anker harte Invariante — Migration auszuführen (idempotent, additiv):**
   `supabase/supabase-bookings-cancellation-anchor.sql`. Backfillt
   `bookings.cancellation_anchor_date = rental_from` für Altbestände, legt einen

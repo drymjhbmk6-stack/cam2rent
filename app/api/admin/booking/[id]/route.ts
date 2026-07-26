@@ -24,6 +24,8 @@ import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 import { sanitizeOverrideDate } from '@/lib/booking-buffer';
 import { createCancellationCreditNote, renderCancellationBelegPdf } from '@/lib/buchhaltung/credit-note-document';
+import { computeCancellationSuggestion, refundBelowSuggestion, normalizeCancellationReason } from '@/data/cancellation';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -778,6 +780,8 @@ export async function PATCH(
   const {
     status,
     cancellation_reason,
+    reason_category,
+    deviation_reason,
     refund_amount,
     stripe_refund,
     send_email,
@@ -794,6 +798,8 @@ export async function PATCH(
   } = body as {
     status?: string;
     cancellation_reason?: string;
+    reason_category?: string;
+    deviation_reason?: string;
     refund_amount?: number;
     stripe_refund?: boolean;
     send_email?: boolean;
@@ -1868,6 +1874,9 @@ export async function PATCH(
   // Bei Status-Wechsel: Pre-Status laden fuer atomaren Status-Guard (Race-Schutz
   // gegen parallele Aktionen wie Stripe-Webhook oder Doppel-Klick auf Storno).
   let preStatus: string | null = null;
+  // Storno-Dokumentation (AGB § 15) — wird beim Cancel befüllt und im
+  // Post-Processing am Buchungsdatensatz persistiert.
+  let cancellationRecord: Record<string, unknown> | null = null;
   if (status) {
     const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
     if (!allowed.includes(status)) {
@@ -1875,10 +1884,11 @@ export async function PATCH(
     }
     updates.status = status;
 
-    // Pre-Status holen (kombiniert mit Notes-Lookup fuer Storno-Grund)
+    // Pre-Status holen (kombiniert mit Notes-Lookup fuer Storno-Grund). Beim
+    // Cancel brauchen wir zusaetzlich Preis/Versand/Anker fuer den Vorschlag.
     const { data: existing } = await supabase
       .from('bookings')
-      .select('status, notes')
+      .select('*')
       .eq('id', id)
       .maybeSingle();
 
@@ -1891,6 +1901,62 @@ export async function PATCH(
     if (status === 'cancelled' && cancellation_reason) {
       const existingNotes = existing.notes ? `${existing.notes} | ` : '';
       updates.notes = `${existingNotes}Stornierungsgrund: ${cancellation_reason}`;
+    }
+
+    // ── AGB-Staffel-Vorschlag + Begründungspflicht (Nachtrag Block 1) ──────
+    // Der Vorschlag ist die Obergrenze der Gebühr, KEINE harte Sperre: eine
+    // Erstattung ÜBER dem Vorschlag ist nach § 15 Abs. 3/4 regelmäßig korrekt.
+    // Nur eine Erstattung UNTER dem serverseitig (autoritativ) berechneten
+    // Vorschlag verlangt eine Begründung — sonst 422. Es wird IMMER gegen den
+    // Anker (cancellation_anchor_date) gerechnet, nie gegen den evtl. verlegten
+    // aktuellen Mietbeginn.
+    // Nur wenn der Storno Erstattungs-Kontext trägt (aus dem Storno-Dialog,
+    // der refund_amount immer mitschickt — auch 0). Ein blanker Status-Wechsel
+    // auf "cancelled" (z. B. altes Status-Dropdown) läuft unverändert durch.
+    if (status === 'cancelled' && refund_amount !== undefined) {
+      const reasonCategory = normalizeCancellationReason(reason_category);
+      const priceTotal = Number(existing.price_total ?? 0);
+      const alreadyShipped = ['shipped', 'delivered', 'picked_up', 'returned'].includes(
+        existing.status as string,
+      );
+      const suggestion = computeCancellationSuggestion({
+        priceTotal,
+        shippingPrice: Number(existing.shipping_price ?? 0),
+        rentalFrom: String(existing.rental_from),
+        cancellationAnchorDate: (existing.cancellation_anchor_date as string | null) ?? null,
+        reasonCategory,
+        alreadyShipped,
+      });
+      const requestedRefund = Math.max(0, Math.min(priceTotal, Number(refund_amount) || 0));
+      const below = refundBelowSuggestion(requestedRefund, suggestion.suggestedAmount);
+      const justification = typeof deviation_reason === 'string' ? deviation_reason.trim() : '';
+
+      if (below && !justification) {
+        return NextResponse.json(
+          {
+            error: 'BELOW_SUGGESTION_NEEDS_REASON',
+            suggested: suggestion.suggestedAmount,
+            message: `Die Erstattung (${requestedRefund.toFixed(2)} €) liegt unter dem AGB-Staffelwert (${suggestion.suggestedAmount.toFixed(2)} €). Bitte eine Begründung angeben.`,
+          },
+          { status: 422 },
+        );
+      }
+
+      const admin = await getCurrentAdminUser();
+      cancellationRecord = {
+        reason_category: reasonCategory,
+        anchor_date: suggestion.anchorDate,
+        rental_from: suggestion.rentalFrom,
+        anchor_differs: suggestion.anchorDiffers,
+        days_until_start: suggestion.daysUntilStart,
+        full_refund_reason: suggestion.fullRefundReason,
+        suggested_amount: suggestion.suggestedAmount,
+        refunded_amount: requestedRefund,
+        below_suggestion: below,
+        justification: justification || null,
+        recorded_by: admin?.name ?? admin?.email ?? 'unbekannt',
+        recorded_at: new Date().toISOString(),
+      };
     }
   }
 
@@ -2017,6 +2083,18 @@ export async function PATCH(
       .maybeSingle();
 
     if (booking) {
+      // Storno-Dokumentation am Datensatz persistieren (defensiver Retry, falls
+      // supabase-bookings-cancellation-record.sql noch aussteht).
+      if (cancellationRecord) {
+        const { error: crErr } = await supabase
+          .from('bookings')
+          .update({ cancellation_record: cancellationRecord })
+          .eq('id', id);
+        if (crErr && /cancellation_record|column|schema cache|PGRST/i.test(crErr.message || '')) {
+          console.warn('[booking-cancel] cancellation_record Migration steht aus — Doku nicht persistiert.');
+        }
+      }
+
       // Stripe Payment Link deaktivieren (falls vorhanden), damit der Kunde
       // nicht noch nach Stornierung zahlt.
       if (booking.stripe_payment_link_id) {
@@ -2218,7 +2296,7 @@ export async function PATCH(
     action,
     entityType: 'booking',
     entityId: id,
-    changes: updates,
+    changes: cancellationRecord ? { ...updates, cancellation_record: cancellationRecord } : updates,
     request: req,
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
@@ -11,6 +11,7 @@ import PriceInput from '@/components/admin/PriceInput';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
+import { computeCancellationSuggestion, refundBelowSuggestion, CANCELLATION_REASON_OPTIONS, type CancellationReasonCategory } from '@/data/cancellation';
 
 interface BookingDetail {
   id: string;
@@ -261,6 +262,8 @@ export default function BuchungDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonCategory, setCancelReasonCategory] = useState<CancellationReasonCategory>('customer');
+  const [cancelDeviationReason, setCancelDeviationReason] = useState('');
   const [cancelRefundMode, setCancelRefundMode] = useState<'none' | 'full' | 'partial'>('none');
   const [cancelRefundAmount, setCancelRefundAmount] = useState(0);
   const [cancelStripeRefund, setCancelStripeRefund] = useState(true);
@@ -646,6 +649,9 @@ export default function BuchungDetailPage() {
 
   async function handleStatusUpdate() {
     if (!booking || newStatus === booking.status) return;
+    // Stornierung läuft immer über den Storno-Dialog (AGB-Staffel-Vorschlag +
+    // Erstattung + Begründungspflicht), nie als blanker Status-Wechsel.
+    if (newStatus === 'cancelled') { openCancelModal(); return; }
     // Beim Wechsel auf Abholung/Versand muss die WBW-Liste an den Mieter raus.
     // Sind die Werte noch nicht finalisiert, öffnet sich das WBW-Fenster — der
     // Statuswechsel passiert erst nach dem Versand der Liste.
@@ -678,6 +684,21 @@ export default function BuchungDetailPage() {
     }
   }
 
+  // AGB-Staffel-Vorschlag für den Admin-Storno (rechnet gegen den Anker, nie
+  // gegen den evtl. verlegten Mietbeginn). Reine Anzeige/Vorbelegung — der
+  // Server berechnet den Vorschlag beim Absenden autoritativ neu.
+  const cancelSuggestion = useMemo(() => {
+    if (!booking) return null;
+    return computeCancellationSuggestion({
+      priceTotal: booking.price_total ?? 0,
+      shippingPrice: booking.shipping_price ?? 0,
+      rentalFrom: booking.rental_from,
+      cancellationAnchorDate: booking.cancellation_anchor_date ?? null,
+      reasonCategory: cancelReasonCategory,
+      alreadyShipped: ['shipped', 'delivered', 'picked_up', 'returned'].includes(booking.status),
+    });
+  }, [booking, cancelReasonCategory]);
+
   function cancelRefundValue(): number {
     if (!booking) return 0;
     const total = booking.price_total ?? 0;
@@ -686,8 +707,58 @@ export default function BuchungDetailPage() {
       : 0;
   }
 
+  /** true → eingegebene Erstattung liegt unter dem AGB-Vorschlag (Begründung Pflicht). */
+  function cancelIsBelowSuggestion(): boolean {
+    if (!cancelSuggestion) return false;
+    return refundBelowSuggestion(cancelRefundValue(), cancelSuggestion.suggestedAmount);
+  }
+
+  /** Storno-Modal öffnen und den Vorschlag vorbelegen. */
+  function openCancelModal() {
+    setCancelReason('');
+    setCancelReasonCategory('customer');
+    setCancelDeviationReason('');
+    setCancelStripeRefund(true);
+    setCancelSendEmail(true);
+    const sugg = booking
+      ? computeCancellationSuggestion({
+          priceTotal: booking.price_total ?? 0,
+          shippingPrice: booking.shipping_price ?? 0,
+          rentalFrom: booking.rental_from,
+          cancellationAnchorDate: booking.cancellation_anchor_date ?? null,
+          reasonCategory: 'customer',
+          alreadyShipped: ['shipped', 'delivered', 'picked_up', 'returned'].includes(booking.status),
+        })
+      : null;
+    setCancelRefundMode('partial');
+    setCancelRefundAmount(sugg ? sugg.suggestedAmount : 0);
+    setShowCancelModal(true);
+  }
+
+  /** Grund-Kategorie wechseln und Erstattung neu vorbelegen. */
+  function changeCancelReasonCategory(cat: CancellationReasonCategory) {
+    setCancelReasonCategory(cat);
+    if (!booking) return;
+    const sugg = computeCancellationSuggestion({
+      priceTotal: booking.price_total ?? 0,
+      shippingPrice: booking.shipping_price ?? 0,
+      rentalFrom: booking.rental_from,
+      cancellationAnchorDate: booking.cancellation_anchor_date ?? null,
+      reasonCategory: cat,
+      alreadyShipped: ['shipped', 'delivered', 'picked_up', 'returned'].includes(booking.status),
+    });
+    setCancelRefundMode('partial');
+    setCancelRefundAmount(sugg.suggestedAmount);
+  }
+
   async function handleCancel(attachInvoice = false) {
     if (!booking || !cancelReason.trim()) return;
+    // Erstattung unter dem Vorschlag verlangt eine Begründung (auch clientseitig
+    // geblockt; der Server ist die autoritative Instanz).
+    if (cancelIsBelowSuggestion() && !cancelDeviationReason.trim()) {
+      alert('Die Erstattung liegt unter dem AGB-Staffelwert. Bitte eine Begründung angeben.');
+      return;
+    }
     const refundAmount = cancelRefundValue();
     setStatusUpdating(true);
     try {
@@ -697,18 +768,26 @@ export default function BuchungDetailPage() {
         body: JSON.stringify({
           status: 'cancelled',
           cancellation_reason: cancelReason.trim(),
+          reason_category: cancelReasonCategory,
+          deviation_reason: cancelDeviationReason.trim() || undefined,
           refund_amount: refundAmount,
           stripe_refund: cancelStripeRefund,
           send_email: cancelSendEmail,
           attach_invoice: attachInvoice,
         }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.message ?? d.error ?? 'Fehler.');
+        return;
+      }
       setBooking((prev) => prev ? { ...prev, status: 'cancelled' } : prev);
       setNewStatus('cancelled');
       setShowCancelPreview(false);
       setShowCancelModal(false);
       setCancelReason('');
+      setCancelReasonCategory('customer');
+      setCancelDeviationReason('');
       setCancelRefundMode('none');
       setCancelRefundAmount(0);
       setCancelStripeRefund(true);
@@ -1939,7 +2018,7 @@ export default function BuchungDetailPage() {
                 {/* Stornieren + Löschen */}
                 <div className="flex gap-2 pt-2 border-t border-brand-border">
                   {booking.status !== 'cancelled' && (
-                    <button onClick={() => setShowCancelModal(true)}
+                    <button onClick={openCancelModal}
                       className="flex-1 px-4 py-2 text-sm font-heading font-semibold text-red-600 border border-red-200 rounded-btn hover:bg-red-50 transition-colors">
                       Stornieren
                     </button>
@@ -2162,7 +2241,18 @@ export default function BuchungDetailPage() {
               <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung stornieren</h3>
               <p className="text-sm font-body text-brand-muted mb-4">Buchung {booking.id} wird als storniert markiert.</p>
 
-              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Stornierungsgrund *</label>
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Grund der Stornierung</label>
+              <select
+                value={cancelReasonCategory}
+                onChange={(e) => changeCancelReasonCategory(e.target.value as CancellationReasonCategory)}
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400 mb-4"
+              >
+                {CANCELLATION_REASON_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}{o.fullRefund ? ' — 100 %' : ''}</option>
+                ))}
+              </select>
+
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Stornierungsgrund (Notiz) *</label>
               <textarea
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
@@ -2171,6 +2261,43 @@ export default function BuchungDetailPage() {
                 autoFocus
                 className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
               />
+
+              {/* AGB-Staffel-Vorschlag (Herleitung) */}
+              {cancelSuggestion && (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-900 p-3">
+                  <p className="text-xs font-heading font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider mb-1">AGB-Vorschlag</p>
+                  <p className="text-sm font-body text-blue-900 dark:text-blue-200">
+                    {cancelSuggestion.fullRefundReason ? (
+                      <>Voller Erstattungsanspruch nach AGB → 100 % = <strong>{fmtEuro(cancelSuggestion.suggestedAmount)}</strong></>
+                    ) : (
+                      <>
+                        {cancelSuggestion.daysUntilStart > 7
+                          ? 'mehr als 7 Tage'
+                          : cancelSuggestion.daysUntilStart >= 3
+                            ? '3–7 Tage'
+                            : cancelSuggestion.daysUntilStart >= 0
+                              ? 'weniger als 3 Tage'
+                              : 'Mietbeginn vergangen'}
+                        {' '}vor Mietbeginn (Anker: {isoToDE(cancelSuggestion.anchorDate)}) → {Math.round(cancelSuggestion.refundRate * 100)} % von {fmtEuro(cancelSuggestion.priceTotal - cancelSuggestion.shippingPrice)} = <strong>{fmtEuro(cancelSuggestion.gradedRefund)}</strong>
+                        {cancelSuggestion.shippingRefund > 0
+                          ? <> zzgl. Versand {fmtEuro(cancelSuggestion.shippingPrice)} voll erstattet</>
+                          : cancelSuggestion.shippingPrice > 0
+                            ? <> (Versand bereits versendet — nicht erstattet)</>
+                            : null}
+                        {' '}= <strong>{fmtEuro(cancelSuggestion.suggestedAmount)}</strong>
+                      </>
+                    )}
+                  </p>
+                  {cancelSuggestion.anchorDiffers && (
+                    <p className="text-xs font-body text-amber-700 dark:text-amber-400 mt-1.5">
+                      ⚠ Verlegte Buchung — gerechnet wird gegen den ursprünglichen Mietbeginn (Anker {isoToDE(cancelSuggestion.anchorDate)}), nicht gegen den aktuellen ({isoToDE(cancelSuggestion.rentalFrom)}).
+                    </p>
+                  )}
+                  <p className="text-[11px] font-body text-blue-700/80 dark:text-blue-400/80 mt-1.5">
+                    Vorschlag = Obergrenze der Gebühr. Mehr erstatten ist jederzeit möglich (§ 15 Abs. 3/4). Weniger nur mit Begründung.
+                  </p>
+                </div>
+              )}
 
               {/* Rückerstattung */}
               <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mt-4 mb-2">Rückerstattung</label>
@@ -2225,6 +2352,23 @@ export default function BuchungDetailPage() {
                 </p>
               )}
 
+              {/* Begründungspflicht bei Erstattung unter dem Vorschlag */}
+              {cancelIsBelowSuggestion() && (
+                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-3">
+                  <p className="text-xs font-heading font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                    ⚠ Erstattung unter AGB-Vorschlag ({fmtEuro(cancelSuggestion?.suggestedAmount ?? 0)})
+                  </p>
+                  <label className="text-xs font-body text-amber-800 dark:text-amber-300 block mb-1">Begründung * (warum weniger als die Staffel?)</label>
+                  <textarea
+                    value={cancelDeviationReason}
+                    onChange={(e) => setCancelDeviationReason(e.target.value)}
+                    rows={2}
+                    placeholder="z. B. Kunde hat bereits einen Teilbetrag als Gutschein erhalten"
+                    className="w-full px-3 py-2 border border-amber-300 dark:border-amber-800 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                  />
+                </div>
+              )}
+
               {/* E-Mail */}
               <label className="flex items-center gap-2 mt-4 text-sm font-body text-brand-black dark:text-slate-200 cursor-pointer">
                 <input
@@ -2237,13 +2381,13 @@ export default function BuchungDetailPage() {
               </label>
 
               <div className="flex justify-end gap-2 mt-5">
-                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelStripeRefund(true); setCancelSendEmail(true); }}
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelReasonCategory('customer'); setCancelDeviationReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelStripeRefund(true); setCancelSendEmail(true); }}
                   className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                   Abbrechen
                 </button>
                 <button
                   onClick={() => { if (cancelSendEmail) { setShowCancelPreview(true); } else { handleCancel(false); } }}
-                  disabled={!cancelReason.trim() || statusUpdating}
+                  disabled={!cancelReason.trim() || statusUpdating || (cancelIsBelowSuggestion() && !cancelDeviationReason.trim())}
                   className="px-5 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40">
                   {statusUpdating ? 'Wird storniert...' : (cancelSendEmail ? 'Weiter: Vorschau' : 'Stornieren')}
                 </button>

@@ -9,6 +9,8 @@ import {
   isSelfServiceCancellable,
   getCancellationInfo,
   effectiveCancelDate,
+  computeCancellationSuggestion,
+  refundBelowSuggestion,
 } from '@/data/cancellation';
 
 // Fester Referenztag als reines Datums-Parse (UTC-Mitternacht), damit die
@@ -166,5 +168,97 @@ describe('effectiveCancelDate / Anker — Verlegung öffnet kein neues Fenster',
     const movedTo = daysAhead(36); // neuer Termin
     expect(daysUntilRentalStart(movedTo, anchor, NOW)).toBe(5);
     expect(getRefundPercentage(movedTo, anchor, NOW)).toBe(0.5); // NICHT 100 %
+  });
+});
+
+describe('computeCancellationSuggestion — Admin-Storno-Vorschlag', () => {
+  const NOW2 = new Date('2026-05-15');
+  const ahead = (n: number) => {
+    const d = new Date(NOW2);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it.each([
+    [10, 1.0], // > 7 Tage → 100 %
+    [5, 0.5],  // 3–7 Tage → 50 %
+    [2, 0.1],  // < 3 Tage → 10 %
+  ])('Vorschlag deckt sich mit der Staffel je Stufe (%i Tage → %f)', (n, rate) => {
+    const s = computeCancellationSuggestion({
+      priceTotal: 93.99, shippingPrice: 4.99, rentalFrom: ahead(n),
+      cancellationAnchorDate: null, reasonCategory: 'customer', now: NOW2,
+    });
+    // Staffel wirkt nur auf den storniablen Anteil (89,00 €), Versand voll.
+    expect(s.refundRate).toBe(rate);
+    expect(s.gradedRefund).toBeCloseTo(89 * rate, 2);
+    expect(s.shippingRefund).toBe(4.99);
+    expect(s.suggestedAmount).toBeCloseTo(89 * rate + 4.99, 2);
+    // identisch zur zugrunde liegenden Erstattungs-Berechnung
+    const r = computeCancellationRefund({ priceTotal: 93.99, shippingPrice: 4.99, daysUntilStart: n });
+    expect(s.suggestedAmount).toBe(r.refundTotal);
+  });
+
+  it('Beispiel aus der Spec: 3–7 Tage → 50 % von 89 € + 4,99 € Versand = 49,49 €', () => {
+    const s = computeCancellationSuggestion({
+      priceTotal: 93.99, shippingPrice: 4.99, rentalFrom: ahead(5),
+      cancellationAnchorDate: null, reasonCategory: 'customer', now: NOW2,
+    });
+    expect(s.suggestedAmount).toBe(49.49);
+  });
+
+  it('verlegte Buchung: Vorschlag basiert auf ANKER, nicht auf verlegtem Start', () => {
+    const anchor = ahead(2);   // Ur-Termin in 2 Tagen → 10 %
+    const movedTo = ahead(40); // verlegt weit nach hinten
+    const s = computeCancellationSuggestion({
+      priceTotal: 100, shippingPrice: 0, rentalFrom: movedTo,
+      cancellationAnchorDate: anchor, reasonCategory: 'customer', now: NOW2,
+    });
+    expect(s.anchorDiffers).toBe(true);
+    expect(s.anchorDate).toBe(anchor);
+    expect(s.refundRate).toBe(0.1); // gegen Anker, nicht 100 %
+    expect(s.suggestedAmount).toBe(10);
+  });
+
+  it('Grund "Vermieter-Verlegung" (§ 12 Abs. 5) → 100 % vorbelegt, nicht Staffel', () => {
+    const s = computeCancellationSuggestion({
+      priceTotal: 93.99, shippingPrice: 4.99, rentalFrom: ahead(2), // 2 Tage = eigentlich 10 %
+      cancellationAnchorDate: null, reasonCategory: 'vermieter_verlegung', now: NOW2,
+    });
+    expect(s.fullRefundReason).toBe(true);
+    expect(s.suggestedAmount).toBe(93.99); // voll, nicht 10 %
+  });
+
+  it('alle Voll-Erstattungs-Gründe belegen 100 % vor', () => {
+    for (const cat of ['bereitstellung_unmoeglich', 'nichtannahme_48h', 'kontosperrung']) {
+      const s = computeCancellationSuggestion({
+        priceTotal: 50, rentalFrom: ahead(1), cancellationAnchorDate: null,
+        reasonCategory: cat, now: NOW2,
+      });
+      expect(s.suggestedAmount).toBe(50);
+    }
+  });
+
+  it('unbekannter Grund fällt auf "customer" (Staffel) zurück', () => {
+    const s = computeCancellationSuggestion({
+      priceTotal: 100, rentalFrom: ahead(10), cancellationAnchorDate: null,
+      reasonCategory: 'irgendwas', now: NOW2,
+    });
+    expect(s.reasonCategory).toBe('customer');
+    expect(s.suggestedAmount).toBe(100); // > 7 Tage
+  });
+});
+
+describe('refundBelowSuggestion — Begründungspflicht-Gate', () => {
+  it('Betrag UNTER Vorschlag → true (Begründung nötig, wird sonst abgelehnt)', () => {
+    expect(refundBelowSuggestion(40, 49.49)).toBe(true);
+  });
+  it('Betrag ÜBER Vorschlag → false (geht ohne Begründung durch)', () => {
+    expect(refundBelowSuggestion(60, 49.49)).toBe(false);
+  });
+  it('Betrag EXAKT auf Vorschlag → false (kein zusätzlicher Schritt)', () => {
+    expect(refundBelowSuggestion(49.49, 49.49)).toBe(false);
+  });
+  it('Cent-Toleranz: 1 Cent Rundungsdifferenz zählt nicht als darunter', () => {
+    expect(refundBelowSuggestion(49.489, 49.49)).toBe(false);
   });
 });

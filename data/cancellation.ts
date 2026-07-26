@@ -225,3 +225,142 @@ export function getCancellationInfo(
     refundPercentage: 0,
   };
 }
+
+// ─── Admin-Storno: Grund-Kategorien + Erstattungs-Vorschlag ─────────────────
+//
+// Der Admin-Storno rechnet mit der Staffel als VORSCHLAG (Obergrenze der
+// Gebühr, kein fester Betrag). Eine Erstattung ÜBER dem Vorschlag ist nach AGB
+// regelmäßig korrekt (§ 15 Abs. 3/4 ersparte Aufwendungen/geringerer Schaden);
+// nur eine Erstattung UNTER dem Vorschlag braucht eine Begründung.
+//
+// Bestimmte Storno-Gründe verlangen nach AGB VOLLE Erstattung — dann wird
+// 100 % vorbelegt statt der Staffel.
+
+export type CancellationReasonCategory =
+  | 'customer'                    // Stornierung durch Kunden → Staffel
+  | 'vermieter_verlegung'         // § 12 Abs. 5 → 100 %
+  | 'bereitstellung_unmoeglich'   // § 11 Abs. 3 → 100 %
+  | 'nichtannahme_48h'            // § 3 Abs. 5 → 100 %
+  | 'kontosperrung';              // § 19 Abs. 2 → 100 %
+
+/** Gründe, die nach AGB volle Erstattung (100 %) verlangen. */
+export const FULL_REFUND_CANCEL_REASONS: readonly CancellationReasonCategory[] = [
+  'vermieter_verlegung',
+  'bereitstellung_unmoeglich',
+  'nichtannahme_48h',
+  'kontosperrung',
+];
+
+/** Auswahloptionen „Grund der Stornierung" für den Admin-Storno-Dialog. */
+export const CANCELLATION_REASON_OPTIONS: {
+  value: CancellationReasonCategory;
+  label: string;
+  fullRefund: boolean;
+}[] = [
+  { value: 'customer', label: 'Stornierung durch Kunden', fullRefund: false },
+  { value: 'vermieter_verlegung', label: 'Vermieter-Verlegung, kein zumutbarer Ersatztermin (§ 12 Abs. 5)', fullRefund: true },
+  { value: 'bereitstellung_unmoeglich', label: 'Bereitstellung nicht möglich (§ 11 Abs. 3)', fullRefund: true },
+  { value: 'nichtannahme_48h', label: 'Nichtannahme innerhalb 48 Stunden (§ 3 Abs. 5)', fullRefund: true },
+  { value: 'kontosperrung', label: 'Kontosperrung ohne Verschulden des Mieters (§ 19 Abs. 2)', fullRefund: true },
+];
+
+/** Normalisiert eine Freitext-Kategorie auf eine bekannte Option (Fallback 'customer'). */
+export function normalizeCancellationReason(value: unknown): CancellationReasonCategory {
+  return CANCELLATION_REASON_OPTIONS.some((o) => o.value === value)
+    ? (value as CancellationReasonCategory)
+    : 'customer';
+}
+
+/** True, wenn der Grund nach AGB volle Erstattung verlangt. */
+export function isFullRefundReason(reasonCategory: string): boolean {
+  return (FULL_REFUND_CANCEL_REASONS as readonly string[]).includes(reasonCategory);
+}
+
+export interface CancellationSuggestion {
+  reasonCategory: CancellationReasonCategory;
+  /** Maßgebliches Anker-Datum (frühester Mietbeginn). */
+  anchorDate: string;
+  rentalFrom: string;
+  /** true → Buchung wurde verlegt, Anker weicht vom aktuellen Mietbeginn ab. */
+  anchorDiffers: boolean;
+  daysUntilStart: number;
+  fullRefundReason: boolean;
+  /** Erstattungsrate der Staffel (0–1); bei Voll-Erstattungs-Gründen 1. */
+  refundRate: number;
+  gradedRefund: number;
+  shippingRefund: number;
+  /** Vorbelegter Erstattungsbetrag (Obergrenze der Gebühr, nach unten begründungspflichtig). */
+  suggestedAmount: number;
+  priceTotal: number;
+  shippingPrice: number;
+}
+
+/**
+ * Berechnet den Erstattungs-VORSCHLAG für den Admin-Storno. Nutzt IMMER den
+ * Anker (cancellation_anchor_date), nie den aktuellen (evtl. verlegten)
+ * Mietbeginn. Voll-Erstattungs-Gründe (§§ 12/11/3/19) belegen 100 % vor.
+ */
+export function computeCancellationSuggestion(params: {
+  priceTotal: number;
+  shippingPrice?: number;
+  rentalFrom: string;
+  cancellationAnchorDate?: string | null;
+  reasonCategory?: string;
+  alreadyShipped?: boolean;
+  now?: Date;
+}): CancellationSuggestion {
+  const now = params.now ?? new Date();
+  const reasonCategory = normalizeCancellationReason(params.reasonCategory);
+  const rentalFrom = params.rentalFrom.slice(0, 10);
+  const anchorDate = effectiveCancelDate(rentalFrom, params.cancellationAnchorDate);
+  const daysUntilStart = daysUntilRentalStart(rentalFrom, params.cancellationAnchorDate, now);
+  const priceTotal = Math.max(0, params.priceTotal || 0);
+  const shipping = Math.max(0, params.shippingPrice || 0);
+  const anchorDiffers = anchorDate !== rentalFrom;
+
+  if (isFullRefundReason(reasonCategory)) {
+    return {
+      reasonCategory,
+      anchorDate,
+      rentalFrom,
+      anchorDiffers,
+      daysUntilStart,
+      fullRefundReason: true,
+      refundRate: 1,
+      gradedRefund: round2(Math.max(0, priceTotal - shipping)),
+      shippingRefund: shipping,
+      suggestedAmount: round2(priceTotal),
+      priceTotal,
+      shippingPrice: shipping,
+    };
+  }
+
+  const r = computeCancellationRefund({
+    priceTotal,
+    shippingPrice: shipping,
+    daysUntilStart,
+    alreadyShipped: params.alreadyShipped,
+  });
+  return {
+    reasonCategory,
+    anchorDate,
+    rentalFrom,
+    anchorDiffers,
+    daysUntilStart,
+    fullRefundReason: false,
+    refundRate: r.refundRate,
+    gradedRefund: r.gradedRefund,
+    shippingRefund: r.shippingRefund,
+    suggestedAmount: r.refundTotal,
+    priceTotal,
+    shippingPrice: shipping,
+  };
+}
+
+/**
+ * Liegt die tatsächliche Erstattung unter dem Vorschlag (mit Cent-Toleranz)?
+ * Dann ist eine Begründung Pflicht (AGB-widrig ohne Begründung).
+ */
+export function refundBelowSuggestion(refunded: number, suggested: number): boolean {
+  return refunded < suggested - 0.005;
+}
