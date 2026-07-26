@@ -3757,6 +3757,43 @@ Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datu
 - `berlinLocalInputToUTC(input)` — Umkehrung (Input ist in Berlin-Zeit gemeint) → UTC-ISO
 - Eingesetzt in `analytics/route.ts` (live/today/bookings), `daily-report/route.ts`, `editorial-plan/[id]/route.ts`, Post-Editor (neu + detail)
 
+### Fristrelevante Kalendertage in Berliner Zeit (Stand 2026-07-26)
+AGB/Mietvertrag meinen deutsche Ortszeit. Zwei TZ-Bugs gefixt + eine zentrale
+Utility ergänzt, damit fristrelevante Berechnungen nicht auf dem UTC-Container kippen:
+- **`BERLIN_TZ = 'Europe/Berlin'`** — benannte Konstante, ersetzt die verstreuten
+  `'Europe/Berlin'`-Literale in `lib/timezone.ts`.
+- **`calendarDaysBetween(fromDateStr, toDateStr)`** — Kalendertag-Differenz zweier
+  `YYYY-MM-DD`-Strings, **DST-immun** (UTC-Mitternacht als Anker; keine
+  ms-Division, die am 30.03./26.10. kippt). **`berlinDaysUntil(target, now?)`** =
+  `calendarDaysBetween(getBerlinDateString(now), target)` — DIE Utility für alle
+  Fristen (Storno-Staffel etc.). `now` (Zugang der Erklärung) wird zuerst in den
+  Berliner Kalendertag übersetzt.
+- **Fix #1 Storno-Staffel** (`data/cancellation.ts`): `toMidnight()`+ms-Division
+  (lokale Serverzeit = UTC auf dem Container) durch `berlinDaysUntil` ersetzt.
+  Vorher zählte eine Stornierung um 00:30 Berlin (= UTC-Vortag) einen Tag zu viel
+  → falsche/kunden-günstigere Stufe. `cancellation_anchor_date` (DATE) wird
+  datumsbasiert verglichen, nicht als UTC-Mitternacht-Timestamp.
+- **Fix #4 `berlinLocalInputToUTC`**: holte den Offset über `getBerlinOffsetString()`
+  **ohne Argument** (= jetzt) → Sommer-Offset auf Winter-Daten. Jetzt Offset am
+  eingegebenen Datum. Gleicher Bug in `editorial-plan/[id]/route.ts` mitgefixt.
+- **Dockerfile**: `ENV TZ=Europe/Berlin` + `tzdata` (zusätzliche Absicherung, KEIN
+  Ersatz — der Code rechnet unabhängig davon korrekt). Auch in `.env.example`.
+- **Tests** laufen unter `TZ=UTC` UND `TZ=Europe/Berlin` identisch grün (inkl.
+  DST-Wechseltage 29.03./25.10.). `lib/__tests__/timezone.test.ts` (Winter-Round-Trip)
+  war ein **Funktions**-Bug, kein Testfehler — repariert, nicht geskippt.
+
+**Cron-Refund-Audit (Stand 2026-07-26, reine Bestandsaufnahme, nichts geändert):**
+Die 5 Auto-Storno/Cleanup-Crons rechnen KEINE Storno-Staffel — sie erstatten
+100 % oder nichts (AGB-adäquat): `verification-auto-cancel` = 100 % (voller
+Stripe-Refund, kein `amount`), `contract-auto-cancel` = 100 % (gated
+`refund_on_cancel`), `awaiting-payment-cancel` + `auto-cancel` = unbezahlt →
+nichts zu erstatten, `account-cleanup` = storniert **gar keine** Buchung (nur
+Konto-Lifecycle, blockt bei offenen Buchungen). Kalendertag-Gates dort sind
+bereits Berlin-basiert (`getBerlinDateString`/`computeDeadlineUTC`/UTC-Anker-Diff).
+Offene Klärung (User entscheidet): Regel für `contract-auto-cancel` (bezahlt +
+bestätigt = Vertrag lt. § 3 Abs. 3, aber Mietvertrag unsigniert) + § 19 Abs. 2
+(Kontosperrung → 100 % aktiver Buchungen) ist NICHT als Auto-Refund implementiert.
+
 ## Analytics-Fixes (Stand 2026-04-19)
 - **Live-Tab respektiert Zeitraum-Filter**: API `type=live` nimmt `range=today|7d|30d|month`, Kacheln zeigen dynamische Labels ("Seitenaufrufe — 30 Tage"). `active_count` bleibt letzte 5 Min (Echtzeit).
 - **Timezone-Bug** in 3 Stellen (live/today/bookings) behoben, nutzt jetzt `getBerlinDayStartISO()`

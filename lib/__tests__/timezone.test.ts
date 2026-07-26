@@ -7,6 +7,9 @@ import {
   getBerlinDateKey,
   utcToBerlinLocalInput,
   berlinLocalInputToUTC,
+  calendarDaysBetween,
+  berlinDaysUntil,
+  BERLIN_TZ,
 } from '../timezone';
 
 describe('getBerlinOffsetString', () => {
@@ -125,5 +128,50 @@ describe('berlinLocalInputToUTC', () => {
 
   it('Ungueltiger Input -> null', () => {
     expect(berlinLocalInputToUTC('not-a-time')).toBeNull();
+  });
+});
+
+describe('BERLIN_TZ', () => {
+  it('ist die benannte Konstante Europe/Berlin', () => {
+    expect(BERLIN_TZ).toBe('Europe/Berlin');
+  });
+});
+
+describe('calendarDaysBetween — DST-immun (Kalendertage, keine ms-Division)', () => {
+  it('einfache Differenz', () => {
+    expect(calendarDaysBetween('2026-05-04', '2026-05-11')).toBe(7);
+    expect(calendarDaysBetween('2026-05-11', '2026-05-04')).toBe(-7);
+    expect(calendarDaysBetween('2026-05-04', '2026-05-04')).toBe(0);
+  });
+
+  it('spannt den 29.03. (23-Stunden-Tag, Spring-Forward) → volle Kalendertage', () => {
+    // Eine ms-Division über Berlin-Local-Timestamps ergäbe hier 6,96 → floor 6.
+    expect(calendarDaysBetween('2026-03-25', '2026-04-01')).toBe(7);
+  });
+
+  it('spannt den 25.10. (25-Stunden-Tag, Fall-Back) → volle Kalendertage', () => {
+    expect(calendarDaysBetween('2026-10-22', '2026-10-29')).toBe(7);
+  });
+
+  it('akzeptiert auch längere ISO-Strings (nur Datumsteil zählt)', () => {
+    expect(calendarDaysBetween('2026-05-04T23:59:59Z', '2026-05-11T00:00:00Z')).toBe(7);
+  });
+});
+
+describe('berlinDaysUntil — Instant → Berliner Kalendertag → Differenz', () => {
+  it('04.05. 00:30 Berlin (= 03.05. 22:30 UTC), Ziel 11.05. → 7 (nicht 8)', () => {
+    expect(berlinDaysUntil('2026-05-11', new Date('2026-05-03T22:30:00Z'))).toBe(7);
+  });
+  it('04.05. 23:30 Berlin (= 04.05. 21:30 UTC), Ziel 11.05. → 7', () => {
+    expect(berlinDaysUntil('2026-05-11', new Date('2026-05-04T21:30:00Z'))).toBe(7);
+  });
+  it('05.05. 00:30 Berlin (= 04.05. 22:30 UTC), Ziel 11.05. → 6', () => {
+    expect(berlinDaysUntil('2026-05-11', new Date('2026-05-04T22:30:00Z'))).toBe(6);
+  });
+  it('DST Herbst: 25.10. 00:30 Berlin (= 24.10. 22:30 UTC, +02:00), Ziel 01.11. → 7', () => {
+    expect(berlinDaysUntil('2026-11-01', new Date('2026-10-24T22:30:00Z'))).toBe(7);
+  });
+  it('DST Frühling: 29.03. 00:30 Berlin (= 28.03. 23:30 UTC, +01:00), Ziel 05.04. → 7', () => {
+    expect(berlinDaysUntil('2026-04-05', new Date('2026-03-28T23:30:00Z'))).toBe(7);
   });
 });

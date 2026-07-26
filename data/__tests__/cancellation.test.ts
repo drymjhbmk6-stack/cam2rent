@@ -318,3 +318,56 @@ describe('refundBelowSuggestion — Begründungspflicht-Gate', () => {
     expect(refundBelowSuggestion(49.489, 49.49)).toBe(false);
   });
 });
+
+describe('Zeitzonen-Korrektheit der Stornostaffel (Berliner Kalendertage)', () => {
+  // Instants als UTC; die Kommentare geben die gemeinte Berliner Wandzeit an.
+  it('Storno 04.05. 00:30 Berlin (=03.05. 22:30 UTC), Mietbeginn 11.05. → 7 Tage → 50 %', () => {
+    const now = new Date('2026-05-03T22:30:00Z');
+    expect(getRefundPercentage('2026-05-11', null, now)).toBe(0.5);
+  });
+
+  it('Storno 04.05. 23:30 Berlin (=04.05. 21:30 UTC), Mietbeginn 11.05. → 7 Tage → 50 %', () => {
+    const now = new Date('2026-05-04T21:30:00Z');
+    expect(getRefundPercentage('2026-05-11', null, now)).toBe(0.5);
+  });
+
+  it('Storno 05.05. 00:30 Berlin (=04.05. 22:30 UTC), Mietbeginn 11.05. → 6 Tage → 50 %', () => {
+    const now = new Date('2026-05-04T22:30:00Z');
+    expect(getRefundPercentage('2026-05-11', null, now)).toBe(0.5);
+  });
+
+  it('Storno 03.05. 23:30 Berlin (=03.05. 21:30 UTC), Mietbeginn 11.05. → 8 Tage → 100 %', () => {
+    const now = new Date('2026-05-03T21:30:00Z');
+    expect(getRefundPercentage('2026-05-11', null, now)).toBe(1.0);
+  });
+
+  it('computeCancellationRefund: 04.05. 00:30 Berlin → 50 % (nicht 100 % via UTC-Vortag)', () => {
+    const r = computeCancellationRefund({
+      priceTotal: 100, shippingPrice: 0,
+      anchorDate: '2026-05-11', rentalFrom: '2026-05-11',
+      now: new Date('2026-05-03T22:30:00Z'),
+    });
+    expect(r.refundRate).toBe(0.5);
+  });
+
+  it('DST Frühling 29.03.: Storno 29.03. 00:30 Berlin, Mietbeginn 05.04. → 7 Tage → 50 %', () => {
+    // 29.03. 00:30 Berlin = 28.03. 23:30 UTC (noch +01:00, Umstellung erst 02:00)
+    expect(getRefundPercentage('2026-04-05', null, new Date('2026-03-28T23:30:00Z'))).toBe(0.5);
+  });
+
+  it('DST Herbst 25.10.: Storno 25.10. 00:30 Berlin, Mietbeginn 01.11. → 7 Tage → 50 %', () => {
+    // 25.10. 00:30 Berlin = 24.10. 22:30 UTC (noch +02:00)
+    expect(getRefundPercentage('2026-11-01', null, new Date('2026-10-24T22:30:00Z'))).toBe(0.5);
+  });
+
+  it('Verlegte Buchung: Anker 10.05., verlegt auf 20.06., Storno 15.06. 00:30 Berlin → 10 %', () => {
+    // 15.06. 00:30 Berlin = 14.06. 22:30 UTC; der Anker (10.05.) darf nicht kippen
+    const r = computeCancellationRefund({
+      priceTotal: 100, shippingPrice: 0,
+      anchorDate: '2026-05-10', rentalFrom: '2026-06-20',
+      now: new Date('2026-06-14T22:30:00Z'),
+    });
+    expect(r.refundRate).toBe(0.1);
+    expect(r.refundTotal).toBe(10);
+  });
+});

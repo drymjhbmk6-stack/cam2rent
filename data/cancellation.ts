@@ -16,6 +16,13 @@
 // auf den storniablen Anteil (Mietpreis + Haftungsschutz + Zubehör =
 // price_total − Versandkosten). Nach dem Versand sind die Versandkosten
 // verbraucht und werden nicht mehr erstattet.
+//
+// ZEITZONE: Alle Kalendertag-Differenzen laufen über `berlinDaysUntil`
+// (lib/timezone.ts) — deutsche Ortszeit, DST-immun. NIE über lokale
+// Server-Mitternacht (auf dem UTC-Container würde 00:30 Berlin als Vortag
+// gezählt → falsche Stornostufe).
+
+import { berlinDaysUntil } from '@/lib/timezone';
 
 export type SelfServiceEligibility =
   | 'allowed'       // > 7 Tage → Selbstservice möglich (100 %)
@@ -82,38 +89,32 @@ export function effectiveCancelDate(
   return anchor < rentalFrom ? anchor : rentalFrom;
 }
 
-function toMidnight(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-/** Kalendertage von heute bis `dateStr` (positiv = Zukunft, negativ = Vergangenheit). */
-function daysBetweenNow(dateStr: string, now: Date): number {
-  const target = toMidnight(new Date(dateStr));
-  const today = toMidnight(now);
-  return Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 /**
  * Kalendertage zwischen heute und dem maßgeblichen (Anker-)Mietbeginn. `now`
  * ist für Tests injizierbar; produktiv wird die aktuelle Zeit verwendet.
+ *
+ * Gerechnet wird in BERLINER Kalendertagen (AGB/Mietvertrag meinen deutsche
+ * Ortszeit): der Instant `now` wird zuerst in den Berliner Kalendertag
+ * übersetzt, dann datumsbasiert (DST-immun) verrechnet — siehe
+ * `berlinDaysUntil`. Damit kippt eine Stornierung um 00:30 Berlin nicht auf
+ * den UTC-Vortag.
  */
 export function daysUntilRentalStart(
   rentalFrom: string,
   cancellationAnchorDate?: string | null,
   now: Date = new Date(),
 ): number {
-  return daysBetweenNow(effectiveCancelDate(rentalFrom, cancellationAnchorDate), now);
+  return berlinDaysUntil(effectiveCancelDate(rentalFrom, cancellationAnchorDate), now);
 }
 
 /**
- * true → die TATSÄCHLICHE (evtl. verlegte) Miete hat begonnen (heute > rental_from).
- * Nur dann greift die 0 %-Regel (Leistung läuft); der Mietbeginn-Tag selbst
- * (Tag 0) zählt noch als storniabel (< 3-Tage-Stufe, 10 %).
+ * true → die TATSÄCHLICHE (evtl. verlegte) Miete hat begonnen (Berliner
+ * Kalendertag von heute > rental_from). Nur dann greift die 0 %-Regel
+ * (Leistung läuft); der Mietbeginn-Tag selbst (Tag 0) zählt noch als
+ * storniabel (< 3-Tage-Stufe, 10 %).
  */
 export function rentalHasStarted(rentalFrom: string, now: Date = new Date()): boolean {
-  return daysBetweenNow(rentalFrom, now) < 0;
+  return berlinDaysUntil(rentalFrom, now) < 0;
 }
 
 export interface CancellationRefund {
@@ -170,7 +171,7 @@ export function computeCancellationRefund(params: {
   const actualFrom = params.rentalFrom || params.anchorDate;
   const refundRate = rentalHasStarted(actualFrom, now)
     ? 0
-    : refundRateForDays(daysBetweenNow(params.anchorDate, now));
+    : refundRateForDays(berlinDaysUntil(params.anchorDate, now));
 
   // Storniabler Anteil = alles außer Versand (Mietpreis + Haftung + Zubehör
   // − eventuelle Rabatte, weil price_total den Rabatt bereits enthält).

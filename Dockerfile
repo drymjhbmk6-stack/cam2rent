@@ -34,10 +34,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+# Berlin-Zeit als Container-Default (ZUSÄTZLICHE Absicherung — der Code rechnet
+# fristrelevante Kalendertage ohnehin explizit über Europe/Berlin, siehe
+# lib/timezone.ts. tzdata liefert die Zonendaten fuer die OS-Ebene).
+ENV TZ=Europe/Berlin
 
 # ffmpeg + DejaVu-Schrift (Fallback) + fontconfig fuer Reel-Rendering
 # (lib/reels/ffmpeg-render.ts spawnt /usr/bin/ffmpeg, drawtext-Filter braucht TTF-Datei)
-RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig
+# tzdata: Zeitzonen-Datenbank fuer die TZ-Env-Variable.
+RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig tzdata
 
 # Phase 1 (1.6): Inter Tight als primaere Marken-Schrift fuer Reels (drawtext).
 # Variable Font (OFL-Lizenz, Google Fonts). Liegt im Repo unter assets/fonts/.

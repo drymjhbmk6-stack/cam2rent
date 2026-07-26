@@ -32,7 +32,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (scheduleChanged && data?.post_id) {
     const datePart = (data.scheduled_date as string) || body.scheduled_date;
     const timePart = ((data.scheduled_time as string) || body.scheduled_time || '10:00').slice(0, 5);
-    const offset = getBerlinOffsetString();
+    // Offset für das GEPLANTE Datum bestimmen (nicht "jetzt") — sonst kippt ein
+    // in einer anderen Saison geplanter Post um eine Stunde.
+    const offset = getBerlinOffsetString(new Date(`${datePart}T${timePart}:00Z`));
     const scheduledAtUTC = new Date(`${datePart}T${timePart}:00${offset}`).toISOString();
     await supabase.from('social_posts').update({ scheduled_at: scheduledAtUTC }).eq('id', data.post_id);
   }
