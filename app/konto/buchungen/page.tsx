@@ -1089,7 +1089,7 @@ export default function BuchungenPage() {
                       {cancelInfo.eligibility === 'email_only' && (
                         <a href={`mailto:${KONTAKT_EMAIL}?subject=Stornierung%20${booking.id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                          Per E-Mail stornieren (50 % Gebühr)
+                          Per E-Mail stornieren ({100 - cancelInfo.refundPercentage} % Stornopauschale)
                         </a>
                       )}
                     </div>

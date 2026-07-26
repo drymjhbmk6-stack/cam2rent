@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
-import { getRefundPercentage, isSelfServiceCancellable } from '@/data/cancellation';
+import {
+  computeCancellationRefund,
+  daysUntilRentalStart,
+  isSelfServiceCancellable,
+} from '@/data/cancellation';
 import {
   sendCancellationConfirmation,
   sendAdminCancellationNotification,
@@ -78,11 +82,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Calculate refund
-  const refundPercentage = getRefundPercentage(booking.rental_from, cancelAnchor);
-  const refundAmountCents = Math.round(
-    (booking.price_total ?? 0) * refundPercentage * 100
+  // Erstattung gemäß AGB § 15: Staffel wirkt nur auf den storniablen Anteil
+  // (price_total − Versand); Versandkosten werden vor Versand voll erstattet
+  // (§ 15 Abs. 5). Selbstservice läuft ohnehin nur > 7 Tage vorher → 100 %,
+  // aber der Helper hält die Rechnung korrekt, falls sich das Gate ändert.
+  const alreadyShipped = ['shipped', 'delivered', 'picked_up', 'returned'].includes(
+    booking.status,
   );
+  const refund = computeCancellationRefund({
+    priceTotal: booking.price_total ?? 0,
+    shippingPrice: booking.shipping_price ?? 0,
+    daysUntilStart: daysUntilRentalStart(booking.rental_from, cancelAnchor),
+    alreadyShipped,
+  });
+  const refundPercentage = refund.refundRate;
+  const refundAmountCents = Math.round(refund.refundTotal * 100);
 
   const stripe = await getStripe();
 
