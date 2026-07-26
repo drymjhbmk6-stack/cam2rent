@@ -46,15 +46,24 @@ function round2(value: number): number {
 }
 
 /**
- * Erstattungsrate (0–1) für die gegebene Anzahl Kalendertage vor Mietbeginn.
- * Hat die Miete bereits begonnen (`daysUntilStart < 0`) → 0 %.
+ * Erstattungsrate (0–1) der Staffel für die Kalendertage bis zum ANKER
+ * (ursprünglicher Mietbeginn, AGB § 15 Abs. 2). Die Untergrenze ist 10 % — die
+ * AGB-Staffel (Abs. 1) definiert keine 0 %-Stufe VOR Mietbeginn; ihre
+ * schlechteste Stufe ist „< 3 Tage → 10 %".
+ *
+ * WICHTIG: 0 % (keine Erstattung) greift NICHT, nur weil der ANKER in der
+ * Vergangenheit liegt (z. B. verlegte Buchung, deren Ur-Termin schon vorbei
+ * ist, deren TATSÄCHLICHE Miete aber noch bevorsteht). 0 % gilt ausschließlich,
+ * wenn die tatsächliche Miete begonnen hat — das prüft `computeCancellationRefund`
+ * separat über `rentalFrom`. Deshalb liefert diese Funktion für negative
+ * Anker-Tage die schlechteste Staffelstufe (10 %), nicht 0 %.
  */
-export function refundRateForDays(daysUntilStart: number): number {
-  if (daysUntilStart < 0) return 0;
+export function refundRateForDays(daysUntilAnchor: number): number {
   for (const tier of CANCELLATION_TIERS) {
-    if (daysUntilStart >= tier.minDaysBefore) return tier.refundRate;
+    if (daysUntilAnchor >= tier.minDaysBefore) return tier.refundRate;
   }
-  return 0;
+  // Anker liegt in der Vergangenheit → schlechteste Stufe (< 3 Tage) = 10 %.
+  return CANCELLATION_TIERS[CANCELLATION_TIERS.length - 1].refundRate;
 }
 
 /**
@@ -79,18 +88,32 @@ function toMidnight(date: Date): Date {
   return copy;
 }
 
+/** Kalendertage von heute bis `dateStr` (positiv = Zukunft, negativ = Vergangenheit). */
+function daysBetweenNow(dateStr: string, now: Date): number {
+  const target = toMidnight(new Date(dateStr));
+  const today = toMidnight(now);
+  return Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 /**
- * Kalendertage zwischen heute und dem maßgeblichen Mietbeginn. `now` ist für
- * Tests injizierbar; produktiv wird die aktuelle Zeit verwendet.
+ * Kalendertage zwischen heute und dem maßgeblichen (Anker-)Mietbeginn. `now`
+ * ist für Tests injizierbar; produktiv wird die aktuelle Zeit verwendet.
  */
 export function daysUntilRentalStart(
   rentalFrom: string,
   cancellationAnchorDate?: string | null,
   now: Date = new Date(),
 ): number {
-  const start = toMidnight(new Date(effectiveCancelDate(rentalFrom, cancellationAnchorDate)));
-  const today = toMidnight(now);
-  return Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return daysBetweenNow(effectiveCancelDate(rentalFrom, cancellationAnchorDate), now);
+}
+
+/**
+ * true → die TATSÄCHLICHE (evtl. verlegte) Miete hat begonnen (heute > rental_from).
+ * Nur dann greift die 0 %-Regel (Leistung läuft); der Mietbeginn-Tag selbst
+ * (Tag 0) zählt noch als storniabel (< 3-Tage-Stufe, 10 %).
+ */
+export function rentalHasStarted(rentalFrom: string, now: Date = new Date()): boolean {
+  return daysBetweenNow(rentalFrom, now) < 0;
 }
 
 export interface CancellationRefund {
@@ -110,17 +133,44 @@ export interface CancellationRefund {
  * Berechnet die Erstattung gemäß AGB § 15. Die Staffel wirkt nur auf den
  * storniablen Anteil (price_total − Versand); Versandkosten werden — solange
  * noch nicht versendet — IMMER voll erstattet (§ 15 Abs. 5).
+ *
+ * Die Fristen bemessen sich nach dem ANKER (`anchorDate` =
+ * `cancellation_anchor_date`, ursprünglicher Mietbeginn — AGB § 15 Abs. 2), die
+ * 0 %-„Miete läuft"-Prüfung nach dem TATSÄCHLICHEN Mietbeginn (`rentalFrom`).
+ * So bekommt ein Kunde, der eine Buchung weit nach hinten verlegt und dann
+ * storniert, korrekt die schlechteste Staffelstufe (10 %) gemessen am Ur-Termin
+ * — nicht wieder das kostenlose Fenster.
  */
 export function computeCancellationRefund(params: {
   priceTotal: number;
   shippingPrice?: number;
-  daysUntilStart: number;
+  /**
+   * `cancellation_anchor_date` — der URSPRÜNGLICH gebuchte Mietbeginn
+   * (AGB § 15 Abs. 2). Bei verlegten Buchungen darf hier NIEMALS
+   * `start_date`/`rental_from` durchgereicht werden — sonst öffnet die
+   * Verlegung ein neues kostenloses Storno-Fenster. Fristen und Stornopauschalen
+   * bemessen sich ausschließlich nach diesem Datum.
+   */
+  anchorDate: string;
+  /**
+   * Tatsächlicher (evtl. verlegter) Mietbeginn — NUR für die „Miete hat
+   * begonnen"-Prüfung (0 % Erstattung, weil die Leistung läuft). Fehlt er,
+   * wird der Anker verwendet (Nicht-Verlegungs-Annahme).
+   */
+  rentalFrom?: string;
   /** true → Paket ist bereits raus, Versandkosten sind verbraucht. */
   alreadyShipped?: boolean;
+  now?: Date;
 }): CancellationRefund {
+  const now = params.now ?? new Date();
   const priceTotal = Math.max(0, params.priceTotal || 0);
   const shipping = Math.max(0, params.shippingPrice || 0);
-  const refundRate = refundRateForDays(params.daysUntilStart);
+
+  // Staffel gegen den ANKER; 0 % nur, wenn die TATSÄCHLICHE Miete bereits läuft.
+  const actualFrom = params.rentalFrom || params.anchorDate;
+  const refundRate = rentalHasStarted(actualFrom, now)
+    ? 0
+    : refundRateForDays(daysBetweenNow(params.anchorDate, now));
 
   // Storniabler Anteil = alles außer Versand (Mietpreis + Haftung + Zubehör
   // − eventuelle Rabatte, weil price_total den Rabatt bereits enthält).
@@ -146,11 +196,15 @@ export function getCancellationEligibility(
 ): SelfServiceEligibility {
   if (status !== 'confirmed') return 'not_possible';
 
-  const daysUntilStart = daysUntilRentalStart(rentalFrom, cancellationAnchorDate, now);
+  // „Nicht mehr stornierbar" nur wenn die TATSÄCHLICHE Miete begonnen hat —
+  // eine verlegte Buchung mit vergangenem Anker, aber zukünftigem Termin,
+  // bleibt stornierbar (dann gegen den Anker: schlechteste Stufe = 10 %).
+  if (rentalHasStarted(rentalFrom, now)) return 'not_possible';
 
-  if (daysUntilStart < 0) return 'not_possible'; // Miete hat begonnen
-  if (daysUntilStart > 7) return 'allowed';       // > 7 Tage → kostenloser Selbstservice
-  return 'email_only';                            // 3–7 (50 %) und < 3 (10 %) → per E-Mail
+  const daysUntilAnchor = daysUntilRentalStart(rentalFrom, cancellationAnchorDate, now);
+
+  if (daysUntilAnchor > 7) return 'allowed';  // > 7 Tage vor Anker → kostenloser Selbstservice
+  return 'email_only';                        // 3–7 (50 %) und < 3 / Anker vergangen (10 %) → per E-Mail
 }
 
 /** Prüft ob Selbstservice-Stornierung (kostenlos, > 7 Tage) erlaubt ist. */
@@ -163,12 +217,13 @@ export function isSelfServiceCancellable(
   return getCancellationEligibility(rentalFrom, status, cancellationAnchorDate, now) === 'allowed';
 }
 
-/** Erstattungsanteil (0–1) für den storniablen Anteil. */
+/** Erstattungsanteil (0–1) für den storniablen Anteil (Staffel gegen den Anker). */
 export function getRefundPercentage(
   rentalFrom: string,
   cancellationAnchorDate?: string | null,
   now: Date = new Date(),
 ): number {
+  if (rentalHasStarted(rentalFrom, now)) return 0; // tatsächliche Miete läuft
   return refundRateForDays(daysUntilRentalStart(rentalFrom, cancellationAnchorDate, now));
 }
 
@@ -338,8 +393,10 @@ export function computeCancellationSuggestion(params: {
   const r = computeCancellationRefund({
     priceTotal,
     shippingPrice: shipping,
-    daysUntilStart,
+    anchorDate,
+    rentalFrom,
     alreadyShipped: params.alreadyShipped,
+    now,
   });
   return {
     reasonCategory,

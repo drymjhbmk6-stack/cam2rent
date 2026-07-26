@@ -181,6 +181,10 @@ export async function POST(req: NextRequest) {
   // Buchung verhindert Stripe selbst via idempotencyKey, aber DB war offen).
   // .is('extension_payment_intent_id', null) garantiert dass nur die erste
   // der konkurrierenden Anfragen die Buchung aktualisiert.
+  // Verlängerung nach § 13: nur das Enddatum (rental_to) + Dauer/Preis ändern
+  // sich. rental_from und cancellation_anchor_date bleiben BEWUSST unberührt —
+  // eine Verlängerung öffnet kein neues Storno-Fenster (§ 13 Abs. 4). NICHT
+  // "aufräumen" und hier den Anker mitschreiben.
   const { data: updated, error: updateError } = await supabase
     .from('bookings')
     .update({

@@ -21,6 +21,28 @@ describe('freezeAnchor — Storno-Anker friert den Ur-Termin ein (AGB § 15 Abs.
   it('ignoriert Zeitanteil (nur Datum)', () => {
     expect(freezeAnchor('2026-05-10T09:00:00Z', '2026-06-20')).toBe('2026-05-10');
   });
+
+  it('zweifache Verlegung → Anker bleibt der Ur-Termin (idempotent)', () => {
+    const original = '2026-05-10';
+    // 1. Verlegung: kein Anker vorhanden → Ur-Termin wird eingefroren.
+    const afterFirst = freezeAnchor(null, original);
+    expect(afterFirst).toBe(original);
+    // 2. Verlegung: aktueller Termin ist jetzt 20.06 (verlegt), Anker existiert.
+    const afterSecond = freezeAnchor(afterFirst, '2026-06-20');
+    expect(afterSecond).toBe(original); // unverändert
+    // 3. Verlegung noch weiter nach hinten → weiterhin der Ur-Termin.
+    expect(freezeAnchor(afterSecond, '2026-08-01')).toBe(original);
+  });
+
+  it('§ 13 Verlängerung ändert nur rental_to → Anker (rental_from-basiert) unberührt', () => {
+    // Eine Verlängerung ruft freezeAnchor NICHT auf; der Anker bleibt der
+    // Ur-Termin. Modelliert durch: gleicher rental_from → Anker unverändert.
+    const original = '2026-05-10';
+    const anchor = freezeAnchor(null, original);
+    // rental_to wächst, rental_from bleibt → eine (hypothetische) erneute
+    // Anker-Berechnung mit unverändertem rental_from ergibt denselben Anker.
+    expect(freezeAnchor(anchor, original)).toBe(original);
+  });
 });
 
 describe('computePostponeTo / isoAddDays — Dauer bleibt gleich', () => {

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import {
   computeCancellationRefund,
-  daysUntilRentalStart,
+  effectiveCancelDate,
   isSelfServiceCancellable,
 } from '@/data/cancellation';
 import {
@@ -92,7 +92,10 @@ export async function POST(req: NextRequest) {
   const refund = computeCancellationRefund({
     priceTotal: booking.price_total ?? 0,
     shippingPrice: booking.shipping_price ?? 0,
-    daysUntilStart: daysUntilRentalStart(booking.rental_from, cancelAnchor),
+    // Fristen gegen den Anker (ursprünglicher Mietbeginn, § 15 Abs. 2), 0 %
+    // nur wenn die tatsächliche Miete bereits läuft (rentalFrom).
+    anchorDate: effectiveCancelDate(booking.rental_from, cancelAnchor),
+    rentalFrom: booking.rental_from,
     alreadyShipped,
   });
   const refundPercentage = refund.refundRate;

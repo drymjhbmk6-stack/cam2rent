@@ -57,4 +57,4 @@ CREATE TRIGGER trg_set_cancellation_anchor
 ALTER TABLE bookings ALTER COLUMN cancellation_anchor_date SET NOT NULL;
 
 COMMENT ON COLUMN bookings.cancellation_anchor_date IS
-  'Eingefrorener Storno-Termin = ursprünglicher rental_from. Maßgeblich für die Stornofristen/Erstattung (AGB § 15 Abs. 2). Wird beim Anlegen automatisch gesetzt (Trigger) und bei Verlegung auf MIN(rental_from, anchor) eingefroren — eine Verlegung öffnet das Storno-Fenster nicht neu.';
+  'Eingefrorener Storno-Termin = ursprünglicher rental_from. Maßgeblich für Stornofristen/Erstattung (AGB § 15 Abs. 2). Wird beim Anlegen automatisch gesetzt (Trigger). Bei einer VERLEGUNG (§ 12) wird dieses Feld BEWUSST NICHT auf den neuen Termin mitgeschrieben — es bleibt der früheste je gesetzte Mietbeginn (MIN(rental_from, anchor)). Bei einer VERLÄNGERUNG (§ 13 Abs. 4) bleibt es ebenfalls unverändert. Eine Verlegung/Verlängerung öffnet damit kein neues kostenloses Storno-Fenster. NICHT beim Zeitraumwechsel "aufräumen".';

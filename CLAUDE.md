@@ -5522,6 +5522,15 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Migration läuft der Storno weiter (Betrag/Refund/Beleg unverändert), nur die
   strukturierte Doku wird nicht persistiert (defensiver Retry, Audit-Log enthält
   sie trotzdem). Empfohlen ASAP ausführen.
+- **Storno gegen Anker vs. tatsächlicher Termin (§ 15 Abs. 2, Stand 2026-07-26):**
+  `computeCancellationRefund()` nimmt jetzt `anchorDate` (Ur-Mietbeginn) + optional
+  `rentalFrom` (tatsächlicher, evtl. verlegter Termin) statt `daysUntilStart`. Die
+  Staffel bemisst sich am **Anker**; die 0 %-„Miete läuft"-Regel am **tatsächlichen**
+  `rental_from`. Folge: eine verlegte Buchung, deren Ur-Termin schon vorbei ist,
+  deren echter Termin aber noch bevorsteht, ist weiter stornierbar und bekommt die
+  schlechteste Staffelstufe (10 %) — nicht mehr 0 %/„nicht möglich". `refundRateForDays`
+  hat jetzt 10 % als Untergrenze (kein 0 % mehr aus negativen Anker-Tagen). Keine
+  Migration. Kundenkonto zeigt bei verlegten Buchungen einen Anker-Hinweis.
 - **Storno-Anker harte Invariante — Migration auszuführen (idempotent, additiv):**
   `supabase/supabase-bookings-cancellation-anchor.sql`. Backfillt
   `bookings.cancellation_anchor_date = rental_from` für Altbestände, legt einen

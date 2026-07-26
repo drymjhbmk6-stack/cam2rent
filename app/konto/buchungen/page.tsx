@@ -82,11 +82,21 @@ function CancelModal({ booking, onConfirm, onClose, loading }: CancelModalProps)
         <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
           {booking.product_name} · {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
         </p>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-5">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3">
           <p className="text-sm font-semibold mb-1 text-green-700">{cancelInfo.label}</p>
           <p className="text-xs text-brand-text dark:text-gray-300 mb-2">{cancelInfo.description}</p>
           <p className="text-sm font-bold text-green-700">Rückerstattung: {formatCurrency(refundAmount)}</p>
         </div>
+        {booking.cancellation_anchor_date &&
+          booking.cancellation_anchor_date.slice(0, 10) !== booking.rental_from.slice(0, 10) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-amber-800">
+                Diese Buchung wurde verlegt. Deine Stornofristen richten sich weiterhin nach dem{' '}
+                <strong>ursprünglichen Mietbeginn am {fmtDate(booking.cancellation_anchor_date)}</strong>{' '}
+                — nicht nach dem verschobenen Termin (AGB § 15 Abs. 2).
+              </p>
+            </div>
+          )}
         <p className="text-xs text-brand-muted dark:text-gray-500 mb-5">Diese Aktion kann nicht rückgängig gemacht werden. Du erhältst eine Bestätigungsmail.</p>
         <div className="flex gap-3">
           <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-btn text-sm font-heading font-semibold text-brand-black dark:text-white hover:bg-brand-bg dark:hover:bg-white/5 dark:bg-brand-black transition-colors disabled:opacity-50">
@@ -1087,10 +1097,18 @@ export default function BuchungenPage() {
 
                       {/* Email cancel */}
                       {cancelInfo.eligibility === 'email_only' && (
-                        <a href={`mailto:${KONTAKT_EMAIL}?subject=Stornierung%20${booking.id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                          Per E-Mail stornieren ({100 - cancelInfo.refundPercentage} % Stornopauschale)
-                        </a>
+                        <div className="flex flex-col gap-0.5">
+                          <a href={`mailto:${KONTAKT_EMAIL}?subject=Stornierung%20${booking.id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            Per E-Mail stornieren ({100 - cancelInfo.refundPercentage} % Stornopauschale)
+                          </a>
+                          {booking.cancellation_anchor_date &&
+                            booking.cancellation_anchor_date.slice(0, 10) !== booking.rental_from.slice(0, 10) && (
+                              <span className="text-[11px] text-amber-700">
+                                Frist nach ursprünglichem Mietbeginn ({fmtDate(booking.cancellation_anchor_date)}).
+                              </span>
+                            )}
+                        </div>
                       )}
                     </div>
                   </div>

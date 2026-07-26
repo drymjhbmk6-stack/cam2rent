@@ -43,8 +43,9 @@ describe('refundRateForDays — Grenzfälle', () => {
     [2, 0.1], // Grenzfall: genau 2 Tage → 10 %
     [1, 0.1], // < 3 Tage → 10 %
     [0, 0.1], // Mietbeginn heute → 10 %
-    [-1, 0.0], // Miete hat begonnen → keine Erstattung
-  ])('bei %i Tagen vor Mietbeginn → Rate %f', (days, rate) => {
+    [-1, 0.1], // Anker in der Vergangenheit → schlechteste Stufe (10 %); 0 % greift separat über rentalFrom
+    [-40, 0.1], // Anker lange vorbei → weiterhin 10 % (verlegte Buchung, Ur-Termin passé)
+  ])('bei %i Tagen vor Anker → Rate %f', (days, rate) => {
     expect(refundRateForDays(days)).toBe(rate);
   });
 });
@@ -64,42 +65,97 @@ describe('getRefundPercentage — über echte Kalenderdaten', () => {
 });
 
 describe('computeCancellationRefund — Versandkosten separat (§ 15 Abs. 5)', () => {
+  // anchorDate == rentalFrom (Nicht-Verlegung); Staffel gegen den Anker.
+  const ref = (n: number, extra: Record<string, unknown> = {}) => ({
+    anchorDate: daysAhead(n), rentalFrom: daysAhead(n), now: NOW, ...extra,
+  });
+
   it('100 % (> 7 Tage): voller Betrag inkl. Versand', () => {
-    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, daysUntilStart: 8 });
+    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, ...ref(8) });
     expect(r).toMatchObject({ refundRate: 1.0, gradedRefund: 90, shippingRefund: 10, refundTotal: 100 });
   });
 
   it('50 % (3–7 Tage): halber Mietanteil, aber Versand VOLL erstattet', () => {
-    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, daysUntilStart: 7 });
+    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, ...ref(7) });
     expect(r).toMatchObject({ refundRate: 0.5, gradedRefund: 45, shippingRefund: 10, refundTotal: 55 });
   });
 
   it('10 % (< 3 Tage): 10 % Mietanteil, Versand VOLL erstattet', () => {
-    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, daysUntilStart: 2 });
+    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, ...ref(2) });
     expect(r).toMatchObject({ refundRate: 0.1, gradedRefund: 9, shippingRefund: 10, refundTotal: 19 });
   });
 
-  it('bereits versendet: Versandkosten sind verbraucht → keine Versanderstattung', () => {
+  it('tatsächliche Miete läuft (rentalFrom in der Vergangenheit) → 0 %', () => {
     const r = computeCancellationRefund({
-      priceTotal: 100,
-      shippingPrice: 10,
-      daysUntilStart: 7,
-      alreadyShipped: true,
+      priceTotal: 100, shippingPrice: 10,
+      anchorDate: daysAhead(-1), rentalFrom: daysAhead(-1), now: NOW,
     });
+    expect(r).toMatchObject({ refundRate: 0, gradedRefund: 0 });
+  });
+
+  it('bereits versendet: Versandkosten sind verbraucht → keine Versanderstattung', () => {
+    const r = computeCancellationRefund({ priceTotal: 100, shippingPrice: 10, ...ref(7, { alreadyShipped: true }) });
     expect(r).toMatchObject({ gradedRefund: 45, shippingRefund: 0, refundTotal: 45 });
   });
 
   it('ohne Versandkosten (Abholung): Staffel wirkt auf den vollen Betrag', () => {
-    const r = computeCancellationRefund({ priceTotal: 80, shippingPrice: 0, daysUntilStart: 2 });
+    const r = computeCancellationRefund({ priceTotal: 80, shippingPrice: 0, ...ref(2) });
     expect(r).toMatchObject({ gradedRefund: 8, shippingRefund: 0, refundTotal: 8 });
   });
 
   it('rundet auf Cent (§ 15 auf krummen Beträgen)', () => {
-    const r = computeCancellationRefund({ priceTotal: 49.99, shippingPrice: 4.99, daysUntilStart: 2 });
+    const r = computeCancellationRefund({ priceTotal: 49.99, shippingPrice: 4.99, ...ref(2) });
     // gradedBase = 45.00 → 4.50; shipping voll 4.99 → total 9.49
     expect(r.gradedRefund).toBe(4.5);
     expect(r.shippingRefund).toBe(4.99);
     expect(r.refundTotal).toBe(9.49);
+  });
+});
+
+describe('Verlegung: Anker maßgeblich, tatsächlicher Termin nur für "Miete läuft" (§ 15 Abs. 2)', () => {
+  // KERNFALL: Buchung Ur-Termin ~5 Wochen her, verlegt in die Zukunft, storno heute.
+  it('Ur-Termin vergangen, verlegt in die Zukunft, storno heute → 10 % (nicht 0 %, nicht 100 %)', () => {
+    const anchor = daysAhead(-36);  // ursprünglicher Mietbeginn 36 Tage her
+    const movedTo = daysAhead(5);   // verlegter Termin in 5 Tagen (Miete läuft NICHT)
+    const r = computeCancellationRefund({
+      priceTotal: 100, shippingPrice: 0, anchorDate: anchor, rentalFrom: movedTo, now: NOW,
+    });
+    expect(r.refundRate).toBe(0.1);   // schlechteste Staffelstufe gegen den Anker
+    expect(r.refundTotal).toBe(10);
+  });
+
+  it('storno mehr als 7 Tage vor dem ANKER → 100 % (Verlegung ändert nichts)', () => {
+    const anchor = daysAhead(20);   // Ur-Termin 20 Tage voraus
+    const movedTo = daysAhead(60);  // weit nach hinten verlegt
+    const r = computeCancellationRefund({
+      priceTotal: 100, shippingPrice: 0, anchorDate: anchor, rentalFrom: movedTo, now: NOW,
+    });
+    expect(r.refundRate).toBe(1.0);
+  });
+
+  it('ohne rentalFrom (Nicht-Verlegung): Anker vergangen → 0 % (Miete gilt als begonnen)', () => {
+    const r = computeCancellationRefund({ priceTotal: 100, anchorDate: daysAhead(-1), now: NOW });
+    expect(r.refundRate).toBe(0);
+  });
+
+  it('Spec-Kernfall: Ur-Termin 10.05., verlegt auf 20.06., Storno am 15.06. → 10 %', () => {
+    const r = computeCancellationRefund({
+      priceTotal: 100,
+      shippingPrice: 0,
+      anchorDate: '2026-05-10',   // ursprünglicher Mietbeginn (eingefroren)
+      rentalFrom: '2026-06-20',   // verlegter Termin (Miete läuft noch nicht)
+      now: new Date('2026-06-15'),
+    });
+    expect(r.refundRate).toBe(0.1);
+    expect(r.refundTotal).toBe(10);
+  });
+
+  it('Nicht-Verlegung verhält sich identisch zu Block 1 (Anker == start_date)', () => {
+    // 5 Tage vor Start → 50 %, egal ob Anker explizit gleich rental_from
+    const withAnchor = computeCancellationRefund({ priceTotal: 100, anchorDate: daysAhead(5), rentalFrom: daysAhead(5), now: NOW });
+    const withoutAnchor = computeCancellationRefund({ priceTotal: 100, anchorDate: daysAhead(5), now: NOW });
+    expect(withAnchor.refundRate).toBe(0.5);
+    expect(withoutAnchor.refundRate).toBe(0.5);
   });
 });
 
@@ -194,7 +250,7 @@ describe('computeCancellationSuggestion — Admin-Storno-Vorschlag', () => {
     expect(s.shippingRefund).toBe(4.99);
     expect(s.suggestedAmount).toBeCloseTo(89 * rate + 4.99, 2);
     // identisch zur zugrunde liegenden Erstattungs-Berechnung
-    const r = computeCancellationRefund({ priceTotal: 93.99, shippingPrice: 4.99, daysUntilStart: n });
+    const r = computeCancellationRefund({ priceTotal: 93.99, shippingPrice: 4.99, anchorDate: ahead(n), rentalFrom: ahead(n), now: NOW2 });
     expect(s.suggestedAmount).toBe(r.refundTotal);
   });
 
