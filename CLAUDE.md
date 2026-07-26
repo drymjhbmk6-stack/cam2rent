@@ -5512,6 +5512,19 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Storno-Anker harte Invariante — Migration auszuführen (idempotent, additiv):**
+  `supabase/supabase-bookings-cancellation-anchor.sql`. Backfillt
+  `bookings.cancellation_anchor_date = rental_from` für Altbestände, legt einen
+  BEFORE-INSERT-Trigger an (jede neue Buchung bekommt den Anker automatisch über
+  ALLE Insert-Pfade) und setzt die Spalte auf NOT NULL. Umsetzung AGB § 15 Abs. 2
+  (Stornofristen richten sich nach dem ursprünglichen Mietbeginn, auch nach
+  Verlegung). Ohne die Migration läuft alles weiter (Storno-Berechnung fällt bei
+  NULL auf rental_from zurück; Verlegung friert den Anker ohnehin ein), nur die
+  DB-Garantie „Anker bei jeder Neuanlage" + NOT NULL fehlt. Empfohlen ASAP
+  ausführen. **Stornoerstattung selbst (AGB § 15 Abs. 1) ist bereits im Code:
+  > 7 T → 100 %, 3–7 T → 50 %, < 3 T → 10 % (`data/cancellation.ts`,
+  `CANCELLATION_TIERS`); Versandkosten werden vor Versand voll erstattet
+  (§ 15 Abs. 5).**
 - **Buchung verlegen (Verlegung) — 2 Migrationen auszuführen (idempotent, additiv):**
   `supabase/supabase-bookings-postpone.sql` (Verlege-/Storno-Anker-Spalten) +
   `supabase/supabase-accessory-assign-exclude-postponed.sql` (RPC schließt

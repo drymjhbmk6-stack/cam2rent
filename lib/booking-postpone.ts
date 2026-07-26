@@ -15,7 +15,7 @@
  * delta-basierte Zubehoer-Anwendung).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { toIsoDate } from '@/lib/booking-buffer';
+import { freezeAnchor, isoAddDays, computePostponeTo } from '@/lib/booking-postpone-utils';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 import { applyAccessoryComposition } from '@/lib/booking-accessory-apply';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
@@ -45,20 +45,9 @@ const PACK_RESET_FIELDS = {
   pack_photo_url: null,
 } as const;
 
-/** YYYY-MM-DD + n Tage (lokaler Kalender, kein UTC-Shift). */
-export function isoAddDays(iso: string, n: number): string {
-  const m = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return iso.slice(0, 10);
-  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-  d.setDate(d.getDate() + n);
-  return toIsoDate(d);
-}
-
-/** Neues Enddatum aus Startdatum + Mietdauer (gleiche Anzahl Tage). */
-export function computePostponeTo(newFrom: string, days: number): string {
-  const d = Math.max(1, Math.floor(days || 1));
-  return isoAddDays(newFrom, d - 1);
-}
+// Reine Datums-/Anker-Helfer sind nach lib/booking-postpone-utils.ts
+// ausgelagert (isoliert unit-testbar) und werden hier re-exportiert.
+export { freezeAnchor, isoAddDays, computePostponeTo };
 
 function fmtDay(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split('-');
@@ -166,11 +155,14 @@ export async function applyPostponeDateMove(
     return { ok: false, status: applied.status, error: applied.error };
   }
 
-  // 3. Storno-Anker (fruehester je gesetzter Mietbeginn) + Original-Daten.
-  const existingAnchor = (booking.cancellation_anchor_date as string | null) ?? null;
-  const anchor = existingAnchor
-    ? existingAnchor.slice(0, 10) < oldFrom ? existingAnchor.slice(0, 10) : oldFrom
-    : oldFrom;
+  // 3. Storno-Anker — AGB § 15 Abs. 2 / Vertrag § 15 Abs. 2:
+  //    Die Stornofristen richten sich nach dem URSPRÜNGLICH gebuchten
+  //    Mietbeginn, AUCH nach einer Verlegung. Der Anker wird deshalb NIE auf
+  //    den neuen Termin (newFrom) gesetzt, sondern bleibt der früheste je
+  //    gesetzte Mietbeginn: MIN(bestehender Anker, alter rental_from). Eine
+  //    Verlegung nach hinten öffnet das kostenlose Storno-Fenster damit nicht
+  //    neu. rental_from/rental_to (unten in `upd`) ändern sich, der Anker nicht.
+  const anchor = freezeAnchor(booking.cancellation_anchor_date as string | null, oldFrom);
 
   const upd: Record<string, unknown> = {
     rental_from: newFrom,
