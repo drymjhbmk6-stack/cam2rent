@@ -4,6 +4,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { getCompanyTaxNumber } from '@/lib/company-tax';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
@@ -153,6 +154,7 @@ export async function POST(
           couponCode: booking.coupon_code ?? undefined,
           priceTotal: booking.price_total ?? 0,
           deposit: booking.deposit ?? 0,
+          steuernummer: getCompanyTaxNumber(),
           taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
           taxRate: parseFloat(taxMap['tax_rate'] || '19'),
           ustId: taxMap['ust_id'] || '',

@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import QRCode from 'qrcode';
 import { BUSINESS } from '@/lib/business-config';
+import { getCompanyTaxNumber } from '@/lib/company-tax';
 import { normalizeAccessoryItems } from '@/lib/booking-accessories';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
 import type { InvoiceLine } from '@/lib/invoice-lines';
@@ -128,6 +129,7 @@ export async function buildInvoiceData(
       shippingPrice: 0,
       priceTotal: (booking.price_total as number) ?? 0,
       deposit: 0,
+      steuernummer: getCompanyTaxNumber(),
       taxMode,
       taxRate,
       ustId,
@@ -184,6 +186,7 @@ export async function buildInvoiceData(
     couponCode: (booking.coupon_code as string) ?? undefined,
     priceTotal: (booking.price_total as number) ?? 0,
     deposit: (booking.deposit as number) ?? 0,
+    steuernummer: getCompanyTaxNumber(),
     taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
     taxRate: parseFloat(taxMap['tax_rate'] || '19'),
     ustId: taxMap['ust_id'] || '',

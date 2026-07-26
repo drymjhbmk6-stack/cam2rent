@@ -77,6 +77,8 @@ export interface InvoiceData {
   couponCode?: string;
   priceTotal: number;
   deposit: number;
+  /** Steuernummer des Kleinunternehmers — Pflichtangabe § 14 Abs. 4 Nr. 2 UStG. */
+  steuernummer: string;
   taxMode?: 'kleinunternehmer' | 'regelbesteuerung';
   taxRate?: number;
   ustId?: string;
@@ -514,7 +516,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               {BUSINESS.street}{'\n'}
               {BUSINESS.zip} {BUSINESS.city}{'\n'}
               {BUSINESS.email}{'\n'}
-              {data.ustId ? `USt-IdNr.: ${data.ustId}` : BUSINESS.domain}
+              {`Steuernummer: ${data.steuernummer}`}
+              {data.ustId ? `\nUSt-IdNr.: ${data.ustId}` : ''}
             </Text>
           </View>
         </View>
@@ -644,17 +647,14 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <Text style={s.totalValue}>{fmtEuro(data.priceTotal)}</Text>
         </View>
 
-        {data.deposit > 0 && (
-          <Text style={{ fontSize: 8, color: C.grayMid, marginTop: 3, textAlign: 'right' }}>
-            Kaution: {fmtEuro(data.deposit)} (wird nach Rückgabe freigegeben)
-          </Text>
-        )}
+        {/* Keine Kautionszeile — cam2rent erhebt weder Kaution noch
+            Kreditkartenvorautorisierung (AGB § 3 Abs. 6 / § 10 Abs. 1). */}
 
         {/* ── Steuer-Hinweis ── */}
         <Text style={{ fontSize: 9, color: C.grayMid, marginTop: 6 }}>
           {isRegel
             ? `${data.ustId ? `USt-IdNr.: ${data.ustId} · ` : ''}Alle Beträge verstehen sich inkl. ${taxRate}% MwSt.`
-            : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
+            : 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'}
         </Text>
 
         <View style={s.divider} />

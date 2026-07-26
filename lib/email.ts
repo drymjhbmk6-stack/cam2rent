@@ -3,6 +3,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { getCompanyTaxNumber } from '@/lib/company-tax';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ReturnChecklistPDF } from '@/lib/return-checklist-pdf';
@@ -270,45 +271,53 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
     console.error('[email] computeInvoiceLines fehlgeschlagen:', err);
   }
 
-  const invoiceData: InvoiceData = {
-    bookingId: data.bookingId,
-    invoiceDate,
-    cameraLines,
-    accessoryLines,
-    customerName: data.customerName,
-    customerEmail: data.customerEmail,
-    productName: data.productName,
-    rentalFrom: data.rentalFrom,
-    rentalTo: data.rentalTo,
-    days: data.days,
-    deliveryMode: data.deliveryMode,
-    shippingMethod: data.shippingMethod,
-    haftung: data.haftung,
-    accessories: data.accessories,
-    priceRental: data.priceRental,
-    priceAccessories: data.priceAccessories,
-    priceHaftung: data.priceHaftung,
-    shippingPrice: data.shippingPrice,
-    discountAmount: data.discountAmount,
-    couponCode: data.couponCode,
-    priceTotal: data.priceTotal,
-    deposit: data.deposit,
-    taxMode: data.taxMode,
-    taxRate: data.taxRate,
-    ustId: data.ustId,
-    // Rabatt-Komponenten (Aktion / Frühbucher / Sonderkondition) — überschreibt
-    // couponDiscount/couponCode, wenn die Buchung geladen werden konnte.
-    ...discountBreakdown,
-  };
-  const pdfBuffer = await renderToBuffer(
-    createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>
-  );
   const invoiceNumber = data.bookingId.replace('BK-', 'RE-');
   const contractNumber = data.bookingId.replace('BK-', 'MV-');
+  const attachments: { filename: string; content: Buffer }[] = [];
 
-  const attachments: { filename: string; content: Buffer }[] = [
-    { filename: `Rechnung-${invoiceNumber}.pdf`, content: pdfBuffer },
-  ];
+  // Rechnungs-PDF NUR erzeugen, wenn die Steuernummer gesetzt ist
+  // (§ 14 Abs. 4 Nr. 2 UStG). Fehlt COMPANY_TAX_NUMBER, wirft
+  // getCompanyTaxNumber() — dann wird die Rechnung übersprungen (keine
+  // unvollständige Rechnung), die Bestätigungsmail geht trotzdem raus.
+  try {
+    const invoiceData: InvoiceData = {
+      bookingId: data.bookingId,
+      invoiceDate,
+      cameraLines,
+      accessoryLines,
+      customerName: data.customerName,
+      customerEmail: data.customerEmail,
+      productName: data.productName,
+      rentalFrom: data.rentalFrom,
+      rentalTo: data.rentalTo,
+      days: data.days,
+      deliveryMode: data.deliveryMode,
+      shippingMethod: data.shippingMethod,
+      haftung: data.haftung,
+      accessories: data.accessories,
+      priceRental: data.priceRental,
+      priceAccessories: data.priceAccessories,
+      priceHaftung: data.priceHaftung,
+      shippingPrice: data.shippingPrice,
+      discountAmount: data.discountAmount,
+      couponCode: data.couponCode,
+      priceTotal: data.priceTotal,
+      deposit: data.deposit,
+      steuernummer: getCompanyTaxNumber(),
+      taxMode: data.taxMode,
+      taxRate: data.taxRate,
+      ustId: data.ustId,
+      // Rabatt-Komponenten (Aktion / Frühbucher / Sonderkondition) — überschreibt
+      // couponDiscount/couponCode, wenn die Buchung geladen werden konnte.
+      ...discountBreakdown,
+    };
+    const pdfBuffer = await renderToBuffer(
+      createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>
+    );
+    attachments.push({ filename: `Rechnung-${invoiceNumber}.pdf`, content: pdfBuffer });
+  } catch (err) {
+    console.error('[email] Rechnungs-PDF übersprungen (COMPANY_TAX_NUMBER gesetzt?):', err);
+  }
 
   if (contractPdfBuffer) {
     attachments.push({ filename: `Mietvertrag-${contractNumber}.pdf`, content: contractPdfBuffer });
