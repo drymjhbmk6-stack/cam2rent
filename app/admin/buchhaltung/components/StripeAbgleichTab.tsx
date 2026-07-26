@@ -241,10 +241,10 @@ export default function StripeAbgleichTab() {
       });
       if (res.ok) {
         const result = await res.json();
-        const msg = result.updated
-          ? `${result.imported} Stripe-Gebühren verbucht, ${result.updated} Beschreibungen aktualisiert`
-          : `${result.imported} Stripe-Gebühren als Ausgaben verbucht`;
-        showToast(msg, 'ok');
+        const parts: string[] = [`${result.imported} Stripe-Gebühren verbucht`];
+        if (result.paypalImported) parts.push(`${result.paypalImported} PayPal-Gebühren`);
+        if (result.updated) parts.push(`${result.updated} Beschreibungen aktualisiert`);
+        showToast(parts.join(', '), 'ok');
       } else {
         const err = await res.json();
         showToast(err.error || 'Fehler', 'err');
