@@ -719,6 +719,86 @@ dahin kein unterschriebener Vertrag vorliegt. Analog zum Ausweis-Flow
   Migrations-Schritt nötig. Bei Bedarf `contract_reminder_config` in
   `admin_settings` anlegen (sonst greifen die Defaults).
 
+### Buchung verlegen (Verlegung) — Admin + Kunden-Self-Service (Stand 2026-07-26)
+Eine Buchung kann auf einen neuen Termin **verlegt** werden — reine Verschiebung
+(gleiche Mietdauer, gleicher Preis, **keine Zahlung**). Der Kunde bekommt in
+jedem Fall eine **Bestätigungs-E-Mail**. Der ursprüngliche Mietzeitraum wird
+dabei **wieder für andere Kunden buchbar** (Inventar-Freigabe).
+- **Kern-Idee:** neuer Status `postponed` („Verlegt", `lib/booking-status-labels.ts`,
+  amber `#d97706`), der **bewusst NICHT** in `RESERVING_BOOKING_STATUSES`
+  (`lib/booking-statuses.ts`) steht → blockiert kein Inventar (Kameras implizit,
+  Zubehör über die RPC-Anpassung). Für Termin-Verschiebungen bleibt die Buchung
+  `confirmed`; nur Daten + Vertrag + Storno-Anker ändern sich. `postponed` ist
+  BEWUSST **nicht** in den generischen Status-Whitelists (PATCH `/booking/[id]`,
+  `update-booking-status`) — setzen/verlassen läuft ausschließlich über die
+  dedizierten Verlege-Endpoints (Inventar-Freigabe nie umgehbar).
+- **Storno-Schutz (Anti-Missbrauch):** Die kostenlose Storno-Frist (100 %,
+  ≥ 7 Tage vor Start) hängt live an `rental_from` — Verlegen auf später würde
+  das Fenster neu öffnen. Neue Spalte `bookings.cancellation_anchor_date` friert
+  den **frühesten je gesetzten** `rental_from` ein; `data/cancellation.ts`
+  (`effectiveCancelDate` = MIN(rental_from, anchor)) rechnet dagegen. Verwendet
+  in `cancel-booking` + Kundenkonto-CancelModal; `/api/meine-buchungen` liefert
+  `cancellation_anchor_date` mit (defensiver Fallback ohne die Spalte).
+- **Migrationen (idempotent, additiv):**
+  `supabase/supabase-bookings-postpone.sql` (Spalten `postponed_at`,
+  `postpone_reason`, `postpone_target_date`, `original_rental_from`,
+  `cancellation_anchor_date`, `postpone_count`, `contract_versions JSONB`) +
+  `supabase/supabase-accessory-assign-exclude-postponed.sql` (RPC
+  `assign_free_accessory_units` → Negations-Liste um `postponed` erweitert,
+  damit verlegte Buchungen ihre Zubehör-Exemplare freigeben). Kamera-RPCs
+  (Positiv-Listen) brauchen keine Änderung.
+- **Shared-Helper `lib/booking-postpone.ts`:** `applyPostponeDateMove` spiegelt
+  den erprobten `booking_edit`-Zeitraumwechsel (Kamera-Skelett-Reset +
+  `assignCamerasToBooking` für den neuen Zeitraum, delta-basierte
+  `applyAccessoryComposition`), friert `cancellation_anchor_date` ein, stasht
+  `original_rental_from/_to`, erzeugt eine Rechnungsversion. **Überbuchungs-
+  Prüfung identisch zur echten Buchung:** `findCameraOverbookingConflict`
+  (`lib/camera-availability-check.ts`, cart-hold- + puffer-aware; neuer
+  optionaler Param `neededUnits` für Multi-Kamera-Buchungen) pro Kameramodell
+  → 409 ohne Mutation. `archiveContractVersion` kopiert das alte signierte PDF
+  nach `contracts/verlegt/{id}/…` und hängt es an `bookings.contract_versions`.
+- **Kunden-Endpoint `POST /api/booking/[id]/postpone`** (Session-Auth, `.eq('user_id')`):
+  Gates `status='confirmed'` + `daysUntil(computeShipDate) ≥ 1` (nur bis 1 Tag
+  vor Versand-/Abholtag — eine bereits gestartete/durchgelaufene Miete ist
+  gesperrt) + `postpone_count===0` (nur EINMAL) + `!contract_locked`. Der Kunde
+  **unterschreibt den Vertrag für den neuen Zeitraum neu** (Canvas, inline im
+  selben Submit) + Pflicht-Ack „Verlegung eröffnet mein kostenloses Storno
+  nicht neu". Ablauf: `applyPostponeDateMove` → `archiveContractVersion` →
+  `rental_agreements`-Zeile löschen → `generateContractPDF`/`storeContract` für
+  den neuen Zeitraum (neuer Hash) → `sendPostponementConfirmation` (mode `date`)
+  + Admin-Notification. „Auf unbestimmte Zeit" ist Kunden NICHT erlaubt.
+- **Admin-Endpoint `POST /api/admin/booking/[id]/postpone`** (Permission via
+  Prefix `/api/admin/booking` → `tagesgeschaeft`), keine Zeit-/Einmal-Limits:
+  - `mode='date'`: `applyPostponeDateMove` (Reaktivierung aus `postponed` →
+    zurück auf `confirmed`). War der Vertrag signiert → `archiveContractVersion`
+    + Reset (`rental_agreements` löschen, Flags leeren) + `sendContractResignRequest`
+    (Kunde unterschreibt neu). `sendPostponementConfirmation` (mode `date`).
+  - `mode='indefinite'`: `status='postponed'`, Anker/Original setzen,
+    `releaseAccessoryUnitsFromBooking` (Zubehör frei; Kameras implizit),
+    `sendPostponementConfirmation` (mode `indefinite`, Wortlaut „melde dich").
+    Defensiver Spalten-Strip (Status + Notiz laufen auch ohne Migration durch).
+- **E-Mail** `sendPostponementConfirmation` (`lib/email.ts`, emailType
+  `booking_postponed`), registriert in `TYPE_LABELS` (`/admin/emails`) +
+  `EMAIL_TEMPLATE_CATALOG` (`/admin/emails/vorlagen`, id = emailType, damit
+  Override greift). Audit `booking.postpone`.
+- **UI Kunde** (`/konto/buchungen`): Button „📅 Verlegen" (Gate ≈ serverseitig,
+  Server autoritativ). `PostponeModal` öffnet direkt den `AvailabilityCalendar`
+  mit `forceDays = days` → **ein Klick aufs Startdatum markiert den ganzen
+  Zeitraum**, grün = frei / rot = belegt; darunter Vertrags-Neu-Unterschrift
+  (Canvas) + zwei Pflicht-Checkboxen. Ein Submit, keine Zahlung.
+- **UI Admin** (`/admin/buchungen/[id]` → Reiter „Bearbeiten"): `PostponeSection`
+  (Modus „Auf neuen Termin" / „Auf unbestimmte Zeit" + Pflicht-Grund + „Kunde
+  benachrichtigen"). `NextActionBar`-Case `postponed` → „📅 Neuen Termin
+  festlegen"; amber Banner bei `status='postponed'`.
+- **Bewusst NICHT im Scope:** Dauer-/Preisänderung beim Verlegen (bleibt in
+  „Bestellung bearbeiten"), nullable `rental_from/_to` (NOT NULL bleibt —
+  „unbestimmt" läuft über den Status), Kunden-„unbestimmt" (nur Admin).
+- **Go-Live TODO:** Beide Migrationen ausführen
+  (`supabase-bookings-postpone.sql` + `supabase-accessory-assign-exclude-postponed.sql`).
+  Ohne sie: Kunden-Endpoint/Admin-`indefinite` melden Fehler bzw. persistieren
+  Anker/Marker nicht (defensive Fallbacks greifen, aber der Storno-Anker + die
+  echte Zubehör-Freigabe wirken erst nach der Migration).
+
 ### Neukunden zahlen immer sofort — Zahlungslink-Pfad entfernt (Stand 2026-06-16)
 Der frühere „erste Buchung → `pending_verification` → Admin gibt frei → Kunde
 bekommt Zahlungslink per E-Mail"-Pfad ist aus dem **Kunden-Flow entfernt**.
@@ -5431,6 +5511,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Buchung verlegen (Verlegung) — 2 Migrationen auszuführen (idempotent, additiv):**
+  `supabase/supabase-bookings-postpone.sql` (Verlege-/Storno-Anker-Spalten) +
+  `supabase/supabase-accessory-assign-exclude-postponed.sql` (RPC schließt
+  `postponed` aus → Zubehör-Freigabe). Ohne sie funktioniert der Verlege-Flow
+  nur eingeschränkt (Kunden-Endpoint/Admin-`indefinite` melden Fehler bzw. der
+  Storno-Anker + die echte Zubehör-Freigabe wirken erst nach der Migration;
+  defensive Fallbacks greifen, kein Hard-Fail an anderer Stelle). Kein Cron
+  nötig. Details siehe „Buchung verlegen (Verlegung)". Empfohlen ASAP ausführen.
 - **Versand-/Retoure-Automatik — Migration + Cron auszuführen:** Migration
   `supabase/supabase-bookings-return-arrived.sql` (idempotent, additiv:
   `bookings.return_arrived_at`) + Crontab-Eintrag (alle 10 Min, `--resolve`

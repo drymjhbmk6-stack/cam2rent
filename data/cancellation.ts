@@ -9,16 +9,33 @@ export type SelfServiceEligibility =
   | 'email_only'    // 3–6 Tage → nur per E-Mail stornierbar
   | 'not_possible'; // ≤ 2 Tage oder Miete hat begonnen → keine Stornierung
 
+/**
+ * Maßgebliches Storno-Datum. Verhindert, dass eine Verlegung das kostenlose
+ * Storno-Fenster neu öffnet: gerechnet wird IMMER gegen den frühesten je
+ * gesetzten Mietbeginn (`cancellationAnchorDate` = ursprünglicher rental_from,
+ * eingefroren beim ersten Verlegen). Ohne Anker (Normalfall) gilt rental_from.
+ */
+export function effectiveCancelDate(
+  rentalFrom: string,
+  cancellationAnchorDate?: string | null,
+): string {
+  const anchor = (cancellationAnchorDate || '').trim();
+  if (!anchor) return rentalFrom;
+  // frühestes Datum gewinnt (String-Vergleich auf YYYY-MM-DD ist chronologisch)
+  return anchor < rentalFrom ? anchor : rentalFrom;
+}
+
 /** Gibt an, ob und wie eine Buchung storniert werden kann */
 export function getCancellationEligibility(
   rentalFrom: string,
-  status: string
+  status: string,
+  cancellationAnchorDate?: string | null,
 ): SelfServiceEligibility {
   if (status !== 'confirmed') return 'not_possible';
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(rentalFrom);
+  const start = new Date(effectiveCancelDate(rentalFrom, cancellationAnchorDate));
   start.setHours(0, 0, 0, 0);
   const daysUntilStart = Math.floor(
     (start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
@@ -31,15 +48,22 @@ export function getCancellationEligibility(
 }
 
 /** Prüft ob Selbstservice-Stornierung erlaubt (≥ 7 Tage) */
-export function isSelfServiceCancellable(rentalFrom: string, status: string): boolean {
-  return getCancellationEligibility(rentalFrom, status) === 'allowed';
+export function isSelfServiceCancellable(
+  rentalFrom: string,
+  status: string,
+  cancellationAnchorDate?: string | null,
+): boolean {
+  return getCancellationEligibility(rentalFrom, status, cancellationAnchorDate) === 'allowed';
 }
 
 /** Erstattungsanteil für Selbstservice-Stornierungen (nur ≥ 7 Tage → immer 100 %) */
-export function getRefundPercentage(rentalFrom: string): number {
+export function getRefundPercentage(
+  rentalFrom: string,
+  cancellationAnchorDate?: string | null,
+): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(rentalFrom);
+  const start = new Date(effectiveCancelDate(rentalFrom, cancellationAnchorDate));
   start.setHours(0, 0, 0, 0);
   const daysUntilStart = Math.floor(
     (start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
@@ -48,13 +72,17 @@ export function getRefundPercentage(rentalFrom: string): number {
 }
 
 /** Label-Texte für die UI je nach Stornierungsstatus */
-export function getCancellationInfo(rentalFrom: string, status: string): {
+export function getCancellationInfo(
+  rentalFrom: string,
+  status: string,
+  cancellationAnchorDate?: string | null,
+): {
   eligibility: SelfServiceEligibility;
   label: string;
   description: string;
   refundPercentage: number;
 } {
-  const eligibility = getCancellationEligibility(rentalFrom, status);
+  const eligibility = getCancellationEligibility(rentalFrom, status, cancellationAnchorDate);
 
   if (eligibility === 'allowed') {
     return {

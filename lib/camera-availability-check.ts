@@ -56,9 +56,14 @@ export async function findCameraOverbookingConflict(
     /** Eigene Warenkorb-Holds dieses Users nicht mitzaehlen (sonst blockiert
      *  sich der Kunde selbst, weil seine Cart-Reservierung schon existiert). */
     excludeUserId?: string | null;
+    /** Wie viele Einheiten dieses Produkts benoetigt werden (Default 1). Bei
+     *  Multi-Kamera-Buchungen mit mehreren gleichen Modellen > 1: der Tag gilt
+     *  erst dann als frei, wenn `bookedCount + neededUnits <= totalStock`. */
+    neededUnits?: number;
   },
 ): Promise<AvailabilityConflict | null> {
   const { productId, rentalFrom, rentalTo } = args;
+  const needed = Math.max(1, Math.floor(args.neededUnits ?? 1));
 
   if (!productId || !rentalFrom || !rentalTo) return null;
   if (rentalTo < rentalFrom) return null;
@@ -185,12 +190,12 @@ export async function findCameraOverbookingConflict(
       }
     }
     bookedCount += holdDayCount.get(cur) ?? 0;
-    if (bookedCount >= totalStock) {
+    if (bookedCount + needed > totalStock) {
       return {
         productId,
         productName: product.name,
         day: cur,
-        available: 0,
+        available: Math.max(0, totalStock - bookedCount),
         totalStock,
       };
     }

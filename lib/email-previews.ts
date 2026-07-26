@@ -30,6 +30,7 @@ import {
   sendNewMessageNotificationToAdmin,
   sendNewMessageNotificationToCustomer,
   sendExtensionConfirmation,
+  sendPostponementConfirmation,
   sendReviewRequest,
   sendReturnChecklist,
   sendCompletionConfirmation,
@@ -55,6 +56,7 @@ import {
   type ReferralRewardEmailData,
   type MessageNotificationData,
   type ExtensionEmailData,
+  type PostponementEmailData,
 } from '@/lib/email';
 import {
   sendUgcApprovedEmail,
@@ -193,6 +195,19 @@ const dummyExtension: ExtensionEmailData = {
   priceDifference: 27,
   newTotal: 131,
 };
+
+const dummyPostponeDate: PostponementEmailData = {
+  bookingId: DUMMY_BOOKING_ID,
+  customerName: 'Max Mustermann',
+  customerEmail: 'max.mustermann@example.de',
+  productName: 'GoPro Hero13 Black',
+  mode: 'date',
+  oldFrom: '2026-05-01',
+  oldTo: '2026-05-07',
+  newFrom: '2026-06-01',
+  newTo: '2026-06-07',
+};
+
 
 // ─── Inline-HTML-Render-Helper ────────────────────────────────────────────────
 //
@@ -827,6 +842,16 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Wenn der Kunde eine bestehende Buchung verlängert und die Zusatzzahlung erfolgreich war.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendExtensionConfirmation, dummyExtension),
+  },
+  // Verlegung (Betreff/Einleitung-Override wirkt auf beide Varianten — die
+  // Vorschau zeigt die „neuer Termin"-Fassung; die „unbestimmt"-Fassung
+  // unterscheidet sich nur im Einleitungstext).
+  {
+    id: 'booking_postponed',
+    name: 'Verlegung',
+    description: 'Bestätigung, wenn eine Buchung verlegt wird — auf einen neuen konkreten Zeitraum (gleiche Dauer/Preis) oder vom Admin auf unbestimmte Zeit.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendPostponementConfirmation, dummyPostponeDate),
   },
   // Bewertung & Warenkorb
   {

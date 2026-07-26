@@ -9,6 +9,7 @@ import { useProducts } from '@/components/ProductsProvider';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
 import { getStripePromise } from '@/lib/stripe-client';
+import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 
 const stripePromise = getStripePromise();
 
@@ -23,7 +24,7 @@ interface Booking {
   rental_to: string;
   days: number;
   price_total: number;
-  status: 'pending_verification' | 'awaiting_payment' | 'confirmed' | 'shipped' | 'delivered' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'damaged';
+  status: 'pending_verification' | 'awaiting_payment' | 'confirmed' | 'preparing_shipment' | 'awaiting_pickup' | 'shipped' | 'delivered' | 'picked_up' | 'returned' | 'postponed' | 'completed' | 'cancelled' | 'damaged';
   delivery_mode: string;
   haftung: string;
   created_at: string;
@@ -36,6 +37,13 @@ interface Booking {
   original_rental_to: string | null;
   extended_at: string | null;
   stripe_payment_link_id: string | null;
+  // Verlegung / Storno-Anker (optional — Migration ggf. noch nicht durch)
+  cancellation_anchor_date?: string | null;
+  postpone_count?: number | null;
+  postponed_at?: string | null;
+  postpone_target_date?: string | null;
+  ship_date_override?: string | null;
+  contract_locked?: boolean | null;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -48,6 +56,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   delivered: { label: 'Zugestellt', className: 'bg-green-100 text-green-700' },
   picked_up: { label: 'Abgeholt', className: 'bg-green-100 text-green-700' },
   returned: { label: 'Zurückgegeben', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
+  postponed: { label: 'Verlegt', className: 'bg-amber-100 text-amber-700' },
   completed: { label: 'Abgeschlossen', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
   cancelled: { label: 'Storniert', className: 'bg-red-100 text-red-600' },
   damaged: { label: 'Schaden gemeldet', className: 'bg-orange-100 text-orange-700' },
@@ -63,7 +72,7 @@ interface CancelModalProps {
 }
 
 function CancelModal({ booking, onConfirm, onClose, loading }: CancelModalProps) {
-  const cancelInfo = getCancellationInfo(booking.rental_from, booking.status);
+  const cancelInfo = getCancellationInfo(booking.rental_from, booking.status, booking.cancellation_anchor_date);
   const refundAmount = booking.price_total * (cancelInfo.refundPercentage / 100);
 
   return (
@@ -511,6 +520,176 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
   );
 }
 
+// ─── Postpone modal (Verlegung, Kunden-Self-Service) ─────────────────────────
+
+function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onClose: () => void; onSuccess: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [newFrom, setNewFrom] = useState<string | null>(null);
+  const [newTo, setNewTo] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const [signerName, setSignerName] = useState('');
+  const [accepted, setAccepted] = useState(false);
+  const [ackCancel, setAckCancel] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const deliveryMode: 'versand' | 'abholung' = booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
+  const days = booking.days || 1;
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+  };
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); setIsDrawing(true);
+    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
+    const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+  };
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawing) return; e.preventDefault();
+    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
+    const pos = getPos(e); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#1a1a1a';
+    ctx.lineTo(pos.x, pos.y); ctx.stroke(); setHasDrawn(true);
+  };
+  const endDraw = () => setIsDrawing(false);
+  const clearCanvas = () => {
+    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
+    ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height); setHasDrawn(false);
+  };
+
+  const handleRange = (range: CalendarRange) => {
+    setNewFrom(range.from);
+    setNewTo(range.to);
+  };
+
+  const handleSubmit = async () => {
+    if (!newFrom || !hasDrawn || !signerName.trim() || !accepted || !ackCancel) return;
+    setSubmitting(true); setError('');
+    try {
+      const signatureDataUrl = canvasRef.current!.toDataURL('image/png');
+      const res = await fetch(`/api/booking/${booking.id}/postpone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newRentalFrom: newFrom, signatureDataUrl, signerName: signerName.trim(), agreedToTerms: true, acknowledgeCancellation: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Verlegung fehlgeschlagen.'); return; }
+      setSuccess(true);
+      setTimeout(() => onSuccess(), 1600);
+    } catch {
+      setError('Netzwerkfehler.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <p className="font-heading font-semibold text-brand-black dark:text-white">Buchung verlegt!</p>
+          <p className="text-sm text-brand-text dark:text-gray-300 mt-1">Du erhältst eine Bestätigung per E-Mail.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-lg p-6 max-h-[92vh] overflow-y-auto">
+        <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung verlegen</h2>
+        <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
+          {booking.product_name} · bisher {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
+        </p>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
+        )}
+
+        <p className="text-xs text-brand-steel dark:text-gray-400 mb-2">
+          Wähle dein neues Startdatum — der gleiche Zeitraum ({days} Tag{days !== 1 ? 'e' : ''}) wird automatisch übernommen. <span className="text-green-600 font-semibold">Grün</span> = frei, <span className="text-red-600 font-semibold">rot</span> = belegt.
+        </p>
+
+        <div className="mb-4">
+          <AvailabilityCalendar
+            productId={booking.product_id}
+            deliveryMode={deliveryMode}
+            forceDays={days}
+            onRangeChange={handleRange}
+          />
+        </div>
+
+        {newFrom && newTo && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm">
+            <span className="text-brand-steel dark:text-gray-500">Neuer Zeitraum:</span>{' '}
+            <span className="font-heading font-bold text-green-700">{fmtDate(newFrom)} – {fmtDate(newTo)}</span>
+            <span className="text-brand-steel dark:text-gray-500"> · gleiche Dauer, gleicher Preis</span>
+          </div>
+        )}
+
+        {newFrom && newTo && (
+          <>
+            <div className="border-t border-brand-border dark:border-white/10 pt-4 mb-3">
+              <p className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-1">Mietvertrag für den neuen Zeitraum bestätigen</p>
+              <p className="text-xs text-brand-steel dark:text-gray-400 mb-3">
+                Der ursprüngliche Vertrag bleibt bestehen — nur der neue Zeitraum wird verbindlich. Bitte unterschreibe erneut.
+              </p>
+              <label className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-1.5 block">Vollständiger Name</label>
+              <input
+                type="text"
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="Vor- und Nachname"
+                className="w-full px-4 py-3 mb-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-blue text-base"
+              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-heading font-semibold text-brand-black dark:text-white">Unterschrift</label>
+                <button type="button" onClick={clearCanvas} className="text-xs text-brand-steel dark:text-gray-400 hover:underline">Löschen</button>
+              </div>
+              <canvas
+                ref={canvasRef}
+                width={500}
+                height={160}
+                className="w-full border border-brand-border dark:border-white/10 rounded-lg bg-white touch-none cursor-crosshair"
+                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+              />
+            </div>
+
+            <label className="flex items-start gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-0.5" />
+              <span className="text-xs text-brand-text dark:text-gray-300">Ich bestätige den neuen Mietzeitraum verbindlich und akzeptiere die Mietbedingungen.</span>
+            </label>
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input type="checkbox" checked={ackCancel} onChange={(e) => setAckCancel(e.target.checked)} className="mt-0.5" />
+              <span className="text-xs text-brand-text dark:text-gray-300">Mir ist bekannt, dass die Verlegung mein kostenloses Storno nicht neu eröffnet — die Frist bleibt an den ursprünglichen Termin gebunden.</span>
+            </label>
+
+            <button
+              onClick={handleSubmit}
+              disabled={!hasDrawn || !signerName.trim() || !accepted || !ackCancel || submitting}
+              className="w-full px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white rounded-btn text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submitting && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              Verlegung bestätigen
+            </button>
+          </>
+        )}
+
+        <button onClick={onClose} className="w-full py-2 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black transition-colors mt-2">Abbrechen</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BuchungenPage() {
@@ -523,6 +702,7 @@ export default function BuchungenPage() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [extendTarget, setExtendTarget] = useState<Booking | null>(null);
   const [signTarget, setSignTarget] = useState<Booking | null>(null);
+  const [postponeTarget, setPostponeTarget] = useState<Booking | null>(null);
   const [extensionSuccess, setExtensionSuccess] = useState(false);
   const router = useRouter();
 
@@ -612,6 +792,35 @@ export default function BuchungenPage() {
     return ['confirmed', 'shipped'].includes(booking.status) && !booking.contract_signed;
   }
 
+  function handlePostponeSuccess() {
+    setPostponeTarget(null);
+    // Buchungen frisch laden (neue Daten + evtl. neu unterschrieben)
+    fetch('/api/meine-buchungen')
+      .then((r) => r.json())
+      .then((data) => setBookings(data.bookings ?? []))
+      .catch(() => { /* still */ });
+  }
+
+  // Naeherungsweiser Versand-/Abholtag (Default-Puffer) fuer das Verlege-Gate.
+  // Der Server prueft die exakte Grenze autoritativ.
+  function approxShipIso(b: Booking): string {
+    if (b.ship_date_override) return b.ship_date_override.slice(0, 10);
+    const before = b.delivery_mode === 'abholung' ? 0 : 2;
+    const d = new Date(`${b.rental_from.slice(0, 10)}T00:00:00`);
+    d.setDate(d.getDate() - before);
+    return d.toISOString().split('T')[0];
+  }
+
+  // Kunde darf selbst verlegen: aktive Buchung, bis 1 Tag vor Versand-/Abholtag,
+  // nur einmal, Vertrag nicht gesperrt.
+  function canPostpone(b: Booking): boolean {
+    if (b.status !== 'confirmed') return false;
+    if ((b.postpone_count ?? 0) >= 1) return false;
+    if (b.contract_locked === true) return false;
+    const todayIso = new Date().toISOString().split('T')[0];
+    return approxShipIso(b) > todayIso;
+  }
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-12 flex justify-center">
@@ -630,6 +839,9 @@ export default function BuchungenPage() {
       )}
       {signTarget && (
         <SignContractModal booking={signTarget} onClose={() => setSignTarget(null)} onSuccess={handleSignSuccess} />
+      )}
+      {postponeTarget && (
+        <PostponeModal booking={postponeTarget} onClose={() => setPostponeTarget(null)} onSuccess={handlePostponeSuccess} />
       )}
 
       <div className="space-y-6">
@@ -665,7 +877,7 @@ export default function BuchungenPage() {
           <div className="space-y-4">
             {bookings.map((booking) => {
               const status = statusConfig[booking.status] ?? statusConfig.confirmed;
-              const cancelInfo = getCancellationInfo(booking.rental_from, booking.status);
+              const cancelInfo = getCancellationInfo(booking.rental_from, booking.status, booking.cancellation_anchor_date);
 
               return (
                 <div key={booking.id} className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
@@ -826,6 +1038,14 @@ export default function BuchungenPage() {
                         <button onClick={() => setExtendTarget(booking)} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-accent-blue hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                           Verlängern
+                        </button>
+                      )}
+
+                      {/* Postpone booking (Verlegung) */}
+                      {canPostpone(booking) && (
+                        <button onClick={() => setPostponeTarget(booking)} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-amber-600 hover:underline">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          Verlegen
                         </button>
                       )}
 

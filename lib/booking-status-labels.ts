@@ -20,6 +20,7 @@ export const BOOKING_STATUS_CONFIG: Record<string, { label: string; color: strin
   delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   returned: { label: 'Retourniert', color: '#8b5cf6', bg: '#8b5cf614' },
+  postponed: { label: 'Verlegt', color: '#d97706', bg: '#d9770614' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },

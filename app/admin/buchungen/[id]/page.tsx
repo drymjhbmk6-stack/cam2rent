@@ -57,6 +57,11 @@ interface BookingDetail {
   contract_signer_name: string | null;
   contract_signature_url: string | null;
   contract_locked: boolean | null;
+  postpone_reason?: string | null;
+  postpone_target_date?: string | null;
+  postpone_count?: number | null;
+  cancellation_anchor_date?: string | null;
+  original_rental_from?: string | null;
   suspicious: boolean;
   suspicious_reasons: string[];
   notes: string | null;
@@ -1068,6 +1073,8 @@ export default function BuchungDetailPage() {
         return { hint: 'Beim Kunden — Rückgabe steht aus', label: '↩ Rückgabe prüfen', href: `/admin/retouren/${booking.id}/pruefen`, tone: 'green' };
       case 'damaged':
         return { hint: 'Schaden gemeldet — Abwicklung offen', label: 'Zur Schadensabwicklung', href: '/admin/schaeden', tone: 'rose' };
+      case 'postponed':
+        return { hint: 'Verlegt — auf unbestimmte Zeit', label: '📅 Neuen Termin festlegen', onClick: () => switchTab('bearbeiten'), tone: 'amber' };
       default:
         return null; // completed / cancelled — keine offene Aktion
     }
@@ -1099,6 +1106,21 @@ export default function BuchungDetailPage() {
 
         {/* ═══ Nächste Aktion — immer ganz oben sichtbar, über den Reitern ═══ */}
         <NextActionBar action={nextAction} statusLabel={sc.label} statusColor={sc.color} />
+
+        {/* Verlegt (auf unbestimmte Zeit) — Hinweis + Zeitraum wieder frei */}
+        {booking.status === 'postponed' && (
+          <div className="mb-6 p-4 rounded-xl border-2 border-amber-300 bg-amber-50 flex items-start gap-3">
+            <span className="text-lg leading-none mt-0.5">📅</span>
+            <div className="min-w-0">
+              <p className="text-sm font-heading font-semibold text-amber-800">Auf unbestimmte Zeit verlegt</p>
+              <p className="text-xs font-body text-amber-700 mt-0.5">
+                Der ursprüngliche Mietzeitraum ist wieder für andere Kunden buchbar. Sobald der Kunde
+                einen neuen Termin nennt, im Reiter „Bearbeiten“ einen neuen Termin festlegen.
+                {booking.postpone_reason ? <> <br />Grund: {booking.postpone_reason}</> : null}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Mietvertrag nicht unterschrieben — Warnung vor Übergabe/Versand */}
         {!booking.contract_signed && !['pending_verification', 'awaiting_payment', 'cancelled', 'completed'].includes(booking.status) && (
@@ -1659,6 +1681,10 @@ export default function BuchungDetailPage() {
 
             {/* ── Reiter: Bearbeiten ── */}
             {activeTab === 'bearbeiten' && (<>
+
+            {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
+              <PostponeSection booking={booking} onSaved={fetchBooking} />
+            )}
 
             {/* Bearbeiten & Werkzeuge */}
             <Collapsible
@@ -2751,6 +2777,120 @@ interface EditPreview {
   diff: number;
   settlement: 'payment_link' | 'refund' | 'none';
   is_stripe_payment: boolean;
+}
+
+// ─── Verlegen (Verlegung) ────────────────────────────────────────────────────
+
+function PostponeSection({ booking, onSaved }: { booking: BookingDetail; onSaved: () => void }) {
+  const [mode, setMode] = useState<'date' | 'indefinite'>('date');
+  const [newFrom, setNewFrom] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [reason, setReason] = useState('');
+  const [notify, setNotify] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const days = booking.days || 1;
+  const newTo = (() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newFrom)) return '';
+    const d = new Date(`${newFrom}T00:00:00`);
+    d.setDate(d.getDate() + days - 1);
+    return d.toISOString().split('T')[0];
+  })();
+
+  const canSubmit = reason.trim().length >= 3 && (mode === 'indefinite' || /^\d{4}-\d{2}-\d{2}$/.test(newFrom)) && !saving;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSaving(true); setError('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/postpone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          rental_from: mode === 'date' ? newFrom : undefined,
+          target_date: mode === 'indefinite' && targetDate ? targetDate : undefined,
+          reason: reason.trim(),
+          notify,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Verlegen fehlgeschlagen.'); return; }
+      setNewFrom(''); setTargetDate(''); setReason('');
+      onSaved();
+    } catch {
+      setError('Netzwerkfehler.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Section title="Verlegen (Termin verschieben)">
+      <p className="text-xs text-brand-muted mb-3">
+        Reine Verschiebung — gleiche Mietdauer, gleicher Preis. Der ursprüngliche Zeitraum wird
+        wieder für andere Kunden buchbar. War der Vertrag unterschrieben, wird er zurückgesetzt und
+        der Kunde per E-Mail zur Neu-Unterschrift aufgefordert.
+      </p>
+
+      {error && <div className="mb-3 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">{error}</div>}
+
+      <div className="flex gap-2 mb-3">
+        <button
+          type="button" onClick={() => setMode('date')}
+          className={`flex-1 px-3 py-2 rounded-lg text-xs font-heading font-semibold border transition-colors ${mode === 'date' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-brand-black border-brand-border'}`}
+        >Auf neuen Termin</button>
+        <button
+          type="button" onClick={() => setMode('indefinite')}
+          className={`flex-1 px-3 py-2 rounded-lg text-xs font-heading font-semibold border transition-colors ${mode === 'indefinite' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-brand-black border-brand-border'}`}
+        >Auf unbestimmte Zeit</button>
+      </div>
+
+      {mode === 'date' ? (
+        <div className="mb-3">
+          <label className="text-xs font-heading font-semibold text-brand-black mb-1 block">Neues Startdatum</label>
+          <input
+            type="date" value={newFrom} onChange={(e) => setNewFrom(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm"
+          />
+          {newTo && (
+            <p className="text-xs text-brand-muted mt-1">Neuer Zeitraum: <span className="font-semibold text-brand-black">{fmtDate(newFrom)} – {fmtDate(newTo)}</span> ({days} Tag{days !== 1 ? 'e' : ''})</p>
+          )}
+        </div>
+      ) : (
+        <div className="mb-3">
+          <label className="text-xs font-heading font-semibold text-brand-black mb-1 block">Angepeilter neuer Termin (optional)</label>
+          <input
+            type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm"
+          />
+          <p className="text-xs text-amber-700 mt-1">Die Buchung wird auf „Verlegt“ gesetzt und gibt Kamera + Zubehör sofort frei.</p>
+        </div>
+      )}
+
+      <div className="mb-3">
+        <label className="text-xs font-heading font-semibold text-brand-black mb-1 block">Grund (Pflicht)</label>
+        <textarea
+          value={reason} onChange={(e) => setReason(e.target.value)} rows={2}
+          placeholder="z.B. Kunde bat um Verschiebung"
+          className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm resize-none"
+        />
+      </div>
+
+      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+        <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+        <span className="text-xs text-brand-black">Kunde per E-Mail benachrichtigen</span>
+      </label>
+
+      <button
+        onClick={handleSubmit} disabled={!canSubmit}
+        className={`w-full px-4 py-2.5 rounded-btn text-sm font-heading font-semibold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'indefinite' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-cyan-600 hover:bg-cyan-700'}`}
+      >
+        {saving ? 'Wird verlegt…' : mode === 'indefinite' ? 'Auf unbestimmte Zeit verlegen' : 'Auf neuen Termin verlegen'}
+      </button>
+    </Section>
+  );
 }
 
 function BookingEditSection({

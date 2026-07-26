@@ -1782,6 +1782,97 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
   await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'extension_confirmation' });
 }
 
+// ─── Verlegung (Postponement) ────────────────────────────────────────────────
+
+export interface PostponementEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  productName: string;
+  /** 'date' = neuer konkreter Termin, 'indefinite' = auf unbestimmte Zeit. */
+  mode: 'date' | 'indefinite';
+  oldFrom?: string;
+  oldTo?: string;
+  newFrom?: string;
+  newTo?: string;
+  /** Optionaler Wunsch-/Zieltermin bei mode='indefinite'. */
+  targetDate?: string | null;
+}
+
+export async function sendPostponementConfirmation(data: PostponementEmailData) {
+  const isIndef = data.mode === 'indefinite';
+  const subject = isIndef
+    ? stripSubject(`Buchung ${data.bookingId} vorübergehend verschoben`)
+    : stripSubject(`Buchung ${data.bookingId} verlegt auf ${fmtDate(data.newFrom || '')}`);
+
+  const headline = isIndef
+    ? 'Deine Miete wurde vorübergehend verschoben'
+    : 'Deine Miete wurde erfolgreich verlegt';
+
+  const detailRows = isIndef
+    ? `
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Buchungs-Nr.</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.bookingId)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.productName)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Neuer Termin</td><td style="padding:6px 0;font-size:14px;color:#d97706;font-weight:600;text-align:right;">${data.targetDate ? `angepeilt ab ${fmtDate(data.targetDate)}` : 'noch offen'}</td></tr>`
+    : `
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Buchungs-Nr.</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.bookingId)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.productName)}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Bisheriger Zeitraum</td><td style="padding:6px 0;font-size:14px;color:#6b7280;text-decoration:line-through;text-align:right;">${fmtDate(data.oldFrom || '')} – ${fmtDate(data.oldTo || '')}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Neuer Zeitraum</td><td style="padding:6px 0;font-size:14px;color:#15803d;font-weight:700;text-align:right;">${fmtDate(data.newFrom || '')} – ${fmtDate(data.newTo || '')}</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Preis</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">unverändert</td></tr>`;
+
+  const bodyIntro = isIndef
+    ? 'deine Miete wurde vorübergehend verschoben. Sobald du einen neuen Wunschtermin hast, melde dich einfach bei uns — wir reservieren dir die Ausrüstung dann für den neuen Zeitraum.'
+    : 'deine Miete wurde auf den neuen Zeitraum verlegt. Der ursprüngliche Mietvertrag bleibt bestehen — nur der neue Zeitraum ist jetzt verbindlich. Hier die Details:';
+
+  const accent = isIndef ? '#d97706' : '#16a34a';
+  const accentBg = isIndef ? '#fffbeb' : '#f0fdf4';
+  const accentText = isIndef ? '#b45309' : '#15803d';
+
+  const html = `<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="background:${accentBg};border-left:4px solid ${accent};padding:20px 32px;">
+          <p style="margin:0;font-size:17px;font-weight:700;color:${accentText};">${headline}</p>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:32px;">
+          <p style="margin:0 0 20px;font-size:15px;color:#374151;">
+            Hallo ${h(data.customerName)},<br><br>
+            ${bodyIntro}
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">${detailRows}
+              </table>
+            </td></tr>
+          </table>
+          <a href="${BUSINESS.url}/konto/buchungen" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Meine Buchungen</a>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'booking_postponed' });
+}
+
 // ─── Review Request ──────────────────────────────────────────────────────────
 
 export async function sendReviewRequest(data: {

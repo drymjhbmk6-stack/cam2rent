@@ -64,8 +64,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Only allow self-service cancellation ≥ 7 days before rental start
-  if (!isSelfServiceCancellable(booking.rental_from, booking.status)) {
+  // Only allow self-service cancellation ≥ 7 days before rental start.
+  // cancellation_anchor_date friert den urspruenglichen Termin ein → eine
+  // Verlegung kann das kostenlose Storno-Fenster nicht neu oeffnen.
+  const cancelAnchor = (booking.cancellation_anchor_date as string | null) ?? null;
+  if (!isSelfServiceCancellable(booking.rental_from, booking.status, cancelAnchor)) {
     return NextResponse.json(
       {
         error:
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Calculate refund
-  const refundPercentage = getRefundPercentage(booking.rental_from);
+  const refundPercentage = getRefundPercentage(booking.rental_from, cancelAnchor);
   const refundAmountCents = Math.round(
     (booking.price_total ?? 0) * refundPercentage * 100
   );

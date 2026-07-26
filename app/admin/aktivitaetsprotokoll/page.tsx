@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.update': 'Buchung aktualisiert',
   'booking.accessory_edit': 'Zubehör der Buchung bearbeitet',
   'booking.edit': 'Bestellung bearbeitet (Zeitraum/Kamera/Zubehör/Haftung)',
+  'booking.postpone': 'Buchung verlegt',
   'booking.delete': 'Buchung endgültig gelöscht',
   'booking.email_updated': 'Kunden-E-Mail geändert',
   'booking.tracking_update': 'Tracking-Daten geändert',
