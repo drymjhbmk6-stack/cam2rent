@@ -6,7 +6,20 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 interface Paragraph {
   title: string;
   text: string;
+  /** Kategorie/Rechtsquelle des Paragraphen. Optional — Altbestand ohne dieses
+   *  Feld fällt auf die index-basierte PARAGRAPH_SOURCES-Map zurück (die
+   *  Default-19 sind dort korrekt zugeordnet). Neue/umsortierte Paragraphen
+   *  tragen ihre Kategorie selbst → Badges wandern nicht. */
+  category?: string;
 }
+
+const CATEGORIES = ['AGB', 'Haftung', 'Widerruf', 'Datenschutz'] as const;
+const CATEGORY_COLORS: Record<string, string> = {
+  AGB: '#06b6d4',
+  Haftung: '#f59e0b',
+  Widerruf: '#8b5cf6',
+  Datenschutz: '#22c55e',
+};
 
 // Mapping: Welche Paragraphen gehören zu welchem Rechtsdokument
 const PARAGRAPH_SOURCES: Record<number, { source: string; color: string }> = {
@@ -38,6 +51,7 @@ export default function VertragsparagraphenContent() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
+  const [editCategory, setEditCategory] = useState<string>('AGB');
   const [hasChanges, setHasChanges] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [original, setOriginal] = useState<string>('');
@@ -67,18 +81,56 @@ export default function VertragsparagraphenContent() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  // Kategorie eines Paragraphen: eigenes Feld hat Vorrang, sonst Index-Map
+  // (Default-19), sonst AGB. Farbe aus der Kategorie-Map.
+  function resolveCategory(p: Paragraph, index: number): { source: string; color: string } {
+    const source = p.category || PARAGRAPH_SOURCES[index]?.source || 'AGB';
+    return { source, color: CATEGORY_COLORS[source] || '#06b6d4' };
+  }
+
   function openEdit(index: number) {
     setEditIndex(index);
     setEditTitle(paragraphs[index].title);
     setEditText(paragraphs[index].text);
+    setEditCategory(resolveCategory(paragraphs[index], index).source);
   }
 
   function saveEdit() {
     if (editIndex === null) return;
     const updated = [...paragraphs];
-    updated[editIndex] = { title: editTitle, text: editText };
+    updated[editIndex] = { title: editTitle, text: editText, category: editCategory };
     setParagraphs(updated);
     setEditIndex(null);
+  }
+
+  function addParagraph() {
+    const nextNr = paragraphs.length + 1;
+    const updated = [...paragraphs, { title: `§ ${nextNr} `, text: '', category: 'AGB' }];
+    setParagraphs(updated);
+    // Neuen Paragraphen direkt zum Bearbeiten öffnen
+    const idx = updated.length - 1;
+    setEditIndex(idx);
+    setEditTitle(updated[idx].title);
+    setEditText('');
+    setEditCategory('AGB');
+    // Ans Ende scrollen (nach Render)
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50);
+  }
+
+  function deleteParagraph(index: number) {
+    const t = paragraphs[index]?.title || `Paragraph ${index + 1}`;
+    if (!confirm(`„${t}" wirklich löschen? Bereits unterschriebene Verträge bleiben unverändert.`)) return;
+    setParagraphs(paragraphs.filter((_, i) => i !== index));
+    setEditIndex(null);
+  }
+
+  function moveParagraph(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= paragraphs.length) return;
+    const updated = [...paragraphs];
+    [updated[index], updated[target]] = [updated[target], updated[index]];
+    setParagraphs(updated);
+    setEditIndex(target); // dem verschobenen Eintrag folgen
   }
 
   async function handleSave() {
@@ -139,10 +191,14 @@ export default function VertragsparagraphenContent() {
           <div>
             <h1 className="font-heading font-bold text-xl text-white">Vertragsparagraphen</h1>
             <p className="text-sm font-body text-gray-400 mt-1">
-              Diese 19 Paragraphen werden in jeden Mietvertrag (PDF) eingebettet.
+              Diese {paragraphs.length} Paragraphen werden in jeden Mietvertrag (PDF) eingebettet.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={addParagraph} disabled={saving}
+              style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.35)' }}>
+              + Paragraph hinzufügen
+            </button>
             <button onClick={handleReset} disabled={saving}
               style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'transparent', color: '#94a3b8', border: '1px solid #1e293b' }}>
               Standard wiederherstellen
@@ -176,7 +232,7 @@ export default function VertragsparagraphenContent() {
         ) : (
           <div className="space-y-2">
             {paragraphs.map((p, i) => {
-              const source = PARAGRAPH_SOURCES[i] || { source: 'AGB', color: '#06b6d4' };
+              const source = resolveCategory(p, i);
               return (
                 <div key={i}
                   className="rounded-xl border transition-all"
@@ -208,9 +264,17 @@ export default function VertragsparagraphenContent() {
                   {/* Editor (aufklappbar) */}
                   {editIndex === i && (
                     <div className="px-4 pb-4 space-y-3">
-                      <div>
-                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Titel</label>
-                        <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                      <div className="flex gap-3 flex-wrap items-end">
+                        <div style={{ flex: '1 1 220px' }}>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Titel (inkl. § Nummer)</label>
+                          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                        </div>
+                        <div style={{ flex: '0 0 160px' }}>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Kategorie</label>
+                          <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Text</label>
@@ -221,7 +285,7 @@ export default function VertragsparagraphenContent() {
                           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
                         />
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap items-center">
                         <button onClick={saveEdit}
                           style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#06b6d4', color: '#0f172a', border: 'none' }}>
                           Übernehmen
@@ -229,6 +293,19 @@ export default function VertragsparagraphenContent() {
                         <button onClick={() => setEditIndex(null)}
                           style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'transparent', color: '#94a3b8', border: '1px solid #1e293b' }}>
                           Abbrechen
+                        </button>
+                        <div style={{ flex: 1 }} />
+                        <button onClick={() => moveParagraph(i, -1)} disabled={i === 0} title="Nach oben"
+                          style={{ padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: i === 0 ? 'not-allowed' : 'pointer', background: 'transparent', color: i === 0 ? '#475569' : '#94a3b8', border: '1px solid #1e293b' }}>
+                          ▲
+                        </button>
+                        <button onClick={() => moveParagraph(i, 1)} disabled={i === paragraphs.length - 1} title="Nach unten"
+                          style={{ padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: i === paragraphs.length - 1 ? 'not-allowed' : 'pointer', background: 'transparent', color: i === paragraphs.length - 1 ? '#475569' : '#94a3b8', border: '1px solid #1e293b' }}>
+                          ▼
+                        </button>
+                        <button onClick={() => deleteParagraph(i)} title="Löschen"
+                          style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                          Löschen
                         </button>
                       </div>
                     </div>
@@ -244,6 +321,11 @@ export default function VertragsparagraphenContent() {
           <p style={{ color: '#94a3b8', fontSize: 13, margin: 0, lineHeight: 1.6 }}>
             Änderungen an den Vertragsparagraphen wirken sich nur auf <strong style={{ color: '#e2e8f0' }}>neue Verträge</strong> aus.
             Bereits unterschriebene Verträge bleiben unverändert (der SHA-256 Hash sichert die Integrität).
+            <br /><br />
+            <strong style={{ color: '#e2e8f0' }}>Nummerierung:</strong> Die §-Nummer steht im Titel und wird nicht
+            automatisch vergeben. Neue Paragraphen am besten <strong style={{ color: '#e2e8f0' }}>am Ende</strong> mit
+            der nächsten fortlaufenden Nummer anlegen. Umsortieren nummeriert <strong style={{ color: '#e2e8f0' }}>nicht</strong> automatisch
+            um — und im Vertragstext gibt es feste Verweise (z. B. „§ 7“), also Nummern der bestehenden Paragraphen nicht verschieben.
             <br /><br />
             Wenn du Rechtstexte (AGB, Haftung, Widerruf, Datenschutz) unter &quot;Rechtliche Dokumente&quot; änderst,
             erhältst du eine Erinnerung die zugehörigen Vertragsparagraphen zu prüfen.

@@ -50,13 +50,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Paragraphen-Array erforderlich.' }, { status: 400 });
   }
 
+  // Sanitizing: pro Position title/text (getrimmt + gedeckelt) + optionale
+  // Kategorie aus der Allowlist. Einträge ohne title UND text werden verworfen,
+  // die Gesamtzahl gedeckelt.
+  const ALLOWED_CATEGORIES = ['AGB', 'Haftung', 'Widerruf', 'Datenschutz'];
+  const clean = (paragraphs as unknown[])
+    .map((raw) => {
+      const p = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+      const title = typeof p.title === 'string' ? p.title.trim().slice(0, 200) : '';
+      const text = typeof p.text === 'string' ? p.text.slice(0, 8000) : '';
+      const cat = typeof p.category === 'string' && ALLOWED_CATEGORIES.includes(p.category)
+        ? p.category
+        : undefined;
+      const out: { title: string; text: string; category?: string } = { title, text };
+      if (cat) out.category = cat;
+      return out;
+    })
+    .filter((p) => p.title || p.text)
+    .slice(0, 60);
+
+  if (clean.length === 0) {
+    return NextResponse.json({ error: 'Kein gültiger Paragraph übergeben.' }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
 
   const { error } = await supabase
     .from('admin_settings')
     .upsert({
       key: 'contract_paragraphs',
-      value: JSON.stringify(paragraphs),
+      value: JSON.stringify(clean),
       updated_at: new Date().toISOString(),
     });
 
@@ -67,7 +90,7 @@ export async function POST(req: NextRequest) {
   await logAudit({
     action: 'legal.update_contract_paragraphs',
     entityType: 'contract_paragraphs',
-    changes: { count: paragraphs.length },
+    changes: { count: clean.length },
     request: req,
   });
 
