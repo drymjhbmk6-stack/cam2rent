@@ -132,7 +132,8 @@ export async function runStripeSync({
         // Doppelzahlung" gesetzt. Die UI-Detection im GET-Endpoint erkennt das
         // zusaetzlich und bietet den Quick-Button "Als Doppelzahlung erfassen".
         let booking: { id: string } | null = null;
-        let matchSource: 'pi' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null = null;
+        let matchSource: 'pi' | 'extension' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null =
+          null;
         let duplicateNote: string | null = null;
 
         // Helper: bereits-verknuepft-Check (existiert eine andere matched/manual
@@ -159,6 +160,45 @@ export async function runStripeSync({
           if (b?.id) {
             booking = b;
             matchSource = 'pi';
+          }
+        }
+
+        // Stufe 1b: Verlaengerungs-Zahlung.
+        // Eine Mietverlaengerung hat einen EIGENEN PaymentIntent (metadata.type
+        // 'extension', metadata.booking_id), der in bookings.extension_payment_intent_id
+        // landet — NICHT in bookings.payment_intent_id. Deshalb greift Stufe 1 nicht,
+        // die Zahlung blieb "ohne Buchung". Hier wird sie der Buchung zugeordnet.
+        // WICHTIG: kein hasOtherLink-Check — die Original-Zahlung derselben Buchung
+        // ist bereits verknuepft, eine Verlaengerung ist aber eine legitime
+        // ZUSATZzahlung, KEINE Doppelzahlung.
+        if (!booking) {
+          const isExtension = pi.metadata?.type === 'extension';
+          const metaBookingId =
+            typeof pi.metadata?.booking_id === 'string' ? pi.metadata.booking_id.trim() : '';
+          // a) ueber metadata (nur wenn ausdruecklich als Verlaengerung markiert)
+          if (isExtension && metaBookingId) {
+            const { data: b } = await supabase
+              .from('bookings')
+              .select('id')
+              .eq('id', metaBookingId)
+              .maybeSingle();
+            if (b?.id) {
+              booking = b;
+              matchSource = 'extension';
+            }
+          }
+          // b) Fallback: Buchung, deren extension_payment_intent_id exakt dieser PI ist
+          //    (autoritativer Link nach erfolgreichem confirm-extension).
+          if (!booking) {
+            const { data: b } = await supabase
+              .from('bookings')
+              .select('id')
+              .eq('extension_payment_intent_id', pi.id)
+              .maybeSingle();
+            if (b?.id) {
+              booking = b;
+              matchSource = 'extension';
+            }
           }
         }
 
