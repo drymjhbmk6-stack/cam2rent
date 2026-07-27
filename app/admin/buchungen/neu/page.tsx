@@ -1184,6 +1184,12 @@ export default function ManualBookingPage() {
             <div className="sm:col-span-2">
               <label style={labelStyle}>Interne Notizen</label>
               <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="z.B. Kleinanzeigen-Nachricht-ID, Absprachen etc." />
+              <p className="text-xs mt-2" style={{ color: '#d97706', lineHeight: 1.5 }}>
+                ⚠ Widerrufsrecht: Beginnt die Miete <strong>vor Ablauf der 14-tägigen Widerrufsfrist</strong>,
+                muss die ausdrückliche Zustimmung des Kunden zur vorzeitigen Leistungserbringung
+                (§ 356 Abs. 4 BGB) in Textform (z.B. E-Mail) eingeholt und hier mit Datum und Uhrzeit
+                dokumentiert werden. Sie kann nicht stellvertretend für den Kunden erklärt werden.
+              </p>
             </div>
             <div className="sm:col-span-2">
               <label style={labelStyle}>Bemerkung (erscheint auf der Rechnung)</label>

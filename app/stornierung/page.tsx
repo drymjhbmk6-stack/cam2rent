@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BUSINESS } from '@/lib/business-config';
+import { describeCancellationTiers } from '@/lib/cancellation-text';
 
 export const metadata: Metadata = {
   title: 'Stornierungs- & Rückerstattungsbedingungen',
@@ -26,38 +27,38 @@ export default function StornierungPage() {
             Die Stornierung einer Buchung ist unter folgenden Bedingungen möglich:
           </p>
           <div className="space-y-3">
-            <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-4 border-l-4 border-status-success">
-              <p className="font-body font-semibold text-brand-black dark:text-white mb-1">
-                Mehr als 7 Tage vor Mietbeginn
-              </p>
-              <p className="font-body text-brand-steel dark:text-gray-300 text-sm">
-                Kostenlose Stornierung. Die Stornierung kann direkt über Ihr{' '}
-                <Link href="/konto/buchungen" className="text-accent-blue hover:underline">
-                  Kundenkonto
-                </Link>{' '}
-                vorgenommen werden.
-              </p>
-            </div>
-            <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-4 border-l-4 border-accent-amber">
-              <p className="font-body font-semibold text-brand-black dark:text-white mb-1">
-                3–6 Tage vor Mietbeginn
-              </p>
-              <p className="font-body text-brand-steel dark:text-gray-300 text-sm">
-                Stornogebühr: 50 % des Mietpreises. Die Stornierung muss schriftlich per E-Mail an{' '}
-                <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
-                  {BUSINESS.emailKontakt}
-                </a>{' '}
-                erfolgen.
-              </p>
-            </div>
-            <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-4 border-l-4 border-status-error">
-              <p className="font-body font-semibold text-brand-black dark:text-white mb-1">
-                Weniger als 2 Tage vor Mietbeginn / Nichtabholung
-              </p>
-              <p className="font-body text-brand-steel dark:text-gray-300 text-sm">
-                Es wird der volle Mietpreis (100 %) berechnet.
-              </p>
-            </div>
+            {describeCancellationTiers().map((t, i) => {
+              const border =
+                ['border-status-success', 'border-accent-amber', 'border-status-error'][i] ??
+                'border-brand-muted';
+              return (
+                <div key={t.compact} className={`bg-brand-bg dark:bg-brand-dark rounded-card p-4 border-l-4 ${border}`}>
+                  <p className="font-body font-semibold text-brand-black dark:text-white mb-1">
+                    {t.label}
+                  </p>
+                  <p className="font-body text-brand-steel dark:text-gray-300 text-sm">
+                    {t.feePercent === 0 ? (
+                      <>
+                        Kostenlose Stornierung (volle Rückerstattung). Die Stornierung kann direkt über Ihr{' '}
+                        <Link href="/konto/buchungen" className="text-accent-blue hover:underline">
+                          Kundenkonto
+                        </Link>{' '}
+                        vorgenommen werden.
+                      </>
+                    ) : (
+                      <>
+                        Stornogebühr: {t.feePercent} % des Mietpreises ({t.refundPercent} % Rückerstattung).
+                        Die Stornierung muss schriftlich per E-Mail an{' '}
+                        <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                          {BUSINESS.emailKontakt}
+                        </a>{' '}
+                        erfolgen.
+                      </>
+                    )}
+                  </p>
+                </div>
+              );
+            })}
           </div>
           <p className="font-body text-brand-steel dark:text-gray-300 mt-4">
             Bereits bezahlte Beträge werden abzüglich der jeweiligen Stornogebühren erstattet.
@@ -66,13 +67,14 @@ export default function StornierungPage() {
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
-            2. Kein gesetzliches Widerrufsrecht
+            2. Widerrufsrecht
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300">
-            Mietverträge mit festem Zeitraum fallen unter § 312g Abs. 2 Nr. 9 BGB
-            (Freizeitdienstleistungen mit festem Termin). Ein gesetzliches Widerrufsrecht besteht in
-            diesen Fällen nicht. Es gelten die oben genannten Stornierungsbedingungen. Weitere
-            Informationen finden Sie in unserer{' '}
+            Als Verbraucher steht Ihnen ein gesetzliches Widerrufsrecht von 14 Tagen zu. Wenn Sie im
+            Buchungsprozess ausdrücklich zustimmen, dass wir vor Ablauf dieser Frist mit der Vermietung
+            beginnen, erlischt Ihr Widerrufsrecht mit vollständiger Erbringung der Leistung
+            (§ 356 Abs. 4 BGB). Widerrufen Sie vor Mietende, schulden Sie anteiligen Wertersatz.
+            Einzelheiten finden Sie in unserer{' '}
             <Link href="/widerruf" className="text-accent-blue hover:underline">
               Widerrufsbelehrung
             </Link>

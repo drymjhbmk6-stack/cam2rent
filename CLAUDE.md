@@ -879,7 +879,9 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Zwei Erfassungspfade (Stand 2026-07-27):** (1) **Warenkorb-Checkout** (`/checkout`) — conditional, sichtbar wenn frühester `rentalFrom` < 14 Tage. (2) **Angebots-/Direkt-Zahlungspfad** (`/kameras/[slug]/buchen`, offerMode → `handleProceedToPayment` → create-payment-intent → confirm-booking) — bis dahin fehlte die Zustimmung, jede Angebots-Buchung war 14 Tage kostenlos widerrufbar. Der **normale** Direkt-Flow (Nicht-Angebot) läuft über „In den Warenkorb" → `/checkout` und ist dadurch abgedeckt.
 - **Erfassung:** Client liefert `early_service_consent_at` (ISO) in der Stripe-Metadata; `create-payment-intent` ergänzt serverseitig `early_service_consent_ip`. `confirm-booking` + `stripe-webhook` (Single **und** Cart) persistieren beides in `bookings.early_service_consent_at`/`_ip`.
 - **Buchungsbestätigung dokumentiert Datum, Uhrzeit UND IP** (AGB § 16 Abs. 3): Block via `lib/email-consent.ts:renderEarlyServiceConsentBlock()` (pure, JSX-frei, unit-getestet). Fehlt die Zustimmung → Block entfällt komplett (keine leeren Platzhalter); fehlt nur die IP → Satz ohne IP-Fragment. IP wird escaped.
-- **Admin-Buchung** (`/admin/buchungen/neu` → manual-booking) erfasst KEINE § 356-Zustimmung — der Admin bucht im Namen des Kunden, die Sachlage ist anders (bewusst offen gelassen).
+- **Admin-Buchung** (`/admin/buchungen/neu` → manual-booking): erfasst KEINE § 356-Zustimmung (Admin kann sie nicht stellvertretend erklären). Amber Hinweis im Formular („Herkunft & Notizen"): bei Lieferung vor Fristablauf ist die Zustimmung in Textform einzuholen + in den internen Notizen zu dokumentieren.
+- **§ 312g Abs. 2 Nr. 9 BGB restlos aus dem UI entfernt (Stand 2026-07-27):** Die frühere Aussage „kein gesetzliches Widerrufsrecht" war FALSCH (widerspricht AGB § 16 / Vertrag § 16 / Widerrufsbelehrung, die alle ein Widerrufsrecht nach §§ 355 ff. gewähren). Eine fehlerhafte Belehrung verlängert die Widerrufsfrist auf 12 Monate + 14 Tage (§ 356 Abs. 3 S. 2). Entfernt aus: Checkout (Info + `acceptsWithdrawal`-Checkbox komplett raus, inkl. State + Button-Gate), Angebots-`PaymentStep`, `/stornierung` (Abschnitt „2. Widerrufsrecht"), Widerrufsbelehrung-Fallback (`/widerruf`), Buchungsbestätigungs-Mail. Ersetzt durch die korrekte Aussage (14-Tage-Widerrufsrecht, erlischt via § 356 Abs. 4 bei vorzeitiger Leistung, anteiliger Wertersatz). Regressionstest `lib/__tests__/widerruf-consistency.test.ts` (grep-Guard) hält „312g"/„kein Widerrufsrecht" dauerhaft aus dem Produktivcode. ⚠️ **DB-Widerrufsbelehrung** (`legal_documents` slug `widerruf`, an die Bestätigungsmail angehängt) muss ebenfalls ohne § 312g sein — im Sandbox-Env nicht prüfbar, siehe „Noch offen".
+- **Storno-Staffel drift-proof aus `CANCELLATION_TIERS`:** `lib/cancellation-text.ts` (`describeCancellationTiers`/`cancellationTierLine`/`cancellationSummaryLine`) rendert die Staffel (AGB § 15: >7 T 100 %, 3–7 T 50 %, <3 T **10 %** Erstattung) aus der einen Quelle `data/cancellation.ts`. Genutzt in Buchungsbestätigungs-Mail, Checkout, Angebots-`PaymentStep`, `/stornierung`. Alte Falschtexte („≤ 2 Tage: keine Erstattung", „voller Mietpreis", „0 %") in Mail/UI/FAQ/`/konto/buchungen` korrigiert.
 - **Checkbox** (3. im Checkout, conditional): Nur sichtbar wenn frühester `rentalFrom` < 14 Tage von heute. Buchen-Button disabled bis angekreuzt.
 - **DB-Spalten** in `bookings` (Migration `supabase-widerruf-consent.sql`): `early_service_consent_at` (timestamptz) + `early_service_consent_ip` (text).
 - **APIs:** `checkout-intent` speichert IP zusätzlich im Checkout-Context; `confirm-cart` + `create-pending-booking` schreiben Timestamp + IP in `bookings`.
@@ -5564,6 +5566,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **⚠️ DB-Widerrufsbelehrung auf § 312g prüfen (KEIN Code-Change möglich):** Die an
+  die Buchungsbestätigung angehängte Widerrufsbelehrung kommt aus der DB
+  (`legal_documents` slug `widerruf` → aktuelle `legal_document_versions`). Der
+  UI-Fallback (`app/widerruf/page.tsx`) ist bereinigt, aber der **DB-Stand** wurde
+  aus dem Sandbox-Env NICHT geprüft (kein Prod-DB-Zugang). Der ursprüngliche Seed
+  (`erledigte supabase/legal-seed-widerruf.sql`, Z. 33) enthält noch den
+  § 312g-Abs.-2-Nr.-9-Ausschluss. **To-do:** Unter `/admin/legal` die
+  Widerrufsbelehrung öffnen und sicherstellen, dass der § 312g-Absatz („kein
+  Widerrufsrecht … Freizeitbetätigung") **entfernt** ist (sonst geht dem Kunden
+  eine fehlerhafte Belehrung zu → 12-Monats-Widerrufsfrist nach § 356 Abs. 3 S. 2).
 - **Admin-Storno-Dokumentation — Migration auszuführen (idempotent, additiv):**
   `supabase/supabase-bookings-cancellation-record.sql`. Legt `bookings.cancellation_record JSONB`
   an (Storno-Doku: vorgeschlagener vs. erstatteter Betrag, Abweichung,

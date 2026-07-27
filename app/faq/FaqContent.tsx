@@ -324,9 +324,9 @@ const faqSections: FaqSection[] = [
         answer: (
           <>
             Ja, nach folgender Staffelung: 7 Tage oder mehr vor Mietbeginn ist die Stornierung
-            kostenlos (volle Erstattung). 3–6 Tage vorher fällt eine Stornogebühr von 50 % an
-            (Stornierung dann nur per E-Mail). Weniger als 3 Tage vorher oder bei Nichtabholung
-            wird der volle Mietpreis berechnet. Details findest du in unseren{' '}
+            kostenlos (volle Erstattung). 3 bis 7 Tage vorher fällt eine Stornogebühr von 50 % an
+            (50 % Rückerstattung, Stornierung dann nur per E-Mail). Weniger als 3 Tage vorher fällt
+            eine Stornogebühr von 90 % an (10 % Rückerstattung). Details findest du in unseren{' '}
             <Link href="/stornierung" className="text-accent-blue hover:underline font-medium">
               Stornierungsbedingungen
             </Link>

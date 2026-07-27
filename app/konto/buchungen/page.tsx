@@ -451,7 +451,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
           <p>• Der Mieter haftet für alle Schäden während des Mietzeitraums.</p>
           <p>• Mängel innerhalb von 24 Stunden nach Empfang melden.</p>
           <p>• Bei verspäteter Rückgabe: Tagespreis + 5,00 EUR Bearbeitungsgebühr pro Tag.</p>
-          <p>• Stornierung: 100% bei 7+ Tagen, 50% bei 3-7 Tagen, 0% bei weniger als 3 Tagen vor Mietbeginn.</p>
+          <p>• Stornierung (Erstattung): 100% bei mehr als 7 Tagen, 50% bei 3-7 Tagen, 10% bei weniger als 3 Tagen vor Mietbeginn.</p>
           <p>• Vorautorisierung wird bei ordnungsgemäßer Rückgabe freigegeben.</p>
           <p>• Deutsches Recht. Gerichtsstand: Berlin.</p>
           <p className="text-brand-muted dark:text-gray-500 mt-2">Der vollständige Vertragstext wurde beim Buchungsvorgang angezeigt.</p>

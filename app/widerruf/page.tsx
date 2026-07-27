@@ -86,23 +86,6 @@ function WiderrufFallback() {
           </p>
         </section>
 
-        <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
-            Wichtiger Hinweis zum Ausschluss des Widerrufsrechts
-          </h2>
-          <div className="bg-accent-amber-soft border border-accent-amber/30 rounded-card p-4">
-            <p className="font-body text-brand-black dark:text-white font-medium mb-2">
-              Bitte beachten Sie:
-            </p>
-            <p className="font-body text-brand-steel dark:text-gray-300">
-              Das Widerrufsrecht besteht gemäß § 312g Abs. 2 Nr. 9 BGB <strong>nicht</strong> bei
-              Verträgen zur Erbringung von Dienstleistungen im Zusammenhang mit Freizeitbetätigungen,
-              wenn der Vertrag für die Erbringung einen spezifischen Termin oder Zeitraum vorsieht.
-              Dies kann auf Kamera-Mietbuchungen mit bestätigtem Zeitraum zutreffen.
-            </p>
-          </div>
-        </section>
-
         <section>
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             Muster-Widerrufsformular

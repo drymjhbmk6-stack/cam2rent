@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { getCompanyTaxNumber } from '@/lib/company-tax';
 import { renderEarlyServiceConsentBlock } from '@/lib/email-consent';
+import { describeCancellationTiers, cancellationTierLine } from '@/lib/cancellation-text';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ReturnChecklistPDF } from '@/lib/return-checklist-pdf';
@@ -563,10 +564,8 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">
               <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;">Stornierungsbedingungen</p>
-              <p style="margin:0 0 4px;font-size:13px;color:#374151;">≥ 7 Tage vor Mietstart: kostenlose Stornierung (100 % Rückerstattung)</p>
-              <p style="margin:0 0 4px;font-size:13px;color:#374151;">3–6 Tage vor Mietstart: 50 % Stornogebühren, Stornierung nur per E-Mail</p>
-              <p style="margin:0 0 8px;font-size:13px;color:#374151;">≤ 2 Tage vor Mietstart: keine Rückerstattung möglich</p>
-              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
+              ${describeCancellationTiers().map((t) => `<p style="margin:0 0 4px;font-size:13px;color:#374151;">${cancellationTierLine(t)}</p>`).join('')}
+              <p style="margin:8px 0 4px;font-size:12px;color:#9ca3af;">Dir steht ein gesetzliches Widerrufsrecht von 14 Tagen zu — Einzelheiten in der beigefügten Widerrufsbelehrung.</p>
               ${renderEarlyServiceConsentBlock(d.earlyServiceConsentAt, d.earlyServiceConsentIp)}
             </td></tr>
           </table>

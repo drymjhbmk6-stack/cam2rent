@@ -21,6 +21,7 @@ import { createAuthBrowserClient } from '@/lib/supabase-auth';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
+import { cancellationSummaryLine } from '@/lib/cancellation-text';
 import { getStripePromise } from '@/lib/stripe-client';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
 
@@ -511,8 +512,8 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
       </p>
 
       <div className="mt-5 p-4 bg-brand-bg dark:bg-gray-800 rounded-[10px] text-xs text-brand-muted dark:text-gray-500 space-y-1">
-        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
-        <p>Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
+        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> {cancellationSummaryLine()} · Stornierung unterhalb der kostenlosen Frist nur per E-Mail.</p>
+        <p>Dir steht ein gesetzliches Widerrufsrecht von 14 Tagen zu (siehe <a href="/widerruf" target="_blank" className="text-accent-blue underline">Widerrufsbelehrung</a>).</p>
       </div>
     </form>
   );

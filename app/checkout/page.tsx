@@ -27,6 +27,7 @@ import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-co
 import { useAllowedCountries } from '@/lib/use-allowed-countries';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
+import { cancellationSummaryLine } from '@/lib/cancellation-text';
 
 // stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
 // Publishable-Key) — siehe getStripePromise mit userId-Parameter weiter unten.
@@ -255,8 +256,8 @@ function PaymentForm({
       </p>
 
       <div className="mt-5 p-4 bg-brand-bg dark:bg-brand-black rounded-[10px] text-xs text-brand-muted dark:text-gray-500 space-y-1">
-        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
-        <p>Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
+        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> {cancellationSummaryLine()} · Stornierung unterhalb der kostenlosen Frist nur per E-Mail.</p>
+        <p>Dir steht ein gesetzliches Widerrufsrecht von 14 Tagen zu (siehe <a href="/widerruf" target="_blank" className="text-accent-blue underline">Widerrufsbelehrung</a>).</p>
       </div>
     </form>
   );
@@ -760,7 +761,6 @@ export default function CheckoutPage() {
   };
 
   const [acceptsTerms, setAcceptsTerms] = useState(false);
-  const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
   const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
 
   // ── Mietvertrag-Unterschrift (Pflicht vor der Zahlung) ──────────────────────
@@ -1407,15 +1407,14 @@ export default function CheckoutPage() {
                         <a href="/haftungsbedingungen" target="_blank" className="text-accent-blue underline">Haftungsbedingungen</a> gelesen und akzeptiere diese.
                       </span>
                     </label>
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input type="checkbox" checked={acceptsWithdrawal} onChange={(e) => setAcceptsWithdrawal(e.target.checked)}
-                        className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
-                      <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
-                        Mir ist bekannt, dass bei zeitgebundenen Freizeitdienstleistungen gemäß{' '}
-                        <a href="/widerruf" target="_blank" className="text-accent-blue underline">§ 312g Abs. 2 Nr. 9 BGB</a>{' '}
-                        kein Widerrufsrecht besteht.
-                      </span>
-                    </label>
+                    <p className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed pl-7">
+                      Dir steht ein gesetzliches Widerrufsrecht von 14 Tagen zu (siehe{' '}
+                      <a href="/widerruf" target="_blank" className="text-accent-blue underline">Widerrufsbelehrung</a>).
+                      Beginnt deine Miete vor Ablauf dieser Frist, bestätigst du unten die vorzeitige
+                      Leistungserbringung; dein Widerrufsrecht erlischt dann mit vollständiger Erbringung
+                      der Leistung (§ 356 Abs. 4 BGB). Bei einem Widerruf vor Mietende schuldest du
+                      anteiligen Wertersatz.
+                    </p>
                     {requiresEarlyServiceConsent && (
                       <EarlyServiceConsentCheckbox checked={acceptsEarlyService} onChange={setAcceptsEarlyService} />
                     )}
@@ -1426,7 +1425,7 @@ export default function CheckoutPage() {
                 {isVerified && (
                   <button
                     onClick={handleProceedToPayment}
-                    disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                    disabled={isCreatingIntent || !contractSignature || !acceptsTerms || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                     className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                   >
                     {isCreatingIntent ? (
@@ -1455,7 +1454,7 @@ export default function CheckoutPage() {
                     </div>
                     <button
                       onClick={handleProceedToPayment}
-                      disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                      disabled={isCreatingIntent || !contractSignature || !acceptsTerms || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                       className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
                       {isCreatingIntent ? (
