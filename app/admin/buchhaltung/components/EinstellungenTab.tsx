@@ -26,6 +26,9 @@ interface BuchhaltungSettings {
   // Rechnungs-Defaults
   payment_terms_days: string;
   invoice_footer: string;
+  // E-Mail-Rechnungs-Import
+  belege_inbox_address: string;
+  belege_inbox_enabled: boolean;
 }
 
 const DEFAULT_SETTINGS: BuchhaltungSettings = {
@@ -47,6 +50,8 @@ const DEFAULT_SETTINGS: BuchhaltungSettings = {
   dunning_fee_3: '10',
   payment_terms_days: '14',
   invoice_footer: 'Vielen Dank für deine Buchung bei cam2rent!',
+  belege_inbox_address: '',
+  belege_inbox_enabled: false,
 };
 
 export default function EinstellungenTab() {
@@ -109,6 +114,22 @@ export default function EinstellungenTab() {
               const shortKey = key.replace('accounting_', '') as keyof BuchhaltungSettings;
               setSettings(s => ({ ...s, [shortKey]: d.value }));
             }
+          }
+        }
+
+        // E-Mail-Rechnungs-Import (Objekt ODER JSON-String)
+        const belegRes = await fetch('/api/admin/settings?key=belege_inbox_config');
+        if (belegRes.ok) {
+          const d = await belegRes.json();
+          let val: unknown = d.value;
+          if (typeof val === 'string') { try { val = JSON.parse(val); } catch { val = null; } }
+          if (val && typeof val === 'object') {
+            const v = val as { address?: string; enabled?: boolean };
+            setSettings(s => ({
+              ...s,
+              belege_inbox_address: v.address || '',
+              belege_inbox_enabled: !!v.enabled,
+            }));
           }
         }
       } finally {
@@ -181,6 +202,19 @@ export default function EinstellungenTab() {
         });
       }
 
+      // E-Mail-Rechnungs-Import
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'belege_inbox_config',
+          value: {
+            address: settings.belege_inbox_address.trim().toLowerCase(),
+            enabled: settings.belege_inbox_enabled,
+          },
+        }),
+      });
+
       showToast('Einstellungen gespeichert', 'ok');
     } catch {
       showToast('Fehler beim Speichern', 'err');
@@ -209,6 +243,39 @@ export default function EinstellungenTab() {
           {toast.msg}
         </div>
       )}
+
+      {/* E-Mail-Rechnungs-Import */}
+      <Section title="Rechnungen per E-Mail importieren">
+        <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginTop: 0, marginBottom: 16 }}>
+          Lieferanten-Rechnungen an eine eigene Adresse schicken oder weiterleiten — der Server
+          legt automatisch einen Beleg an, erkennt Lieferant + Positionen per KI und schlägt die
+          Klassifizierung vor. Du prüfst am Monatsende und schreibst fest.
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 16 }}>
+          <input
+            type="checkbox"
+            checked={settings.belege_inbox_enabled}
+            onChange={(e) => updateSetting('belege_inbox_enabled', e.target.checked)}
+            style={{ accentColor: '#06b6d4', width: 18, height: 18 }}
+          />
+          <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>E-Mail-Import aktiv</span>
+        </label>
+        <div>
+          <label style={labelStyle}>Rechnungs-Adresse</label>
+          <input
+            value={settings.belege_inbox_address}
+            onChange={(e) => updateSetting('belege_inbox_address', e.target.value)}
+            placeholder="belege@cam2rent.de"
+            style={inputStyle}
+          />
+          <p style={{ color: '#64748b', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+            Diese Adresse als Weiterleitung auf das Support-Postfach (kontakt@cam2rent.de) anlegen.
+            Nur Mails an genau diese Adresse <strong>mit PDF-/Bild-Anhang</strong> werden als Beleg
+            verarbeitet — alles andere landet wie gewohnt in den Nachrichten. Der Abgleich läuft
+            über den bestehenden E-Mail-Abruf (alle 3 Minuten).
+          </p>
+        </div>
+      </Section>
 
       {/* Steuermodus */}
       <Section title="Steuermodus">

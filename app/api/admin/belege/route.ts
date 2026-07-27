@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
-import { nextBelegNr, sanitizePosition, recomputeBelegSummen, type BelegPositionInput } from '@/lib/buchhaltung/beleg-utils';
-import { findContentDuplicate, persistDuplicateWarning } from '@/lib/buchhaltung/duplicate-check';
+import { type BelegPositionInput } from '@/lib/buchhaltung/beleg-utils';
+import { createBeleg } from '@/lib/buchhaltung/beleg-create';
 import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
@@ -94,8 +94,6 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const jahr = new Date(belegDatum).getFullYear();
-  const belegNr = await nextBelegNr(supabase, jahr);
   const istEigenbeleg = !!body.ist_eigenbeleg;
   const eigenbelegGrund = body.eigenbeleg_grund ? String(body.eigenbeleg_grund) : null;
 
@@ -105,68 +103,25 @@ export async function POST(req: NextRequest) {
 
   const isTest = await isTestMode();
 
-  const { data: beleg, error: belErr } = await supabase
-    .from('belege')
-    .insert({
-      beleg_nr: belegNr,
-      lieferant_id: body.lieferant_id ?? null,
-      beleg_datum: belegDatum,
-      // Bezahl-Datum-Default: wenn nicht angegeben, automatisch auf Beleg-Datum
-      // spiegeln. Real-life-Annahme: die meisten kleinen Eingangsrechnungen
-      // werden zeitnah bezahlt — manueller Override bleibt jederzeit moeglich.
-      bezahl_datum: body.bezahl_datum ?? belegDatum,
-      rechnungsnummer_lieferant: body.rechnungsnummer_lieferant ?? null,
-      summe_netto: 0,
-      summe_brutto: 0,
-      status: 'offen',
-      quelle,
-      ist_eigenbeleg: istEigenbeleg,
-      eigenbeleg_grund: eigenbelegGrund,
-      notizen: body.notizen ?? null,
-      is_test: isTest,
-    })
-    .select('*')
-    .single();
-  if (belErr) return NextResponse.json({ error: belErr.message }, { status: 500 });
-
-  // Positionen einfuegen (nur wenn welche da sind — Upload-Pfad startet leer)
-  if (positionen.length > 0) {
-    const sanitized = positionen.map((p, i) => ({
-      ...sanitizePosition({ ...p, reihenfolge: p.reihenfolge ?? i }),
-      beleg_id: beleg.id,
-    }));
-    const { error: posErr } = await supabase.from('beleg_positionen').insert(sanitized);
-    if (posErr) {
-      // Rollback: Beleg wieder loeschen
-      await supabase.from('belege').delete().eq('id', beleg.id);
-      return NextResponse.json({ error: posErr.message }, { status: 500 });
-    }
+  // Anlage-Logik (Insert + Positionen + Summen + Duplikat-Check) liegt im
+  // geteilten Helfer, den auch der E-Mail-Import nutzt — keine Divergenz.
+  const { beleg, error: createErr } = await createBeleg(supabase, {
+    belegDatum,
+    quelle,
+    isTest,
+    lieferantId: (body.lieferant_id as string | undefined) ?? null,
+    bezahlDatum: (body.bezahl_datum as string | undefined) ?? null,
+    rechnungsnummerLieferant: (body.rechnungsnummer_lieferant as string | undefined) ?? null,
+    istEigenbeleg,
+    eigenbelegGrund,
+    notizen: (body.notizen as string | undefined) ?? null,
+    positionen,
+  });
+  if (!beleg) {
+    return NextResponse.json({ error: createErr ?? 'Beleg-Anlage fehlgeschlagen' }, { status: 500 });
   }
 
-  await recomputeBelegSummen(supabase, beleg.id);
-
-  // Inhaltsbasierter Duplikat-Check. Beim manuellen Anlegen sind Lieferant/Rg-Nr
-  // typisch direkt vom Admin gesetzt — also gute Treffer-Chance fuer den
-  // Strict-Match. Reload, weil recomputeBelegSummen die Brutto-Spalte gerade
-  // frisch geschrieben hat.
-  const { data: belegPostInsert } = await supabase
-    .from('belege')
-    .select('id, lieferant_id, beleg_datum, rechnungsnummer_lieferant, summe_brutto, is_test')
-    .eq('id', beleg.id)
-    .single();
-  if (belegPostInsert) {
-    const dup = await findContentDuplicate(supabase, {
-      belegId: beleg.id,
-      lieferantId: (belegPostInsert as { lieferant_id: string | null }).lieferant_id,
-      belegDatum: (belegPostInsert as { beleg_datum: string | null }).beleg_datum,
-      rechnungsnummerLieferant: (belegPostInsert as { rechnungsnummer_lieferant: string | null }).rechnungsnummer_lieferant,
-      summeBrutto: Number((belegPostInsert as { summe_brutto: number | string }).summe_brutto ?? 0),
-      isTest: !!(belegPostInsert as { is_test: boolean }).is_test,
-    });
-    await persistDuplicateWarning(supabase, beleg.id, dup);
-  }
-
-  await logAudit({ action: 'beleg.create', entityType: 'beleg', entityId: beleg.id, entityLabel: belegNr, changes: { positionen: positionen.length }, request: req });
+  await logAudit({ action: 'beleg.create', entityType: 'beleg', entityId: beleg.id, entityLabel: beleg.beleg_nr, changes: { positionen: positionen.length }, request: req });
 
   const { data: full } = await supabase
     .from('belege')

@@ -112,6 +112,59 @@ export async function GET() {
     // purchase_items-Tabelle fehlt
   }
 
+  // 3b) Belege wartend auf Pruefung/Klassifizierung (neue Buchhaltungs-Welt,
+  // u.a. per E-Mail importierte Lieferanten-Rechnungen). Zaehlt Belege, die
+  // noch offen/teilweise klassifiziert sind, deren OCR fehlschlug, oder die
+  // einen offenen Duplikat-Verdacht tragen. Defensiv gegen fehlende Migrationen
+  // (ocr_status / verdacht_duplikat_*): bei Spaltenfehler ohne diese Felder erneut.
+  try {
+    const SELECT_FULL = 'id, status, ocr_status, verdacht_duplikat_beleg_id, verdacht_duplikat_dismissed_at';
+    let rows: Record<string, unknown>[] | null = null;
+    const primary = await supabase
+      .from('belege')
+      .select(SELECT_FULL)
+      .eq('is_test', false)
+      .neq('status', 'festgeschrieben')
+      .limit(1000);
+    if (primary.error) {
+      const fb = await supabase
+        .from('belege')
+        .select('id, status')
+        .eq('is_test', false)
+        .neq('status', 'festgeschrieben')
+        .limit(1000);
+      rows = (fb.data as Record<string, unknown>[] | null) ?? null;
+    } else {
+      rows = (primary.data as Record<string, unknown>[] | null) ?? null;
+    }
+
+    const belege = rows ?? [];
+    let failedOrDup = 0;
+    const review = belege.filter((b) => {
+      const status = b.status as string;
+      const ocrFailed = b.ocr_status === 'failed';
+      const openDup = !!b.verdacht_duplikat_beleg_id && !b.verdacht_duplikat_dismissed_at;
+      if (ocrFailed || openDup) failedOrDup++;
+      return status === 'offen' || status === 'teilweise' || ocrFailed || openDup;
+    });
+
+    if (review.length > 0) {
+      todos.push({
+        id: 'belege_review',
+        severity: failedOrDup > 0 ? 'critical' : 'warning',
+        icon: 'inbox',
+        title: `${review.length} ${review.length === 1 ? 'Beleg' : 'Belege'} zu prüfen`,
+        subtitle: failedOrDup > 0
+          ? `Klassifizieren & festschreiben · ${failedOrDup} mit OCR-Fehler / Duplikat-Verdacht`
+          : 'Klassifizieren & festschreiben',
+        count: review.length,
+        action: { label: 'Belege öffnen', href: '/admin/buchhaltung/belege' },
+      });
+    }
+  } catch {
+    // belege-Tabelle fehlt — ignorieren
+  }
+
   // 4) Monatsabschluss-Status — Vergleich gegen aktuellen Monat
   try {
     // Berlin-Monat ermitteln

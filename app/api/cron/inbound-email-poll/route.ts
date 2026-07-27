@@ -10,6 +10,8 @@ import {
   isAutomatedEmail,
   processInboundEmail,
 } from '@/lib/inbound-email';
+import { loadBelegInboxConfig, isBelegRecipient } from '@/lib/buchhaltung/inbound-beleg-config';
+import { processInboundBeleg } from '@/lib/buchhaltung/inbound-beleg';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,19 +140,18 @@ async function handler(req: NextRequest) {
       return NextResponse.json({ ok: true, armed: !state, processed: 0 });
     }
 
+    // Rechnungs-Import-Config einmal pro Lauf laden.
+    const belegConfig = await loadBelegInboxConfig(supabase);
+
     let processedUpTo = state!.lastUid;
-    let created = 0, duplicate = 0, skipped = 0, errors = 0;
+    let created = 0, duplicate = 0, skipped = 0, errors = 0, belegCreated = 0;
     let migrationPending = false;
 
     for (const item of fetched) {
+      let parsed;
       let mail;
       try {
-        const parsed = await simpleParser(item.source);
-        if (isAutomatedEmail(parsed)) {
-          skipped++;
-          processedUpTo = item.uid;
-          continue;
-        }
+        parsed = await simpleParser(item.source);
         mail = parseImapMessage(parsed);
       } catch {
         errors++;
@@ -158,6 +159,27 @@ async function handler(req: NextRequest) {
         continue;
       }
 
+      // ─── Rechnungs-Abzweig: VOR den Automatik-/Eigen-Absender-Filtern. ───
+      // Lieferanten senden Rechnungen legitim von noreply@-Adressen, und beim
+      // Weiterleiten aus dem eigenen Postfach ist der Absender @cam2rent.de —
+      // beide Filter (isAutomatedEmail / ownSuffix) duerfen den Rechnungspfad
+      // nicht abwuergen. Erkennung: Empfaenger = konfigurierte Beleg-Adresse.
+      if (mail && isBelegRecipient(mail.recipients, belegConfig)) {
+        const bres = await processInboundBeleg(supabase, mail);
+        if (bres.status === 'created') belegCreated++;
+        else if (bres.status === 'duplicate') duplicate++;
+        else if (bres.status === 'skipped') skipped++;
+        else errors++;
+        processedUpTo = item.uid;
+        continue;
+      }
+
+      // ─── Normaler Kundenpostfach-Pfad ───────────────────────────────────
+      if (isAutomatedEmail(parsed)) {
+        skipped++;
+        processedUpTo = item.uid;
+        continue;
+      }
       // Eigene System-/Report-Mails an das Support-Postfach ueberspringen.
       if (!mail || mail.from.endsWith(ownSuffix)) {
         skipped++;
@@ -185,7 +207,7 @@ async function handler(req: NextRequest) {
     return NextResponse.json({
       ok: !migrationPending,
       migration_pending: migrationPending,
-      created, duplicate, skipped, errors,
+      created, duplicate, skipped, errors, beleg_created: belegCreated,
     });
   } catch (err) {
     return NextResponse.json(

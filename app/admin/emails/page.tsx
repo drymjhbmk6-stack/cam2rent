@@ -66,6 +66,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   message_admin: { label: 'Nachricht (Admin)', color: '#6366f1', bg: '#6366f114' },
   message_customer: { label: 'Nachricht (Kunde)', color: '#6366f1', bg: '#6366f114' },
   inbound_received: { label: 'E-Mail empfangen', color: '#0ea5e9', bg: '#0ea5e914' },
+  inbound_beleg_received: { label: 'Beleg per E-Mail', color: '#0ea5e9', bg: '#0ea5e914' },
   inbound_reply: { label: 'E-Mail-Antwort', color: '#0ea5e9', bg: '#0ea5e914' },
   extension_confirmation: { label: 'Verlängerung', color: '#06b6d4', bg: '#06b6d414' },
   booking_postponed: { label: 'Verlegung', color: '#d97706', bg: '#d9770614' },

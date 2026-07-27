@@ -604,6 +604,57 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
     bleibt 1:1 Side-by-Side wie zuvor.
 - **Go-Live TODO:** siehe „Noch offen".
 
+### Rechnungen per E-Mail importieren → automatische Buchhaltung (Stand 2026-07-27)
+Lieferanten-Rechnungen an eine eigene Adresse (z.B. `belege@cam2rent.de`)
+schicken/weiterleiten → der Server legt automatisch einen **Beleg** an, macht
+OCR (Lieferant, Positionen, Beträge), füllt den KI-Klassifizierungs-Vorschlag
+und macht den Duplikat-Check. Der Admin **prüft am Monatsende**, bestätigt die
+Klassifizierung und schreibt fest (kein Auto-Festschreiben, kein Auto-Apply —
+GoBD-sicher). Dockt an das bestehende IMAP-Polling + die
+`runOcrForBeleg`-Pipeline an, statt einen zweiten Abrufweg zu bauen.
+- **Erkennung:** Mail an die konfigurierte Adresse **UND** mind. ein per
+  Magic-Byte erkanntes PDF/Bild im Anhang. Config in
+  `admin_settings.belege_inbox_config = { address, enabled }`
+  (`lib/buchhaltung/inbound-beleg-config.ts`, `loadBelegInboxConfig`,
+  `isBelegRecipient`, 30 s Cache, Default aus). Admin-UI: neue Sektion oben im
+  Buchhaltungs-Einstellungen-Tab (`EinstellungenTab.tsx`, Toggle + Adresse,
+  Speichern via generischem `POST /api/admin/settings` key `belege_inbox_config`).
+- **Pipeline** `lib/buchhaltung/inbound-beleg.ts` → `processInboundBeleg(supabase,
+  mail)`: Idempotenz über `belege.email_message_id` (sonst Datei-Hash-Dedup) →
+  valide Anhänge filtern (keiner → `skipped`, kein Junk-Beleg) → **ein Beleg pro
+  Mail** (`createBeleg`, `quelle='email'`, `beleg_datum=heute` Berlin; erstes
+  valides Attachment `kind='rechnung'`, weitere `sonstiges`) → `runOcrForBeleg`
+  (OCR überschreibt `beleg_datum` mit dem echten Rechnungsdatum) → Notification
+  `beleg_ready`/`beleg_duplicate`/`beleg_failed` (Deep-Link) → `email_log`
+  (`inbound_beleg_received`) + Audit (`beleg.email_import`). Positionen bleiben
+  `pending`, Beleg `offen`.
+- **Geteilte Helfer** `lib/buchhaltung/beleg-create.ts` (`createBeleg` +
+  `attachFileToBeleg`) aus den Route-Handlern extrahiert — `POST /api/admin/belege`
+  und `.../[id]/anhaenge` nutzen jetzt exakt dieselbe Logik (Insert, Positionen,
+  Summen, Duplikat-Check, SHA-256-Datei-Dedup, Storage-Rollback, Migrations-
+  Fallback), damit E-Mail-Import + manueller Upload nicht divergieren.
+- **Cron-Abzweig** in `app/api/cron/inbound-email-poll/route.ts`: Mail wird
+  ZUERST geparst, dann greift der Rechnungs-Abzweig **vor** `isAutomatedEmail`
+  und **vor** dem `mail.from.endsWith(ownSuffix)`-Skip. Grund: Lieferanten senden
+  Rechnungen legitim von `noreply@…` (würde von `isAutomatedEmail` verworfen), und
+  beim Weiterleiten aus dem eigenen Postfach ist der Absender `@cam2rent.de`
+  (würde vom ownSuffix-Skip verworfen). Sonst unverändert → Kundenpostfach.
+  Response um `beleg_created` erweitert. Kein neuer Crontab-Eintrag (läuft im
+  bestehenden 3-Min-Poll von `kontakt@`).
+- **Monatsend-Aufgabe:** Cockpit (`app/api/admin/buchhaltung/cockpit/route.ts`)
+  hat einen neuen Todo `belege_review` = Anzahl Belege `offen`/`teilweise` ODER
+  `ocr_status='failed'` ODER offener Duplikat-Verdacht (`is_test=false`, defensiv
+  gegen fehlende Spalten mit Select-Retry) → CTA `/admin/buchhaltung/belege`.
+  Macht „am Monatsende prüfen" persistent sichtbar (nicht nur der einmalige Push).
+- **Migration** `supabase/supabase-belege-email-import.sql` (idempotent, additiv):
+  `belege.email_message_id TEXT` + partieller Unique-Index +
+  `quelle`-CHECK `+= 'email'`. Ohne Migration läuft alles defensiv weiter
+  (`createBeleg` fällt auf `quelle='upload'` zurück, kein `email_message_id`-
+  Dedup → nur Datei-Hash schützt).
+- **Bewusst NICHT:** mehrere Rechnungen pro Mail (dann eine Mail je Rechnung),
+  Auto-Festschreiben, Auto-Apply der Klassifizierung.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
 - **Sets gefiltert** nach `product_ids` (Kamera-Kompatibilität) — nur passende Sets werden angezeigt
@@ -5573,6 +5624,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **E-Mail-Rechnungs-Import Go-Live:**
+  1. Migration `supabase/supabase-belege-email-import.sql` ausführen (idempotent,
+     additiv). Ohne sie läuft der Import defensiv weiter (kein `email_message_id`-
+     Dedup, `quelle` fällt auf `upload` zurück).
+  2. Alias `belege@cam2rent.de` im All-Inkl-KAS als **Weiterleitung** auf
+     `kontakt@cam2rent.de` anlegen (kein zweites IMAP-Login — läuft durch das
+     bestehende 3-Min-Polling).
+  3. Unter Buchhaltung → Einstellungen die Adresse eintragen + „E-Mail-Import
+     aktiv" anhaken. Kein neuer Crontab-Eintrag nötig. Siehe „Rechnungen per
+     E-Mail importieren".
 - **Rechtstext-Versions-Snapshot Migration auszuführen:** `supabase/supabase-bookings-terms-version.sql`
   (idempotent, additiv: `bookings.terms_version`/`liability_terms_version`/
   `withdrawal_version`/`privacy_version`/`terms_snapshot_at`/`liability_max_amount`
