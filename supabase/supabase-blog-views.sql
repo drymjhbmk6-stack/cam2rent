@@ -6,7 +6,7 @@
 -- `blog_posts.view_count` gefuehrt (serverseitig hochgezaehlt in
 -- app/blog/[slug]/page.tsx, ohne Cookie-Consent — reine anonyme Statistik).
 -- Die Statistik-Seite (/admin/analytics → Blog) las die Blog-Aufrufe aber aus
--- der `page_views`-Tabelle, die per § 25 TTDSG nur bei Cookie-Consent='all'
+-- der `page_views`-Tabelle, die per § 25 TDDDG nur bei Cookie-Consent='all'
 -- befuellt wird → fast leer, obwohl die Artikel real viele Aufrufe haben.
 --
 -- Diese Tabelle haelt pro Aufruf eine Event-Zeile MIT Zeitstempel, aber OHNE

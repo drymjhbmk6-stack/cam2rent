@@ -1,8 +1,16 @@
+-- ⚠️ HISTORISCHER SEED (V1-Snapshot). NICHT ERNEUT AUSFÜHREN.
+-- Maßgeblich ist ausschließlich die in der DB gepflegte Fassung
+-- (legal_documents/legal_document_versions, aktuell V7), verwaltet über
+-- /admin/legal. Ein erneuter Aufruf von publish_legal_version() würde diese
+-- Datei als NEUE current-Version veröffentlichen und den DB-Stand überschreiben.
+-- Diese Datei wurde nur um den (rechtlich falschen) § 312g-Ausschluss bereinigt
+-- und um die Telefonnummer ergänzt; die vollständige V7-Struktur (u. a. Hinweis
+-- zur Verlegung) lebt in der DB und ist hier bewusst NICHT nachgebildet.
 SELECT publish_legal_version(
   (SELECT id FROM legal_documents WHERE slug = 'widerruf'),
   '# Widerrufsbelehrung
 
-*Informationen zum Widerrufsrecht*
+*Stand: Juli 2026 · Informationen zum Widerrufsrecht*
 
 ## Widerrufsrecht
 
@@ -15,6 +23,7 @@ Um Ihr Widerrufsrecht auszuüben, müssen Sie uns mittels einer eindeutigen Erkl
 **cam2rent – Lennart Schickel**
 Heimsbrunner Str. 12
 12349 Berlin
+Telefon: 0162 / 8367477
 E-Mail: kontakt@cam2rent.de
 Website: www.cam2rent.de
 
@@ -28,9 +37,9 @@ Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von 
 
 Haben Sie verlangt, dass die Dienstleistung während der Widerrufsfrist beginnen soll, so haben Sie uns einen angemessenen Betrag zu zahlen, der dem Anteil der bis zu dem Zeitpunkt, zu dem Sie uns von der Ausübung des Widerrufsrechts unterrichten, bereits erbrachten Dienstleistungen im Vergleich zum Gesamtumfang der im Vertrag vorgesehenen Dienstleistungen entspricht.
 
-## Wichtiger Hinweis zum Ausschluss des Widerrufsrechts
+## Vorzeitiger Beginn der Leistung
 
-**Bitte beachten Sie:** Das Widerrufsrecht besteht gemäß § 312g Abs. 2 Nr. 9 BGB **nicht** bei Verträgen zur Erbringung von Dienstleistungen im Zusammenhang mit Freizeitbetätigungen, wenn der Vertrag für die Erbringung einen spezifischen Termin oder Zeitraum vorsieht. Dies kann auf Kamera-Mietbuchungen mit bestätigtem Zeitraum zutreffen.
+Wenn Sie im Buchungsprozess ausdrücklich verlangen, dass wir mit der Vermietung vor Ablauf der 14-tägigen Widerrufsfrist beginnen, erlischt Ihr Widerrufsrecht mit vollständiger Erbringung der Leistung (§ 356 Abs. 4 BGB). Widerrufen Sie vor Ablauf der Frist, schulden Sie anteiligen Wertersatz (siehe „Folgen des Widerrufs").
 
 ## Muster-Widerrufsformular
 
@@ -52,6 +61,6 @@ Unterschrift des/der Verbraucher(s) (nur bei Mitteilung auf Papier):
 
 *(*) Unzutreffendes streichen*',
   'markdown',
-  'Vollständige Widerrufsbelehrung eingepflegt',
+  'Widerrufsbelehrung ohne § 312g-Ausschluss (§ 356 Abs. 4 BGB), Telefon ergänzt',
   NULL
 );

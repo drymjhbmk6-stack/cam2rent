@@ -238,13 +238,17 @@ function DatenschutzFallback() {
             automatisch gelöscht. Eine Zuordnung zu einzelnen Personen ist nicht möglich.
           </p>
           <p className="font-body text-brand-steel dark:text-gray-300">
-            Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der
-            statistischen Analyse des Nutzerverhaltens). Sie können dem Tracking jederzeit über
-            unseren{' '}
-            <Link href="/cookie-richtlinie" className="text-accent-blue hover:underline">
-              Cookie-Banner
+            Die Reichweitenmessung erfolgt ausschließlich auf Grundlage Ihrer Einwilligung
+            (§ 25 Abs. 1 TDDDG, Art. 6 Abs. 1 lit. a DSGVO). Ohne Einwilligung findet keine
+            Reichweitenmessung statt und es werden keine Besucher- oder Session-Kennungen in Ihrem
+            Browser gespeichert. Sie können Ihre Einwilligung jederzeit über die{' '}
+            <Link
+              href="/cookie-richtlinie#datenschutz-einstellungen"
+              className="text-accent-blue hover:underline"
+            >
+              Datenschutz-Einstellungen
             </Link>{' '}
-            widersprechen.
+            erteilen oder mit Wirkung für die Zukunft widerrufen (Art. 7 Abs. 3 DSGVO).
           </p>
         </section>
 

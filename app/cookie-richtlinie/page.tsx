@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import ResetConsentButton from '@/components/ResetConsentButton';
+import ConsentSettings from '@/components/ConsentSettings';
 import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
@@ -157,8 +157,17 @@ export default function CookieRichtliniePage() {
             verarbeitet und nach 90 Tagen automatisch gelöscht.
           </p>
           <p className="font-body text-brand-steel dark:text-gray-300 mt-3">
-            Sie können dieses Tracking jederzeit über den Cookie-Banner deaktivieren oder wieder
-            aktivieren. Wählen Sie dazu &quot;Nur notwendige&quot; um das Tracking abzulehnen.
+            Zusätzlich zählen wir mit Ihrer Einwilligung anonym die Gesamtzahl der Besuche
+            (Session-Flag <code className="bg-brand-bg dark:bg-brand-dark px-1 rounded text-xs">cam2rent_visit_counted</code>,
+            ohne Personenbezug). Auch dieser Zähler läuft ausschließlich nach Ihrer Zustimmung.
+          </p>
+          <p className="font-body text-brand-steel dark:text-gray-300 mt-3">
+            Sie können dieses Tracking jederzeit über den Banner oder die{' '}
+            <Link href="#datenschutz-einstellungen" className="text-accent-blue hover:underline">
+              Datenschutz-Einstellungen
+            </Link>{' '}
+            erteilen oder ablehnen. Wählen Sie im Banner &quot;Ablehnen&quot;, findet keine
+            Reichweitenmessung statt.
           </p>
         </section>
 
@@ -167,11 +176,11 @@ export default function CookieRichtliniePage() {
             5. Einstellungen verwalten
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300 mb-4">
-            Sie können Ihre Einwilligung jederzeit widerrufen. Klicken Sie dazu auf den folgenden
-            Button, um Ihre Einstellungen zurückzusetzen. Beim nächsten Seitenaufruf wird der
-            Cookie-Banner erneut angezeigt.
+            Sie können Ihre Einwilligung jederzeit erteilen oder widerrufen — so einfach wie die
+            Erteilung (Art. 7 Abs. 3 DSGVO). Ein Widerruf stoppt die Messung sofort und löscht die
+            im Browser gespeicherte Besucher- und Session-Kennung.
           </p>
-          <ResetConsentButton />
+          <ConsentSettings />
         </section>
 
         <section className="mb-10">

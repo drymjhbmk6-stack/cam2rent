@@ -2,13 +2,22 @@
 -- Legal-Dokumente: Alle 5 Seiten mit vollständigem Inhalt
 -- Supabase SQL Editor — einmal ausführen
 -- ============================================================
+--
+-- ⚠️ HISTORISCHER SEED (V1-Snapshot). NICHT ERNEUT AUSFÜHREN.
+-- Maßgeblich ist ausschließlich die in der DB gepflegte Fassung (aktuell V9,
+-- §§ 1–25), verwaltet über /admin/legal. Ein erneuter Aufruf würde den
+-- DB-Stand überschreiben. Diese Datei wurde nur um die verbotene Terminologie
+-- (Schadenspauschale → Haftungsschutz, Selbstbeteiligung → Höchstbetrag der
+-- Ersatzpflicht) und die eingestellte ODR-Plattform bereinigt; die vollständige
+-- V9-Nummerierung/-Klauseln (u. a. § 12 Haftungsschutz-Wechsel, § 22
+-- Auftragsverarbeiter) leben in der DB und sind hier NICHT nachgebildet.
 
 -- 1. AGB
 SELECT publish_legal_version(
   (SELECT id FROM legal_documents WHERE slug = 'agb'),
   '# Allgemeine Geschäftsbedingungen
 
-*cam2rent – Stand: April 2026*
+*cam2rent – Stand: April 2026 (V1-Snapshot, siehe DB für aktuelle Fassung)*
 
 ## § 1 Geltungsbereich, Vertragspartner
 
@@ -38,7 +47,7 @@ SELECT publish_legal_version(
 
 (2) Durch Klick auf den Button "zahlungspflichtig buchen" und erfolgreichen Abschluss des Zahlungsvorgangs über den Zahlungsdienstleister gibt der Mieter ein verbindliches Angebot ab.
 
-(3) Der Vertrag kommt erst zustande, wenn kumulativ folgende Voraussetzungen erfüllt sind: a) der vollständige Mietpreis inklusive Versandkosten und gewählter Schadenspauschale ist beim Zahlungsdienstleister erfolgreich autorisiert und eingezogen, b) der Vermieter hat dem Mieter eine Buchungsbestätigung per E-Mail zugesandt. Eine automatische Eingangsbestätigung über den Buchungseingang stellt noch keine Annahme des Angebots dar.
+(3) Der Vertrag kommt erst zustande, wenn kumulativ folgende Voraussetzungen erfüllt sind: a) der vollständige Mietpreis inklusive Versandkosten und gewähltem Haftungsschutz ist beim Zahlungsdienstleister erfolgreich autorisiert und eingezogen, b) der Vermieter hat dem Mieter eine Buchungsbestätigung per E-Mail zugesandt. Eine automatische Eingangsbestätigung über den Buchungseingang stellt noch keine Annahme des Angebots dar.
 
 (4) Schlägt die Zahlung fehl oder wird sie zurückgebucht, gilt das Angebot als nicht abgegeben; ein Vertrag kommt in diesem Fall nicht zustande.
 
@@ -94,11 +103,11 @@ SELECT publish_legal_version(
 
 (5) Schäden, Verlust oder Diebstahl sind dem Vermieter unverzüglich, spätestens innerhalb von 48 Stunden nach Kenntnis, per E-Mail an kontakt@cam2rent.de zu melden. Bei Diebstahl ist zusätzlich unverzüglich Strafanzeige bei der Polizei zu erstatten; eine Kopie der Anzeige ist dem Vermieter binnen 7 Tagen vorzulegen.
 
-## § 9 Haftung des Mieters, Schadenspauschale
+## § 9 Haftung des Mieters, Haftungsschutz
 
 (1) Der Mieter haftet nach den gesetzlichen Vorschriften für Schäden, Verlust, Zerstörung oder Diebstahl der Mietsache während der Mietdauer, soweit er diese zu vertreten hat. Maßgeblich ist der Zeitraum zwischen Übergabe und vertragsgemäßer Rückgabe.
 
-(2) Der Mieter kann bei Buchung eine Schadenspauschale wählen, die seine Ersatzpflicht der Höhe nach begrenzt. Es gelten: a) Ohne Schadenspauschale: Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert). b) Basis-Schadenspauschale: Die Ersatzpflicht des Mieters ist im Schadensfall auf 200 EUR je Schadensereignis begrenzt (Selbstbeteiligung). c) Premium-Schadenspauschale: Die Ersatzpflicht des Mieters ist im Schadensfall auf 0 EUR begrenzt (keine Selbstbeteiligung).
+(2) Der Mieter kann bei Buchung einen Haftungsschutz wählen, der seine Ersatzpflicht der Höhe nach begrenzt. Es gelten: a) Ohne Haftungsschutz: Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert). b) Basis-Haftungsschutz: Die Ersatzpflicht des Mieters ist im Schadensfall auf 200 EUR je Schadensereignis begrenzt (Höchstbetrag der Ersatzpflicht). c) Premium-Haftungsschutz: Die Ersatzpflicht des Mieters ist im Schadensfall auf 0 EUR begrenzt (kein Höchstbetrag der Ersatzpflicht).
 
 (3) Die Tagespauschalen sind nach Mietdauer gestaffelt: Basis: 15 EUR/Tag (1–7 Tage), 20 EUR/Tag (8–14 Tage), 25 EUR/Tag (15–21 Tage) sowie Erhöhung um 5 EUR/Tag je weiteren angefangenen Zeitraum von 7 Tagen. Premium: 25 EUR/Tag (1–7 Tage), 35 EUR/Tag (8–14 Tage), 45 EUR/Tag (15–21 Tage) sowie Erhöhung um 10 EUR/Tag je weiteren angefangenen Zeitraum von 7 Tagen. Der Gesamtbetrag wird vor Vertragsschluss auf der Website und im Mietvertrag ausgewiesen.
 
@@ -106,7 +115,7 @@ SELECT publish_legal_version(
 
 (5) Die Haftungsbegrenzung nach Absatz 2 gilt NICHT bei: a) vorsätzlich oder grob fahrlässig verursachten Schäden, b) bestimmungswidriger Nutzung entgegen Herstellerangaben, c) Verstoß gegen § 8 Absatz 2, d) unterlassener oder erheblich verspäteter Schadensmeldung, soweit dies die Schadensfeststellung wesentlich erschwert, e) Diebstahl ohne unverzügliche polizeiliche Anzeige. In diesen Fällen haftet der Mieter in voller Höhe.
 
-(6) Die Schadenspauschale ist KEINE Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG), sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters gegenüber dem Vermieter.
+(6) Der Haftungsschutz ist KEINE Versicherung im Sinne des Versicherungsvertragsgesetzes (VVG), sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters gegenüber dem Vermieter.
 
 ## § 10 Schadensabrechnung
 
@@ -188,11 +197,9 @@ Der Mieter kann gegen Forderungen des Vermieters nur mit unbestrittenen oder rec
 
 (4) Eine handschriftliche Unterschrift ist zur Wirksamkeit des Vertrags nicht erforderlich.
 
-## § 19 Online-Streitbeilegung, Verbraucherschlichtung
+## § 19 Verbraucherschlichtung
 
-(1) Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung bereit: https://ec.europa.eu/consumers/odr/
-
-(2) Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).
+(1) Der Vermieter ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).
 
 ## § 20 Anwendbares Recht, Schlussbestimmungen
 
@@ -204,6 +211,6 @@ Der Mieter kann gegen Forderungen des Vermieters nur mit unbestrittenen oder rec
 
 (4) Mündliche Nebenabreden bestehen nicht.',
   'markdown',
-  'Vollständiger AGB-Inhalt eingepflegt',
+  'AGB bereinigt: Haftungsschutz statt Schadenspauschale, Höchstbetrag der Ersatzpflicht, ODR-Plattform entfernt',
   NULL
 );

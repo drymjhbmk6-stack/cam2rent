@@ -1,8 +1,15 @@
+-- ⚠️ HISTORISCHER SEED (V1-Snapshot). NICHT ERNEUT AUSFÜHREN.
+-- Maßgeblich ist ausschließlich die in der DB gepflegte Fassung (aktuell V9),
+-- verwaltet über /admin/legal. Ein erneuter Aufruf würde den DB-Stand
+-- überschreiben. Diese Datei wurde nur um die verbotene Terminologie bereinigt
+-- (Standard-Haftungsschutz → Basis-Haftungsschutz, Selbstbeteiligung →
+-- Höchstbetrag der Ersatzpflicht, Reparaturdepot ersatzlos gestrichen); die
+-- vollständige V9-Struktur lebt in der DB und ist hier nicht nachgebildet.
 SELECT publish_legal_version(
   (SELECT id FROM legal_documents WHERE slug = 'haftungsausschluss'),
   '# Haftungsbedingungen
 
-*Stand: Januar 2026*
+*Stand: Juli 2026*
 
 ## § 1 Geltungsbereich
 
@@ -12,21 +19,21 @@ Diese Haftungsbedingungen gelten für alle Mietverträge über Kamera-, Audio- u
 
 Bei jeder Buchung kann der Mieter zwischen folgenden Haftungsoptionen wählen:
 
-### Ohne Haftungsbegrenzung — 0 €
+### Ohne Haftungsschutz — 0 €
 
 Der Mieter haftet in voller Höhe des Wiederbeschaffungswerts der Ausrüstung.
 
-### Standard-Haftungsschutz — 15 € / Miete
+### Basis-Haftungsschutz — 15 € / Miete
 
-Deckt Schäden bei sachgemäßer Nutzung ab (z.B. Sturz-, Stoß-, Wasser- oder Elektronikschäden). Selbstbeteiligung: maximal 150 € pro Schadensfall.
+Deckt Schäden bei bestimmungsgemäßer Nutzung ab (z.B. Sturz-, Stoß-, Wasser- oder Elektronikschäden). Höchstbetrag der Ersatzpflicht: maximal 150 € pro Schadensfall.
 
 ### Premium-Haftungsschutz — 25 € / Miete
 
-Vollschutz bei bestimmungsgemäßer Nutzung — keine Selbstbeteiligung im Schadensfall.
+Vollschutz bei bestimmungsgemäßer Nutzung — kein Höchstbetrag der Ersatzpflicht (0 €) im Schadensfall.
 
 ## § 3 Abgedeckte Schadensfälle
 
-Bei Auswahl der Standard- oder Premium-Haftung sind folgende Schadensfälle abgedeckt:
+Bei Auswahl des Basis- oder Premium-Haftungsschutzes sind folgende Schadensfälle abgedeckt:
 
 - Technische Defekte durch normale Nutzung
 - Sturz- und Stoßschäden
@@ -65,16 +72,16 @@ Der Haftungsschutz beginnt mit der Übergabe (Lieferung/Abholung) der Ausrüstun
 
 ## § 8 Haftungsgrenzen — Zusammenfassung
 
-| Option | Preis / Miete | Selbstbeteiligung |
+| Option | Preis / Miete | Höchstbetrag der Ersatzpflicht |
 |---|---|---|
-| Ohne Haftungsbegrenzung | 0 € | Voller Wiederbeschaffungswert |
-| Standard-Haftungsschutz | 15 € | Max. 150 € |
-| Premium-Haftungsschutz | 25 € | Keine |
+| Ohne Haftungsschutz | 0 € | Voller Wiederbeschaffungswert |
+| Basis-Haftungsschutz | 15 € | Max. 150 € |
+| Premium-Haftungsschutz | 25 € | Keiner (0 €) |
 
 ## Wichtiger Hinweis
 
-Die Haftungsoptionen von cam2rent stellen **keine Versicherung** im Sinne des Versicherungsvertragsgesetzes (VVG) dar. Die Haftungsbegrenzung wird durch ein **selbstfinanziertes Reparaturdepot** von cam2rent getragen. Die erhobenen Gebühren für Standard- und Premium-Haftungsschutz fließen in dieses Depot und dienen ausschließlich der Deckung von Reparatur- und Ersatzkosten.',
+Die Haftungsoptionen von cam2rent stellen **keine Versicherung** im Sinne des Versicherungsvertragsgesetzes (VVG) dar, sondern eine vertragliche Begrenzung der Ersatzpflicht des Mieters. Der über den Höchstbetrag der Ersatzpflicht hinausgehende Schaden wird von cam2rent getragen.',
   'markdown',
-  'Vollständige Haftungsbedingungen eingepflegt',
+  'Haftungsbedingungen bereinigt: Basis-Haftungsschutz, Höchstbetrag der Ersatzpflicht, Reparaturdepot gestrichen',
   NULL
 );

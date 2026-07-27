@@ -2166,7 +2166,7 @@ export default function BuchenPage() {
                                 {opt.description}
                               </p>
                               <p className={`text-xs font-body font-semibold ${selected ? 'text-accent-blue' : 'text-brand-muted dark:text-gray-500'}`}>
-                                Eigenbeteiligung: {opt.liability.replace('Max. ', '').replace(' Eigenbeteiligung', '')}
+                                {opt.liability}
                               </p>
                             </div>
 

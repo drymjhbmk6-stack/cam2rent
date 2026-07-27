@@ -19,6 +19,7 @@ const legalLinks = [
   { href: '/haftungsbedingungen', label: 'Haftungsbedingungen' },
   { href: '/versand-zahlung', label: 'Versand & Zahlung' },
   { href: '/cookie-richtlinie', label: 'Cookie-Richtlinie (EU)' },
+  { href: '/cookie-richtlinie#datenschutz-einstellungen', label: 'Datenschutz-Einstellungen' },
 ];
 
 const sonstigesLinks = [

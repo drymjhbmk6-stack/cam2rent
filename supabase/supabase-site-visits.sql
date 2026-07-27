@@ -4,7 +4,7 @@
 --
 -- Zweck: Ein einfacher Besucherzähler, der JEDEN Besuch zählt — egal ob der
 -- Cookie-Banner akzeptiert wurde oder nicht. Anders als `page_views` (das per
--- § 25 TTDSG nur bei Cookie-Consent='all' befüllt wird) speichert diese Tabelle
+-- § 25 TDDDG nur bei Cookie-Consent='all' befüllt wird) speichert diese Tabelle
 -- KEINEN Personenbezug: keine IP, keine visitor_id, kein Cookie — nur pro Tag
 -- eine Zähl-Zeile. Damit ist es reine anonyme Aggregat-Statistik (gleiche
 -- DSGVO-Logik wie `blog_views` / `blog_posts.view_count`) und braucht keine

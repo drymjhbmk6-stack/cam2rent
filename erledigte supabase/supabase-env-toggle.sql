@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_is_test         ON invoices(is_test) WHE
 ALTER TABLE credit_notes     ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_credit_notes_is_test     ON credit_notes(is_test) WHERE is_test = TRUE;
 
--- Expenses (Ausgaben/Reparaturdepot/Stripe-Gebuehren)
+-- Expenses (Ausgaben/Stripe-Gebuehren)
 ALTER TABLE expenses         ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_expenses_is_test         ON expenses(is_test) WHERE is_test = TRUE;
 
