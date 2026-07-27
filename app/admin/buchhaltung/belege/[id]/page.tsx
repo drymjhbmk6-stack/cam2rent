@@ -23,6 +23,21 @@ const KLASS_HINT: Record<Klass, string> = {
   ignoriert: 'Position wird NICHT verbucht — z. B. private Anschaffung versehentlich auf der Geschäftsrechnung, durchlaufender Posten, Pfand.',
 };
 
+// Deutsche Labels für die KI-Vorschlag-Anzeige (die KI liefert interne/englische Keys)
+const ART_LABEL: Record<string, string> = {
+  kamera: 'Kamera', zubehoer: 'Zubehör', buero: 'Büro', werkzeug: 'Werkzeug', sonstiges: 'Sonstiges',
+};
+const KATEGORIE_LABEL: Record<string, string> = {
+  stripe_fees: 'Zahlungsgebühren', fees: 'Zahlungsgebühren', shipping: 'Versandkosten',
+  software: 'Software & Abos', hardware: 'Hardware & Equipment', marketing: 'Marketing & Werbung',
+  office: 'Bürobedarf', travel: 'Reisekosten', insurance: 'Versicherungen',
+  legal: 'Rechts- & Beratungskosten', depreciation: 'Abschreibungen (AfA)',
+  asset_purchase: 'GWG-Sofortabzug', other: 'Sonstiges',
+};
+const kiKlassLabel = (k: string) => KLASS_LABEL[k as Klass] ?? k;
+const artLabel = (a: string) => ART_LABEL[a] ?? a;
+const kategorieLabel = (k: string) => KATEGORIE_LABEL[k] ?? k;
+
 interface Beleg {
   id: string; beleg_nr: string; interne_beleg_no: string | null;
   beleg_datum: string; bezahl_datum: string | null;
@@ -117,6 +132,7 @@ export default function BelegDetailPage() {
     { bezeichnung: '', menge: '', einzelpreis_netto: '', mwst_satz: '' },
   );
   const [savingPos, setSavingPos] = useState(false);
+  const [applyingAll, setApplyingAll] = useState(false);
   const [verknuepfFor, setVerknuepfFor] = useState<
     { id: string; label: string; menge: number; linked: number } | null
   >(null);
@@ -173,18 +189,40 @@ export default function BelegDetailPage() {
     if (res.ok) reload();
   }
 
-  async function applyKiVorschlag(p: Position) {
+  // Schreibt den KI-Vorschlag einer Position, OHNE neu zu laden (für Einzel- und Sammel-Übernahme).
+  async function patchKiVorschlag(p: Position): Promise<boolean> {
     const ki = p.ki_vorschlag;
-    if (!ki) return;
+    if (!ki || p.locked) return false;
     const update: Record<string, unknown> = {};
     if (ki.klassifizierung) update.klassifizierung = ki.klassifizierung;
     if (ki.kategorie) update.kategorie = ki.kategorie;
-    if (!Object.keys(update).length) return;
+    if (!Object.keys(update).length) return false;
     const res = await fetch(`/api/admin/beleg-positionen/${p.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(update),
     });
-    if (res.ok) reload();
+    return res.ok;
+  }
+
+  async function applyKiVorschlag(p: Position) {
+    if (await patchKiVorschlag(p)) reload();
+  }
+
+  // Übernimmt alle noch offenen KI-Vorschläge auf einmal.
+  async function applyAllKiVorschlaege() {
+    const offen = positionen.filter(
+      (p) => !p.locked && p.ki_vorschlag && (p.ki_vorschlag.klassifizierung || p.ki_vorschlag.kategorie),
+    );
+    if (!offen.length) return;
+    setApplyingAll(true);
+    setError(null);
+    let fehler = 0;
+    for (const p of offen) {
+      if (!(await patchKiVorschlag(p))) fehler++;
+    }
+    if (fehler > 0) setError(`${fehler} von ${offen.length} Vorschlägen konnten nicht übernommen werden.`);
+    await reload();
+    setApplyingAll(false);
   }
 
   function startEditPos(p: Position) {
@@ -365,6 +403,9 @@ export default function BelegDetailPage() {
   const isLocked = beleg.status === 'festgeschrieben';
   const hasOpenDuplicate = !!beleg.verdacht_duplikat_beleg_id && !beleg.verdacht_duplikat_dismissed_at;
   const allClassified = positionen.length > 0 && positionen.every((p) => p.klassifizierung !== 'pending');
+  const offeneKiCount = positionen.filter(
+    (p) => !p.locked && p.ki_vorschlag && (p.ki_vorschlag.klassifizierung || p.ki_vorschlag.kategorie),
+  ).length;
 
   return (
     <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
@@ -681,9 +722,20 @@ export default function BelegDetailPage() {
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Positionen ({positionen.length})</h2>
             {!isLocked && (
-              <button onClick={applyKi} disabled={busy} className="text-cyan-400 hover:text-cyan-300 text-sm">
-                {busy ? 'KI läuft…' : '✨ KI-Klassifizierung'}
-              </button>
+              <div className="flex items-center gap-3">
+                {offeneKiCount > 0 && (
+                  <button
+                    onClick={applyAllKiVorschlaege}
+                    disabled={applyingAll || busy}
+                    className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded border border-cyan-500/30 text-sm disabled:opacity-50"
+                  >
+                    {applyingAll ? 'Übernehme…' : `💡 Alle übernehmen (${offeneKiCount})`}
+                  </button>
+                )}
+                <button onClick={applyKi} disabled={busy || applyingAll} className="text-cyan-400 hover:text-cyan-300 text-sm">
+                  {busy ? 'KI läuft…' : '✨ KI-Klassifizierung'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -839,11 +891,11 @@ export default function BelegDetailPage() {
                           )}
                         </div>
                         <div className="text-slate-300 mt-0.5">
-                          {ki.klassifizierung && <span>Klassifizierung: <span className="text-cyan-300">{ki.klassifizierung}</span></span>}
+                          {ki.klassifizierung && <span>Klassifizierung: <span className="text-cyan-300">{kiKlassLabel(ki.klassifizierung)}</span></span>}
                           {typeof ki.confidence === 'number' && <span> · Sicherheit {Math.round(ki.confidence * 100)}%</span>}
                         </div>
-                        {ki.art && <div className="text-slate-400">Art: {ki.art}</div>}
-                        {ki.kategorie && <div className="text-slate-400">Kategorie: {ki.kategorie}</div>}
+                        {ki.art && <div className="text-slate-400">Art: {artLabel(ki.art)}</div>}
+                        {ki.kategorie && <div className="text-slate-400">Kategorie: {kategorieLabel(ki.kategorie)}</div>}
                         {typeof ki.nutzungsdauer_monate === 'number' && (
                           <div className="text-slate-400">Nutzungsdauer: {ki.nutzungsdauer_monate} Monate</div>
                         )}
