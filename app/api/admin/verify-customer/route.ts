@@ -103,6 +103,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Bei Ablehnung: Ausweisbilder UNVERZÜGLICH löschen (AGB § 2 Abs. 3 /
+    // Vertrag § 2 Abs. 3 / Datenschutz Ziffer 6 — „bei Ablehnung unverzüglich").
+    // Nicht erst im täglichen dsgvo-cleanup-Cron warten. Storage-Datei UND
+    // DB-Verweis werden entfernt.
+    if (status === 'rejected') {
+      try {
+        const { data: idProfile } = await supabase
+          .from('profiles')
+          .select('id_front_url, id_back_url')
+          .eq('id', customerId)
+          .maybeSingle();
+        const paths = [idProfile?.id_front_url, idProfile?.id_back_url].filter(
+          Boolean,
+        ) as string[];
+        if (paths.length) {
+          await supabase.storage.from('id-documents').remove(paths);
+          await supabase
+            .from('profiles')
+            .update({ id_front_url: null, id_back_url: null })
+            .eq('id', customerId);
+          await logAudit({
+            action: 'customer.id_deleted',
+            entityType: 'customer',
+            entityId: customerId,
+            // Nur Metadaten protokollieren — niemals Dateiinhalt.
+            changes: { reason: 'verification_rejected', files: paths.length },
+            request: req,
+          });
+        }
+      } catch (delErr) {
+        // Non-blocking: schlägt die Löschung fehl, greift der dsgvo-cleanup-Cron
+        // (Branch „rejected") beim nächsten Lauf als Sicherheitsnetz.
+        console.error('verify-customer: Ausweis-Löschung bei Ablehnung fehlgeschlagen:', delErr);
+      }
+    }
+
     // Bei Ablehnung: E-Mail an Kunden mit Re-Upload-Link
     if (status === 'rejected') {
       try {

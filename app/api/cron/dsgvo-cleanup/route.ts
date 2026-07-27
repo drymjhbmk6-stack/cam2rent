@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -42,20 +43,34 @@ async function handle(req: NextRequest) {
     // d.h. Profile mit verification_status='pending' (Ausweis hochgeladen, nie
     // geprueft) und 'rejected' (abgelehnt) blieben fuer immer im Bucket.
     // Datenschutzerklaerung verspricht aber Sofort-Loeschung bei Ablehnung.
-    const wipeIdDocs = async (rows: Array<{ id: string }> | null | undefined) => {
+    const wipeIdDocs = async (
+      rows: Array<{ id: string }> | null | undefined,
+      reason: string,
+    ) => {
       let n = 0;
       for (const p of rows ?? []) {
         try {
           const { data: files } = await supabase.storage.from('id-documents').list(p.id);
+          let fileCount = 0;
           if (files && files.length > 0) {
             const paths = files.map((f) => `${p.id}/${f.name}`);
             await supabase.storage.from('id-documents').remove(paths);
+            fileCount = paths.length;
           }
           await supabase
             .from('profiles')
             .update({ id_front_url: null, id_back_url: null })
             .eq('id', p.id);
           n++;
+          // Jeden Löschvorgang protokollieren (Zeitpunkt, User-ID, Anzahl
+          // Dateien) — niemals Dateiinhalt. Best-effort.
+          await logAudit({
+            action: 'customer.id_deleted',
+            entityType: 'customer',
+            entityId: p.id,
+            changes: { reason, files: fileCount, source: 'dsgvo-cleanup' },
+            request: req,
+          }).catch(() => {});
         } catch (e) {
           console.error('[dsgvo-cleanup] id-doc cleanup error', p.id, e);
         }
@@ -73,7 +88,7 @@ async function handle(req: NextRequest) {
         .lt('verified_at', cutoff90)
         .or('id_front_url.not.is.null,id_back_url.not.is.null')
         .limit(200);
-      results.id_documents_verified_deleted = await wipeIdDocs(verifiedRows);
+      results.id_documents_verified_deleted = await wipeIdDocs(verifiedRows, 'verified_90d');
     } catch (e) {
       results.id_documents_verified_error = (e as Error).message;
     }
@@ -86,7 +101,7 @@ async function handle(req: NextRequest) {
         .eq('verification_status', 'rejected')
         .or('id_front_url.not.is.null,id_back_url.not.is.null')
         .limit(200);
-      results.id_documents_rejected_deleted = await wipeIdDocs(rejectedRows);
+      results.id_documents_rejected_deleted = await wipeIdDocs(rejectedRows, 'rejected');
     } catch (e) {
       results.id_documents_rejected_error = (e as Error).message;
     }
@@ -101,7 +116,7 @@ async function handle(req: NextRequest) {
         .lt('updated_at', cutoff30)
         .or('id_front_url.not.is.null,id_back_url.not.is.null')
         .limit(200);
-      results.id_documents_pending_deleted = await wipeIdDocs(pendingRows);
+      results.id_documents_pending_deleted = await wipeIdDocs(pendingRows, 'pending_30d');
     } catch (e) {
       results.id_documents_pending_error = (e as Error).message;
     }

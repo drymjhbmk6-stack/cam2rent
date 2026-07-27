@@ -10,6 +10,7 @@ import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro } from '@/lib/format-utils';
 import { PdfLogo } from '@/lib/pdf/common';
 import { CONTRACT_PARAGRAPHS_FALLBACK } from '@/lib/legal/generated-fallbacks';
+import { formatLegalVersions } from '@/lib/contracts/legal-snapshot-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,14 @@ export interface RentalContractData {
   haftungDescription: string;
   // Eigenbeteiligung (dynamisch pro Kategorie)
   eigenbeteiligung?: number;
+  // Einbezogene Rechtstext-Fassungen bei Vertragsschluss (AGB § 1 Abs. 5 /
+  // Vertrag § 1 Abs. 4 — Ausweis mit Versionsnummer). Eingefroren, siehe
+  // generate-contract.ts. Format: Versionsnummer als String bzw.
+  // "unbekannt (Altbestand)" für Altverträge ohne Snapshot.
+  termsVersion?: string;
+  liabilityTermsVersion?: string;
+  withdrawalVersion?: string;
+  privacyVersion?: string;
   // Stripe
   stripePaymentIntentId?: string;
   paymentDate?: string;
@@ -300,6 +309,11 @@ export function getParagraphen(eigenbeteiligung: number = 200): { title: string;
 
 // ─── buildContractText (für SHA-256 Hash) ───────────────────────────────────
 
+/** Formatiert die einbezogenen Rechtstext-Fassungen für Anzeige + Hash. */
+export function formatEinbezogeneFassungen(data: RentalContractData): string | null {
+  return formatLegalVersions(data);
+}
+
 export function buildContractText(data: RentalContractData): string {
   const lines: string[] = [
     'MIETVERTRAG',
@@ -324,6 +338,8 @@ export function buildContractText(data: RentalContractData): string {
     lines.push('');
   }
   lines.push(`Vertragsschluss: ${data.contractDate} um ${data.contractTime} Uhr`);
+  const fassungen = formatEinbezogeneFassungen(data);
+  if (fassungen) lines.push(`Einbezogene Fassungen: ${fassungen}`);
   return lines.join('\n');
 }
 
@@ -419,12 +435,15 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 16 }}>
           <TableRow label="Buchungsnummer" value={data.bookingNumber} />
           <TableRow label="Vertragsschluss" value={`${data.contractDate} um ${data.contractTime} Uhr`} alt />
-          <TableRow label="Mietbeginn" value={data.rentalFrom} />
-          <TableRow label="Mietende" value={data.rentalTo} alt />
-          <TableRow label="Mietdauer" value={`${data.rentalDays} Tage`} />
-          <TableRow label="Übergabeart" value={data.deliveryMode} alt />
-          <TableRow label="Rückgabeart" value={data.returnMode} />
-          {data.deliveryAddress && <TableRow label="Lieferadresse" value={data.deliveryAddress} alt />}
+          {formatEinbezogeneFassungen(data) && (
+            <TableRow label="Einbezogene Fassungen" value={formatEinbezogeneFassungen(data)!} />
+          )}
+          <TableRow label="Mietbeginn" value={data.rentalFrom} alt />
+          <TableRow label="Mietende" value={data.rentalTo} />
+          <TableRow label="Mietdauer" value={`${data.rentalDays} Tage`} alt />
+          <TableRow label="Übergabeart" value={data.deliveryMode} />
+          <TableRow label="Rückgabeart" value={data.returnMode} alt />
+          {data.deliveryAddress && <TableRow label="Lieferadresse" value={data.deliveryAddress} />}
         </View>
 
         {/* Mietgegenstand */}

@@ -2726,7 +2726,7 @@ export async function sendInactiveDeactivationWarning(params: {
   <tr><td style="background:#ffffff;padding:32px;">
     <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#0a0a0a;">Wir vermissen dich</h1>
     <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;">du warst über ein Jahr nicht mehr bei cam2rent eingeloggt. Wenn du dein Konto behalten möchtest, melde dich einfach innerhalb der nächsten <strong>${grace} Tage</strong> einmal an — damit bleibt alles beim Alten.</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">du warst schon sehr lange nicht mehr bei cam2rent eingeloggt. Wenn du dein Konto behalten möchtest, melde dich einfach innerhalb der nächsten <strong>${grace} Tage</strong> einmal an — damit bleibt alles beim Alten.</p>
     <p style="margin:0 0 24px;"><a href="https://cam2rent.de/login" style="display:inline-block;padding:14px 28px;background:#06b6d4;color:#0a0a0a;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">Konto behalten — jetzt einloggen</a></p>
     <p style="margin:0 0 8px;font-size:14px;color:#374151;">Meldest du dich nicht, setzen wir dein Konto auf <strong>inaktiv</strong>. Deine Daten bleiben erhalten — du kannst dein Konto jederzeit wieder aktivieren, indem du dich erneut einloggst.</p>
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Fragen? Einfach auf diese Mail antworten.</p>

@@ -193,7 +193,13 @@ export async function GET(
       // ignore
     }
   }
-  const eigenbeteiligung = getEigenbeteiligung(haftungConfig, productCategory);
+  // Eingefrorenen Höchstbetrag bevorzugen (§ 8 Abs. 2 b — maßgeblich ist der im
+  // Vertrag ausgewiesene Betrag), sonst live aus der Kategorie ableiten.
+  const liveEigenbeteiligung = getEigenbeteiligung(haftungConfig, productCategory);
+  const eigenbeteiligung =
+    booking.haftung === 'standard' && booking.liability_max_amount != null
+      ? Number(booking.liability_max_amount)
+      : liveEigenbeteiligung;
 
   // Datumsformatierung
   const fmtDate = (iso: string) => {
@@ -256,6 +262,10 @@ export async function GET(
       ? `Ersatzpflicht auf max. ${eigenbeteiligung} EUR je Schadensereignis begrenzt (Höchstbetrag der Ersatzpflicht).`
       : 'Volle Haftungsfreistellung – Höchstbetrag der Ersatzpflicht: 0 EUR.',
     eigenbeteiligung,
+    termsVersion: booking.terms_version ?? undefined,
+    liabilityTermsVersion: booking.liability_terms_version ?? undefined,
+    withdrawalVersion: booking.withdrawal_version ?? undefined,
+    privacyVersion: booking.privacy_version ?? undefined,
     stripePaymentIntentId: booking.payment_intent_id || '',
     signatureDataUrl,
     signatureMethod,

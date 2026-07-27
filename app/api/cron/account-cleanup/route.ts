@@ -49,9 +49,6 @@ export async function POST(req: NextRequest) { return handle(req); }
 
 type SB = ReturnType<typeof createServiceClient>;
 
-// Buchungen in diesen Status gelten als "offen" (blockieren die Deaktivierung).
-const TERMINAL_STATUSES = ['cancelled', 'completed', 'returned'];
-
 async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -120,19 +117,6 @@ async function userIdsWithAnyBooking(supabase: SB, ids: string[]): Promise<Set<s
   const set = new Set<string>();
   if (ids.length === 0) return set;
   const { data } = await supabase.from('bookings').select('user_id').in('user_id', ids);
-  for (const b of data ?? []) if (b.user_id) set.add(b.user_id);
-  return set;
-}
-
-/** userIds mit offener (nicht-terminaler) Buchung. */
-async function userIdsWithOpenBooking(supabase: SB, ids: string[]): Promise<Set<string>> {
-  const set = new Set<string>();
-  if (ids.length === 0) return set;
-  const { data } = await supabase
-    .from('bookings')
-    .select('user_id, status')
-    .in('user_id', ids)
-    .not('status', 'in', `(${TERMINAL_STATUSES.join(',')})`);
   for (const b of data ?? []) if (b.user_id) set.add(b.user_id);
   return set;
 }
@@ -283,11 +267,13 @@ async function stepInactiveWarn(
   const rows = data ?? [];
   if (rows.length === 0) return 0;
 
-  // Konten mit offener Buchung ausnehmen.
-  const openBooking = await userIdsWithOpenBooking(supabase, rows.map((r) => r.id));
+  // Konten mit JEDER Buchung ausnehmen (Legal: „ohne Anmeldung UND ohne
+  // Buchung"). Buchungshalter fallen unter die 10-Jahres-Aufbewahrung
+  // (§ 19 Abs. 4) und werden hier nicht angetastet.
+  const withBooking = await userIdsWithAnyBooking(supabase, rows.map((r) => r.id));
   let n = 0;
   for (const r of rows) {
-    if (openBooking.has(r.id)) continue;
+    if (withBooking.has(r.id)) continue;
     const info = authMap.get(r.id);
     const email = info?.email;
     if (!email || email.endsWith('@anonymisiert.local')) continue;
@@ -339,10 +325,10 @@ async function stepInactiveDeactivate(
   const rows = data ?? [];
   if (rows.length === 0) return 0;
 
-  const openBooking = await userIdsWithOpenBooking(supabase, rows.map((r) => r.id));
+  const withBooking = await userIdsWithAnyBooking(supabase, rows.map((r) => r.id));
   let n = 0;
   for (const r of rows) {
-    if (openBooking.has(r.id)) continue;
+    if (withBooking.has(r.id)) continue;
     // Defensiv: hat sich der Kunde doch neu eingeloggt (Marker wurde von
     // login-track nicht geleert?), NICHT deaktivieren.
     const info = authMap.get(r.id);

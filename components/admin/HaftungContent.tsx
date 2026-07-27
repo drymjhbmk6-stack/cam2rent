@@ -101,11 +101,11 @@ export default function HaftungContent() {
                   <Field label="Basispreis (1-7 Tage)" value={haftung.standard} onChange={(v) => setHaftung((h) => ({ ...h, standard: v }))} />
                   <Field label="Aufschlag pro Woche" value={haftung.standardIncrement} onChange={(v) => setHaftung((h) => ({ ...h, standardIncrement: v }))} />
                 </div>
-                <Field label="Fallback-Eigenbeteiligung" sub="Wird verwendet wenn keine Kategorie passt" value={haftung.standardEigenbeteiligung} onChange={(v) => setHaftung((h) => ({ ...h, standardEigenbeteiligung: v }))} />
+                <Field label="Fallback-Höchstbetrag der Ersatzpflicht" sub="Wird verwendet wenn keine Kategorie passt" value={haftung.standardEigenbeteiligung} onChange={(v) => setHaftung((h) => ({ ...h, standardEigenbeteiligung: v }))} />
 
-                {/* Eigenbeteiligung pro Kategorie */}
+                {/* Höchstbetrag der Ersatzpflicht pro Kategorie */}
                 <div className="mt-3 pt-3 border-t border-brand-border">
-                  <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Eigenbeteiligung pro Kategorie</p>
+                  <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Höchstbetrag der Ersatzpflicht pro Kategorie</p>
                   <div className="space-y-3">
                     {Object.entries(haftung.eigenbeteiligungByCategory ?? { 'action-cam': 200, '360-cam': 300 }).map(([cat, val]) => {
                       const numVal = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
@@ -168,7 +168,7 @@ export default function HaftungContent() {
               <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="font-heading font-semibold text-sm text-brand-black">Premium-Haftungsschutz</p>
-                  <span className="text-xs font-body text-brand-muted bg-white dark:bg-slate-900 border border-brand-border dark:border-slate-700 px-2 py-0.5 rounded-full">Keine Eigenbeteiligung</span>
+                  <span className="text-xs font-body text-brand-muted bg-white dark:bg-slate-900 border border-brand-border dark:border-slate-700 px-2 py-0.5 rounded-full">Höchstbetrag 0 €</span>
                 </div>
                 <Field label="Preis" value={haftung.premium} onChange={(v) => setHaftung((h) => ({ ...h, premium: v }))} />
               </div>

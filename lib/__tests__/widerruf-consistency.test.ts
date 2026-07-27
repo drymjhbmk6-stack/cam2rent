@@ -128,7 +128,10 @@ const EIGENBETEILIGUNG_ALLOWLIST: Record<string, string> = {
   'lib/contracts/generate-contract.ts': 'Helper `getEigenbeteiligung` + Kommentar',
   // Admin-interne Konfig-UI beschreibt das DB-Feld. Kein Kunden-/Rechtstext.
   // (Ob die Admin-Labels ebenfalls umbenannt werden sollen, ist offen — siehe Report.)
-  'components/admin/HaftungContent.tsx': 'Admin-Konfig-UI-Label für das DB-Feld `standardEigenbeteiligung`',
+  // Anzeige-Labels sind auf „Höchstbetrag der Ersatzpflicht" umbenannt; verbleibt
+  // NUR noch der DB-Feld-Identifier `standardEigenbeteiligung` (Feldname bewusst
+  // unangetastet) — daher kann der Eintrag nicht entfernt werden.
+  'components/admin/HaftungContent.tsx': 'DB-Feld-Identifier `standardEigenbeteiligung` (Anzeige-Labels bereinigt)',
 };
 
 /** Prüft: alle Grep-Treffer müssen in der Allowlist stehen (sonst Verstoß). */

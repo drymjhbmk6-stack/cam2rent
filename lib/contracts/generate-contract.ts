@@ -9,6 +9,7 @@ import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/repla
 import { getInventarWbwAverageByLegacyAccessoryIds, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 import { resolveBookingCameras, type BookingCamera } from '@/lib/booking-cameras';
 import { verifyAccessoryPrice } from '@/lib/booking/verify-accessory-price';
+import { computeLiabilityMaxAmount } from '@/lib/contracts/legal-snapshot-utils';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -30,6 +31,173 @@ async function loadHaftungConfig(): Promise<HaftungConfig> {
     // Fallback
   }
   return DEFAULT_HAFTUNG;
+}
+
+const LEGAL_SLUGS = ['agb', 'haftungsausschluss', 'widerruf', 'datenschutz'] as const;
+type LegalSlug = (typeof LEGAL_SLUGS)[number];
+
+/** Liest die aktuell veröffentlichten Versionsnummern der vier Rechtsdokumente. */
+async function readCurrentLegalVersions(
+  sb: ReturnType<typeof createServiceClient>,
+): Promise<Partial<Record<LegalSlug, string>>> {
+  const out: Partial<Record<LegalSlug, string>> = {};
+  try {
+    const { data: docs } = await sb
+      .from('legal_documents')
+      .select('slug, current_version_id')
+      .in('slug', LEGAL_SLUGS as unknown as string[]);
+    const idToSlug = new Map<string, LegalSlug>();
+    const ids: string[] = [];
+    (docs ?? []).forEach((d: { slug: string; current_version_id: string | null }) => {
+      if (d.current_version_id) {
+        ids.push(d.current_version_id);
+        idToSlug.set(d.current_version_id, d.slug as LegalSlug);
+      }
+    });
+    if (ids.length) {
+      const { data: vers } = await sb
+        .from('legal_document_versions')
+        .select('id, version_number')
+        .in('id', ids);
+      (vers ?? []).forEach((v: { id: string; version_number: number }) => {
+        const slug = idToSlug.get(v.id);
+        if (slug) out[slug] = String(v.version_number);
+      });
+    }
+  } catch {
+    // Legal-Tabellen nicht vorhanden → keine Versionen
+  }
+  return out;
+}
+
+/** Produkt-Kategorie aus admin_config.products (für kategorie-spezifischen Höchstbetrag). */
+async function resolveProductCategory(
+  sb: ReturnType<typeof createServiceClient>,
+  productId: string | null,
+): Promise<string | undefined> {
+  if (!productId) return undefined;
+  try {
+    const { data } = await sb.from('admin_config').select('value').eq('key', 'products').maybeSingle();
+    if (!data?.value) return undefined;
+    const products = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    const cat = products?.[productId]?.category;
+    return cat ? String(cat) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface ContractLegalSnapshot {
+  termsVersion?: string;
+  liabilityTermsVersion?: string;
+  withdrawalVersion?: string;
+  privacyVersion?: string;
+  /** kategorie-korrekter Höchstbetrag der Ersatzpflicht bei Basis (für die PDF-Anzeige) */
+  eigenbeteiligung: number;
+}
+
+/**
+ * Friert die bei Vertragsschluss geltenden Rechtstext-Versionen + den konkreten
+ * Höchstbetrag der Ersatzpflicht am Buchungsdatensatz ein — AGB § 1 Abs. 5 /
+ * Vertrag § 1 Abs. 4 (Versionsausweis) + § 8 Abs. 2 b) / Abs. 3 (fester
+ * Höchstbetrag, keine nachträgliche Änderung).
+ *
+ * Freeze-once: einmal gesetzt (terms_version NOT NULL), nie überschrieben.
+ * Damit behalten eine Verlegung mit Neuunterzeichnung (§ 12 Abs. 2 — es
+ * entsteht KEIN neuer Vertrag) und eine Verlängerung (§ 13) die ursprünglich
+ * einbezogene Fassung + den ursprünglichen Höchstbetrag.
+ */
+async function resolveContractLegalSnapshot(opts: {
+  bookingId?: string;
+  productId: string | null;
+  explicitCategory?: string;
+  explicitEigenbeteiligung?: number;
+  haftungOption: string;
+  forceTestMode: boolean;
+}): Promise<ContractLegalSnapshot> {
+  const sb = createServiceClient();
+
+  // Bereits eingefrorene Werte am Buchungsdatensatz?
+  type ExistingSnapshot = {
+    terms_version: string | null;
+    liability_terms_version: string | null;
+    withdrawal_version: string | null;
+    privacy_version: string | null;
+    liability_max_amount: number | null;
+  };
+  let existing: ExistingSnapshot | null = null;
+  if (opts.bookingId) {
+    try {
+      const { data } = await sb
+        .from('bookings')
+        .select(
+          'terms_version, liability_terms_version, withdrawal_version, privacy_version, liability_max_amount',
+        )
+        .eq('id', opts.bookingId)
+        .maybeSingle();
+      existing = (data as ExistingSnapshot | null) ?? null;
+    } catch {
+      // Spalten fehlen (Migration nicht ausgeführt) → wie „nicht eingefroren"
+    }
+  }
+
+  // Kategorie-korrekter Basis-Höchstbetrag ermitteln.
+  let eb: number;
+  if (opts.explicitEigenbeteiligung !== undefined) {
+    eb = opts.explicitEigenbeteiligung;
+  } else {
+    const category = opts.explicitCategory ?? (await resolveProductCategory(sb, opts.productId));
+    eb = getEigenbeteiligung(await loadHaftungConfig(), category);
+  }
+
+  // Höchstbetrag je Option: Premium 0, Basis = eb, Ohne = NULL (Wiederbeschaffungswert).
+  const liabilityMax = computeLiabilityMaxAmount(opts.haftungOption, eb);
+
+  // Schon eingefroren → gefrorene Fassung + gefrorenen Betrag verwenden.
+  if (existing?.terms_version) {
+    const frozenEb =
+      opts.haftungOption === 'Basis-Haftungsschutz' && existing.liability_max_amount != null
+        ? Number(existing.liability_max_amount)
+        : eb;
+    return {
+      termsVersion: existing.terms_version ?? undefined,
+      liabilityTermsVersion: existing.liability_terms_version ?? undefined,
+      withdrawalVersion: existing.withdrawal_version ?? undefined,
+      privacyVersion: existing.privacy_version ?? undefined,
+      eigenbeteiligung: frozenEb,
+    };
+  }
+
+  // Noch nicht eingefroren → aktuelle Versionen lesen und (bei echter Buchung,
+  // kein Muster) freeze-once schreiben. Nur wenn die AGB-Version wirklich
+  // gelesen werden konnte (sonst später erneut versuchen statt „unbekannt"
+  // zu zementieren).
+  const cur = await readCurrentLegalVersions(sb);
+  if (opts.bookingId && !opts.forceTestMode && cur.agb) {
+    try {
+      await sb
+        .from('bookings')
+        .update({
+          terms_version: cur.agb,
+          liability_terms_version: cur.haftungsausschluss ?? 'unbekannt',
+          withdrawal_version: cur.widerruf ?? 'unbekannt',
+          privacy_version: cur.datenschutz ?? 'unbekannt',
+          terms_snapshot_at: new Date().toISOString(),
+          liability_max_amount: liabilityMax,
+        })
+        .eq('id', opts.bookingId)
+        .is('terms_version', null);
+    } catch {
+      // Spalten fehlen → nicht persistierbar, PDF wird trotzdem korrekt gerendert
+    }
+  }
+  return {
+    termsVersion: cur.agb,
+    liabilityTermsVersion: cur.haftungsausschluss,
+    withdrawalVersion: cur.widerruf,
+    privacyVersion: cur.datenschutz,
+    eigenbeteiligung: eb,
+  };
 }
 
 export interface GenerateContractResult {
@@ -561,14 +729,19 @@ export async function generateContractPDF(opts: {
     : 'Premium-Haftungsschutz'
   );
 
-  // Eigenbeteiligung dynamisch: explizit > Kategorie+haftung_config > Konfig-Default > 200
-  let eb: number;
-  if (opts.eigenbeteiligung !== undefined) {
-    eb = opts.eigenbeteiligung;
-  } else {
-    const haftungConfig = await loadHaftungConfig();
-    eb = getEigenbeteiligung(haftungConfig, opts.productCategory);
-  }
+  // Rechtstext-Versionen + Höchstbetrag der Ersatzpflicht bei Vertragsschluss
+  // einfrieren (freeze-once) und den kategorie-korrekten Betrag ermitteln.
+  // (Behebt zugleich, dass die 10 Aufrufer bisher keine productCategory
+  //  übergaben und der Höchstbetrag dadurch immer auf 200 EUR zurückfiel.)
+  const legalSnapshot = await resolveContractLegalSnapshot({
+    bookingId: opts.bookingId,
+    productId: resolveProductId,
+    explicitCategory: opts.productCategory,
+    explicitEigenbeteiligung: opts.eigenbeteiligung,
+    haftungOption,
+    forceTestMode: opts.forceTestMode === true,
+  });
+  const eb = legalSnapshot.eigenbeteiligung;
   const haftungDescription = opts.haftungDescription || (
     haftungOption === 'Ohne Haftungsschutz'
       ? 'Kein Haftungsschutz gewählt. Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert).'
@@ -623,6 +796,10 @@ export async function generateContractPDF(opts: {
     ipAddress: opts.ipAddress,
     contractHash: '',
     eigenbeteiligung: eb,
+    termsVersion: legalSnapshot.termsVersion,
+    liabilityTermsVersion: legalSnapshot.liabilityTermsVersion,
+    withdrawalVersion: legalSnapshot.withdrawalVersion,
+    privacyVersion: legalSnapshot.privacyVersion,
     customParagraphs: customParagraphs ?? undefined,
     testMode,
     depositMode,
