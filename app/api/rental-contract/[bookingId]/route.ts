@@ -8,6 +8,7 @@ import { createElement, type ReactElement } from 'react';
 import { RentalContractPDF, type RentalContractData } from '@/lib/contracts/contract-template';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import { sha256Hex } from '@/lib/contracts/pdf-hash';
 
 /**
  * GET /api/rental-contract/[bookingId]
@@ -105,7 +106,9 @@ export async function GET(
       timeZone: 'Europe/Berlin',
     });
 
-    // PDF aus Storage laden wenn vorhanden
+    // Gespeichertes signiertes ORIGINAL ausliefern (Mietvertrag § 22 Abs. 2).
+    // Es wird NICHT neu gerendert, solange das Original geladen werden kann —
+    // sonst würde der Signatur-Beweiswert (Hash) ins Leere laufen.
     if (agreement.pdf_url) {
       const storagePath = agreement.pdf_url.replace('contracts/', '');
       const { data: signedUrlData } = await supabase.storage
@@ -117,6 +120,22 @@ export async function GET(
           if (!pdfRes.ok) throw new Error(`storage fetch HTTP ${pdfRes.status}`);
           const pdfBuffer = await pdfRes.arrayBuffer();
           const pdfBytes = new Uint8Array(pdfBuffer);
+
+          // Integritäts-Verifikation: die ausgelieferten Bytes müssen mit dem
+          // bei Vertragsschluss gespeicherten Hash übereinstimmen. Bei
+          // Abweichung wird das protokolliert (mögliche Manipulation), aber
+          // weiterhin das Original ausgeliefert — es wird NIEMALS stillschweigend
+          // eine Neu-Rendering-Reproduktion untergeschoben. (Bestandsverträge
+          // ohne gespeicherten Hash werden ohne Vergleich bedient.)
+          if (agreement.pdf_sha256) {
+            const actual = sha256Hex(pdfBytes);
+            if (actual !== agreement.pdf_sha256) {
+              console.error(
+                `[rental-contract] INTEGRITÄTSWARNUNG: gespeichertes Vertrags-PDF für ${bookingId} weicht vom Hash ab (erwartet ${agreement.pdf_sha256}, ist ${actual}). Original wird trotzdem ausgeliefert.`,
+              );
+            }
+          }
+
           const contractNumber = bookingId.replace('BK-', 'MV-');
           return new NextResponse(pdfBytes, {
             headers: {
@@ -128,8 +147,13 @@ export async function GET(
               'Pragma': 'no-cache',
             },
           });
-        } catch {
-          // Fallback: PDF neu generieren
+        } catch (fetchErr) {
+          // Original nicht ladbar → wir rendern eine als Reproduktion
+          // gekennzeichnete Fassung (siehe unten), aber NICHT stillschweigend.
+          console.error(
+            `[rental-contract] Signiertes Original für ${bookingId} nicht ladbar — liefere gekennzeichnete Reproduktion:`,
+            fetchErr,
+          );
         }
       }
     }
@@ -279,7 +303,19 @@ export async function GET(
     deposit: booking.deposit || 0,
     taxMode,
     taxRate: parseFloat(taxMap['tax_rate'] || '19'),
+    // War der Vertrag unterschrieben, das gespeicherte Original aber nicht
+    // auslieferbar (kein rental_agreements-PDF / Altvertrag / Storage-Fehler),
+    // ist dieses neu gerenderte PDF eine Reproduktion — deutlich kennzeichnen.
+    reproductionNote: booking.contract_signed
+      ? 'Dieses Dokument wurde neu erzeugt, weil die gespeicherte Originaldatei nicht ausgeliefert werden konnte. Die rechtsverbindliche, unterzeichnete Originalfassung liegt bei cam2rent vor und ist maßgeblich. Einzelne Werte können von der Originalfassung abweichen.'
+      : undefined,
   };
+
+  if (booking.contract_signed) {
+    console.error(
+      `[rental-contract] Reproduktion (kein signiertes Original ausgeliefert) für ${bookingId}.`,
+    );
+  }
 
   // PDF generieren
   const pdfBuffer = await renderToBuffer(

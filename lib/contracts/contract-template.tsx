@@ -94,6 +94,10 @@ export interface RentalContractData {
   // Steuert Hinweistexte im Vertrag (kein "Kaution wird nicht erhoben"-Satz
   // im Kaution-Modus, dafuer Pre-Auth-Hinweis).
   depositMode?: 'kaution' | 'haftung';
+  // Kennzeichnet ein NEU gerendertes PDF als Reproduktion/Nachdruck (nicht die
+  // signierte Originalfassung). Gesetzt, wenn das gespeicherte Original nicht
+  // ausgeliefert werden konnte. Rendert einen deutlichen Hinweisbanner.
+  reproductionNote?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -396,6 +400,16 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
             <Text style={[s.headerValue, { color: CYAN }]}>{data.contractDate}</Text>
           </View>
         </View>
+
+        {/* Reproduktions-Hinweis (kein signiertes Original) */}
+        {data.reproductionNote && (
+          <View style={{ borderWidth: 1, borderColor: '#f59e0b', backgroundColor: '#fffbeb', borderRadius: 4, padding: 8, marginBottom: 12 }}>
+            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#9a3412', marginBottom: 2 }}>
+              Reproduktion / Nachdruck — nicht die signierte Originalfassung
+            </Text>
+            <Text style={{ fontSize: 8, color: '#92400e', lineHeight: 1.4 }}>{data.reproductionNote}</Text>
+          </View>
+        )}
 
         {/* Vertragsparteien */}
         <Text style={s.sectionHeading}>Vertragsparteien</Text>

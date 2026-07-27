@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
+import { sha256Hex } from '@/lib/contracts/pdf-hash';
 
 /**
  * Speichert das Vertrags-PDF in Supabase Storage und erstellt einen
@@ -51,18 +52,30 @@ export async function storeContract(
   // Für die DB speichern wir den Storage-Pfad (nicht die signierte URL, da die abläuft)
   const pdfUrl = `contracts/${storagePath}`;
 
+  // Integritäts-Hash der konkreten PDF-Datei-Bytes (unabhängig vom
+  // logischen contract_hash) — ermöglicht die Byte-Verifikation beim Ausliefern.
+  const pdfSha256 = sha256Hex(pdfBuffer);
+
   // 3. Eintrag in rental_agreements (unveränderlich)
-  const { error: dbError } = await supabase
-    .from('rental_agreements')
-    .insert({
-      booking_id: bookingId,
-      pdf_url: pdfUrl,
-      contract_hash: metadata.contractHash,
-      signed_by_name: metadata.customerName,
-      signed_at: metadata.signedAt,
-      ip_address: metadata.ipAddress,
-      signature_method: metadata.signatureMethod,
-    });
+  const insertRow = {
+    booking_id: bookingId,
+    pdf_url: pdfUrl,
+    contract_hash: metadata.contractHash,
+    pdf_sha256: pdfSha256,
+    signed_by_name: metadata.customerName,
+    signed_at: metadata.signedAt,
+    ip_address: metadata.ipAddress,
+    signature_method: metadata.signatureMethod,
+  };
+  let { error: dbError } = await supabase.from('rental_agreements').insert(insertRow);
+
+  // Defensiv: fehlt die pdf_sha256-Spalte (Migration noch nicht ausgeführt),
+  // ohne den Hash erneut versuchen.
+  if (dbError && /pdf_sha256|column|schema cache|PGRST/i.test(dbError.message || '')) {
+    const { pdf_sha256: _omit, ...withoutHash } = insertRow;
+    void _omit;
+    ({ error: dbError } = await supabase.from('rental_agreements').insert(withoutHash));
+  }
 
   if (dbError) {
     // Idempotenz: Wenn bereits vorhanden, kein Fehler
