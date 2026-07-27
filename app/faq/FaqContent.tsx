@@ -122,7 +122,7 @@ const faqSections: FaqSection[] = [
             <span className="block">Die Buchung ist in 5 einfache Schritte aufgeteilt:</span>
             <span className="block"><strong>1. Versand</strong> — Wähle, ob du die Ausrüstung per DHL/DPD geliefert bekommen oder selbst abholen möchtest.</span>
             <span className="block"><strong>2. Zubehör</strong> — Optional kannst du passendes Zubehör wie Speicherkarten, Akkus oder Stative dazubuchen.</span>
-            <span className="block"><strong>3. Haftungsschutz</strong> — Entscheide dich für eine Haftungsoption: Standard oder Premium.</span>
+            <span className="block"><strong>3. Haftungsschutz</strong> — Entscheide dich für eine Haftungsoption: Basis oder Premium.</span>
             <span className="block"><strong>4. Zusammenfassung</strong> — Prüfe alle Details deiner Buchung: Zeitraum, Zubehör, Haftungsschutz und Gesamtpreis.</span>
             <span className="block"><strong>5. Zahlung</strong> — Bezahle sicher über Stripe mit Kreditkarte, Klarna, Apple Pay, Google Pay oder SEPA-Lastschrift.</span>
           </span>
@@ -287,7 +287,7 @@ const faqSections: FaqSection[] = [
           <>
             Nein. cam2rent verlangt keine klassische Kaution und reserviert keinen Betrag
             auf deiner Kreditkarte. Stattdessen wählst du bei der Buchung einen
-            Haftungsschutz (Standard oder Premium), der deine Haftung im Schadensfall
+            Haftungsschutz (Basis oder Premium), der deine Haftung im Schadensfall
             begrenzt. Mehr dazu findest du unter{' '}
             <a href="#schäden-und-haftung" className="text-accent-blue hover:underline font-medium">Schäden &amp; Haftung</a>.
           </>
