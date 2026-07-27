@@ -16,7 +16,7 @@ interface FaqItem {
 interface FaqSection {
   title: string;
   icon: React.ReactNode;
-  color: 'blue' | 'teal' | 'amber' | 'rose' | 'violet' | 'emerald';
+  color: 'blue' | 'teal' | 'amber' | 'rose' | 'violet' | 'emerald' | 'pink';
   items: FaqItem[];
 }
 
@@ -62,6 +62,13 @@ const colorConfig = {
     border: 'border-emerald-200',
     ring: 'ring-emerald-500/20',
     dot: 'bg-emerald-500',
+  },
+  pink: {
+    bg: 'bg-pink-50 dark:bg-pink-500/15',
+    text: 'text-pink-500',
+    border: 'border-pink-200',
+    ring: 'ring-pink-500/20',
+    dot: 'bg-pink-500',
   },
 };
 
@@ -157,6 +164,25 @@ const faqSections: FaqSection[] = [
         answer:
           'Für Kameras, die noch nicht im Bestand sind, erscheint statt „Jetzt mieten" ein „Benachrichtige mich"-Feld. Trag dort einfach deine E-Mail-Adresse ein — wir melden uns bei dir, sobald die Kamera buchbar ist.',
       },
+      {
+        question: 'Kann ich mehrere Kameras gleichzeitig mieten?',
+        answer:
+          'Ja. Du kannst mehrere Kameras — auch verschiedene Modelle — in den Warenkorb legen und in einer Buchung mieten. Die Verfügbarkeit wird für jedes Modell einzeln im Kalender geprüft.',
+      },
+      {
+        question: 'Kann ich meine Buchung auf einen anderen Termin verlegen?',
+        answer: (
+          <>
+            Ja. Eine bestätigte Buchung kannst du über dein{' '}
+            <Link href="/konto/buchungen" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>{' '}
+            einmalig kostenlos auf einen anderen Termin verlegen (Button „Verlegen“) — solange die
+            Miete noch nicht unmittelbar bevorsteht (bis spätestens einen Tag vor dem Versand- bzw.
+            Abholtag). Mietdauer und Preis bleiben gleich, eine erneute Zahlung fällt nicht an. Du
+            unterschreibst dabei kurz den Mietvertrag für den neuen Zeitraum neu. Wichtig: Eine
+            Verlegung eröffnet deine kostenlose Stornofrist nicht neu.
+          </>
+        ),
+      },
     ],
   },
   {
@@ -177,6 +203,33 @@ const faqSections: FaqSection[] = [
         question: 'Kann ich die Ausrüstung auch abholen?',
         answer:
           `Ja! Selbstabholung ist in ${BUSINESS.pickupLocation} kostenlos möglich. Die Abholung erfolgt in der Regel einen Tag vor Mietbeginn. Den genauen Termin vereinbarst du bei der Buchung.`,
+      },
+      {
+        question: 'Liefert ihr auch ins Ausland?',
+        answer:
+          'Aktuell versenden wir ausschließlich innerhalb Deutschlands. Bei der Registrierung und im Checkout ist daher nur eine deutsche Lieferadresse möglich. Selbstabholung vor Ort ist natürlich ebenfalls möglich.',
+      },
+      {
+        question: 'Kann ich mein Paket verfolgen?',
+        answer: (
+          <>
+            Ja. Sobald dein Paket rausgeht, erhältst du eine Versandbestätigung per E-Mail mit einem
+            Tracking-Link (DHL oder DPD). Die Sendungsnummer findest du außerdem jederzeit in deinem{' '}
+            <Link href="/konto/buchungen" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>.
+          </>
+        ),
+      },
+      {
+        question: 'Kann ich eine abweichende Liefer- oder Rechnungsadresse angeben?',
+        answer: (
+          <>
+            Ja. In deinem{' '}
+            <Link href="/konto/uebersicht" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>{' '}
+            kannst du eine abweichende Liefer- und/oder Rechnungsadresse als Standard hinterlegen.
+            Alternativ gibst du im Warenkorb-Checkout pro Buchung eine abweichende Adresse an — zum
+            Beispiel, wenn die Rechnung an deine Firma gehen soll.
+          </>
+        ),
       },
     ],
   },
@@ -206,6 +259,16 @@ const faqSections: FaqSection[] = [
         question: 'Was passiert bei verspäteter Rückgabe?',
         answer:
           'Für jeden zusätzlichen Tag wird der reguläre Tagespreis berechnet. Bei erheblicher Verspätung (mehr als 3 Tage ohne Rückmeldung) behalten wir uns die Berechnung des entstandenen Ausfalls sowie weitere Schritte vor. Melde dich einfach kurz bei uns, falls es zeitlich eng wird.',
+      },
+      {
+        question: 'Ist eine Speicherkarte dabei und was passiert mit meinen Aufnahmen?',
+        answer:
+          'Bei vielen Sets ist eine Speicherkarte enthalten, ansonsten kannst du sie im Buchungsschritt „Zubehör" dazubuchen. Bitte sichere deine Fotos und Videos vor der Rückgabe und setze die Speicherkarte anschließend zurück — so sind deine Aufnahmen gelöscht, bevor die Karte weiterzieht.',
+      },
+      {
+        question: 'Woher weiß ich, dass meine Rückgabe angekommen ist?',
+        answer:
+          'Sobald deine Rücksendung bei uns eingegangen und geprüft ist, erhältst du eine Abschluss-Bestätigung per E-Mail. Ist alles in Ordnung, ist deine Miete damit abgeschlossen.',
       },
     ],
   },
@@ -239,6 +302,11 @@ const faqSections: FaqSection[] = [
         question: 'Kann ich einen Gutschein oder Rabatt einlösen?',
         answer:
           'Ja. Einen Gutscheincode gibst du im Checkout ein — der Rabatt wird sofort abgezogen. Zusätzlich greifen automatische Rabatte: Längere Mietzeiträume werden günstiger, und je nach Aktion können auch Mengen-, Frühbucher- oder Treuerabatte automatisch berücksichtigt werden.',
+      },
+      {
+        question: 'Wann muss ich bezahlen?',
+        answer:
+          'Die Bezahlung erfolgt direkt im Checkout — mit der Zahlung ist deine Buchung verbindlich. Auch als Neukunde zahlst du sofort; deinen Ausweis lädst du danach hoch, wir prüfen ihn noch vor dem Versand.',
       },
     ],
   },
@@ -316,6 +384,34 @@ const faqSections: FaqSection[] = [
             </span>
           </>
         ),
+      },
+    ],
+  },
+  {
+    title: 'Extras & Vorteile',
+    color: 'pink',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-6 h-6" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+      </svg>
+    ),
+    items: [
+      {
+        question: 'Bekomme ich einen Rabatt, wenn ich meine Fotos oder Videos teile?',
+        answer: (
+          <>
+            Ja! Nach deiner Miete kannst du in deinem{' '}
+            <Link href="/konto/buchungen" className="text-accent-blue hover:underline font-medium">Kundenkonto</Link>{' '}
+            Fotos oder Videos deiner Aufnahmen hochladen und uns die Nutzungsrechte erteilen. Nach
+            unserer Freigabe erhältst du einen Rabattgutschein. Veröffentlichen wir dein Material auf
+            unseren Kanälen, gibt es on top einen weiteren Bonus-Gutschein.
+          </>
+        ),
+      },
+      {
+        question: 'Bekomme ich einen Gutschein fürs Bewerten?',
+        answer:
+          'Ja. Nach abgeschlossener Miete laden wir dich per E-Mail ein, uns bei Google zu bewerten — als Dankeschön bekommst du einen 10 %-Rabattgutschein für deine nächste Miete.',
       },
     ],
   },
