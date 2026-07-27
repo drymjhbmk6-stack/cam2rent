@@ -122,6 +122,7 @@ const dummyBooking: BookingEmailData = {
   taxRate: 19,
   ustId: '',
   earlyServiceConsentAt: new Date().toISOString(),
+  earlyServiceConsentIp: '203.0.113.42',
 };
 
 const dummyCancellation: CancellationEmailData = {

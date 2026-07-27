@@ -1396,6 +1396,7 @@ export async function POST(req: NextRequest) {
               taxRate: parseFloat(txMap['tax_rate'] || '19'),
               ustId: txMap['ust_id'] || '',
               earlyServiceConsentAt: r_earlyServiceConsentAt,
+              earlyServiceConsentIp: r_earlyServiceConsentIp,
               verificationRequired: r_verificationRequired,
             };
 

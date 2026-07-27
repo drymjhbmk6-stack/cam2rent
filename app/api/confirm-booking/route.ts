@@ -477,6 +477,15 @@ export async function POST(req: NextRequest) {
       ...(contractSignature?.signatureDataUrl ? { contract_signature_url: contractSignature.signatureDataUrl } : {}),
       // Nur setzen wenn true — so bleibt Insert ohne Migration ruckwaerts-kompatibel
       ...(verificationRequired ? { verification_required: true } : {}),
+      // § 356 Abs. 4 BGB — Zustimmung zur vorzeitigen Leistungserbringung.
+      // Zeitstempel vom Client, IP serverseitig in create-payment-intent gesetzt.
+      // Spalten existieren (confirm-cart schreibt sie ebenfalls).
+      ...(meta.early_service_consent_at
+        ? {
+            early_service_consent_at: meta.early_service_consent_at,
+            early_service_consent_ip: meta.early_service_consent_ip || null,
+          }
+        : {}),
       // Angebots-Verknuepfung (nur bei Angebots-Buchungen).
       ...(offerIdToStore ? { offer_id: offerIdToStore } : {}),
     };
@@ -738,6 +747,14 @@ export async function POST(req: NextRequest) {
           taxRate: parseFloat(txMap['tax_rate'] || '19'),
           ustId: txMap['ust_id'] || '',
           verificationRequired,
+          // § 356 Abs. 4 BGB — Zustimmung (Datum/Uhrzeit + IP) in der
+          // Buchungsbestätigung dokumentieren (AGB § 16 Abs. 3).
+          ...(meta.early_service_consent_at
+            ? {
+                earlyServiceConsentAt: meta.early_service_consent_at,
+                earlyServiceConsentIp: meta.early_service_consent_ip || null,
+              }
+            : {}),
           // Produkt-Rabatt aus Metadata in die Kunden-Mail durchreichen, damit
           // die Kostenuebersicht den Aktionsrabatt (z.B. "Release50 -7,50 €")
           // zeigt — analog Buchungsdetail + Rechnung.

@@ -9,6 +9,7 @@ import {
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro } from '@/lib/format-utils';
 import { PdfLogo } from '@/lib/pdf/common';
+import { CONTRACT_PARAGRAPHS_FALLBACK } from '@/lib/legal/generated-fallbacks';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -268,6 +269,12 @@ function TableHeader({ children }: { children: string }) {
 // ─── Vertragsparagraphen ──────────────────────────────────────────────────────
 
 export function getParagraphen(eigenbeteiligung: number = 200): { title: string; text: string }[] {
+  // Bevorzugt die aus der DB generierte, autoritative Fassung (§§ 1–24), sobald
+  // `npm run sync:legal` gelaufen ist. Solange der Stub leer ist, greift die
+  // hand-gepflegte Liste unten (alte Nummerierung). Die generierte Fassung trägt
+  // die Eigenbeteiligung fest im Text (wie die DB-`customParagraphs`), daher wird
+  // der Parameter dort — genau wie im DB-Pfad — nicht interpoliert.
+  if (CONTRACT_PARAGRAPHS_FALLBACK.length > 0) return CONTRACT_PARAGRAPHS_FALLBACK;
   return [
   { title: '\u00a7 1 Vertragsgegenstand und Eigentum', text: '(1) Der Vermieter \u00fcberl\u00e4sst dem Mieter die in der Tabelle Mietgegenstand aufgef\u00fchrten Ger\u00e4te nebst Zubeh\u00f6r (nachfolgend Mietsache) f\u00fcr die vereinbarte Mietdauer zum vertragsgem\u00e4\u00dfen Gebrauch gegen Zahlung des vereinbarten Mietentgelts.\n(2) Das Eigentum an der Mietsache verbleibt w\u00e4hrend der gesamten Mietdauer ausschlie\u00dflich beim Vermieter. Der Mieter erwirbt kein Eigentum, keine Anwartschaft und kein Recht, die Mietsache zu ver\u00e4u\u00dfern, zu verpf\u00e4nden, sicherungshalber zu \u00fcbereignen oder Dritten Rechte an ihr einzur\u00e4umen.\n(3) Wird auf die Mietsache durch Dritte zugegriffen (insbesondere Pf\u00e4ndung, Beschlagnahme), hat der Mieter den Vermieter unverz\u00fcglich schriftlich zu benachrichtigen und den Dritten auf das Eigentum des Vermieters hinzuweisen.' },
   { title: '\u00a7 2 Voraussetzungen des Vertragsschlusses, Konto-Verifizierung', text: '(1) Der Mieter erkl\u00e4rt, mindestens 18 Jahre alt und voll gesch\u00e4ftsf\u00e4hig zu sein. Der Vermieter ist berechtigt, bei begr\u00fcndeten Zweifeln einen Altersnachweis zu verlangen.\n(2) Vor der ersten Buchung muss der Mieter sein Kundenkonto verifizieren: a) Best\u00e4tigung der E-Mail-Adresse durch Verifizierungslink, b) Upload eines amtlichen Lichtbilddokuments.\n(3) Das Ausweisdokument dient ausschlie\u00dflich der Identit\u00e4tspr\u00fcfung (Art. 6 Abs. 1 lit. b und f DSGVO). Es wird verschl\u00fcsselt gespeichert und sp\u00e4testens 90 Tage nach Ende der letzten Gesch\u00e4ftsbeziehung gel\u00f6scht.\n(4) Ohne abgeschlossene Verifizierung ist keine Buchung m\u00f6glich.\n(5) Der Mieter versichert, dass die angegebenen Daten vollst\u00e4ndig und wahrheitsgem\u00e4\u00df sind.' },

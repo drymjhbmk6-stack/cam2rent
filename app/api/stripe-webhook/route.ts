@@ -504,6 +504,15 @@ async function handleSingleBooking(
     ...(singleEarlyBird > 0 && !singleSpecialActive ? { early_bird_discount: singleEarlyBird } : {}),
     // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
     ...(singleSpecialActive ? { special_discount: singleSpecial } : {}),
+    // § 356 Abs. 4 BGB — Zustimmung (Zeitstempel + IP aus create-payment-intent).
+    // Falls der Webhook die Buchung vor confirm-booking anlegt (Race), gehen
+    // die Werte sonst verloren.
+    ...(meta.early_service_consent_at
+      ? {
+          early_service_consent_at: meta.early_service_consent_at,
+          early_service_consent_ip: meta.early_service_consent_ip || null,
+        }
+      : {}),
   };
 
   let { error } = await supabase.from('bookings').insert(singleInsert);
@@ -621,6 +630,13 @@ async function handleSingleBooking(
       taxMode: tax.taxMode as 'kleinunternehmer' | 'regelbesteuerung',
       taxRate: tax.taxRate,
       ustId: tax.ustId,
+      // § 356 Abs. 4 BGB — Zustimmung in der Buchungsbestätigung dokumentieren.
+      ...(meta.early_service_consent_at
+        ? {
+            earlyServiceConsentAt: meta.early_service_consent_at,
+            earlyServiceConsentIp: meta.early_service_consent_ip || null,
+          }
+        : {}),
     };
     // Sweep 8: Promise.allSettled statt Promise.all, damit ein Fehler in der
     // Customer-Mail nicht die Admin-Notification mit-killt (oder umgekehrt).
@@ -682,6 +698,11 @@ async function handleCartBooking(
   const durationDiscount = (ctx.durationDiscount as number) ?? 0;
   const earlyBirdDiscount = (ctx.earlyBirdDiscount as number) ?? 0;
   const loyaltyDiscount = (ctx.loyaltyDiscount as number) ?? 0;
+  // § 356 Abs. 4 BGB — Zustimmung aus dem Checkout-Kontext (von checkout-intent
+  // gespeichert). Falls der Webhook die Cart-Buchung vor confirm-cart anlegt
+  // (Race), gehen Zeitstempel + IP sonst verloren.
+  const earlyServiceConsentAt = (ctx.earlyServiceConsentAt as string) ?? null;
+  const earlyServiceConsentIp = (ctx.earlyServiceConsentIp as string) ?? null;
 
   // Liefer- + Rechnungsadresse: Per-Order-Eingabe aus dem Checkout-Kontext (ctx)
   // hat Vorrang, sonst die abweichenden Profil-Standards bzw. Hauptadresse.
@@ -791,6 +812,10 @@ async function handleCartBooking(
     ...(earlyBirdDiscount > 0 && !cartSpecialActive ? { early_bird_discount: earlyBirdDiscount } : {}),
     // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
     ...(cartSpecialActive ? { special_discount: cartSpecial } : {}),
+    // § 356 Abs. 4 BGB — Zustimmung (Zeitstempel + IP aus dem Checkout-Kontext).
+    ...(earlyServiceConsentAt
+      ? { early_service_consent_at: earlyServiceConsentAt, early_service_consent_ip: earlyServiceConsentIp }
+      : {}),
   };
 
   let { error } = await supabase.from('bookings').insert(cartInsert);

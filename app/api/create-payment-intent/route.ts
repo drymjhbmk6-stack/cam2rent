@@ -233,6 +233,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // § 356 Abs. 4 BGB — Client-IP zur Zustimmung serverseitig ergänzen
+    // (Beweiskraft; der Client liefert nur den Zeitstempel). confirm-booking +
+    // Stripe-Webhook lesen beide Werte aus der Intent-Metadata.
+    if (metadata.early_service_consent_at) {
+      metadata.early_service_consent_ip = ip === '127.0.0.1' ? 'unknown' : ip;
+    }
+
     const stripe = tester ? getTesterStripe() : await getStripe();
     if (tester) metadata.tester = '1';
 

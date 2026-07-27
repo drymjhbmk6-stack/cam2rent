@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { BUSINESS } from '@/lib/business-config';
 import LegalPage from '@/components/LegalPage';
+import LegalPageContent from '@/components/LegalPageContent';
+import { LEGAL_FALLBACKS } from '@/lib/legal/generated-fallbacks';
 
 export const metadata: Metadata = {
   title: 'AGB',
@@ -15,6 +17,26 @@ export default function AGBPage() {
 
 /** Hardcoded Fallback — wird angezeigt wenn DB nicht verfügbar */
 function AGBFallback() {
+  // Bevorzugt die aus der DB generierte, autoritative Fassung (§§ 1–25), sobald
+  // `npm run sync:legal` gelaufen ist (Stub leer → hand-gepflegtes JSX unten).
+  const generated = LEGAL_FALLBACKS['agb'];
+  if (generated?.markdown) {
+    const md = generated.markdown
+      .replace(/^#\s+.+\n*/m, '')
+      .replace(/^\*Stand:.+\*\n*/m, '')
+      .replace(/^\*cam2rent\s+–\s+Stand:.+\*\n*/m, '')
+      .trim();
+    return (
+      <div className="min-h-screen bg-white dark:bg-brand-black">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white mb-2">
+            {generated.title || 'Allgemeine Geschäftsbedingungen'}
+          </h1>
+          <LegalPageContent>{md}</LegalPageContent>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

@@ -20,6 +20,7 @@ import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEi
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
+import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
 import { getStripePromise } from '@/lib/stripe-client';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
 
@@ -626,6 +627,17 @@ export default function BuchenPage() {
   // Mietvertrag-Signatur
   const [contractSignature, setContractSignature] = useState<SignatureResult | null>(null);
 
+  // § 356 Abs. 4 BGB — Zustimmung zur vorzeitigen Leistungserbringung, nötig wenn
+  // die Miete vor Ablauf der 14-tägigen Widerrufsfrist beginnt. Betrifft den
+  // Angebots-/Direkt-Zahlungspfad (offerMode → handleProceedToPayment); der
+  // normale Flow läuft über Warenkorb → Checkout, der die Zustimmung selbst erhebt.
+  const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
+  const requiresEarlyServiceConsent = useMemo(() => {
+    if (!range?.from) return false;
+    const diffDays = (range.from.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    return diffDays < 14;
+  }, [range?.from]);
+
   // Auth-Gate vor Mietvertrag — Kunde muss eingeloggt oder registriert sein
   const [showAuthGate, setShowAuthGate] = useState(false);
   // Ref (statt State!) damit das Flag synchron sichtbar ist, BEVOR React den
@@ -1065,6 +1077,12 @@ export default function BuchenPage() {
             // Set info
             set_id: selectedSet?.id ?? '',
             set_name: selectedSet?.name ?? '',
+            // § 356 Abs. 4 BGB — Zustimmung zur vorzeitigen Leistungserbringung.
+            // Zeitstempel hier, IP fügt create-payment-intent serverseitig hinzu.
+            // confirm-booking + Webhook schreiben beides in die Buchung.
+            ...(requiresEarlyServiceConsent && acceptsEarlyService
+              ? { early_service_consent_at: new Date().toISOString() }
+              : {}),
           },
         }),
       });
@@ -2746,6 +2764,13 @@ export default function BuchenPage() {
                         </p>
                       </div>
                     </div>
+                    {/* § 356 Abs. 4 BGB — nur im Angebots-/Direkt-Zahlungspfad; der
+                        Warenkorb-Weg (else-Zweig) erhebt die Zustimmung im Checkout. */}
+                    {offerMode && requiresEarlyServiceConsent && (
+                      <div className="mb-4 p-3 rounded-xl border border-brand-border dark:border-gray-700 bg-brand-bg dark:bg-gray-800/50">
+                        <EarlyServiceConsentCheckbox checked={acceptsEarlyService} onChange={setAcceptsEarlyService} />
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <button
                         type="button"
@@ -2757,7 +2782,7 @@ export default function BuchenPage() {
                       {offerMode ? (
                       <button
                         type="button"
-                        disabled={isCreatingIntent}
+                        disabled={isCreatingIntent || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                         onClick={() => { void handleProceedToPayment(); }}
                         className="flex items-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >

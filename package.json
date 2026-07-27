@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "sync:legal": "tsx scripts/sync-legal-fallbacks.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",

@@ -26,6 +26,7 @@ import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 import { useAllowedCountries } from '@/lib/use-allowed-countries';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
+import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
 
 // stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
 // Publishable-Key) — siehe getStripePromise mit userId-Parameter weiter unten.
@@ -1416,13 +1417,7 @@ export default function CheckoutPage() {
                       </span>
                     </label>
                     {requiresEarlyServiceConsent && (
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input type="checkbox" checked={acceptsEarlyService} onChange={(e) => setAcceptsEarlyService(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
-                        <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
-                          Ich verlange ausdrücklich, dass cam2rent vor Ablauf der 14-tägigen Widerrufsfrist mit der Ausführung der Dienstleistung (Versand/Bereitstellung der Mietgeräte) beginnt. Mir ist bekannt, dass mein Widerrufsrecht mit vollständiger Vertragserfüllung durch cam2rent erlischt (§ 356 Abs. 4 BGB).
-                        </span>
-                      </label>
+                      <EarlyServiceConsentCheckbox checked={acceptsEarlyService} onChange={setAcceptsEarlyService} />
                     )}
                   </div>
                 )}
