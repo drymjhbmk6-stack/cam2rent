@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
+import PushPreferencesSection from '@/components/admin/PushPreferencesSection';
 import AnalyticsOptOutSection from '@/components/admin/AnalyticsOptOutSection';
 import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
 import FirmwareCheckSection from '@/components/admin/FirmwareCheckSection';
@@ -608,6 +609,9 @@ export default function EinstellungenAllgemein() {
 
       {/* Sektion 8: Push-Benachrichtigungen */}
       <PushNotificationsSection />
+
+      {/* Sektion 8b: Push-Typen pro Gerät/Person wählen */}
+      <PushPreferencesSection />
 
       {/* Sektion 9: Wöchentlicher Bericht */}
       <WeeklyReportSection />

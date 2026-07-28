@@ -15,6 +15,14 @@ import type { PermissionKey } from '@/lib/admin-users';
  * 3. SQL-Migration `supabase-push-subscriptions.sql` ausführen.
  */
 
+/** Liest die stummgeschalteten Notification-Typen aus einem push_prefs-JSON. */
+function extractMutedTypes(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const muted = (value as { muted?: unknown }).muted;
+  if (!Array.isArray(muted)) return [];
+  return muted.filter((x): x is string => typeof x === 'string');
+}
+
 let vapidConfigured = false;
 
 function configureVapid(): boolean {
@@ -84,9 +92,34 @@ export async function sendPushToAdmins(
 
   try {
     const supabase = createServiceClient();
-    const { data: subs, error } = await supabase
-      .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth, admin_user_id, admin_users(role, permissions, is_active)');
+    // push_prefs wird defensiv mitgeladen — fehlt die Migration
+    // (supabase-admin-users-push-prefs.sql), retryen wir ohne die Spalte,
+    // damit Pushes NICHT komplett ausfallen.
+    const SELECT_WITH_PREFS =
+      'id, endpoint, p256dh, auth, admin_user_id, admin_users(role, permissions, is_active, push_prefs)';
+    const SELECT_NO_PREFS =
+      'id, endpoint, p256dh, auth, admin_user_id, admin_users(role, permissions, is_active)';
+    type SubRow = {
+      id: string;
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      admin_user_id: string | null;
+      admin_users?: unknown;
+    };
+    let subs: SubRow[] | null = null;
+    let error: { message: string } | null = null;
+    {
+      const r = await supabase.from('push_subscriptions').select(SELECT_WITH_PREFS);
+      if (r.error && /push_prefs|column|schema cache|PGRST/i.test(r.error.message || '')) {
+        const r2 = await supabase.from('push_subscriptions').select(SELECT_NO_PREFS);
+        subs = r2.data as unknown as SubRow[] | null;
+        error = r2.error;
+      } else {
+        subs = r.data as unknown as SubRow[] | null;
+        error = r.error;
+      }
+    }
 
     if (error) {
       console.error('[push] Subscriptions-Load-Fehler:', error.message);
@@ -97,13 +130,28 @@ export async function sendPushToAdmins(
     if (!subs || subs.length === 0) return stats;
     stats.totalSubscriptions = subs.length;
 
-    // Permission-Filter
+    // Der Notification-Typ steckt im `tag` — damit gleichen wir gegen die
+    // pro-Mitarbeiter stummgeschalteten Typen (push_prefs.muted) ab.
+    const notifType = payload.tag;
+
+    // Permission-Filter + Pro-Mitarbeiter-Stummschaltung
     const required = opts?.requiredPermission;
     const filtered = subs.filter((s) => {
-      // Legacy-Subscription (keine User-Bindung) → wie Owner behandeln
+      // Legacy-Subscription (keine User-Bindung) → wie Owner behandeln,
+      // keine Stummschaltung moeglich (kein DB-Profil).
       if (!s.admin_user_id) return true;
-      const u = Array.isArray(s.admin_users) ? s.admin_users[0] : s.admin_users;
+      const rawU = (s as { admin_users?: unknown }).admin_users;
+      const u = (Array.isArray(rawU) ? rawU[0] : rawU) as
+        | { role?: string; permissions?: unknown; is_active?: boolean; push_prefs?: unknown }
+        | undefined;
       if (!u || u.is_active === false) return false;
+
+      // Stummschaltung: gilt fuer Owner UND Mitarbeiter.
+      if (notifType) {
+        const muted = extractMutedTypes(u.push_prefs);
+        if (muted.includes(notifType)) return false;
+      }
+
       if (u.role === 'owner') return true;
       if (!required) return true; // ohne Filter: alle aktiven User
       const perms = Array.isArray(u.permissions) ? (u.permissions as string[]) : [];

@@ -51,6 +51,14 @@ interface AdminUser {
   created_at: string;
   last_login_at: string | null;
   inbox_address?: string | null;
+  push_muted?: string[];
+}
+
+interface NotificationType {
+  type: string;
+  label: string;
+  group: string;
+  permission: PermissionKey | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -69,6 +77,7 @@ function fmtDate(iso: string | null): string {
 export default function MitarbeiterPage() {
   const [me, setMe] = useState<AdminUser | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [notifTypes, setNotifTypes] = useState<NotificationType[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -93,6 +102,7 @@ export default function MitarbeiterPage() {
   const [editActive, setEditActive] = useState(true);
   const [editPassword, setEditPassword] = useState('');
   const [editInbox, setEditInbox] = useState('');
+  const [editPushMuted, setEditPushMuted] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,6 +115,7 @@ export default function MitarbeiterPage() {
       if (meRes?.user) setMe(meRes.user);
       if (listRes?.users) setUsers(listRes.users);
       else if (listRes?.error) setErr(listRes.error);
+      if (Array.isArray(listRes?.notificationTypes)) setNotifTypes(listRes.notificationTypes);
     } catch {
       setErr('Fehler beim Laden.');
     } finally {
@@ -160,6 +171,7 @@ export default function MitarbeiterPage() {
     setEditActive(u.is_active);
     setEditPassword('');
     setEditInbox(u.inbox_address ?? '');
+    setEditPushMuted(u.push_muted ?? []);
     setErr('');
   }
 
@@ -175,6 +187,7 @@ export default function MitarbeiterPage() {
         permissions: editPerms,
         is_active: editActive,
         inbox_address: editInbox.trim() || null,
+        push_muted: editPushMuted,
       };
       if (editPassword) patch.password = editPassword;
       const res = await fetch(`/api/admin/employees/${id}`, {
@@ -377,6 +390,14 @@ export default function MitarbeiterPage() {
                   disabled={editRole === 'owner'}
                 />
 
+                <PushGrid
+                  types={notifTypes}
+                  role={editRole}
+                  perms={editPerms}
+                  muted={editPushMuted}
+                  onChange={setEditPushMuted}
+                />
+
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     onClick={() => handleUpdate(u.id)}
@@ -443,6 +464,11 @@ export default function MitarbeiterPage() {
                       ))
                     )}
                   </div>
+                  {(u.push_muted?.length ?? 0) > 0 && (
+                    <div className="text-xs mt-2" style={{ color: '#f59e0b' }}>
+                      🔕 {u.push_muted!.length} Push-Typ(en) stummgeschaltet
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -566,6 +592,109 @@ function PermissionGrid({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Push-Benachrichtigungen pro Mitarbeiter (welche Typen aufs Gerät)
+// ============================================================
+function PushGrid({
+  types, role, perms, muted, onChange,
+}: {
+  types: NotificationType[];
+  role: 'owner' | 'employee';
+  perms: PermissionKey[];
+  muted: string[];
+  onChange: (next: string[]) => void;
+}) {
+  // Nur Typen zeigen, die dieser Mitarbeiter überhaupt bekommen kann.
+  const relevant = types.filter(
+    (t) => role === 'owner' || !t.permission || perms.includes(t.permission),
+  );
+
+  // Nach Gruppe ordnen (Reihenfolge folgt dem Katalog).
+  const groups: { group: string; items: NotificationType[] }[] = [];
+  for (const t of relevant) {
+    let g = groups.find((x) => x.group === t.group);
+    if (!g) { g = { group: t.group, items: [] }; groups.push(g); }
+    g.items.push(t);
+  }
+
+  const mutedSet = new Set(muted);
+  function toggle(type: string) {
+    const next = new Set(mutedSet);
+    if (next.has(type)) next.delete(type);
+    else next.add(type);
+    onChange([...next]);
+  }
+
+  if (relevant.length === 0) {
+    return (
+      <div>
+        <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+          Push-Benachrichtigungen
+        </label>
+        <p className="text-xs mt-1" style={{ color: '#64748b' }}>
+          Zuerst Zugriffsrechte auswählen — dann erscheinen hier die passenden Push-Typen.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+          Push-Benachrichtigungen (welche Typen auf sein Gerät gebuzzt werden)
+        </label>
+        <span className="text-xs" style={{ color: '#64748b' }}>
+          Abgehakt = bekommt Push. Abwählen = still.
+        </span>
+      </div>
+      <div className="space-y-3">
+        {groups.map((g) => (
+          <div key={g.group}>
+            <div className="text-xs font-heading font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748b' }}>
+              {g.group}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {g.items.map((t) => {
+                const on = !mutedSet.has(t.type);
+                return (
+                  <button
+                    type="button"
+                    key={t.type}
+                    onClick={() => toggle(t.type)}
+                    className="flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors"
+                    style={{
+                      background: on ? 'rgba(6,182,212,0.1)' : '#0a0f1e',
+                      border: on ? '1px solid #06b6d4' : '1px solid #1e293b',
+                    }}
+                  >
+                    <div
+                      className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
+                      style={{
+                        borderColor: on ? '#06b6d4' : '#475569',
+                        background: on ? '#06b6d4' : 'transparent',
+                      }}
+                    >
+                      {on && (
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="3">
+                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm" style={{ color: on ? '#06b6d4' : '#e2e8f0' }}>
+                      {t.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

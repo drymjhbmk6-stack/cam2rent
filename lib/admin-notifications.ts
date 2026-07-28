@@ -1,39 +1,14 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sendPushToAdmins } from '@/lib/push';
-import type { PermissionKey } from '@/lib/admin-users';
+import { TYPE_TO_PERMISSION } from '@/lib/notification-types';
 
 /**
- * Mapping von Notification-Typ → benoetigter Permission.
- * Mitarbeiter ohne diese Permission bekommen keinen Push-Buzz auf der Watch.
- * Owner kriegt immer alles (in lib/push.ts gehandhabt).
- *
- * Notifications, die hier nicht stehen, gehen an alle aktiven Admins —
- * gewollt fuer Sammelmeldungen oder Custom-Types aus dem Notifications-Endpoint.
+ * Das Mapping Notification-Typ → Permission lebt zentral in
+ * `lib/notification-types.ts` (gemeinsam genutzt von Push-Filter + UI).
+ * Mitarbeiter ohne die passende Permission bekommen keinen Push (Owner immer,
+ * gehandhabt in lib/push.ts). Typen, die dort keine Permission haben, gehen an
+ * alle aktiven Admins.
  */
-const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
-  new_booking: 'tagesgeschaeft',
-  booking_cancelled: 'tagesgeschaeft',
-  new_damage: 'tagesgeschaeft',
-  overdue_return: 'tagesgeschaeft',
-  new_message: 'kunden',
-  new_review: 'kunden',
-  new_waitlist: 'kunden',
-  new_customer: 'kunden',
-  new_ugc: 'kunden',
-  payment_failed: 'finanzen',
-  coupon_race: 'finanzen',
-  blog_ready: 'content',
-  social_ready: 'content',
-  reel_ready: 'content',
-  beleg_ready: 'finanzen',
-  beleg_failed: 'finanzen',
-  beleg_duplicate: 'finanzen',
-  availability_alert: 'tagesgeschaeft',
-  firmware_update_available: 'katalog',
-  pickup_coordination: 'tagesgeschaeft',
-  return_coordination: 'tagesgeschaeft',
-  return_arrived: 'tagesgeschaeft',
-};
 
 /**
  * Erstellt eine Admin-Benachrichtigung.

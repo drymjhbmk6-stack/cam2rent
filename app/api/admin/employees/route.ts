@@ -5,10 +5,12 @@ import {
   listAdminUsers,
   hasPermission,
   getInboxAddressMap,
+  getPushPrefsMap,
   setInboxAddress,
   PERMISSION_KEYS,
   type PermissionKey,
 } from '@/lib/admin-users';
+import { NOTIFICATION_TYPES } from '@/lib/notification-types';
 import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
@@ -25,9 +27,24 @@ export async function GET() {
   }
   try {
     const users = await listAdminUsers();
-    const inboxMap = await getInboxAddressMap();
-    const enriched = users.map((u) => ({ ...u, inbox_address: inboxMap[u.id] ?? null }));
-    return NextResponse.json({ users: enriched });
+    const [inboxMap, pushPrefsMap] = await Promise.all([
+      getInboxAddressMap(),
+      getPushPrefsMap(),
+    ]);
+    const enriched = users.map((u) => ({
+      ...u,
+      inbox_address: inboxMap[u.id] ?? null,
+      push_muted: pushPrefsMap[u.id] ?? [],
+    }));
+    return NextResponse.json({
+      users: enriched,
+      notificationTypes: NOTIFICATION_TYPES.map((t) => ({
+        type: t.type,
+        label: t.label,
+        group: t.group,
+        permission: t.permission ?? null,
+      })),
+    });
   } catch (err) {
     console.error('[employees] list', err);
     return NextResponse.json({ error: 'Fehler beim Laden.' }, { status: 500 });

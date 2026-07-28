@@ -2784,6 +2784,64 @@ Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotifica
   3. SQL-Migration `supabase-push-subscriptions.sql` ausführen
   4. Admin-PWA installieren (Homescreen) → `/admin/einstellungen` → "Push aktivieren"
 
+#### Push-Typen pro Mitarbeiter einstellbar + zentraler Typen-Katalog (Stand 2026-07-28)
+Jeder Mitarbeiter kann jetzt festlegen, welche **Benachrichtigungs-Typen** als
+Push auf sein Gerät kommen — zusätzlich zum bestehenden Permission-Filter (der
+die harte Grenze bleibt). Zwei Wege: **Self-Service** (jeder Admin für sich) +
+**Owner-seitig pro Mitarbeiter** in der Mitarbeiter-Verwaltung. Reine
+Verengung; das Benachrichtigungs-Center (Glocke) zeigt weiterhin alles.
+- **Zentraler Katalog `lib/notification-types.ts`** (`NOTIFICATION_TYPES`) ist
+  die einzige Quelle der Wahrheit: pro Typ `{ type, label, permission?, group }`.
+  Daraus abgeleitet: `TYPE_TO_PERMISSION` (Push-Filter, früher in
+  `lib/admin-notifications.ts` hartkodiert → jetzt importiert),
+  `NOTIFICATION_TYPE_KEYS` (Validierung), `notificationTypesForUser(user)`
+  (welche Typen ein Mitarbeiter überhaupt bekommen kann). **Neue Typen künftig
+  nur hier eintragen** — Filter + beide UIs ziehen automatisch nach. (Import in
+  Client-Komponenten vermeiden: die Datei importiert `PermissionKey` aus
+  `lib/admin-users.ts` mit Node-`crypto` → würde ins Client-Bundle ziehen. Der
+  Client bekommt den Katalog stattdessen über die Employees-GET-Antwort bzw. den
+  Preferences-Endpoint.)
+- **Speicherung:** Spalte `admin_users.push_prefs JSONB` (Migration
+  `supabase/supabase-admin-users-push-prefs.sql`, idempotent, additiv). Form
+  `{ "muted": ["new_review", ...] }` = **Opt-out-Liste** der abgewählten Typen.
+  Leer/fehlend = alles an (Backward-Compat: neue Typen sind standardmäßig AN).
+  Defensiv wie `inbox_address` behandelt — **NICHT** in `SELECT_COLS`/
+  `sanitizeUser` (Login-kritisch). Helfer in `lib/admin-users.ts`:
+  `getPushPrefsMap`, `getPushMutedForUser`, `setPushMuted` (Schema-Fehler →
+  leer/klarer Migrations-Hinweis).
+- **Filter** in `lib/push.ts` → `sendPushToAdmins`: lädt `push_prefs` im nested
+  `admin_users(...)`-Select **defensiv mit Retry ohne die Spalte** (fehlt die
+  Migration → Pushes fallen NICHT aus). Nach dem Permission-Filter wird eine
+  Subscription verworfen, wenn `payload.tag` (= der Notification-Typ) in der
+  `muted`-Liste des Users steht. **Gilt für Owner UND Mitarbeiter** (Owner kann
+  so Rauschen stummschalten). Legacy-Subscriptions ohne `admin_user_id`
+  (ENV-Login) können nicht stummgeschaltet werden → bekommen weiter alles.
+  `sendPushToUser` (persönliche Termin-Reminder) bleibt unberührt.
+- **Self-Service** `GET/PUT /api/admin/push/preferences` (jeder eingeloggte
+  Admin, KEIN `mitarbeiter_verwalten` nötig): GET liefert die für den User
+  relevanten Typen + aktuelle `muted`-Liste (ENV-Login → `{ legacy: true }`),
+  PUT setzt die eigene `muted`-Liste (nur bekannte Typen). UI:
+  `components/admin/PushPreferencesSection.tsx` als neue Section 8b unter
+  `/admin/einstellungen` direkt nach der Push-Aktivierung (gruppierte Toggles,
+  abgehakt = bekommt Push).
+- **Owner-seitig pro Mitarbeiter** (`/admin/einstellungen/mitarbeiter`):
+  `GET /api/admin/employees` liefert pro User `push_muted` + einmal den Katalog
+  (`notificationTypes`); `PATCH /api/admin/employees/[id]` akzeptiert
+  `push_muted: string[]` (validiert, **keine** Session-Invalidierung — nicht
+  Login-kritisch). Edit-Formular zeigt `PushGrid` (gefiltert auf die Bereiche
+  des Mitarbeiters), Listen-Ansicht zeigt „🔕 N Push-Typ(en) stummgeschaltet".
+- **Neue Benachrichtigung `verification_pending`** (Permission `kunden`, lila
+  Ausweis-Icon): feuert in `POST /api/upload-id`, sobald ein Kunde den Ausweis
+  hochlädt (`verification_status='pending'`) — Deep-Link auf `/admin/kunden/[id]`.
+  Schließt die Lücke, dass die offene Verifizierung bisher nur im Dashboard-
+  Aufgaben-Widget sichtbar war, aber keinen Push auslöste. Auch in die
+  Whitelist von `/api/admin/notifications/create` aufgenommen (dort außerdem
+  `return_arrived`/`beleg_*`/`availability_alert` nachgetragen).
+- **Go-Live TODO:** Migration `supabase/supabase-admin-users-push-prefs.sql`
+  ausführen. Ohne sie funktioniert alles weiter (Filter defensiv ohne
+  Stummschaltung, Self-Service/PATCH melden „Migration ausstehend" beim
+  Speichern) — nur die persönliche Auswahl greift erst nach der Migration.
+
 ### Social-Media-Modul: FB + IG Auto-Posting (Stand 2026-04-19)
 Vollautomatisches Posten auf Facebook-Page + Instagram-Business-Account über die Meta Graph API. Rein organisches Publishing — keine bezahlten Ads. KI-generierte Captions (Claude) + optional Bilder (DALL-E 3).
 
@@ -5625,6 +5683,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Push-Typen-pro-Mitarbeiter Migration auszuführen:**
+  `supabase/supabase-admin-users-push-prefs.sql` (idempotent, additiv:
+  `admin_users.push_prefs JSONB`). Ohne sie läuft alles weiter (Push-Filter
+  defensiv ohne Stummschaltung; Self-Service + Owner-PATCH melden beim Speichern
+  „Migration ausstehend") — die persönliche Push-Auswahl greift erst danach.
+  Siehe „Push-Typen pro Mitarbeiter einstellbar". Empfohlen ASAP ausführen.
 - **E-Mail-Rechnungs-Import Go-Live:**
   1. Migration `supabase/supabase-belege-email-import.sql` ausführen (idempotent,
      additiv). Ohne sie läuft der Import defensiv weiter (kein `email_message_id`-

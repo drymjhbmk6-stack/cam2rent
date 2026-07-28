@@ -510,6 +510,75 @@ export async function setInboxAddress(id: string, address: string | null): Promi
   }
 }
 
+// ============================================================
+// Push-Benachrichtigungs-Einstellungen pro Mitarbeiter (push_prefs)
+// ------------------------------------------------------------
+// Bewusst NICHT in SELECT_COLS / sanitizeUser: faellt die Migration
+// supabase-admin-users-push-prefs.sql aus, wuerde sonst der Login-Pfad
+// brechen. Diese Helper sind defensiv (Schema-Fehler → leer / no-op).
+//
+// Form der Spalte: { "muted": ["new_review", ...] } — Liste der Typen, die der
+// Mitarbeiter NICHT als Push will. Leer = alles an (was die Permission erlaubt).
+// ============================================================
+
+function extractMuted(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const muted = (value as { muted?: unknown }).muted;
+  if (!Array.isArray(muted)) return [];
+  return muted.filter((x): x is string => typeof x === 'string');
+}
+
+/** Map admin_user_id → muted[] fuer alle Mitarbeiter (defensiv, {} bei fehlender Migration). */
+export async function getPushPrefsMap(): Promise<Record<string, string[]>> {
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('id, push_prefs');
+    if (error) return {};
+    const map: Record<string, string[]> = {};
+    for (const r of data ?? []) {
+      const row = r as { id: string; push_prefs: unknown };
+      map[row.id] = extractMuted(row.push_prefs);
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/** Liefert die stummgeschalteten Typen eines einzelnen Mitarbeiters. */
+export async function getPushMutedForUser(id: string): Promise<string[]> {
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('push_prefs')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !data) return [];
+    return extractMuted((data as { push_prefs: unknown }).push_prefs);
+  } catch {
+    return [];
+  }
+}
+
+/** Setzt die Liste stummgeschalteter Notification-Typen eines Mitarbeiters. */
+export async function setPushMuted(id: string, muted: string[]): Promise<void> {
+  const clean = [...new Set(muted.filter((m) => typeof m === 'string').map((m) => m.trim()).filter(Boolean))].slice(0, 100);
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from('admin_users')
+    .update({ push_prefs: { muted: clean } })
+    .eq('id', id);
+  if (error) {
+    if (INBOX_SCHEMA_ERROR.test(error.message ?? '')) {
+      throw new Error('Migration ausstehend: supabase-admin-users-push-prefs.sql.');
+    }
+    throw new Error(error.message);
+  }
+}
+
 /** Findet den Mitarbeiter, dessen inbox_address in der Empfaengerliste vorkommt. */
 export async function findAdminUserByInboxAddress(
   addresses: string[],

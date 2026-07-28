@@ -7,10 +7,12 @@ import {
   getAdminUserById,
   hasPermission,
   setInboxAddress,
+  setPushMuted,
   PERMISSION_KEYS,
   type PermissionKey,
   updateAdminUser,
 } from '@/lib/admin-users';
+import { NOTIFICATION_TYPE_KEYS } from '@/lib/notification-types';
 import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
@@ -51,6 +53,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     is_active?: boolean;
     password?: string;
     inbox_address?: string | null;
+    push_muted?: string[];
   } | null;
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
 
@@ -141,6 +144,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // Postfach-Adresse separat pflegen (siehe Kommentar in lib/admin-users.ts).
     if (body.inbox_address !== undefined) {
       await setInboxAddress(id, body.inbox_address);
+    }
+    // Push-Stummschaltung separat pflegen (nicht Login-kritisch, keine
+    // Session-Invalidierung). Nur bekannte Notification-Typen zulassen.
+    if (body.push_muted !== undefined) {
+      const muted = Array.isArray(body.push_muted)
+        ? body.push_muted.filter((m) => typeof m === 'string' && NOTIFICATION_TYPE_KEYS.includes(m))
+        : [];
+      try {
+        await setPushMuted(id, muted);
+      } catch (e) {
+        console.error('[employees PATCH] Push-Prefs setzen fehlgeschlagen:', e);
+      }
     }
     // Sicherheits-Invalidierung: bei Deaktivierung, Passwort-Wechsel, Rollen-/
     // Permission-Aenderung muessen alle bestehenden Sessions sofort enden,

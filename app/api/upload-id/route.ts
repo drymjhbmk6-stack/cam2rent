@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const uploadLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 }); // 5 pro Stunde
 
@@ -156,6 +157,15 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Admin benachrichtigen: Ausweis liegt vor, wartet auf Freigabe.
+    // Fire-and-forget — darf den Kunden-Upload nie blockieren.
+    void createAdminNotification(supabase, {
+      type: 'verification_pending',
+      title: 'Ausweis-Verifizierung offen',
+      message: `${user.email ?? 'Ein Kunde'} hat den Ausweis hochgeladen und wartet auf Freigabe.`,
+      link: `/admin/kunden/${userId}`,
+    });
 
     return NextResponse.json({ success: true, status: 'pending' });
   } catch (err) {

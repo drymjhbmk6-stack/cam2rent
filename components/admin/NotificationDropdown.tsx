@@ -39,6 +39,13 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
         </svg>
       );
+    case 'verification_pending':
+      // Ausweis + Häkchen — Kunde wartet auf Freigabe
+      return (
+        <svg style={iconStyle} fill="none" stroke="#a855f7" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h0a2 2 0 012 2v1m-4 0h4m-7 6l1.5 1.5L11 11" />
+        </svg>
+      );
     case 'overdue_return':
       return (
         <svg style={iconStyle} fill="none" stroke="#ef4444" viewBox="0 0 24 24">
