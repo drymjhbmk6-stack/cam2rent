@@ -2837,6 +2837,24 @@ Verengung; das Benachrichtigungs-Center (Glocke) zeigt weiterhin alles.
   Aufgaben-Widget sichtbar war, aber keinen Push auslöste. Auch in die
   Whitelist von `/api/admin/notifications/create` aufgenommen (dort außerdem
   `return_arrived`/`beleg_*`/`availability_alert` nachgetragen).
+- **Vier weitere neue Typen (Stand 2026-07-28):**
+  - **`auto_cancelled`** (Permission `tagesgeschaeft`) — die drei Auto-Storno-
+    Crons (`auto-cancel`, `verification-auto-cancel`, `contract-auto-cancel`)
+    feuern jetzt diesen eigenen Typ statt `booking_cancelled`, damit
+    automatische Stornos getrennt von manuellen stummgeschaltet werden können.
+  - **`adjustment_paid`** (Permission `finanzen`) — `stripe-webhook`
+    (`booking_type='price_adjustment'`) feuert, sobald eine Nachzahlung aus der
+    Bestellbearbeitung eingeht (nur wenn der Status-Flip wirklich griff).
+  - **`dunning_due`** (Permission `finanzen`) — der `dunning-check`-Cron feuert
+    EINE Sammel-Benachrichtigung pro Lauf, wenn neue Mahn-Entwürfe erstellt
+    wurden (kein Spam pro Rechnung), Deep-Link auf die offenen Posten.
+  - **`new_feedback`** (Permission `berichte`) — `POST /api/feedback`
+    (Konto-Feedback → `beta_feedback`) feuert, Deep-Link auf
+    `/admin/beta-feedback`.
+  Alle vier stehen im Katalog `lib/notification-types.ts`, haben Icons im
+  `NotificationDropdown` und sind in der Create-Whitelist. **Newsletter-
+  Anmeldung** wurde bewusst NICHT als Push angeschlossen (zu niedrig-wertig/
+  häufig).
 - **Go-Live TODO:** Migration `supabase/supabase-admin-users-push-prefs.sql`
   ausführen. Ohne sie funktioniert alles weiter (Filter defensiv ohne
   Stummschaltung, Self-Service/PATCH melden „Migration ausstehend" beim

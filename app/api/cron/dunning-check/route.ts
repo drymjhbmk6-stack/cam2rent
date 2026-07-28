@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * GET /api/cron/dunning-check
@@ -136,6 +137,16 @@ export async function GET(req: NextRequest) {
     }
 
     draftsCreated++;
+  }
+
+  // Eine Sammel-Benachrichtigung pro Lauf (kein Spam pro Rechnung).
+  if (draftsCreated > 0) {
+    await createAdminNotification(supabase, {
+      type: 'dunning_due',
+      title: `${draftsCreated} Mahnung(en) fällig`,
+      message: `Für ${draftsCreated} überfällige Rechnung(en) wurde ein Mahn-Entwurf erstellt — bitte prüfen und freigeben.`,
+      link: '/admin/buchhaltung?tab=einnahmen&sub=offen',
+    }).catch((e) => console.error('[dunning-check] Notification-Fehler:', e));
   }
 
   return NextResponse.json({

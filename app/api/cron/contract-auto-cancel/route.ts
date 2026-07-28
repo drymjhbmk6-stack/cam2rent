@@ -189,7 +189,7 @@ async function handle(req: NextRequest) {
 
       // Admin-Notification
       createAdminNotification(supabase, {
-        type: 'booking_cancelled',
+        type: 'auto_cancelled',
         title: `Auto-Storno (Vertrag fehlt): ${id}`,
         message: `${(b.customer_name as string) || 'Kunde'} — Mietvertrag nicht rechtzeitig unterschrieben`,
         link: `/admin/buchungen/${id}`,

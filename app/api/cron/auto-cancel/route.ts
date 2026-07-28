@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
   for (const booking of cancelledBookings) {
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
-      type: 'booking_cancelled',
+      type: 'auto_cancelled',
       title: `Auto-Stornierung: ${booking.id}`,
       message: `${booking.customer_name} — Zahlung nicht eingegangen`,
       link: `/admin/buchungen/${booking.id}`,

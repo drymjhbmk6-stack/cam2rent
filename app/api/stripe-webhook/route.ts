@@ -345,11 +345,20 @@ export async function POST(req: NextRequest) {
         .from('bookings')
         .update({ adjustment_status: 'paid' })
         .eq('id', meta.booking_id)
-        .eq('adjustment_status', 'pending_payment');
+        .eq('adjustment_status', 'pending_payment')
+        .select('id, customer_name')
+        .maybeSingle();
       if (r.error && /adjustment_status/i.test(r.error.message || '')) {
         console.warn('[Webhook] adjustment_status-Spalte fehlt (Migration ausstehend).');
-      } else {
+      } else if (r.data) {
         console.log(`[Webhook] Nachzahlung fuer ${meta.booking_id} als bezahlt markiert.`);
+        // Admin informieren — der offene „Nachzahlung ausstehend"-Fall ist erledigt.
+        await createAdminNotification(supabase, {
+          type: 'adjustment_paid',
+          title: `Nachzahlung eingegangen: ${meta.booking_id}`,
+          message: `${(r.data as { customer_name?: string }).customer_name || 'Kunde'} — Differenz aus der Bestellbearbeitung ist bezahlt.`,
+          link: `/admin/buchungen/${meta.booking_id}`,
+        }).catch((e) => console.error('[Webhook] adjustment_paid-Notification-Fehler:', e));
       }
     }
 

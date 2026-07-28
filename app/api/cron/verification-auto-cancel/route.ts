@@ -184,7 +184,7 @@ async function handle(req: NextRequest) {
 
     // Admin-Notification
     createAdminNotification(supabase, {
-      type: 'booking_cancelled',
+      type: 'auto_cancelled',
       title: `Auto-Storno (Ausweis fehlt): ${b.id}`,
       message: `${b.customer_name ?? 'Kunde'} — Ausweis nicht rechtzeitig hochgeladen`,
       link: `/admin/buchungen/${b.id}`,

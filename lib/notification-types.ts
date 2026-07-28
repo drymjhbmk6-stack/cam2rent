@@ -28,7 +28,8 @@ export interface NotificationTypeDef {
 export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
   // ── Tagesgeschäft ──────────────────────────────────────────
   { type: 'new_booking', label: 'Neue Buchung', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
-  { type: 'booking_cancelled', label: 'Stornierung', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
+  { type: 'booking_cancelled', label: 'Stornierung (manuell)', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
+  { type: 'auto_cancelled', label: 'Auto-Storno (Frist verpasst)', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'new_damage', label: 'Schadensmeldung', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'overdue_return', label: 'Überfällige Rückgabe', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'availability_alert', label: 'Verfügbarkeits-Warnung', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
@@ -46,6 +47,8 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
 
   // ── Finanzen ──────────────────────────────────────────────
   { type: 'payment_failed', label: 'Zahlungsproblem', permission: 'finanzen', group: 'Finanzen' },
+  { type: 'adjustment_paid', label: 'Nachzahlung eingegangen', permission: 'finanzen', group: 'Finanzen' },
+  { type: 'dunning_due', label: 'Mahnung fällig', permission: 'finanzen', group: 'Finanzen' },
   { type: 'coupon_race', label: 'Gutschein-Konflikt', permission: 'finanzen', group: 'Finanzen' },
   { type: 'beleg_ready', label: 'Beleg zum Prüfen', permission: 'finanzen', group: 'Finanzen' },
   { type: 'beleg_failed', label: 'Beleg-Analyse fehlgeschlagen', permission: 'finanzen', group: 'Finanzen' },
@@ -58,6 +61,9 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
 
   // ── Katalog ───────────────────────────────────────────────
   { type: 'firmware_update_available', label: 'Firmware-Update verfügbar', permission: 'katalog', group: 'Katalog' },
+
+  // ── Berichte ──────────────────────────────────────────────
+  { type: 'new_feedback', label: 'Neues Feedback', permission: 'berichte', group: 'Berichte' },
 ];
 
 /** Schnell-Lookup Typ → Permission (Push-Filter). */

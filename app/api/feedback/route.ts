@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 const feedbackLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 }); // 10/h
@@ -59,6 +60,14 @@ export async function POST(req: NextRequest) {
     console.error('Feedback insert error:', error);
     return NextResponse.json({ error: 'Feedback konnte nicht gespeichert werden.' }, { status: 500 });
   }
+
+  // Admin benachrichtigen (Permission `berichte`). Fire-and-forget.
+  void createAdminNotification(supabase, {
+    type: 'new_feedback',
+    title: 'Neues Feedback',
+    message: `${testerName || user.email || 'Ein Kunde'}: ${message.trim().slice(0, 140)}`,
+    link: '/admin/beta-feedback',
+  });
 
   return NextResponse.json({ success: true });
 }

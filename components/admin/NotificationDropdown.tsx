@@ -16,6 +16,7 @@ function TypeIcon({ type }: { type: string }) {
         </svg>
       );
     case 'booking_cancelled':
+    case 'auto_cancelled':
       return (
         <svg style={iconStyle} fill="none" stroke="#ef4444" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -62,6 +63,27 @@ function TypeIcon({ type }: { type: string }) {
       return (
         <svg style={iconStyle} fill="none" stroke="#ef4444" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        </svg>
+      );
+    case 'adjustment_paid':
+      // Geld eingegangen — Kreis mit Euro/Häkchen
+      return (
+        <svg style={iconStyle} fill="none" stroke="#10b981" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    case 'dunning_due':
+      // Mahnung — Dokument mit Ausrufezeichen
+      return (
+        <svg style={iconStyle} fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h4m-8 4h12a2 2 0 002-2V7.414A2 2 0 0018.414 6L14 1.586A2 2 0 0012.586 1H5a2 2 0 00-2 2v15a2 2 0 002 2z" />
+        </svg>
+      );
+    case 'new_feedback':
+      // Sprechblase mit Herz/Stern-Feeling → einfache Chat-Blase
+      return (
+        <svg style={iconStyle} fill="none" stroke="#06b6d4" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
         </svg>
       );
     case 'new_waitlist':
