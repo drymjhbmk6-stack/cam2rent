@@ -73,6 +73,14 @@ export default function BlogZeitplanPage() {
   const [dragOver, setDragOver] = useState<string | null>(null);
   const dragCalEntry = useRef<string | null>(null);
 
+  // Touch-Drag (Handy/Tablet — natives HTML5-DnD feuert dort nicht)
+  const [touchDragId, setTouchDragId] = useState<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchEntryRef = useRef<string | null>(null);
+  const touchTargetDay = useRef<string | null>(null);
+  const justTouchDragged = useRef(false);
+
   // Legacy list drag refs (Serien-Tab)
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
@@ -235,6 +243,42 @@ export default function BlogZeitplanPage() {
     updateDate(id, dateStr);
   }
 
+  // ── Touch-Drag (Handy) — folgt dem Finger, Ziel-Tag via elementFromPoint ──
+  useEffect(() => {
+    if (!touchDragId) return;
+    const move = (e: TouchEvent) => {
+      e.preventDefault(); // non-passive → verhindert Seiten-Scroll während des Ziehens
+      const t = e.touches[0];
+      if (!t) return;
+      const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
+      const day = el?.closest('[data-day]')?.getAttribute('data-day') ?? null;
+      touchTargetDay.current = day;
+      setDragOver(day);
+    };
+    const end = () => {
+      const id = touchEntryRef.current;
+      const day = touchTargetDay.current;
+      justTouchDragged.current = true;
+      setTimeout(() => { justTouchDragged.current = false; }, 350);
+      setTouchDragId(null);
+      setDragOver(null);
+      touchEntryRef.current = null;
+      touchTargetDay.current = null;
+      if (id && day) {
+        const entry = schedule.find(e => e.id === id);
+        if (entry && entry.scheduled_date !== day) updateDate(id, day);
+      }
+    };
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', end);
+    document.addEventListener('touchcancel', end);
+    return () => {
+      document.removeEventListener('touchmove', move);
+      document.removeEventListener('touchend', end);
+      document.removeEventListener('touchcancel', end);
+    };
+  }, [touchDragId, schedule]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Serien-Tab list drag ─────────────────────────────────────────────────
   function handleDragStart(i: number) { dragItem.current = i; }
   function handleDragEnter(i: number) { dragOverItem.current = i; }
@@ -348,6 +392,7 @@ export default function BlogZeitplanPage() {
                       return (
                         <td
                           key={ds}
+                          data-day={ds}
                           onDragOver={e => { e.preventDefault(); setDragOver(ds); }}
                           onDragLeave={() => setDragOver(null)}
                           onDrop={() => handleDropOnDay(ds)}
@@ -384,7 +429,31 @@ export default function BlogZeitplanPage() {
                                   key={entry.id}
                                   draggable={!isPublished}
                                   onDragStart={e => { if (isPublished) { e.preventDefault(); return; } e.stopPropagation(); handleCalDragStart(entry.id); }}
-                                  onClick={() => setEditEntry(entry)}
+                                  onTouchStart={e => {
+                                    if (isPublished) return;
+                                    const t = e.touches[0];
+                                    touchStartRef.current = { x: t.clientX, y: t.clientY };
+                                    touchEntryRef.current = entry.id;
+                                    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                                    touchTimerRef.current = setTimeout(() => {
+                                      touchTargetDay.current = entry.scheduled_date;
+                                      setDragOver(entry.scheduled_date);
+                                      setTouchDragId(entry.id);
+                                      if (navigator.vibrate) navigator.vibrate(25);
+                                    }, 260);
+                                  }}
+                                  onTouchMove={e => {
+                                    if (isPublished || touchDragId === entry.id) return;
+                                    const t = e.touches[0];
+                                    const s = touchStartRef.current;
+                                    if (s && (Math.abs(t.clientX - s.x) > 12 || Math.abs(t.clientY - s.y) > 12)) {
+                                      if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+                                    }
+                                  }}
+                                  onTouchEnd={() => {
+                                    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+                                  }}
+                                  onClick={() => { if (justTouchDragged.current) return; setEditEntry(entry); }}
                                   title={isPublished ? `${entry.topic} — veröffentlicht (nicht verschiebbar)` : entry.topic}
                                   style={{
                                     display: 'flex',
@@ -393,10 +462,14 @@ export default function BlogZeitplanPage() {
                                     minHeight: 58,
                                     padding: '6px 7px',
                                     borderRadius: 4,
-                                    background: color + '22',
+                                    background: touchDragId === entry.id ? color + '44' : color + '22',
                                     borderLeft: `2px solid ${color}`,
+                                    outline: touchDragId === entry.id ? `2px solid ${color}` : 'none',
+                                    opacity: touchDragId && touchDragId !== entry.id ? 0.5 : 1,
                                     cursor: 'pointer',
                                     userSelect: 'none',
+                                    WebkitUserSelect: 'none',
+                                    WebkitTouchCallout: 'none',
                                     overflow: 'hidden',
                                   }}
                                 >
@@ -476,6 +549,9 @@ export default function BlogZeitplanPage() {
             </>
           )}
         </div>
+        <p style={{ fontSize: 11, color: '#475569', marginBottom: 12 }}>
+          Beitrag verschieben: am PC ziehen &amp; ablegen · am Handy Beitrag kurz gedrückt halten, dann auf den neuen Tag ziehen.
+        </p>
         {months}
       </div>
     );
