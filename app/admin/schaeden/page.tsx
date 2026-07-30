@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import DamageReportModal from '@/components/admin/DamageReportModal';
 import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const DAMAGE_CACHE_KEY = 'admin:damage';
 
 interface DamageReport {
   id: string;
@@ -41,8 +44,8 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
 };
 
 export default function AdminSchaedenPage() {
-  const [reports, setReports] = useState<DamageReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<DamageReport[]>(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) === undefined);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [selectedReport, setSelectedReport] = useState<DamageReport | null>(null);
   const [editForm, setEditForm] = useState({
@@ -66,12 +69,14 @@ export default function AdminSchaedenPage() {
   }, []);
 
   async function fetchReports() {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<DamageReport[]>(DAMAGE_CACHE_KEY) === undefined) setLoading(true);
     try {
       const res = await fetch('/api/admin/damage');
       if (!res.ok) throw new Error();
       const data = await res.json();
       setReports(data.reports || []);
+      setCached(DAMAGE_CACHE_KEY, data.reports || []);
     } catch {
       console.error('Failed to load damage reports');
     } finally {

@@ -5,6 +5,10 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const DEFAULT_UGC_COUNTS = { pending: 0, approved: 0, featured: 0, rejected: 0, withdrawn: 0 };
+const ugcCacheKey = (filter: string) => `admin:ugc:${filter}`;
 
 type UgcStatus = 'pending' | 'approved' | 'featured' | 'rejected' | 'withdrawn';
 
@@ -74,10 +78,14 @@ export default function KundenMaterialPage() {
   const searchParams = useSearchParams();
   const initialOpen = searchParams.get('open');
 
-  const [entries, setEntries] = useState<UgcEntry[]>([]);
-  const [counts, setCounts] = useState<Counts>({ pending: 0, approved: 0, featured: 0, rejected: 0, withdrawn: 0 });
+  const [entries, setEntries] = useState<UgcEntry[]>(
+    () => getCached<{ entries: UgcEntry[]; counts: Counts }>(ugcCacheKey('pending'))?.entries ?? [],
+  );
+  const [counts, setCounts] = useState<Counts>(
+    () => getCached<{ entries: UgcEntry[]; counts: Counts }>(ugcCacheKey('pending'))?.counts ?? DEFAULT_UGC_COUNTS,
+  );
   const [filter, setFilter] = useState<UgcStatus | 'all'>('pending');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCached(ugcCacheKey('pending')) === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<DetailData | null>(null);
@@ -85,15 +93,27 @@ export default function KundenMaterialPage() {
   const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const key = ugcCacheKey(filter);
+    const cached = getCached<{ entries: UgcEntry[]; counts: Counts }>(key);
+    // Cache für diesen Filter → sofort anzeigen, still revalidieren. Sonst Spinner.
+    if (cached !== undefined) {
+      setEntries(cached.entries);
+      setCounts(cached.counts);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const url = filter === 'all' ? '/api/admin/customer-ugc?status=all' : `/api/admin/customer-ugc?status=${filter}`;
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Fehler beim Laden.');
-      setEntries(data.entries ?? []);
-      setCounts(data.counts ?? { pending: 0, approved: 0, featured: 0, rejected: 0, withdrawn: 0 });
+      const nextEntries = data.entries ?? [];
+      const nextCounts = data.counts ?? DEFAULT_UGC_COUNTS;
+      setEntries(nextEntries);
+      setCounts(nextCounts);
+      setCached(key, { entries: nextEntries, counts: nextCounts });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
     } finally {
