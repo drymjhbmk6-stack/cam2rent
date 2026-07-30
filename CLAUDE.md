@@ -3865,11 +3865,18 @@ geändert**. `tsc` + `eslint`: 0 Fehler pro Datei.
   — Roh-Primitiv, das nur den **Startwert** seedet, damit Seiten mit
   **optimistischen lokalen Updates** (`setState(prev => …)`) unangetastet
   bleiben. `invalidateCachedFetch(key)` zum gezielten Verwerfen.
-- **Umgestellt:** `/admin` (Dashboard, `useCachedFetch` + 60-s-Poll),
-  `/admin/buchungen` (Seed, Key `admin:alle-buchungen`), `/admin/kunden` (Seed
-  pro Filter, `admin:kunden:<filter>`), `/admin/inventar` (Seed pro
-  Filter-Kombi). Muster: Spinner nur beim allerersten Laden (kein Cache),
-  Wiederbesuch = still revalidieren.
+- **Umgestellt (11 Seiten):** `/admin` (Dashboard, `useCachedFetch` + 60-s-Poll),
+  `/admin/buchungen` (`admin:alle-buchungen`), `/admin/kunden` (Seed pro Filter
+  `admin:kunden:<filter>`), `/admin/inventar` (Seed pro Filter-Kombi),
+  `/admin/sendungen`, `/admin/verkauf`, `/admin/warteliste`, `/admin/bewertungen`
+  (pro Filter), `/admin/buchungsinteresse` (pro Auswertung), `/admin/schaeden`,
+  `/admin/kunden-material` (Paar entries+counts pro Filter). Muster: Spinner nur
+  beim allerersten Laden (kein Cache), Wiederbesuch = still revalidieren; lokale
+  Mutationen/optimistische Updates unangetastet.
+- **Noch offen (gleiche Technik, größere/mutations-lastige Seiten):**
+  `/admin/zubehoer`, `/admin/sets`, `/admin/retouren`, `/admin/buchhaltung`,
+  `/admin/nachrichten`, `/admin/auftragskalender`, `/admin/verfuegbarkeit`,
+  `/admin/analytics` — können bei Bedarf nach dem Seed-Muster nachgezogen werden.
 - **Bewusst NICHT für Konto-Seiten** (`/konto/*`): per-Kunde-Daten. Ein globaler
   Modul-Cache würde auf einem geteilten Browser nach Kontowechsel kurz die
   Daten des Vorgängers zeigen (Privacy-Leak) — dort wäre ein user-gebundener,
