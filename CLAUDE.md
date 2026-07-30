@@ -3865,18 +3865,24 @@ geändert**. `tsc` + `eslint`: 0 Fehler pro Datei.
   — Roh-Primitiv, das nur den **Startwert** seedet, damit Seiten mit
   **optimistischen lokalen Updates** (`setState(prev => …)`) unangetastet
   bleiben. `invalidateCachedFetch(key)` zum gezielten Verwerfen.
-- **Umgestellt (11 Seiten):** `/admin` (Dashboard, `useCachedFetch` + 60-s-Poll),
+- **Umgestellt (16 Seiten):** `/admin` (Dashboard, `useCachedFetch` + 60-s-Poll),
   `/admin/buchungen` (`admin:alle-buchungen`), `/admin/kunden` (Seed pro Filter
   `admin:kunden:<filter>`), `/admin/inventar` (Seed pro Filter-Kombi),
   `/admin/sendungen`, `/admin/verkauf`, `/admin/warteliste`, `/admin/bewertungen`
   (pro Filter), `/admin/buchungsinteresse` (pro Auswertung), `/admin/schaeden`,
-  `/admin/kunden-material` (Paar entries+counts pro Filter). Muster: Spinner nur
-  beim allerersten Laden (kein Cache), Wiederbesuch = still revalidieren; lokale
-  Mutationen/optimistische Updates unangetastet.
-- **Noch offen (gleiche Technik, größere/mutations-lastige Seiten):**
-  `/admin/zubehoer`, `/admin/sets`, `/admin/retouren`, `/admin/buchhaltung`,
-  `/admin/nachrichten`, `/admin/auftragskalender`, `/admin/verfuegbarkeit`,
-  `/admin/analytics` — können bei Bedarf nach dem Seed-Muster nachgezogen werden.
+  `/admin/kunden-material` (Paar entries+counts pro Filter), `/admin/zubehoer`,
+  `/admin/sets` (Bundle sets/accessories/products/badges), `/admin/verfuegbarkeit`
+  (Gantt), `/admin/auftragskalender` (Paar bookings+notes pro Monats-Range),
+  `/admin/retouren`. Muster: Spinner nur beim allerersten Laden (kein Cache),
+  Wiederbesuch = still revalidieren; lokale Mutationen/optimistische Updates
+  unangetastet.
+- **Bewusst NICHT umgestellt:** `/admin/nachrichten` (Inbox ist **pro Mitarbeiter**
+  gescoped → gleiche Privacy-Überlegung wie Konto-Seiten: globaler Modul-Cache
+  könnte nach Account-Wechsel kurz fremde Threads zeigen), `/admin/analytics`
+  (viele filter-/tab-getriebene Fetches, zu komplex/risikoreich für den
+  Seed-Ansatz ohne Laufzeittest, seltener genutzt), `/admin/buchhaltung`
+  (dünner Tab-Router ohne eigenen Daten-Fetch — die Daten liegen in den
+  Tab-Kindkomponenten).
 - **Bewusst NICHT für Konto-Seiten** (`/konto/*`): per-Kunde-Daten. Ein globaler
   Modul-Cache würde auf einem geteilten Browser nach Kontowechsel kurz die
   Daten des Vorgängers zeigen (Privacy-Leak) — dort wäre ein user-gebundener,
