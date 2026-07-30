@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useCachedFetch } from '@/lib/use-cached-fetch';
 import {
   type WidgetLayoutItem,
   type WidgetSize,
@@ -48,10 +49,19 @@ export default function AdminDashboardPage() {
   const [editMode, setEditMode] = useState(false);
   const [editLayout, setEditLayout] = useState<WidgetLayoutItem[]>([]);
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
   const [todayLabel, setTodayLabel] = useState('');
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Dashboard-Daten mit Stale-While-Revalidate-Cache: beim erneuten Öffnen des
+  // Dashboards sofort der letzte Stand statt Spinner, dazu 60-s-Hintergrund-Poll.
+  const { data, loading } = useCachedFetch<Record<string, unknown>>(
+    'admin-dashboard-data',
+    async () => {
+      const res = await fetch('/api/admin/dashboard-data');
+      if (!res.ok) throw new Error('dashboard-data');
+      return (await res.json()) as Record<string, unknown>;
+    },
+    { pollMs: 60_000 },
+  );
 
   // Load layout from localStorage on mount
   useEffect(() => {
@@ -62,30 +72,6 @@ export default function AdminDashboardPage() {
       new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     );
   }, []);
-
-  // Fetch dashboard data
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/dashboard-data');
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Initial fetch + auto-refresh
-  useEffect(() => {
-    fetchData();
-    timerRef.current = setInterval(fetchData, 60_000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [fetchData]);
 
   // ── Edit mode handlers ─────────────────────────────────────────
 
