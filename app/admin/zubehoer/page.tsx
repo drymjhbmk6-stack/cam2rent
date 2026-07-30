@@ -8,6 +8,9 @@ import AccessoryUnitsManager from '@/components/admin/AccessoryUnitsManager';
 import InventarCodeBuilder from '@/components/admin/InventarCodeBuilder';
 import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const ACCESSORIES_CACHE_KEY = 'admin:accessories';
 import { useBrandColors } from '@/hooks/useBrandColors';
 import { fmtEuro } from '@/lib/format-utils';
 import {
@@ -127,8 +130,8 @@ function formStateToSpecs(form: Record<string, string> | undefined | null): Acce
 }
 
 export default function AdminZubehoerPage() {
-  const [accessories, setAccessories] = useState<Accessory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [accessories, setAccessories] = useState<Accessory[]>(() => getCached<Accessory[]>(ACCESSORIES_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<Accessory[]>(ACCESSORIES_CACHE_KEY) === undefined);
   const [showNew, setShowNew] = useState(false);
   const [newForm, setNewForm] = useState(emptyForm());
   const [creating, setCreating] = useState(false);
@@ -154,10 +157,11 @@ export default function AdminZubehoerPage() {
   }, []);
 
   function loadAccessories() {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<Accessory[]>(ACCESSORIES_CACHE_KEY) === undefined) setLoading(true);
     fetch('/api/admin/accessories')
       .then((r) => r.json())
-      .then(({ accessories: data }) => setAccessories(data ?? []))
+      .then(({ accessories: data }) => { setAccessories(data ?? []); setCached(ACCESSORIES_CACHE_KEY, data ?? []); })
       .catch(() => setAccessories([]))
       .finally(() => setLoading(false));
   }

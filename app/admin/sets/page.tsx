@@ -8,6 +8,9 @@ import BrandBadge from '@/components/BrandBadge';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
 import { fmtEuro } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const SETS_BUNDLE_KEY = 'admin:sets-bundle';
 
 interface AccessoryItem { accessory_id: string; qty: number; }
 
@@ -54,6 +57,13 @@ const DEFAULT_BADGE_OPTIONS = [
   { label: 'Wasserdicht', value: 'Wasserdicht', color: 'bg-accent-teal text-white' },
 ];
 
+type SetsBundle = {
+  sets: AdminSet[];
+  accessories: Accessory[];
+  badgeOptions: typeof DEFAULT_BADGE_OPTIONS;
+  products: Record<string, AdminProduct>;
+};
+
 const STATIC_IDS = new Set(['basic', 'fahrrad', 'ski', 'motorrad', 'taucher', 'vlogging', 'allrounder']);
 
 function emptyNew() {
@@ -76,11 +86,12 @@ function computeAvailFromItems(
 }
 
 export default function AdminSetsPage() {
-  const [sets, setSets] = useState<AdminSet[]>([]);
-  const [accessories, setAccessories] = useState<Accessory[]>([]);
-  const [BADGE_OPTIONS, setBadgeOptions] = useState(DEFAULT_BADGE_OPTIONS);
-  const [products, setProducts] = useState<Record<string, AdminProduct>>({});
-  const [loading, setLoading] = useState(true);
+  // Startwerte aus dem Cache seeden → Wiederbesuch zeigt sofort statt Spinner.
+  const [sets, setSets] = useState<AdminSet[]>(() => getCached<SetsBundle>(SETS_BUNDLE_KEY)?.sets ?? []);
+  const [accessories, setAccessories] = useState<Accessory[]>(() => getCached<SetsBundle>(SETS_BUNDLE_KEY)?.accessories ?? []);
+  const [BADGE_OPTIONS, setBadgeOptions] = useState(() => getCached<SetsBundle>(SETS_BUNDLE_KEY)?.badgeOptions ?? DEFAULT_BADGE_OPTIONS);
+  const [products, setProducts] = useState<Record<string, AdminProduct>>(() => getCached<SetsBundle>(SETS_BUNDLE_KEY)?.products ?? {});
+  const [loading, setLoading] = useState(() => getCached(SETS_BUNDLE_KEY) === undefined);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editState, setEditState] = useState<Record<string, {
     name: string; description: string; badge: string; badge_color: string;
@@ -133,13 +144,17 @@ export default function AdminSetsPage() {
       fetch('/api/admin/config?key=products').then((r) => r.json()),
       fetch('/api/admin/settings?key=set_badges').then((r) => r.json()),
     ]).then(([setsData, accData, prodData, badgeData]) => {
-      setSets(setsData.sets ?? []);
-      setAccessories(accData.accessories ?? []);
+      const nextSets = setsData.sets ?? [];
+      const nextAcc = accData.accessories ?? [];
       const src = prodData && Object.keys(prodData).length > 0 ? prodData : {};
+      const nextBadges = (badgeData?.value && Array.isArray(badgeData.value) && badgeData.value.length > 0)
+        ? badgeData.value
+        : DEFAULT_BADGE_OPTIONS;
+      setSets(nextSets);
+      setAccessories(nextAcc);
       setProducts(src);
-      if (badgeData?.value && Array.isArray(badgeData.value) && badgeData.value.length > 0) {
-        setBadgeOptions(badgeData.value);
-      }
+      setBadgeOptions(nextBadges);
+      setCached<SetsBundle>(SETS_BUNDLE_KEY, { sets: nextSets, accessories: nextAcc, badgeOptions: nextBadges, products: src });
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
