@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getGermanHolidayMap } from '@/lib/german-holidays';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const akCacheKey = (from: string, to: string) => `admin:auftragskalender:${from}:${to}`;
 
 // ============================================================
 // Typen
@@ -151,7 +154,16 @@ export default function AuftragskalenderPage() {
   }, [gridStart, gridEnd]);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
+    const key = akCacheKey(gridStart, gridEnd);
+    const cached = getCached<{ bookings: Booking[]; notes: CalendarNote[] }>(key);
+    // Cache für diesen Monat → sofort anzeigen, still revalidieren. Sonst Spinner.
+    if (cached !== undefined) {
+      setBookings(cached.bookings);
+      setNotes(cached.notes);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [bRes, nRes] = await Promise.all([
@@ -160,13 +172,15 @@ export default function AuftragskalenderPage() {
       ]);
       if (!bRes.ok) throw new Error('Laden fehlgeschlagen');
       const bJson = await bRes.json();
-      setBookings(Array.isArray(bJson.bookings) ? bJson.bookings : []);
+      const nextBookings = Array.isArray(bJson.bookings) ? bJson.bookings : [];
+      setBookings(nextBookings);
+      let nextNotes: CalendarNote[] = [];
       if (nRes.ok) {
         const nJson = await nRes.json();
-        setNotes(Array.isArray(nJson.notes) ? nJson.notes : []);
-      } else {
-        setNotes([]);
+        nextNotes = Array.isArray(nJson.notes) ? nJson.notes : [];
       }
+      setNotes(nextNotes);
+      setCached(key, { bookings: nextBookings, notes: nextNotes });
     } catch {
       setError('Aufträge konnten nicht geladen werden.');
       setBookings([]);

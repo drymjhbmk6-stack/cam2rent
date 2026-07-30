@@ -3,6 +3,9 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const GANTT_CACHE_KEY = 'admin:availability-gantt';
 
 /* ─── Typen ─────────────────────────────────────────────────────────────── */
 
@@ -163,8 +166,8 @@ export default function AdminVerfuegbarkeitPage() {
   // Gantt-State — durchgehend scrollbar (3 Monate zurück + 6 Monate voraus)
   const MONTHS_BACK = 3;
   const MONTHS_FORWARD = 6;
-  const [ganttData, setGanttData] = useState<GanttData | null>(null);
-  const [ganttLoading, setGanttLoading] = useState(true);
+  const [ganttData, setGanttData] = useState<GanttData | null>(() => getCached<GanttData>(GANTT_CACHE_KEY) ?? null);
+  const [ganttLoading, setGanttLoading] = useState(() => getCached<GanttData>(GANTT_CACHE_KEY) === undefined);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
 
   // Zeitraum berechnen
@@ -178,11 +181,13 @@ export default function AdminVerfuegbarkeitPage() {
 
   // Gantt-Daten laden (gesamter Zeitraum)
   const loadGantt = useCallback(async () => {
-    setGanttLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<GanttData>(GANTT_CACHE_KEY) === undefined) setGanttLoading(true);
     try {
       const res = await fetch(`/api/admin/availability-gantt?from=${rangeFrom}&to=${rangeTo}`);
       const data = await res.json();
       setGanttData(data);
+      setCached(GANTT_CACHE_KEY, data);
     } catch {
       setGanttData(null);
     } finally {
