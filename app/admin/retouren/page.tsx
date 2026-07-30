@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const RETOUREN_BOOKINGS_KEY = 'admin:retouren-bookings';
 
 /**
  * Versand & Rueckgabe — kombinierte Page fuer den gesamten Fulfillment-
@@ -143,8 +146,8 @@ function daysUntil(due: Date): number {
 type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'abgeschlossen';
 
 export default function AdminVersandRueckgabePage() {
-  const [bookings, setBookings] = useState<FulfillmentBooking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<FulfillmentBooking[]>(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) === undefined);
   const [tab, setTab] = useState<Tab>('versenden');
   const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
 
@@ -300,12 +303,14 @@ export default function AdminVersandRueckgabePage() {
   }
 
   async function fetchBookings() {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) === undefined) setLoading(true);
     try {
       const res = await fetch('/api/admin/alle-buchungen?limit=500');
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBookings(data.bookings || []);
+      setCached(RETOUREN_BOOKINGS_KEY, data.bookings || []);
     } catch {
       console.error('Failed to load bookings');
     } finally {
