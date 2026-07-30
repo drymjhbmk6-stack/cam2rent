@@ -3852,6 +3852,36 @@ Pro Einkauf koennen jetzt mehrere Belege hinterlegt werden — Rechnung, Quittun
 - **Sitemap dynamic:** `app/sitemap.ts` nutzt `dynamic = 'force-dynamic'` + `revalidate = 3600` + `withTimeout(5s)` für DB-Calls. Wird nicht mehr beim Build generiert (sonst Build-Timeout bei langsamer Supabase).
 - **Server:** Hetzner Cloud CPX32 (4 vCPU AMD, 8 GB RAM) — Upgrade von CX23 am 2026-04-19 wegen Build-OOM bei großen Dependency-Trees (Social-Modul).
 
+### Ladezeit: Client-Cache (Stale-While-Revalidate) für Admin-Listen (Stand 2026-07-30)
+Admin-Seiten sind `'use client'` + `useEffect`+`fetch` → beim JEDEM Öffnen erst
+leerer Spinner, dann Daten. Neuer **modul-weiter Client-Cache**
+`lib/use-cached-fetch.ts` zeigt beim **erneuten** Öffnen einer Seite sofort den
+zuletzt gesehenen Stand und revalidiert still im Hintergrund. Kein externes
+Paket (kein SWR/React-Query), kein Server-/Cross-Request-Cache. Reine
+Latenz-/UX-Verbesserung — **kein Verhalten, keine Query, keine Migration
+geändert**. `tsc` + `eslint`: 0 Fehler pro Datei.
+- **Zwei Bausteine:** (1) `useCachedFetch(key, fetcher, {pollMs?})` — Hook, der
+  den State selbst besitzt (für **read-only**-Seiten). (2) `getCached`/`setCached`
+  — Roh-Primitiv, das nur den **Startwert** seedet, damit Seiten mit
+  **optimistischen lokalen Updates** (`setState(prev => …)`) unangetastet
+  bleiben. `invalidateCachedFetch(key)` zum gezielten Verwerfen.
+- **Umgestellt:** `/admin` (Dashboard, `useCachedFetch` + 60-s-Poll),
+  `/admin/buchungen` (Seed, Key `admin:alle-buchungen`), `/admin/kunden` (Seed
+  pro Filter, `admin:kunden:<filter>`), `/admin/inventar` (Seed pro
+  Filter-Kombi). Muster: Spinner nur beim allerersten Laden (kein Cache),
+  Wiederbesuch = still revalidieren.
+- **Bewusst NICHT für Konto-Seiten** (`/konto/*`): per-Kunde-Daten. Ein globaler
+  Modul-Cache würde auf einem geteilten Browser nach Kontowechsel kurz die
+  Daten des Vorgängers zeigen (Privacy-Leak) — dort wäre ein user-gebundener,
+  bei Logout geleerter Cache nötig. Admin-Daten sind admin-scoped → unkritisch.
+- **`/api/reviews`** (GET) bekam einen CDN-Cache-Header (`public max-age=30,
+  s-maxage=120, stale-while-revalidate=600`) — läuft auf jeder Produkt-Detailseite.
+- **Weiterer Hebel (offen, größer):** echtes Server-Rendern (SSR) der Admin-/
+  Konto-Seiten für schnellen ERSTEN Paint. Braucht pro Seite Auth-Cookie-Handling
+  + Laufzeittest auf einer Live-/Staging-Umgebung (in der Sandbox nicht real
+  testbar) → schrittweise, nicht blind. Der Hauptfaktor „generelle Langsamkeit"
+  ist ohnehin die DB-Antwortzeit, nicht der Code.
+
 ### Ladezeit-Optimierung Shop + Admin (Stand 2026-07-04)
 Shop und Adminbereich zeigten Inhalte zu spät, weil fast alles client-seitig
 nachgeladen wurde (leere Seite → Hydration → `fetch` → schwere, teils
