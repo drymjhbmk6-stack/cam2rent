@@ -30,7 +30,16 @@ export async function GET(req: NextRequest) {
     ? Math.round((reviews!.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10
     : 0;
 
-  return NextResponse.json({ reviews: reviews ?? [], avgRating, count });
+  return NextResponse.json(
+    { reviews: reviews ?? [], avgRating, count },
+    {
+      headers: {
+        // Öffentliche, änderungsarme Daten → CDN-Cache entlastet die DB auf
+        // jeder Produkt-Detailseite (wiederholte Besucher treffen den Cache).
+        'Cache-Control': 'public, max-age=30, s-maxage=120, stale-while-revalidate=600',
+      },
+    },
+  );
 }
 
 /**
