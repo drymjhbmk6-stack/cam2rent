@@ -27,6 +27,23 @@ export function invalidateCachedFetch(key: string): void {
   cache.delete(key);
 }
 
+/**
+ * Rohzugriff auf den Cache — für Seiten, die ihren State SELBST verwalten
+ * (z.B. optimistische Updates via `setState(prev => ...)`). Muster:
+ *   const [rows, setRows] = useState(() => getCached<Row[]>(KEY) ?? []);
+ *   const [loading, setLoading] = useState(() => getCached(KEY) === undefined);
+ *   // nach dem Fetch:  setCached(KEY, rows); setRows(rows);
+ * So bleibt die bestehende Logik unangetastet, nur der ERSTE Frame beim
+ * Wiederbesuch zeigt sofort den letzten Stand statt Spinner.
+ */
+export function getCached<T>(key: string): T | undefined {
+  return cache.has(key) ? (cache.get(key) as T) : undefined;
+}
+
+export function setCached<T>(key: string, value: T): void {
+  cache.set(key, value);
+}
+
 export function useCachedFetch<T>(
   key: string,
   fetcher: () => Promise<T>,

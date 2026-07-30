@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const BOOKINGS_CACHE_KEY = 'admin:alle-buchungen';
 
 interface Booking {
   id: string;
@@ -82,8 +85,8 @@ function startOfMonth(d: Date) {
 
 export default function AdminBuchungenPage() {
   const router = useRouter();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<Booking[]>(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) === undefined);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
@@ -104,12 +107,15 @@ export default function AdminBuchungenPage() {
   }, []);
 
   async function fetchBookings() {
-    setLoading(true);
+    // Spinner nur beim allerersten Laden (kein Cache). Beim Wiederbesuch sind
+    // die Daten schon da → still im Hintergrund revalidieren.
+    if (getCached<Booking[]>(BOOKINGS_CACHE_KEY) === undefined) setLoading(true);
     try {
       const res = await fetch('/api/admin/alle-buchungen?limit=500');
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBookings(data.bookings ?? []);
+      setCached(BOOKINGS_CACHE_KEY, data.bookings ?? []);
     } catch {
       setError('Buchungen konnten nicht geladen werden.');
     } finally {

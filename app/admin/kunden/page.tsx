@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const kundenCacheKey = (filter: string) => `admin:kunden:${filter}`;
 
 interface Customer {
   id: string;
@@ -84,23 +87,37 @@ const FILTERS = [
 
 export default function KundenPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Startwert aus dem Cache seeden (Initial-Filter '') → Wiederbesuch ohne Spinner.
+  const [customers, setCustomers] = useState<Customer[]>(() => getCached<Customer[]>(kundenCacheKey('')) ?? []);
+  const [loading, setLoading] = useState(() => getCached<Customer[]>(kundenCacheKey('')) === undefined);
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
   const [letter, setLetter] = useState('');
   const [resettingId, setResettingId] = useState<string | null>(null);
 
   const fetchCustomers = useCallback(async () => {
-    setLoading(true);
+    const key = kundenCacheKey(filter);
+    const cached = getCached<Customer[]>(key);
+    // Cache für diesen Filter da → sofort anzeigen, still revalidieren.
+    // Sonst (erster Aufruf für diesen Filter) → Spinner.
+    if (cached !== undefined) {
+      setCustomers(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     const params =
       filter === 'blacklisted' ? '?status=blacklisted'
       : filter === 'inactive' ? '?status=inactive'
       : '';
-    const res = await fetch(`/api/admin/kunden${params}`);
-    const data = await res.json();
-    setCustomers(data.customers || []);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/admin/kunden${params}`);
+      const data = await res.json();
+      setCustomers(data.customers || []);
+      setCached(key, data.customers || []);
+    } finally {
+      setLoading(false);
+    }
   }, [filter]);
 
   // Inaktives Konto wieder aktivieren (leert deactivated_at).
