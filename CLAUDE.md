@@ -3895,6 +3895,31 @@ geändert**. `tsc` + `eslint`: 0 Fehler pro Datei.
   testbar) → schrittweise, nicht blind. Der Hauptfaktor „generelle Langsamkeit"
   ist ohnehin die DB-Antwortzeit, nicht der Code.
 
+### Ladezeit: SSR-Pilot Buchungsliste (Stand 2026-07-30)
+Erste Seite mit echtem Server-Rendern: `/admin/buchungen` liefert die Buchungen
+bereits im initialen HTML (kein leerer Spinner beim ERSTEN Öffnen — der Punkt,
+den der Client-Cache nicht abdeckt). **Muster (Vorlage für weitere Seiten):**
+- Kernquery in eine Lib extrahieren (`lib/admin/load-alle-buchungen.ts`), die
+  API-Route (`/api/admin/alle-buchungen`) UND die Server-Page teilen sie → keine
+  Divergenz. Lib wirft nie (DB-Fehler → `{ bookings: [], error }`).
+- `page.tsx` = **Server-Komponente** (`export const dynamic = 'force-dynamic'`
+  gegen Build-Zeit-Ausführung ohne DB), fetcht server-seitig, rendert
+  `<XClient initialData=… />`. Auth macht die **Middleware** (Prefix `/admin/*`),
+  wie bei den API-Routen — die Page prüft nicht selbst.
+- Client-Komponente (`BuchungenClient.tsx`) = der bisherige Seiteninhalt, seedet
+  `useState` **deterministisch aus `initialBookings`** (NICHT aus dem Client-Cache
+  — sonst Hydration-Mismatch, weil die Server-Cache-Map leer, die Client-Map evtl.
+  gefüllt ist). Client-Refetch nur wenn SSR leer war (kein Doppel-DB-Hit; die
+  dynamische Route rendert bei jeder Navigation ohnehin frisch).
+- **Hydration-Checkliste pro SSR-Umbau:** (1) Startwert deterministisch (kein
+  `getCached`/`localStorage`/`Date.now()` im `useState`-Initializer); (2) keine
+  Browser-APIs (`window`/`document`/`localStorage`) im Render-Pfad; (3) Filter-
+  Defaults dürfen im Erst-Render kein `new Date()` triggern (hier: `dateFilter`
+  Default `'all'`).
+- **Bewusst erst EINE Seite** — Laufzeit ist in der Sandbox nicht testbar, daher
+  Pilot live gegenchecken (Liste erscheint sofort, Filter/Aktionen funktionieren,
+  keine Konsolen-Hydration-Warnung), DANN die nächsten nach demselben Muster.
+
 ### Ladezeit-Optimierung Shop + Admin (Stand 2026-07-04)
 Shop und Adminbereich zeigten Inhalte zu spät, weil fast alles client-seitig
 nachgeladen wurde (leere Seite → Hydration → `fetch` → schwere, teils
