@@ -4,6 +4,10 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const invKey = (typ: string, status: string, belegStatus: string, q: string, produktId: string) =>
+  `admin:inventar:${typ}|${status}|${belegStatus}|${q}|${produktId}`;
 
 /**
  * Inventar — Konsolidiert (neue Welt). Zeigt alles aus inventar_units.
@@ -84,8 +88,13 @@ function displayFields(u: Unit): { bezeichnung: string; code: string; sn: string
 export default function InventarPage() {
   const searchParams = useSearchParams();
   const produktId = searchParams.get('produkt_id') ?? '';
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Startwert aus dem Cache (Initial-Filter) → Wiederbesuch ohne Spinner.
+  const [units, setUnits] = useState<Unit[]>(
+    () => getCached<Unit[]>(invKey(searchParams.get('typ') ?? '', '', '', '', produktId)) ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => getCached<Unit[]>(invKey(searchParams.get('typ') ?? '', '', '', '', produktId)) === undefined,
+  );
   const [typ, setTyp] = useState(searchParams.get('typ') ?? '');
   const [status, setStatus] = useState('');
   const [belegStatus, setBelegStatus] = useState('');
@@ -118,18 +127,31 @@ export default function InventarPage() {
   }
 
   useEffect(() => {
-    const load = async () => {
+    const key = invKey(typ, status, belegStatus, q, produktId);
+    // Cache für diese Filter-Kombi vorhanden → sofort anzeigen, still
+    // revalidieren. Sonst Spinner (erster Aufruf dieser Kombi).
+    const cached = getCached<Unit[]>(key);
+    if (cached !== undefined) {
+      setUnits(cached);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+    const load = async () => {
       const sp = new URLSearchParams();
       if (typ) sp.set('typ', typ);
       if (status) sp.set('status', status);
       if (belegStatus) sp.set('beleg_status', belegStatus);
       if (q) sp.set('q', q);
       if (produktId) sp.set('produkt_id', produktId);
-      const res = await fetch(`/api/admin/inventar?${sp.toString()}`);
-      const data = await res.json();
-      setUnits(data.units ?? []);
-      setLoading(false);
+      try {
+        const res = await fetch(`/api/admin/inventar?${sp.toString()}`);
+        const data = await res.json();
+        setUnits(data.units ?? []);
+        setCached(key, data.units ?? []);
+      } finally {
+        setLoading(false);
+      }
     };
     const debounce = setTimeout(load, 300);
     return () => clearTimeout(debounce);
