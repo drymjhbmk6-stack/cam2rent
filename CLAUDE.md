@@ -3919,6 +3919,21 @@ den der Client-Cache nicht abdeckt). **Muster (Vorlage für weitere Seiten):**
 - **Bewusst erst EINE Seite** — Laufzeit ist in der Sandbox nicht testbar, daher
   Pilot live gegenchecken (Liste erscheint sofort, Filter/Aktionen funktionieren,
   keine Konsolen-Hydration-Warnung), DANN die nächsten nach demselben Muster.
+- **Rollout-Batch (Stand 2026-07-30):** nach dem Pilot auf die **SSR-sicheren**
+  Seiten ausgeweitet: `/admin/warteliste`, `/admin/verkauf`, `/admin/schaeden`,
+  `/admin/bewertungen` (Default-Filter 'all'), `/admin/kunden-material`
+  (Default-Filter 'pending', in `<Suspense>` wegen `useSearchParams`). Libs:
+  `lib/admin/load-{waitlist,sales,damage-reports,reviews,customer-ugc}.ts`.
+- **BEWUSST NICHT SSR (bleiben auf Client+Cache):** Seiten mit `Date.now()`/
+  `new Date()` **im Render** (`/admin/kunden` zeigt „vor X Tagen", `/admin/retouren`
+  filtert nach „heute") → SSR-Zeit ≠ Client-Zeit → Hydration-Mismatch; Seiten mit
+  `localStorage`/`window` im Render (`/admin` Dashboard-Layout,
+  `/admin/auftragskalender` View-Pref); **langsame** Endpoints
+  (`/admin/sendungen` → Sendcloud-Live-Abruf blockiert den SSR-Paint); Multi-Fetch
+  (`/admin/sets` lädt 4 Endpoints). Für die wäre SSR neutral/schädlich — der
+  Client-Cache ist dort die bessere Wahl. Ein SSR-Umbau der hoch-frequenten
+  `/admin/kunden`/`/admin` bräuchte zuerst einen Hydration-Fix (Zeiten/„heute"
+  erst nach Mount rendern) + Live-Test.
 
 ### Ladezeit-Optimierung Shop + Admin (Stand 2026-07-04)
 Shop und Adminbereich zeigten Inhalte zu spät, weil fast alles client-seitig
