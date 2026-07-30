@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtEuro, fmtDateTime } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const SALES_CACHE_KEY = 'admin:verkauf';
 
 interface SaleItem {
   name: string;
@@ -35,19 +38,21 @@ function statusBadge(status: string) {
 }
 
 export default function VerkaufListe() {
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sales, setSales] = useState<Sale[]>(() => getCached<Sale[]>(SALES_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<Sale[]>(SALES_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<Sale[]>(SALES_CACHE_KEY) === undefined) setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/admin/verkauf');
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Fehler beim Laden.');
       setSales(data.sales ?? []);
+      setCached(SALES_CACHE_KEY, data.sales ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
     } finally {

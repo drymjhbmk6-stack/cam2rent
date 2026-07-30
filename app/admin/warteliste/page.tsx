@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const WAITLIST_CACHE_KEY = 'admin:waitlist';
 
 interface WaitlistEntry {
   id: string;
@@ -26,18 +29,20 @@ function sourceLabel(source: string | null): string {
 }
 
 export default function Warteliste() {
-  const [entries, setEntries] = useState<WaitlistEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<WaitlistEntry[]>(() => getCached<WaitlistEntry[]>(WAITLIST_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<WaitlistEntry[]>(WAITLIST_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<WaitlistEntry[]>(WAITLIST_CACHE_KEY) === undefined) setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/admin/waitlist');
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Fehler beim Laden.');
       setEntries(data.entries ?? []);
+      setCached(WAITLIST_CACHE_KEY, data.entries ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
     } finally {

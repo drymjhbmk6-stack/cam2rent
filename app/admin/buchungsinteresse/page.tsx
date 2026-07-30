@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const interestCacheKey = (query: string) => `admin:booking-interest:${query}`;
 
 interface RankItem { id: string; name: string; count: number }
 interface BucketItem { bucket: string; count: number }
@@ -118,8 +121,8 @@ function BarRow({ label, count, max }: { label: string; count: number; max: numb
 }
 
 export default function BuchungsinteressePage() {
-  const [data, setData] = useState<InterestData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<InterestData | null>(() => getCached<InterestData>(interestCacheKey('days=30')) ?? null);
+  const [loading, setLoading] = useState(() => getCached<InterestData>(interestCacheKey('days=30')) === undefined);
 
   // Zeitraum-State: entweder ein Preset ODER ein freier Zeitraum.
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
@@ -139,11 +142,24 @@ export default function BuchungsinteressePage() {
   const customValid = !!customFrom && !!customTo && customFrom <= customTo;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const key = interestCacheKey(appliedQuery);
+    const cached = getCached<InterestData>(key);
+    // Cache für diese Auswertung → sofort anzeigen, still revalidieren.
+    if (cached !== undefined) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`/api/admin/booking-interest?${appliedQuery}`);
-      if (res.ok) setData(await res.json());
-      else setData(null);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        setCached(key, json);
+      } else {
+        setData(null);
+      }
     } catch {
       setData(null);
     } finally {

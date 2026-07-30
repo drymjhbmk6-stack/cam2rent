@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const SENDUNGEN_CACHE_KEY = 'admin:sendungen';
 
 type Category = 'delivered' | 'transit' | 'announced' | 'problem' | 'unknown';
 type Direction = 'outbound' | 'return';
@@ -78,21 +81,24 @@ function carrierColor(c: string): string {
 type Bucket = Record<Direction, SendungEntry[]>;
 
 export default function SendungenPage() {
-  const [entries, setEntries] = useState<SendungEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<SendungEntry[]>(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) ?? []);
+  const [loading, setLoading] = useState(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [carrierFilter, setCarrierFilter] = useState<'' | 'DHL' | 'DPD'>('');
   const [q, setQ] = useState('');
   const [showArchive, setShowArchive] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
+    if (getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) === undefined) setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/admin/sendungen');
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
-      setEntries(Array.isArray(json.entries) ? json.entries : []);
+      const list = Array.isArray(json.entries) ? json.entries : [];
+      setEntries(list);
+      setCached(SENDUNGEN_CACHE_KEY, list);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden.');
     } finally {

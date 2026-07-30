@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { getCached, setCached } from '@/lib/use-cached-fetch';
+
+const reviewsCacheKey = (filter: string) => `admin:reviews:${filter}`;
 
 const C = {
   bg: '#0a0f1e',
@@ -47,8 +50,8 @@ function Stars({ rating }: { rating: number }) {
 }
 
 export default function AdminBewertungenPage() {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState<Review[]>(() => getCached<Review[]>(reviewsCacheKey('all')) ?? []);
+  const [loading, setLoading] = useState(() => getCached<Review[]>(reviewsCacheKey('all')) === undefined);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [replyId, setReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -59,6 +62,7 @@ export default function AdminBewertungenPage() {
       const res = await fetch(`/api/admin/reviews?filter=${filter}`);
       const data = await res.json();
       setReviews(data.reviews ?? []);
+      setCached(reviewsCacheKey(filter), data.reviews ?? []);
     } catch {
     } finally {
       setLoading(false);
@@ -66,7 +70,14 @@ export default function AdminBewertungenPage() {
   }
 
   useEffect(() => {
-    setLoading(true);
+    // Cache für diesen Filter → sofort anzeigen, still revalidieren. Sonst Spinner.
+    const cached = getCached<Review[]>(reviewsCacheKey(filter));
+    if (cached !== undefined) {
+      setReviews(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     loadReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
