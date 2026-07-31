@@ -196,7 +196,13 @@ export default function KundenDetailPage() {
   const [reminderLoading, setReminderLoading] = useState(false);
   const [idFrontSignedUrl, setIdFrontSignedUrl] = useState<string | null>(null);
   const [idBackSignedUrl, setIdBackSignedUrl] = useState<string | null>(null);
+  // Unverkleinertes Original als Fallback, falls die verkleinerte Transform-URL
+  // nicht lädt (Supabase-Bildtransformation nicht aktiviert).
+  const [idFrontOriginalUrl, setIdFrontOriginalUrl] = useState<string | null>(null);
+  const [idBackOriginalUrl, setIdBackOriginalUrl] = useState<string | null>(null);
   const [idImagesLoading, setIdImagesLoading] = useState(false);
+  const [frontImgLoaded, setFrontImgLoaded] = useState(false);
+  const [backImgLoaded, setBackImgLoaded] = useState(false);
 
   // ─── Stammdaten bearbeiten ───
   const [editProfile, setEditProfile] = useState(false);
@@ -267,16 +273,25 @@ export default function KundenDetailPage() {
 
     async function loadIdImages() {
       setIdImagesLoading(true);
+      const frontPath = customer?.id_front_url;
+      const backPath = customer?.id_back_url;
+      const signUrl = (path: string) =>
+        fetch(`/api/admin/id-document-url?path=${encodeURIComponent(path)}`)
+          .then((r) => r.json())
+          .catch(() => null);
       try {
-        if (customer?.id_front_url) {
-          const res = await fetch(`/api/admin/id-document-url?path=${encodeURIComponent(customer.id_front_url)}`);
-          const data = await res.json();
-          if (data.url) setIdFrontSignedUrl(data.url);
+        // Vorder- und Rückseite parallel holen (vorher nacheinander = doppelte Wartezeit).
+        const [frontData, backData] = await Promise.all([
+          frontPath ? signUrl(frontPath) : Promise.resolve(null),
+          backPath ? signUrl(backPath) : Promise.resolve(null),
+        ]);
+        if (frontData?.url) {
+          setIdFrontSignedUrl(frontData.url);
+          setIdFrontOriginalUrl(frontData.original ?? null);
         }
-        if (customer?.id_back_url) {
-          const res = await fetch(`/api/admin/id-document-url?path=${encodeURIComponent(customer.id_back_url)}`);
-          const data = await res.json();
-          if (data.url) setIdBackSignedUrl(data.url);
+        if (backData?.url) {
+          setIdBackSignedUrl(backData.url);
+          setIdBackOriginalUrl(backData.original ?? null);
         }
       } catch {
         // Bilder konnten nicht geladen werden
@@ -818,15 +833,37 @@ export default function KundenDetailPage() {
                       Vorderseite
                     </div>
                     {idFrontSignedUrl ? (
-                      <a href={idFrontSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                      <a href={idFrontSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
+                        {!frontImgLoaded && (
+                          <div style={{
+                            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', color: '#64748b', fontSize: 12,
+                            background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                          }}>
+                            Bild lädt…
+                          </div>
+                        )}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={idFrontSignedUrl}
                           alt="Ausweis Vorderseite"
+                          loading="eager"
+                          decoding="async"
+                          onLoad={() => setFrontImgLoaded(true)}
+                          onError={() => {
+                            // Verkleinerte URL lädt nicht → auf Original zurückfallen.
+                            if (idFrontOriginalUrl && idFrontSignedUrl !== idFrontOriginalUrl) {
+                              setIdFrontSignedUrl(idFrontOriginalUrl);
+                            } else {
+                              setFrontImgLoaded(true);
+                            }
+                          }}
                           style={{
                             width: '100%', borderRadius: 8, border: '1px solid #1e293b',
                             cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
-                            background: '#0a0f1e',
+                            background: '#0a0f1e', display: 'block',
+                            opacity: frontImgLoaded ? 1 : 0,
+                            minHeight: frontImgLoaded ? undefined : 120,
                           }}
                         />
                       </a>
@@ -849,15 +886,37 @@ export default function KundenDetailPage() {
                       Rückseite
                     </div>
                     {idBackSignedUrl ? (
-                      <a href={idBackSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                      <a href={idBackSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
+                        {!backImgLoaded && (
+                          <div style={{
+                            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', color: '#64748b', fontSize: 12,
+                            background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                          }}>
+                            Bild lädt…
+                          </div>
+                        )}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={idBackSignedUrl}
                           alt="Ausweis Rückseite"
+                          loading="eager"
+                          decoding="async"
+                          onLoad={() => setBackImgLoaded(true)}
+                          onError={() => {
+                            // Verkleinerte URL lädt nicht → auf Original zurückfallen.
+                            if (idBackOriginalUrl && idBackSignedUrl !== idBackOriginalUrl) {
+                              setIdBackSignedUrl(idBackOriginalUrl);
+                            } else {
+                              setBackImgLoaded(true);
+                            }
+                          }}
                           style={{
                             width: '100%', borderRadius: 8, border: '1px solid #1e293b',
                             cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
-                            background: '#0a0f1e',
+                            background: '#0a0f1e', display: 'block',
+                            opacity: backImgLoaded ? 1 : 0,
+                            minHeight: backImgLoaded ? undefined : 120,
                           }}
                         />
                       </a>
