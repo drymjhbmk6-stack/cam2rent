@@ -4,7 +4,6 @@ import { sendDamageResolution, sendAdminDamageNotice } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
 import { createAdminNotification } from '@/lib/admin-notifications';
-import { loadDamageReports } from '@/lib/admin/load-damage-reports';
 import {
   uploadDamageDocument,
   buildEmailHistoryAttachment,
@@ -29,15 +28,71 @@ const DETECTED_TO_EXT: Record<string, { ext: string; mime: string }> = {
  * Optional: ?status=open|confirmed|resolved
  */
 export async function GET(req: NextRequest) {
-  // Kernlogik in lib/admin/load-damage-reports.ts — geteilt mit der
-  // server-gerenderten /admin/schaeden-Page.
-  const status = req.nextUrl.searchParams.get('status');
-  const bookingId = req.nextUrl.searchParams.get('booking_id');
-  const { reports, error } = await loadDamageReports({ status, bookingId });
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 });
+  try {
+    const supabase = createServiceClient();
+    const status = req.nextUrl.searchParams.get('status');
+    const bookingId = req.nextUrl.searchParams.get('booking_id');
+
+    let query = supabase
+      .from('damage_reports')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (status && ['open', 'confirmed', 'resolved'].includes(status)) {
+      query = query.eq('status', status);
+    }
+    if (bookingId) {
+      query = query.eq('booking_id', bookingId);
+    }
+
+    const { data: reports, error } = await query;
+    if (error) throw error;
+
+    // Buchungs-Details dazuladen
+    const bookingIds = [...new Set((reports || []).map((r) => r.booking_id))];
+    const bookingsMap: Record<string, {
+      product_name: string;
+      customer_name: string;
+      customer_email: string;
+      deposit: number;
+      product_id: string;
+      deposit_intent_id: string | null;
+      deposit_status: string | null;
+      price_haftung: number | null;
+    }> = {};
+
+    if (bookingIds.length > 0) {
+      const { data: bookings } = await supabase
+        .from('bookings')
+        .select('id, product_name, product_id, customer_name, customer_email, deposit, deposit_intent_id, deposit_status, price_haftung')
+        .in('id', bookingIds);
+
+      if (bookings) {
+        for (const b of bookings) {
+          bookingsMap[b.id] = {
+            product_name: b.product_name,
+            customer_name: b.customer_name,
+            customer_email: b.customer_email,
+            deposit: b.deposit,
+            product_id: b.product_id,
+            deposit_intent_id: b.deposit_intent_id ?? null,
+            deposit_status: b.deposit_status ?? null,
+            price_haftung: b.price_haftung ?? null,
+          };
+        }
+      }
+    }
+
+    const enriched = (reports || []).map((r) => ({
+      ...r,
+      booking: bookingsMap[r.booking_id] || null,
+    }));
+
+    return NextResponse.json({ reports: enriched });
+  } catch (err) {
+    console.error('GET /api/admin/damage error:', err);
+    return NextResponse.json({ error: 'Fehler beim Laden.' }, { status: 500 });
   }
-  return NextResponse.json({ reports });
 }
 
 /**

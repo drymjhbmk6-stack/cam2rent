@@ -4,7 +4,6 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { createSale } from '@/lib/verkauf';
-import { loadSales } from '@/lib/admin/load-sales';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -93,16 +92,20 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Verkaufs-Liste ──────────────────────────────────────────────────────
-  // Kernlogik in lib/admin/load-sales.ts — geteilt mit der server-gerenderten
-  // /admin/verkauf-Page.
-  const { sales, migrationPending, error } = await loadSales();
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 });
-  }
-  if (migrationPending) {
+  const res = await sb
+    .from('bookings')
+    .select('id, customer_name, customer_email, price_total, status, created_at, sale_items, stripe_payment_link_id, notes')
+    .eq('booking_type', 'kauf')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (res.error && /booking_type/i.test(res.error.message || '')) {
+    // Migration noch nicht ausgeführt → es gibt schlicht keine Verkäufe.
     return NextResponse.json({ sales: [], migration_pending: true });
   }
-  return NextResponse.json({ sales });
+  if (res.error) {
+    return NextResponse.json({ error: res.error.message }, { status: 500 });
+  }
+  return NextResponse.json({ sales: res.data ?? [] });
 }
 
 /**
