@@ -3895,10 +3895,26 @@ geändert**. `tsc` + `eslint`: 0 Fehler pro Datei.
   testbar) → schrittweise, nicht blind. Der Hauptfaktor „generelle Langsamkeit"
   ist ohnehin die DB-Antwortzeit, nicht der Code.
 
-### Ladezeit: SSR-Pilot Buchungsliste (Stand 2026-07-30)
-Erste Seite mit echtem Server-Rendern: `/admin/buchungen` liefert die Buchungen
-bereits im initialen HTML (kein leerer Spinner beim ERSTEN Öffnen — der Punkt,
-den der Client-Cache nicht abdeckt). **Muster (Vorlage für weitere Seiten):**
+### Ladezeit: SSR-Versuch WIEDER REVERTED (Stand 2026-07-30)
+**⚠️ WICHTIG — SSR wurde ausprobiert und komplett zurückgerollt.** Die
+SSR-Umbauten (buchungen, warteliste, verkauf, schaeden, bewertungen,
+kunden-material) sind per `git revert` rückgängig gemacht; alle diese Seiten
+sind wieder Client-Komponenten mit dem **Client-Cache** (`useCachedFetch`/
+`getCached`, instant beim Wiederbesuch).
+- **Grund:** Bei der (langsamen) Supabase-Instanz ist SSR **kontraproduktiv**.
+  Eine `force-dynamic`-Server-Page fragt die DB bei **JEDER** Navigation neu ab
+  und zeigt währenddessen `app/admin/loading.tsx` (Skeleton) — genau so lange,
+  wie die DB braucht. Der Client-Cache dagegen zeigt beim **Wiederbesuch sofort**
+  (kein DB-Wait). SSR half nur beim allerersten Besuch (und nur bei schneller DB)
+  und nahm dafür den instant-Revisit-Vorteil weg → netto langsamer *gefühlt*.
+- **Lehre für später:** SSR lohnt nur, wenn die DB-Antwort schnell ist. Solange
+  die DB der Flaschenhals ist, ist der Client-Cache die bessere Wahl. Ein
+  SSR-Neuversuch macht erst Sinn nach DB-Tuning (Indizes/Instanz) — und dann mit
+  kurzer Router-Cache-Haltezeit (`staleTimes`), damit Wiederbesuche nicht neu
+  abfragen.
+- Das ursprüngliche Muster (nur noch historisch, NICHT aktiv):
+
+**(historisch) SSR-Muster:**
 - Kernquery in eine Lib extrahieren (`lib/admin/load-alle-buchungen.ts`), die
   API-Route (`/api/admin/alle-buchungen`) UND die Server-Page teilen sie → keine
   Divergenz. Lib wirft nie (DB-Fehler → `{ bookings: [], error }`).
