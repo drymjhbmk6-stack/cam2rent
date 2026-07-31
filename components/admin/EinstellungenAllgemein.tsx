@@ -9,6 +9,7 @@ import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
 import FirmwareCheckSection from '@/components/admin/FirmwareCheckSection';
 import EnvModeSection from '@/components/admin/EnvModeSection';
 import CheckoutConfigSection from '@/components/admin/CheckoutConfigSection';
+import HandoverAddressesSection from '@/components/admin/HandoverAddressesSection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -603,6 +604,9 @@ export default function EinstellungenAllgemein() {
 
       {/* Sektion 6: Geschaeftsdaten */}
       <BusinessDataSection />
+
+      {/* Sektion 6b: Übergabe-/Abhol-Adressen */}
+      <HandoverAddressesSection />
 
       {/* Sektion 7: Admin-App installieren */}
       <AdminInstallSection />

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
+import { BUSINESS } from '@/lib/business-config';
+import { normalizeHandoverAddresses } from '@/components/admin/HandoverAddressesSection';
 import {
   expandItems,
   groupItems,
@@ -116,6 +118,17 @@ function Wizard({ booking }: { booking: BookingDetail }) {
 
   // Step 1 state
   const [location, setLocation] = useState('');
+  // Hinterlegte Übergabe-Adressen (aus Einstellungen) als anhakbare Auswahl.
+  const [savedAddresses, setSavedAddresses] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/settings?key=handover_addresses')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = normalizeHandoverAddresses(d?.value);
+        setSavedAddresses(list.length > 0 ? list : [BUSINESS.fullAddress]);
+      })
+      .catch(() => setSavedAddresses([BUSINESS.fullAddress]));
+  }, []);
   const [tested, setTested] = useState(false);
   const [noDamage, setNoDamage] = useState(false);
   const [otherNote, setOtherNote] = useState('');
@@ -398,7 +411,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
             scannerOpen, setScannerOpen,
             scanFeedback, handleScan,
             totalPackable, checkedPackable,
-            location, setLocation,
+            location, setLocation, savedAddresses,
             tested, setTested, noDamage, setNoDamage,
             photoFile, setPhotoFile, photoPreview, setPhotoPreview,
             otherNote, setOtherNote,
@@ -546,6 +559,7 @@ function Step1(props: {
   checkedPackable: number;
   location: string;
   setLocation: (v: string) => void;
+  savedAddresses: string[];
   tested: boolean;
   setTested: (v: boolean) => void;
   noDamage: boolean;
@@ -583,13 +597,44 @@ function Step1(props: {
       {/* Ort der Übergabe */}
       <div className="mb-5">
         <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Ort der Übergabe *</label>
+
+        {props.savedAddresses.length > 0 && (
+          <div className="space-y-1.5 mb-2.5">
+            {props.savedAddresses.map((addr) => {
+              const selected = props.location.trim() === addr;
+              return (
+                <label
+                  key={addr}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    selected
+                      ? 'bg-cyan-500/10 border-cyan-500'
+                      : 'bg-slate-950 border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => props.setLocation(selected ? '' : addr)}
+                    className="h-4 w-4 accent-cyan-500 shrink-0"
+                  />
+                  <span className="text-sm text-slate-200">{addr}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
         <input
           type="text"
-          value={props.location}
+          value={props.savedAddresses.includes(props.location.trim()) ? '' : props.location}
           onChange={(e) => props.setLocation(e.target.value)}
-          placeholder="z.B. Heimsbrunner Str. 12, 12349 Berlin"
+          placeholder="Andere Adresse eingeben…"
           className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-base focus:border-cyan-500 focus:outline-none"
         />
+        <p className="text-xs text-slate-500 mt-1.5">
+          Adresse anhaken oder eine abweichende Adresse eingeben. Feste Adressen
+          verwaltest du unter Einstellungen → Allgemein.
+        </p>
       </div>
 
       {/* Item-Checkliste + Scanner */}
