@@ -2532,6 +2532,24 @@ validity-gefilterte `getDiscountMatchesForItem`).
 
 **Auto-Status „abgeholt" nach Abschluss (Stand 2026-06-20):** Sobald das Übergabeprotokoll erfolgreich gespeichert ist (beide Signaturen + Foto), setzt `POST /api/admin/handover/[bookingId]` den Buchungsstatus automatisch auf **`picked_up`** („abgeholt"). Atomarer Guard `.in('status', ['confirmed','awaiting_pickup'])` — überschreibt also NICHT einen bereits weiter fortgeschrittenen Status (picked_up/completed/returned/cancelled/damaged/shipped/delivered). Best-effort (Fehler lässt das gespeicherte Protokoll unberührt). Antwort + Audit (`booking.handover_completed`) enthalten `statusUpdated`/`statusSetToPickedUp`. Kein neuer Spalten-Timestamp (`bookings.status` ist plain TEXT, es gibt kein `picked_up_at`).
 
+### Übergabe: „Ort der Übergabe" als anhakbare Adress-Auswahl (Stand 2026-07-31)
+Das Feld „Ort der Übergabe" in Schritt 1 der Übergabe/Abholung
+(`/admin/buchungen/[id]/uebergabe`) war ein reines Textfeld. Jetzt erscheinen
+hinterlegte Adressen als **anhakbare Checkbox-Auswahl** (kein Dropdown) — anhaken
+setzt `location`, erneutes Anhaken leert es; ein Freitextfeld darunter bleibt für
+abweichende Adressen (die Checkboxen entkoppeln automatisch, sobald der Freitext
+nicht exakt einer gespeicherten Adresse entspricht). `canProceedFromStep1` bleibt
+unverändert (`location.trim().length > 0`).
+- **Speicherung:** `admin_settings.handover_addresses` = `string[]` (generisch über
+  `GET/POST /api/admin/settings`, kein neues Schema/keine Migration).
+- **Verwaltung:** neue Section `components/admin/HandoverAddressesSection.tsx`
+  (beliebig viele Adressen hinzufügen/entfernen/speichern), gerendert in
+  `components/admin/EinstellungenAllgemein.tsx` (Einstellungen → Allgemein, „Sektion
+  6b"). Exportiert `normalizeHandoverAddresses(value)` (Array / JSON-String / null →
+  `string[]`), das der Übergabe-Wizard zum Laden wiederverwendet.
+- **Default:** solange noch nie gespeichert wurde, wird `BUSINESS.fullAddress`
+  vorgeschlagen (im Settings-Editor UND als einzige Haken-Option in der Übergabe).
+
 ### Übergabeprotokoll-Wizard mit Scanner (Stand 2026-05-16)
 Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard: Zustand → Vermieter → Mieter → Fertig) nutzt in Schritt 1 jetzt denselben Scanner-Workflow wie das Versand-Packen. Statt der reinen Checkbox-Liste: `<ScannerBar>` + `<ItemList>` (gruppiert, Mengen-Counter) + `<SerialScanner continuous>` + `<ScannerLiveList>` aus `components/admin/scan-workflow.tsx`. Kamera-Seriennummer / Zubehör-Exemplar-Code wird gescannt → Slot automatisch abgehakt, Toast-Feedback (grün/amber/rot), Auto-Close wenn alle scanbaren Stücke erfasst sind, Substitution erlaubt (analog Pack-Schritt 1). `bookingToScanInput()` setzt `skipReturnLabel: true` (Abholung → kein Rücksendeetikett). Manuelles Abhaken per Klick auf die Item-Zeile bleibt parallel möglich.
 
