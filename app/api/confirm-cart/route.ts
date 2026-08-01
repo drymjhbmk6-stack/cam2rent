@@ -718,10 +718,14 @@ export async function POST(req: NextRequest) {
       const groupLoyaltyDiscount = specialActive ? 0 : Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
       const groupSpecialDiscount = specialActive ? Math.round(serverSpecialTotal * ratio * scale * 100) / 100 : 0;
 
-      // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt mehr
-      // als 0,50 EUR auseinander liegen, ist das ein Hinweis auf einen Frontend-
-      // Bug oder Manipulationsversuch — Admin-Notification.
-      if (Math.abs(bodyDiscountSum - effectiveDiscount) > 0.5 && gi === 0) {
+      // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt zu
+      // weit auseinander liegen, ist das ein Hinweis auf einen Frontend-Bug oder
+      // Manipulationsversuch — Admin-Notification. Die Toleranz ist relativ zum
+      // Rabattbetrag (max. 0,50 EUR oder 1,5 % des Rabatts), damit die normale
+      // Rundungsdrift beim additiven Rabatt-Stacking bei grossen Rabatten keine
+      // Fehlalarme mehr ausloest (z.B. 0,67 EUR Drift bei ~55 EUR Rabatt).
+      const mismatchTolerance = Math.max(0.5, bodyDiscountSum * 0.015);
+      if (Math.abs(bodyDiscountSum - effectiveDiscount) > mismatchTolerance && gi === 0) {
         try {
           await createAdminNotification(supabase, {
             type: 'payment_failed',
@@ -1038,6 +1042,14 @@ export async function POST(req: NextRequest) {
               usedQuery = usedQuery.eq('user_id', r_userId);
             } else if (buyerEmail) {
               usedQuery = usedQuery.ilike('customer_email', buyerEmail);
+            }
+            // Die in DIESEM Request erzeugten Buchungen ausschliessen — der
+            // Pre-Check laeuft NACH dem Schreiben der Buchungen, sonst zaehlt er
+            // die gerade angelegten Buchungen (bei Warenkorb-Split auch mehrere)
+            // als "schon genutzt" und meldet faelschlich einen once_per_customer-
+            // Verstoss bei der legitimen Erstnutzung.
+            if (bookingIds.length > 0) {
+              usedQuery = usedQuery.not('id', 'in', `(${bookingIds.join(',')})`);
             }
             const { count: priorUses } = await usedQuery;
             if ((priorUses ?? 0) > 0) {
