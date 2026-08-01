@@ -740,12 +740,17 @@ dahin kein unterschriebener Vertrag vorliegt. Analog zum Ausweis-Flow
   existiert längst.
 - **Config** `admin_settings.contract_reminder_config` (`lib/contract-reminder-config.ts`,
   `loadContractReminderConfig`): `{ enabled, reminder_lead_days=5,
-  autocancel_versand=true, autocancel_abholung=true, refund_on_cancel=true }`.
-  Ohne Setting greifen diese Defaults. **Wichtig:** Bei Abholung kann der Vertrag
-  auch bei der Übergabe unterschrieben werden — wer Abholung NICHT
-  auto-stornieren will, setzt `{ "autocancel_abholung": false }` (Reminder läuft
-  dann trotzdem weiter). Zum Deaktivieren des ganzen Features:
-  `{ "enabled": false }`.
+  autocancel_versand=true, autocancel_abholung=false, refund_on_cancel=true }`.
+  Ohne Setting greifen diese Defaults. **⚠️ WICHTIG (Stand 2026-08-01):
+  Abholung wird NIEMALS wegen fehlendem Vertrag auto-storniert** — der Kunde kann
+  den Mietvertrag bei der Übergabe unterschreiben. Das ist im Cron
+  `contract-auto-cancel` **hart verdrahtet** (`if (mode === 'abholung') continue`)
+  und **lässt sich per Config nicht umgehen**; der Wert `autocancel_abholung` ist
+  ohne Wirkung (Default trotzdem auf `false` gesetzt). Der Reminder läuft für
+  Abholung weiter (nur die harte Stornierung entfällt). Auto-Storno hängt damit
+  nur noch an `autocancel_versand`. Hintergrund: das System hatte eine Abholung
+  storniert, weil der Vertrag nicht unterschrieben war — das darf bei Abholung
+  nie passieren. Zum Deaktivieren des ganzen Features: `{ "enabled": false }`.
 - **Cron `/api/cron/contract-reminder`** (täglich ~08:00 Berlin, `verifyCronAuth`
   + `acquireCronLock('contract-reminder')`, `isTestMode`-Filter): lädt Buchungen
   mit Status `confirmed|preparing_shipment|awaiting_pickup`, `contract_signed`
@@ -757,9 +762,10 @@ dahin kein unterschriebener Vertrag vorliegt. Analog zum Ausweis-Flow
   `lib/email.ts` (emailType `contract_sign_reminder`, CTA auf `/konto/buchungen`,
   eskalierender Wortlaut bei ≤1 Tag Vorlauf).
 - **Cron `/api/cron/contract-auto-cancel`** (täglich ~09:00 Berlin, nach der
-  Reminder-Mail): storniert dieselben Kandidaten, sobald der Puffertag erreicht/
-  überschritten ist (`daysUntil(shipDate) <= 0`), gated pro Lieferart über die
-  Config. Atomarer Flip `status='cancelled'` mit Status-Guard +
+  Reminder-Mail): storniert **nur Versand-Buchungen** ohne Vertrag, sobald der
+  Puffertag erreicht/überschritten ist (`daysUntil(shipDate) <= 0`).
+  **Abholungen werden hart übersprungen** (nie stornieren). Atomarer Flip
+  `status='cancelled'` mit Status-Guard +
   `.or('contract_signed.is.null,contract_signed.eq.false')` (schließt eine
   Last-Minute-Unterschrift aus). Bei `refund_on_cancel`: Stripe-Refund
   (idempotencyKey `contract-auto-cancel:<id>`) + Kaution-Vorautorisierung
@@ -5949,8 +5955,8 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   ```
   Ohne die Einträge bekommt der Kunde keine Vertrags-Erinnerung und es wird nicht
   auto-storniert. Verhalten/Config siehe „Mietvertrag-Erinnerung + Auto-Storno".
-  Abholung vom Storno ausnehmen: `admin_settings.contract_reminder_config` →
-  `{ "autocancel_abholung": false }`. Empfohlen ASAP ausführen.
+  **Abholungen werden nie wegen fehlendem Vertrag auto-storniert (hart im Code).**
+  Empfohlen ASAP ausführen.
 - **Abhol-/Rückgabe-Terminabsprache — Migration + Cron auszuführen:** Migration
   `supabase/supabase-bookings-coordination-reminder.sql` (idempotent, additiv:
   2 Timestamp-Marker) + Crontab-Eintrag (mehrmals täglich, `--resolve`):

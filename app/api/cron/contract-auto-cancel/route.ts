@@ -26,12 +26,13 @@ export const maxDuration = 300;
  * die Zahlung (optional) per Stripe erstattet und der Kunde informiert.
  *
  * Konfigurierbar über `admin_settings.contract_reminder_config`:
- *  - autocancel_versand / autocancel_abholung (pro Lieferart an/aus)
+ *  - autocancel_versand (Auto-Storno für Versand-Buchungen an/aus)
  *  - refund_on_cancel (Stripe-Erstattung + Kaution-Freigabe)
  *
- * Hinweis Abholung: der Vertrag kann bei Abholung auch bei der Übergabe
- * unterschrieben werden. Wer Abholung NICHT auto-stornieren will, setzt
- * `autocancel_abholung: false` im Setting.
+ * WICHTIG — Abholung: Abhol-Buchungen werden NIEMALS wegen fehlendem Vertrag
+ * auto-storniert (hart im Loop übersprungen), weil der Kunde den Mietvertrag bei
+ * der Übergabe unterschreiben kann. Der Config-Wert `autocancel_abholung` ist
+ * ohne Wirkung.
  *
  * Idempotenz: atomarer Status-Flip mit Status- + contract_signed-Guard.
  *
@@ -66,7 +67,9 @@ async function handle(req: NextRequest) {
     if (!config.enabled) {
       return NextResponse.json({ ok: true, cancelled: 0, skipped: 'disabled' });
     }
-    if (!config.autocancel_versand && !config.autocancel_abholung) {
+    // Abholung wird NIEMALS wegen fehlendem Mietvertrag auto-storniert (siehe
+    // Filter im Loop). Der Auto-Storno hängt daher nur noch an `autocancel_versand`.
+    if (!config.autocancel_versand) {
       return NextResponse.json({ ok: true, cancelled: 0, skipped: 'autocancel_off' });
     }
 
@@ -104,8 +107,11 @@ async function handle(req: NextRequest) {
       if (!rentalFrom) { skipped++; continue; }
 
       const mode = b.delivery_mode === 'abholung' ? 'abholung' : 'versand';
-      if (mode === 'versand' && !config.autocancel_versand) { skipped++; continue; }
-      if (mode === 'abholung' && !config.autocancel_abholung) { skipped++; continue; }
+      // Abholung NIEMALS wegen fehlendem Vertrag stornieren — der Kunde kann den
+      // Mietvertrag bei der Übergabe/Abholung unterschreiben. Hart im Code, damit
+      // es unabhängig vom Config-Schalter garantiert nie passiert.
+      if (mode === 'abholung') { skipped++; continue; }
+      if (!config.autocancel_versand) { skipped++; continue; }
 
       const override = (b.ship_date_override as string | null | undefined) ?? null;
       const shipDate = toIsoDate(computeShipDate(rentalFrom, mode, buf, override));
@@ -199,7 +205,8 @@ async function handle(req: NextRequest) {
       const customerEmail = b.customer_email as string | null;
       if (customerEmail) {
         try {
-          const isPickup = mode === 'abholung';
+          // Abholung wird nie auto-storniert (Filter oben) → hier immer Versand.
+          const isPickup = false;
           const safeBusiness = escapeHtml(BUSINESS.name);
           const safeName = escapeHtml((b.customer_name as string) || 'Kunde');
           const safeId = escapeHtml(id);

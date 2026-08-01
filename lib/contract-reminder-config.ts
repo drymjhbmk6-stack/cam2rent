@@ -7,11 +7,11 @@
  *  - /api/cron/contract-auto-cancel   (Auto-Storno am Puffertag)
  *
  * Ohne Setting greifen die Defaults unten (Feature aktiv, 5 Tage Vorlauf,
- * Storno für Versand UND Abholung, automatische Stripe-Erstattung).
+ * Storno NUR für Versand, automatische Stripe-Erstattung).
  *
- * Zum Umstellen einfach das Setting bearbeiten, z.B. Abholung vom Auto-Storno
- * ausnehmen (Vertrag wird bei Abholung ohnehin bei der Übergabe unterschrieben):
- *   { "autocancel_abholung": false }
+ * WICHTIG: Abholung wird NIE wegen fehlendem Vertrag auto-storniert — der Kunde
+ * kann den Mietvertrag bei der Übergabe unterschreiben. Das ist im Cron hart
+ * verdrahtet (`contract-auto-cancel`) und lässt sich per Config nicht umgehen.
  */
 
 import type { createServiceClient } from '@/lib/supabase';
@@ -29,7 +29,12 @@ export interface ContractReminderConfig {
   reminder_lead_days: number;
   /** Versand-Buchungen am Puffertag auto-stornieren, wenn Vertrag fehlt. */
   autocancel_versand: boolean;
-  /** Abholung-Buchungen am Puffertag auto-stornieren, wenn Vertrag fehlt. */
+  /**
+   * Veraltet / ohne Wirkung: Abholung-Buchungen werden NIE wegen fehlendem
+   * Vertrag auto-storniert (der Kunde unterschreibt bei der Übergabe). Der
+   * Cron `contract-auto-cancel` ignoriert diesen Wert und überspringt jede
+   * Abholung hart. Feld bleibt nur aus Rückwärts-Kompatibilität erhalten.
+   */
   autocancel_abholung: boolean;
   /** Beim Auto-Storno automatisch per Stripe erstatten + Kaution freigeben. */
   refund_on_cancel: boolean;
@@ -39,7 +44,7 @@ export const DEFAULT_CONTRACT_REMINDER_CONFIG: ContractReminderConfig = {
   enabled: true,
   reminder_lead_days: 5,
   autocancel_versand: true,
-  autocancel_abholung: true,
+  autocancel_abholung: false,
   refund_on_cancel: true,
 };
 
