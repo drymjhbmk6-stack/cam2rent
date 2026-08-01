@@ -97,13 +97,27 @@ export async function POST(
   // jetzt eine echte Gutschrift mit GS-Nummer anlegen, damit der Kunde einen
   // ordnungsgemaess nummerierten Stornierungsbeleg als Anhang bekommt.
   if (!cn?.id && priceTotal > 0) {
-    const cnId = await createCancellationCreditNote(supabase, {
-      bookingId: id,
-      grossAmount: priceTotal,
-      reason: 'Stornierung der Buchung',
-      refundStatus: refundAmount > 0 ? 'manual' : 'none',
-    });
-    if (cnId) cn = { id: cnId };
+    // Existenz-Guard UNMITTELBAR vor der Anlage: schmalisiert das Race-Fenster
+    // gegen paralleles Resend, das sonst zwei Gutschriften zur selben Buchung
+    // erzeugen wuerde (keine Unique-Constraint auf credit_notes.booking_id).
+    const { data: existingCn } = await supabase
+      .from('credit_notes')
+      .select('id')
+      .eq('booking_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingCn?.id) {
+      cn = existingCn;
+    } else {
+      const cnId = await createCancellationCreditNote(supabase, {
+        bookingId: id,
+        grossAmount: priceTotal,
+        reason: 'Stornierung der Buchung',
+        refundStatus: refundAmount > 0 ? 'manual' : 'none',
+      });
+      if (cnId) cn = { id: cnId };
+    }
   }
 
   // (Der tatsaechlich erstattete Betrag steht auf der Buchung und erscheint als

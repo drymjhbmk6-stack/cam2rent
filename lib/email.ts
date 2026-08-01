@@ -645,7 +645,7 @@ export function buildAdminEmail(d: BookingEmailData): { html: string; subject: s
             </tr>
             ${d.accessories.length > 0 ? `<tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Zubehör</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.accessories.join(', ')}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.accessories.join(', '))}</td>
             </tr>` : ''}
             <tr>
               <td style="padding:8px 0;font-size:14px;color:#6b7280;">Gesamtbetrag</td>

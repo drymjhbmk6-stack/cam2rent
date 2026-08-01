@@ -34,25 +34,66 @@ export interface CameraUtilizationRow {
 }
 
 /**
+ * Optionen fuer computeCameraUtilization. Alle optional → rueckwaerts-
+ * kompatibel: nicht-angepasste Aufrufer laufen unveraendert weiter.
+ */
+export interface CameraUtilizationOptions {
+  /**
+   * Test-/Live-Filter (M-6). undefined = kein zusaetzlicher Filter
+   * (bisheriges Verhalten). true → nur Test-Buchungen, false → nur echte.
+   */
+  isTest?: boolean;
+  /**
+   * Expliziter Zeitraum als Berlin-Kalendertag `YYYY-MM-DD` (M-7). Wenn
+   * `from` UND `to` gesetzt sind, wird DIESER Zeitraum genutzt (auch
+   * vergangene custom-Fenster) statt „letzte `days` Tage bis heute".
+   */
+  from?: string;
+  to?: string;
+}
+
+/**
  * Berechnet die Auslastung aller Kameras fuer den angegebenen Zeitraum.
  * `days` = Anzahl Tage in die Vergangenheit ab heute (Berlin-Zeit).
- * Auslastung pro Kamera = gebuchte Tage / (Zeitraum × Anzahl aktiver Units).
+ * Wenn `opts.from`/`opts.to` gesetzt sind, gilt stattdessen dieser explizite
+ * Zeitraum (M-7). Auslastung pro Kamera = gebuchte Tage / (Zeitraum ×
+ * Anzahl aktiver Units).
  */
 export async function computeCameraUtilization(
   supabase: SupabaseClient,
   days = 30,
+  opts: CameraUtilizationOptions = {},
 ): Promise<CameraUtilizationRow[]> {
-  // Heute in Berlin-Zeit, damit die Periode zwischen 22-24 Uhr nicht auf den
-  // UTC-Vortag rutscht (Server laeuft UTC).
-  const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-  const [tyStr, tmStr, tdStr] = todayBerlin.split('-');
-  const ty = parseInt(tyStr, 10);
-  const tm = parseInt(tmStr, 10);
-  const td = parseInt(tdStr, 10);
-  const periodStart = new Date(Date.UTC(ty, tm - 1, td - days));
-  const periodStartStr = periodStart.toISOString().split('T')[0];
-  const now = new Date(Date.UTC(ty, tm - 1, td));
-  const periodEndStr = todayBerlin;
+  let periodStart: Date;
+  let periodStartStr: string;
+  let now: Date; // Ende-Anker fuer das Clampen von effectiveEnd
+  let periodEndStr: string;
+  let windowDays: number; // Nenner fuer die Auslastungs-Normalisierung
+
+  if (opts.from && opts.to) {
+    // Expliziter (ggf. vergangener) Zeitraum — Tagesgrenzen als UTC-Mitternacht.
+    periodStart = new Date(`${opts.from}T00:00:00Z`);
+    now = new Date(`${opts.to}T00:00:00Z`);
+    periodStartStr = opts.from;
+    periodEndStr = opts.to;
+    windowDays = Math.max(
+      1,
+      Math.round((now.getTime() - periodStart.getTime()) / 86400000) + 1,
+    );
+  } else {
+    // Heute in Berlin-Zeit, damit die Periode zwischen 22-24 Uhr nicht auf den
+    // UTC-Vortag rutscht (Server laeuft UTC).
+    const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    const [tyStr, tmStr, tdStr] = todayBerlin.split('-');
+    const ty = parseInt(tyStr, 10);
+    const tm = parseInt(tmStr, 10);
+    const td = parseInt(tdStr, 10);
+    periodStart = new Date(Date.UTC(ty, tm - 1, td - days));
+    periodStartStr = periodStart.toISOString().split('T')[0];
+    now = new Date(Date.UTC(ty, tm - 1, td));
+    periodEndStr = todayBerlin;
+    windowDays = days;
+  }
 
   const { data: configData } = await supabase
     .from('admin_config')
@@ -65,12 +106,18 @@ export async function computeCameraUtilization(
       ? (configData.value as Record<string, AdminProduct>)
       : {};
 
-  const { data: bookings } = await supabase
+  let bookingsQuery = supabase
     .from('bookings')
     .select('id, product_id, product_name, rental_from, rental_to, status, price_total')
     .in('status', UTILIZATION_BOOKING_STATUSES as unknown as string[])
     .lte('rental_from', periodEndStr)
     .gte('rental_to', periodStartStr);
+  // Test-/Live-Isolation (M-6): nur filtern, wenn explizit angefordert —
+  // sonst bleibt das bisherige Verhalten (alle Buchungen) erhalten.
+  if (opts.isTest !== undefined) {
+    bookingsQuery = bookingsQuery.eq('is_test', opts.isTest);
+  }
+  const { data: bookings } = await bookingsQuery;
 
   const { data: allUnits } = await supabase
     .from('product_units')
@@ -110,7 +157,7 @@ export async function computeCameraUtilization(
 
     const unitCount = (allUnits ?? []).filter((u) => u.product_id === product.id).length || 1;
     const utilization =
-      days > 0 ? Math.min(100, (totalBookedDays / (days * unitCount)) * 100) : 0;
+      windowDays > 0 ? Math.min(100, (totalBookedDays / (windowDays * unitCount)) * 100) : 0;
     const avgDuration = productBookings.length > 0 ? Math.round(totalDuration / productBookings.length) : 0;
 
     results.push({
@@ -119,7 +166,7 @@ export async function computeCameraUtilization(
       brand: product.brand,
       utilization: Math.round(utilization * 10) / 10,
       bookedDays: totalBookedDays,
-      totalDays: days,
+      totalDays: windowDays,
       revenue: Math.round(totalRevenue * 100) / 100,
       avgDuration,
       bookingCount: productBookings.length,

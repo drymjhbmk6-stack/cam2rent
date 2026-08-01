@@ -16,6 +16,18 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 
 /**
+ * H-12 (2026-08-01): Mappt den Haftungswert ('standard' | 'premium' | 'none')
+ * auf das Anzeige-Label für den Mietvertrag, damit die Haftungsoption NICHT aus
+ * dem Preis geraten wird. Unbekannt → undefined → Preis-Heuristik als Fallback.
+ */
+function haftungOptionLabel(h: string | null | undefined): string | undefined {
+  if (h === 'premium') return 'Premium-Haftungsschutz';
+  if (h === 'none') return 'Ohne Haftungsschutz';
+  if (h === 'standard') return 'Basis-Haftungsschutz';
+  return undefined;
+}
+
+/**
  * Gruppiert Cart-Items nach Mietzeitraum.
  */
 function groupByPeriod(items: CartItem[]) {
@@ -361,6 +373,7 @@ export async function POST(req: NextRequest) {
             priceShipping: groupShipping,
             priceTotal: Math.max(0, priceTotal),
             deposit: groupDeposit,
+            haftungOption: haftungOptionLabel(firstItem.haftung),
             taxMode,
             taxRate,
             signatureDataUrl: contractSignature.signatureDataUrl,

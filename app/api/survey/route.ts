@@ -29,11 +29,11 @@ const REWARD_DISCOUNT = 10; // 10% Rabatt
 const REWARD_VALIDITY_DAYS = 90;
 const REWARD_MIN_ORDER = 50; // Mindestbestellwert 50 €
 
-function generateCouponCode(bookingId: string): string {
-  // Eindeutiger Code: DANKE-{BookingID-Kurz}-{Random}
-  const short = bookingId.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(-6);
-  const random = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-  return `DANKE-${short}-${random}`;
+function couponCodeForBooking(bookingId: string): string {
+  // Deterministisch pro Buchung (statt Random-Suffix): ein zweiter, paralleler
+  // Insert kollidiert am code-Unique (23505) → idempotent, kein Doppel-Coupon.
+  const slug = bookingId.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  return `DANKE-${slug}`;
 }
 
 type SupabaseClient = ReturnType<typeof createServiceClient>;
@@ -73,40 +73,51 @@ async function ensureRewardCoupon(
   if (existingCoupon) {
     couponCode = existingCoupon.code;
   } else {
-    let code = generateCouponCode(bookingId);
-    for (let i = 0; i < 5; i++) {
-      const { data: dup } = await supabase.from('coupons').select('id').eq('code', code).maybeSingle();
-      if (!dup) break;
-      code = generateCouponCode(bookingId);
-    }
+    // Deterministischer Code pro Buchung. Falls unter dem alten Random-Schema
+    // bereits ein Coupon existiert, faengt der description-ILIKE-Check oben ihn
+    // ab; hier deckt der code-Lookup + der 23505-Fallback den Race-Fall ab.
+    const code = couponCodeForBooking(bookingId);
+    const { data: byCode } = await supabase.from('coupons').select('code').eq('code', code).maybeSingle();
 
-    const now = new Date();
-    const validUntil = new Date(now.getTime() + REWARD_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
-
-    const { data: newCoupon, error: couponError } = await supabase
-      .from('coupons')
-      .insert({
-        code,
-        type: 'percent',
-        value: REWARD_DISCOUNT,
-        description: `Dankeschön für die Bewertung (Buchung ${bookingId})`,
-        target_type: 'user',
-        target_user_email: targetEmail,
-        valid_from: now.toISOString(),
-        valid_until: validUntil.toISOString(),
-        max_uses: 1,
-        min_order_value: REWARD_MIN_ORDER,
-        once_per_customer: true,
-        not_combinable: false,
-        active: true,
-      })
-      .select('code')
-      .single();
-
-    if (couponError) {
-      console.error('Coupon creation error:', couponError);
+    if (byCode) {
+      couponCode = byCode.code;
     } else {
-      couponCode = newCoupon?.code ?? null;
+      const now = new Date();
+      const validUntil = new Date(now.getTime() + REWARD_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
+
+      const { data: newCoupon, error: couponError } = await supabase
+        .from('coupons')
+        .insert({
+          code,
+          type: 'percent',
+          value: REWARD_DISCOUNT,
+          description: `Dankeschön für die Bewertung (Buchung ${bookingId})`,
+          target_type: 'user',
+          target_user_email: targetEmail,
+          valid_from: now.toISOString(),
+          valid_until: validUntil.toISOString(),
+          max_uses: 1,
+          min_order_value: REWARD_MIN_ORDER,
+          once_per_customer: true,
+          not_combinable: false,
+          active: true,
+        })
+        .select('code')
+        .single();
+
+      if (couponError) {
+        // 23505 = Unique-Verletzung am code → ein paralleler Request war
+        // schneller. Bestehenden Coupon zuruecklesen statt Doppel-Coupon.
+        const isDuplicate = couponError.code === '23505' || /duplicate key|unique/i.test(couponError.message ?? '');
+        if (isDuplicate) {
+          const { data: raced } = await supabase.from('coupons').select('code').eq('code', code).maybeSingle();
+          couponCode = raced?.code ?? null;
+        } else {
+          console.error('Coupon creation error:', couponError);
+        }
+      } else {
+        couponCode = newCoupon?.code ?? null;
+      }
     }
   }
 

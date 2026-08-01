@@ -707,6 +707,16 @@ async function handleCartBooking(
   const durationDiscount = (ctx.durationDiscount as number) ?? 0;
   const earlyBirdDiscount = (ctx.earlyBirdDiscount as number) ?? 0;
   const loyaltyDiscount = (ctx.loyaltyDiscount as number) ?? 0;
+  // H-7: Produktaktions-Rabatt (z.B. "Sommer25") aus dem Checkout-Kontext.
+  // Fehlte bisher im Webhook-Fallback → discount_amount war zu niedrig und der
+  // Buchhaltungs-Umsatz race-abhaengig (je nachdem ob confirm-cart oder der
+  // Webhook die Buchung zuerst schrieb). Analog zu confirm-cart wird er in
+  // discount_amount gemergt; das Label dient als coupon_code-Fallback.
+  const productDiscount = (ctx.productDiscount as number) ?? 0;
+  const productDiscountLabel =
+    typeof ctx.productDiscountLabel === 'string' && ctx.productDiscountLabel.trim()
+      ? ctx.productDiscountLabel.trim()
+      : null;
   // § 356 Abs. 4 BGB — Zustimmung aus dem Checkout-Kontext (von checkout-intent
   // gespeichert). Falls der Webhook die Cart-Buchung vor confirm-cart anlegt
   // (Race), gehen Zeitstempel + IP sonst verloren.
@@ -785,6 +795,28 @@ async function handleCartBooking(
     } catch { /* defensiv: Migration evtl. nicht durch */ }
   }
   const cartSpecialActive = cartSpecial > 0;
+
+  // H-7: Rabatte gegen den von Stripe signierten Gesamtbetrag skalieren —
+  // analog confirm-cart (Stripe ist Source of Truth). So summieren die
+  // persistierten Rabatt-Felder immer exakt zum tatsaechlich gezahlten Betrag,
+  // egal ob confirm-cart oder der Webhook die Buchung zuerst schreibt.
+  const cartBase = items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0);
+  const paidEurosCart = intent.amount / 100;
+  const effectiveDiscount = Math.max(0, Math.round((cartBase + shippingPrice - paidEurosCart) * 100) / 100);
+  const bodyDiscountSum =
+    discountAmount +
+    (cartSpecialActive
+      ? cartSpecial
+      : productDiscount + durationDiscount + earlyBirdDiscount + loyaltyDiscount);
+  const discScale = bodyDiscountSum > 0 ? effectiveDiscount / bodyDiscountSum : 0;
+  const sCouponDiscount = Math.round(discountAmount * discScale * 100) / 100;
+  const sProductDiscount = cartSpecialActive ? 0 : Math.round(productDiscount * discScale * 100) / 100;
+  const sDurationDiscount = cartSpecialActive ? 0 : Math.round(durationDiscount * discScale * 100) / 100;
+  const sEarlyBirdDiscount = cartSpecialActive ? 0 : Math.round(earlyBirdDiscount * discScale * 100) / 100;
+  const sLoyaltyDiscount = cartSpecialActive ? 0 : Math.round(loyaltyDiscount * discScale * 100) / 100;
+  const sSpecialDiscount = cartSpecialActive ? Math.round(cartSpecial * discScale * 100) / 100 : 0;
+  const sDiscountAmount = sCouponDiscount + sProductDiscount;
+
   const cartInsert: Record<string, unknown> = {
     id: bookingId,
     payment_intent_id: intent.id,
@@ -813,14 +845,17 @@ async function handleCartBooking(
     ...(invoiceOverride
       ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
       : {}),
-    coupon_code: couponCode || null,
-    discount_amount: discountAmount,
-    duration_discount: cartSpecialActive ? 0 : durationDiscount,
-    loyalty_discount: cartSpecialActive ? 0 : loyaltyDiscount,
+    // Echter Gutschein-Code hat Vorrang; sonst der Aktionsname (z.B.
+    // "Sommer25"), damit die Rechnung die Rabatt-Zeile korrekt beschriftet.
+    coupon_code: couponCode || productDiscountLabel || null,
+    // H-7: skalierter Coupon + Produktaktion (analog confirm-cart groupDiscount).
+    discount_amount: sDiscountAmount,
+    duration_discount: sDurationDiscount,
+    loyalty_discount: sLoyaltyDiscount,
     // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(earlyBirdDiscount > 0 && !cartSpecialActive ? { early_bird_discount: earlyBirdDiscount } : {}),
+    ...(sEarlyBirdDiscount > 0 ? { early_bird_discount: sEarlyBirdDiscount } : {}),
     // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(cartSpecialActive ? { special_discount: cartSpecial } : {}),
+    ...(cartSpecialActive ? { special_discount: sSpecialDiscount } : {}),
     // § 356 Abs. 4 BGB — Zustimmung (Zeitstempel + IP aus dem Checkout-Kontext).
     ...(earlyServiceConsentAt
       ? { early_service_consent_at: earlyServiceConsentAt, early_service_consent_ip: earlyServiceConsentIp }
@@ -828,7 +863,7 @@ async function handleCartBooking(
   };
 
   let { error } = await supabase.from('bookings').insert(cartInsert);
-  if (error && earlyBirdDiscount > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
+  if (error && sEarlyBirdDiscount > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
     delete cartInsert.early_bird_discount;
     ({ error } = await supabase.from('bookings').insert(cartInsert));
   }
@@ -842,12 +877,15 @@ async function handleCartBooking(
     return;
   }
 
-  // Plausibilitaet: Items-Summe + Versand - Rabatte gegen Stripe-Gesamtbetrag
+  // Plausibilitaet: RAW gemeldete Komponenten-Summe gegen den Stripe-Gesamtbetrag.
+  // Bewusst die UNskalierten ctx-Werte (inkl. productDiscount) — so wird eine
+  // echte Abweichung (manipulierte Metadata) erkannt; die oben persistierten
+  // Rabatte sind gegen Stripe skaliert und wuerden die Abweichung sonst verstecken.
   const expectedSumCents = Math.round(
-    (items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0) +
+    (cartBase +
       shippingPrice -
       discountAmount -
-      (cartSpecialActive ? cartSpecial : durationDiscount + earlyBirdDiscount + loyaltyDiscount)) * 100,
+      (cartSpecialActive ? cartSpecial : productDiscount + durationDiscount + earlyBirdDiscount + loyaltyDiscount)) * 100,
   );
   await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
 
@@ -892,7 +930,9 @@ async function handleCartBooking(
       price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
       price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
       shipping_price: shippingPrice,
-      discount_amount: discountAmount,
+      // H-7: effektiver Gesamtrabatt (base + Versand − gezahlt), analog
+      // confirm-cart — statt nur des rohen Coupon-Betrags.
+      discount_amount: effectiveDiscount,
       coupon_code: couponCode || null,
       payment_intent_id: intent.id,
       status: 'confirmed',

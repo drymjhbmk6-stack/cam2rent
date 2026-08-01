@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BuchhaltungTabs, { type TabId } from './components/BuchhaltungTabs';
 import DashboardTab from './components/DashboardTab';
@@ -119,11 +120,11 @@ function BuchhaltungContent() {
       {/* Quick-Links zur neuen Welt (Konsolidierungs-Refactor) */}
       <div style={{ marginBottom: 16, padding: 12, background: '#0f1729', border: '1px solid #1e293b', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>Neue Welt:</span>
-        <a href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📄 Belege</a>
-        <a href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</a>
-        <a href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</a>
-        <a href="/admin/inventar" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📦 Inventar</a>
-        <a href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>⚙ WBW-Berechnung</a>
+        <Link href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📄 Belege</Link>
+        <Link href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</Link>
+        <Link href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</Link>
+        <Link href="/admin/inventar" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📦 Inventar</Link>
+        <Link href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>⚙ WBW-Berechnung</Link>
       </div>
 
       {/* Tab-Navigation */}

@@ -1306,6 +1306,8 @@ export async function PATCH(
     let scaledDiscountAmount: number;
     let scaledDurationDiscount: number;
     let scaledLoyaltyDiscount: number;
+    let scaledEarlyBird: number;
+    let scaledSpecial: number;
     let discountTotal: number;
     let discountIsManual = false;
 
@@ -1320,6 +1322,10 @@ export async function PATCH(
       scaledDiscountAmount = manual;
       scaledDurationDiscount = 0;
       scaledLoyaltyDiscount = 0;
+      // Ein manueller Rabatt ERSETZT alle Auto-Rabatte — auch Frühbucher-
+      // (early_bird_discount) und Sonderkondition (special_discount) → 0.
+      scaledEarlyBird = 0;
+      scaledSpecial = 0;
       discountTotal = Math.round(manual * 100) / 100;
       discountIsManual = true;
     } else {
@@ -1331,8 +1337,14 @@ export async function PATCH(
       scaledDiscountAmount = Math.round(Number(booking.discount_amount ?? 0) * discScale * 100) / 100;
       scaledDurationDiscount = Math.round(Number(booking.duration_discount ?? 0) * discScale * 100) / 100;
       scaledLoyaltyDiscount = Math.round(Number(booking.loyalty_discount ?? 0) * discScale * 100) / 100;
+      // Frühbucher- + Sonderkondition-Rabatt ebenfalls proportional skalieren
+      // UND in den Gesamt-Rabatt einbeziehen — sonst rechnet der Recompute die
+      // Bestellung fälschlich teurer (Phantom-Nachzahlung) und lässt die alten
+      // Felder stale stehen.
+      scaledEarlyBird = Math.round(Number(booking.early_bird_discount ?? 0) * discScale * 100) / 100;
+      scaledSpecial = Math.round(Number(booking.special_discount ?? 0) * discScale * 100) / 100;
       discountTotal =
-        Math.round((scaledDiscountAmount + scaledDurationDiscount + scaledLoyaltyDiscount) * 100) / 100;
+        Math.round((scaledDiscountAmount + scaledDurationDiscount + scaledLoyaltyDiscount + scaledEarlyBird + scaledSpecial) * 100) / 100;
       discountIsManual = false;
     }
     if (discountTotal > subtotal) discountTotal = subtotal;
@@ -1436,6 +1448,11 @@ export async function PATCH(
       discount_amount: scaledDiscountAmount,
       duration_discount: scaledDurationDiscount,
       loyalty_discount: scaledLoyaltyDiscount,
+      // Frühbucher + Sonderkondition mitschreiben (proportional skaliert bzw.
+      // 0 bei manuellem Rabatt). Fehlt die Spalte (Migration ausstehend),
+      // strippt der defensive Update-Loop sie unten weg.
+      early_bird_discount: scaledEarlyBird,
+      special_discount: scaledSpecial,
       delivery_mode: deliveryMode,
       shipping_method: shipMethod,
       notes: `${existingNotes}${noteLine}`,
@@ -1896,6 +1913,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
     }
     preStatus = existing.status;
+
+    // Idempotenz: eine bereits stornierte Buchung darf NICHT erneut durch die
+    // Storno-Nebenwirkungen laufen (zweite Gutschrift, evtl. zweiter Refund,
+    // erneute Storno-Mail). Ein Re-PATCH status='cancelled' wird sauber als
+    // „bereits storniert" beantwortet, BEVOR Update/Refund/Beleg/Mail greifen.
+    if (status === 'cancelled' && existing.status === 'cancelled') {
+      return NextResponse.json({ success: true, already_cancelled: true });
+    }
 
     // Bei Stornierung: Grund in Notizen speichern
     if (status === 'cancelled' && cancellation_reason) {

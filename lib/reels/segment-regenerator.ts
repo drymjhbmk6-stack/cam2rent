@@ -431,10 +431,14 @@ async function rebuildVoiceTrack(
     if (seg.has_voice && seg.voice_storage_path) {
       const mp3Path = path.join(workDir, `voice-${i}.mp3`);
       await downloadFromBucket(seg.voice_storage_path, mp3Path);
+      // afade-out (250ms vor Ende) analog zum Haupt-Render (ffmpeg-render.ts):
+      // wenn die TTS laenger als die Szene ist, maskiert der Ausklang den
+      // Mid-Word-Cut ("Klick"); bei Voice <= Szene unhoerbar.
+      const fadeStart = Math.max(0, effDur - 0.25);
       await runFfmpeg([
         '-y', '-hide_banner', '-loglevel', 'error',
         '-i', mp3Path,
-        '-af', `apad=whole_dur=${effDur}`,
+        '-af', `apad=whole_dur=${effDur},afade=t=out:st=${fadeStart}:d=0.25`,
         '-t', String(effDur),
         '-ar', '44100', '-ac', '2',
         paddedPath,

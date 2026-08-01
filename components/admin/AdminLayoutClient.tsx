@@ -159,7 +159,7 @@ const KUNDEN_ITEMS: NavItem[] = [
   { href: '/admin/warteliste', label: 'Warteliste', icon: iconBell, perm: 'kunden' },
   { href: '/admin/kunden-material', label: 'Kundenmaterial', icon: iconGallery, perm: 'kunden' },
   { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar, perm: 'kunden' },
-  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'kunden' },
+  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'tagesgeschaeft' },
 ];
 
 const KATALOG_ITEMS: NavItem[] = [

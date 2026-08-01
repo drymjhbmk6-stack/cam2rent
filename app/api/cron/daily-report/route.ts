@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     supabase.from('page_views').select('session_id, visitor_id')
       .gte('created_at', dayBefore.toISOString())
       .lt('created_at', yesterday.toISOString()),
-    supabase.from('bookings').select('total_price, product_id')
+    supabase.from('bookings').select('price_total, product_id')
       .gte('created_at', yesterday.toISOString())
       .lte('created_at', yesterdayEnd.toISOString())
       .neq('status', 'cancelled'),
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
   // Bookings
   const bookingCount = bookings.length;
-  const revenue = bookings.reduce((s, b) => s + (b.total_price ?? 0), 0);
+  const revenue = bookings.reduce((s, b) => s + (b.price_total ?? 0), 0);
 
   // Devices
   let desktop = 0, mobile = 0, tablet = 0;

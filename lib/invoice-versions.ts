@@ -47,6 +47,8 @@ function fingerprint(d: InvoiceData): string {
     ph: d.priceHaftung,
     sp: d.shippingPrice,
     di: d.discountAmount ?? 0,
+    eb: d.earlyBirdDiscount ?? 0,
+    sd: d.specialDiscount ?? 0,
     cc: d.couponCode ?? '',
     pt: d.priceTotal,
     rf: d.rentalFrom,

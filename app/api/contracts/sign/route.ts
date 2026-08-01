@@ -8,6 +8,18 @@ import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
 import { getClientIp } from '@/lib/rate-limit';
 
+/**
+ * H-12 (2026-08-01): Mappt den Haftungswert ('standard' | 'premium' | 'none')
+ * auf das Anzeige-Label für den Mietvertrag, damit die Haftungsoption NICHT aus
+ * dem Preis geraten wird. Unbekannt → undefined → Preis-Heuristik als Fallback.
+ */
+function haftungOptionLabel(h: string | null | undefined): string | undefined {
+  if (h === 'premium') return 'Premium-Haftungsschutz';
+  if (h === 'none') return 'Ohne Haftungsschutz';
+  if (h === 'standard') return 'Basis-Haftungsschutz';
+  return undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -142,6 +154,7 @@ export async function POST(request: NextRequest) {
       priceShipping: booking.shipping_price || 0,
       priceTotal: booking.price_total || 0,
       deposit: booking.deposit || 0,
+      haftungOption: haftungOptionLabel(booking.haftung),
       taxMode: taxMode as 'kleinunternehmer' | 'regelbesteuerung',
       taxRate: 19,
       signatureDataUrl: method === 'canvas' ? signatureDataUrl : null,

@@ -176,11 +176,19 @@ export async function POST(req: NextRequest) {
   const priceDifference = paidCents / 100;
   const newTotal = (booking.price_total || 0) + priceDifference;
 
-  // Sweep 8 H2: Atomarer Idempotency-Guard. Doppelklick wuerde sonst zu zwei
-  // Verlaengerungs-Mails + zwei Admin-Notifications fuehren (Refund-Doppel-
-  // Buchung verhindert Stripe selbst via idempotencyKey, aber DB war offen).
-  // .is('extension_payment_intent_id', null) garantiert dass nur die erste
-  // der konkurrierenden Anfragen die Buchung aktualisiert.
+  // H-1 (2026-08-01): Idempotenz pi-spezifisch statt "extension_payment_intent_id IS NULL".
+  // Der frühere Guard .is('extension_payment_intent_id', null) verschluckte eine
+  // ECHTE zweite Verlängerung (anderer paymentIntent): die Buchung trug bereits
+  // den pi der ERSTEN Verlängerung → der zweite, bezahlte Intent lief ins Leere
+  // ("Bereits verlängert") OHNE Refund → gezahltes Geld ohne Gegenleistung.
+  // Der Same-pi-Fall (Doppelklick / echter Retry) wird oben (booking.extension_
+  // payment_intent_id === paymentIntentId) idempotent abgefangen.
+  // Neuer Guard: .or(IS NULL, != paymentIntentId) →
+  //   - erste Verlängerung (Spalte NULL) läuft durch,
+  //   - zweite echte Verlängerung (Spalte = alter, anderer pi) läuft durch,
+  //   - konkurrierende Requests mit DEMSELBEN neuen pi: sobald der Gewinner
+  //     die Spalte auf diesen pi gesetzt hat, matcht der Verlierer weder
+  //     IS NULL noch != pi → maybeSingle() null → "Bereits verlängert" (Race-Schutz bleibt).
   // Verlängerung nach § 13: nur das Enddatum (rental_to) + Dauer/Preis ändern
   // sich. rental_from und cancellation_anchor_date bleiben BEWUSST unberührt —
   // eine Verlängerung öffnet kein neues Storno-Fenster (§ 13 Abs. 4). NICHT
@@ -198,12 +206,13 @@ export async function POST(req: NextRequest) {
       extended_at: new Date().toISOString(),
     })
     .eq('id', bookingId)
-    .is('extension_payment_intent_id', null)
+    .or(`extension_payment_intent_id.is.null,extension_payment_intent_id.neq.${paymentIntentId}`)
     .select('id')
     .maybeSingle();
 
   if (!updateError && !updated) {
-    // Race verloren — andere Anfrage hat die Verlaengerung schon eingebucht.
+    // Race verloren — andere Anfrage hat die Verlaengerung mit demselben
+    // paymentIntent bereits eingebucht.
     return NextResponse.json({ success: true, message: 'Bereits verlängert.' });
   }
 

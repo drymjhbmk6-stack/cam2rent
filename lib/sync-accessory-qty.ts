@@ -7,8 +7,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *  - Alte Welt: `accessory_units` (status IN ['available', 'rented']) —
  *    Original-Quelle fuer den Buchungspfad.
  *  - Neue Welt: `inventar_units` (typ IN ['zubehoer', 'verbrauch'],
- *    tracking_mode='individual', status NICHT 'ausgemustert') —
- *    Single Source of Truth fuer das Admin-Inventar.
+ *    tracking_mode='individual', status IN ['verfuegbar', 'vermietet']) —
+ *    Single Source of Truth fuer das Admin-Inventar. Nur nutzbare Status
+ *    zaehlen (analog der alten Welt available/rented); wartung/defekt/
+ *    ausgemustert bleiben aussen vor, sonst wuerden nicht-buchbare Stuecke
+ *    den Bestand faelschlich erhoehen.
  *
  * Result = MAX(legacy_count, inventar_count). Damit faellt der Wert nie
  * unter den tatsaechlich existierenden Bestand, auch wenn eine der beiden
@@ -71,7 +74,7 @@ export async function syncAccessoryQty(
         .eq('produkt_id', produkteId)
         .in('typ', ['zubehoer', 'verbrauch'])
         .eq('tracking_mode', 'individual')
-        .neq('status', 'ausgemustert');
+        .in('status', ['verfuegbar', 'vermietet']);
       inventarCount = invCount ?? 0;
     }
   } catch (err) {

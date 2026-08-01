@@ -96,7 +96,7 @@ async function computeDrift(supabase: ReturnType<typeof createServiceClient>): P
       .in('produkt_id', produkteIds)
       .in('typ', ['zubehoer', 'verbrauch'])
       .eq('tracking_mode', 'individual')
-      .neq('status', 'ausgemustert');
+      .in('status', ['verfuegbar', 'vermietet']);
     for (const u of (invUnits ?? []) as Array<{ produkt_id: string | null }>) {
       if (!u.produkt_id) continue;
       inventarCountByProdukte.set(u.produkt_id, (inventarCountByProdukte.get(u.produkt_id) ?? 0) + 1);

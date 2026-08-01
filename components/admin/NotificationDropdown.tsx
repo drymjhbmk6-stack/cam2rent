@@ -79,6 +79,13 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h4m-8 4h12a2 2 0 002-2V7.414A2 2 0 0018.414 6L14 1.586A2 2 0 0012.586 1H5a2 2 0 00-2 2v15a2 2 0 002 2z" />
         </svg>
       );
+    case 'coupon_race':
+      // Gutschein-Race (Finanz-Warnung) — Ticket/Tag mit Warnfarbe
+      return (
+        <svg style={iconStyle} fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a2 2 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 9V4a1 1 0 011-1z" />
+        </svg>
+      );
     case 'new_feedback':
       // Sprechblase mit Herz/Stern-Feeling → einfache Chat-Blase
       return (

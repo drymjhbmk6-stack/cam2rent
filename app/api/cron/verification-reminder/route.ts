@@ -5,6 +5,7 @@ import { sendAndLog, escapeHtml, stripSubject } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { berlinDaysUntil } from '@/lib/timezone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,9 +102,9 @@ async function handle(req: NextRequest) {
     if (b.user_id && verifiedUserIds.has(b.user_id)) { skipped++; continue; }
     if (alreadySent.has(b.id)) { skipped++; continue; }
 
-    // Tage bis Mietbeginn
-    const rentalStart = new Date(b.rental_from);
-    const diffDays = Math.ceil((rentalStart.getTime() - Date.now()) / 86_400_000);
+    // Tage bis Mietbeginn — Berliner Kalendertage (DST-immun), statt rohem
+    // ms/86400000, das an der UTC-Tagesgrenze die Frist-Buckets verschiebt.
+    const diffDays = berlinDaysUntil(b.rental_from);
     // Nur an 5/4/3 Tagen erinnern. Auto-Storno greift bei T-2.
     if (![5, 4, 3].includes(diffDays)) { skipped++; continue; }
 

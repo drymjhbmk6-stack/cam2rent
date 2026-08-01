@@ -46,7 +46,6 @@ export function getGermanHolidays(year: number): Set<string> {
     addDays(easter, 39),      // Christi Himmelfahrt
     addDays(easter, 50),      // Pfingstmontag
     new Date(year, 9, 3),     // Tag der Deutschen Einheit
-    new Date(year, 9, 31),    // Reformationstag (Berlin seit 2019)
     new Date(year, 11, 25),   // 1. Weihnachtstag
     new Date(year, 11, 26),   // 2. Weihnachtstag
   ];
@@ -153,7 +152,6 @@ export function getGermanHolidayMap(year: number): Map<string, string> {
     [addDays(easter, 39), 'Christi Himmelfahrt'],
     [addDays(easter, 50), 'Pfingstmontag'],
     [new Date(year, 9, 3), 'Tag der Deutschen Einheit'],
-    [new Date(year, 9, 31), 'Reformationstag'],
     [new Date(year, 11, 25), '1. Weihnachtstag'],
     [new Date(year, 11, 26), '2. Weihnachtstag'],
   ];

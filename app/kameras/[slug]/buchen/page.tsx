@@ -12,6 +12,7 @@ import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
+import { calcSetPrice } from '@/lib/set-price';
 import { isAngebotActive, getAngebotCameraOption, type Angebot } from '@/data/angebote';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -1272,9 +1273,7 @@ export default function BuchenPage() {
 
   // Set price is calculated separately and added on top of the base breakdown
   const setPrice = selectedSet && breakdown
-    ? selectedSet.pricingMode === 'perDay'
-      ? selectedSet.price * breakdown.days
-      : selectedSet.price
+    ? calcSetPrice(selectedSet.price, selectedSet.pricingMode, breakdown.days)
     : 0;
 
   // Effective total including set price

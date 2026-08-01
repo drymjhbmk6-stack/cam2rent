@@ -28,15 +28,29 @@ export async function GET(req: NextRequest) {
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
-  const { data: bookings } = await supabase
+  // refund_amount vom Umsatz abziehen (konsistent zur EÜR bei Erstattungen).
+  // Zufluss-Prinzip: awaiting_payment / pending_verification zaehlen NICHT.
+  const buildRevenueQuery = (cols: string) => supabase
     .from('bookings')
-    .select('price_total')
+    .select(cols)
     .eq('is_test', false)
     .neq('status', 'cancelled')
+    .not('status', 'in', '(awaiting_payment,pending_verification)')
     .gte('created_at', fromIso)
     .lte('created_at', toIso);
 
-  const totalRevenue = (bookings || []).reduce((sum, b) => sum + (b.price_total || 0), 0);
+  let { data: bookings, error: bookingsErr } = await buildRevenueQuery('price_total, refund_amount');
+  if (bookingsErr && /refund_amount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
+    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die Spalte
+    // (refund_amount wird dann als 0 behandelt).
+    ({ data: bookings, error: bookingsErr } = await buildRevenueQuery('price_total'));
+  }
+
+  const bookingRows = (bookings || []) as unknown as Array<{ price_total: number | null; refund_amount?: number | null }>;
+  const totalRevenue = bookingRows.reduce(
+    (sum, b) => sum + (b.price_total || 0) - (b.refund_amount || 0),
+    0,
+  );
 
   // Im Kleinunternehmer-Modus rechtlich KEIN Vorsteuerabzug (§ 19 UStG).
   // Vorher wurde Vorsteuer aus expenses.tax_amount summiert und zahllast als

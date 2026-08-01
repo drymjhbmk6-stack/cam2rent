@@ -199,15 +199,15 @@ export async function publishPost(postId: string): Promise<PublishResult> {
   }
 
   // ── Instagram ─────────────────────────────────────────────────────────
-  if (typedPost.platforms.includes('instagram') && typedPost.ig_account_id) {
+  // IG verlangt IMMER ein Bild — ohne Media wird die Plattform still
+  // uebersprungen (kein Fehler => Post bleibt nicht dauerhaft "partial").
+  if (typedPost.platforms.includes('instagram') && typedPost.ig_account_id && typedPost.media_urls.length > 0) {
     try {
       const { data: igAccount } = await supabase.from('social_accounts').select('*').eq('id', typedPost.ig_account_id).single();
       if (!igAccount) throw new Error('IG-Account nicht gefunden');
       const acc = igAccount as SocialAccount;
 
-      if (typedPost.media_urls.length === 0) {
-        throw new Error('Instagram verlangt mindestens ein Bild');
-      } else if (typedPost.media_urls.length === 1) {
+      if (typedPost.media_urls.length === 1) {
         // IG-Feed erzwingt 1:1 — crop mit gewaehlter Position damit der
         // Ausschnitt der Vorschau entspricht
         const igUrl = await cropImageForPlatform(typedPost.media_urls[0], 1, typedPost.ig_image_position);

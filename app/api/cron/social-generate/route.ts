@@ -19,6 +19,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
+import { isTopicOutOfSeason, getSeasonContext } from '@/lib/meta/season';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -206,7 +207,21 @@ async function runGeneration(req: NextRequest): Promise<NextResponse> {
 
   try {
     // Zeitstempel fuer Scheduling
-    const scheduledAt = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '10:00').slice(0, 5)}:00`).toISOString();
+    const scheduledDate = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '10:00').slice(0, 5)}:00`);
+    const scheduledAt = scheduledDate.toISOString();
+
+    // Saison-Check: saisonfremde Themen gar nicht erst generieren (analog
+    // lib/meta/generate-plan-entry.ts). Der Auto-Pfad reimplementiert die
+    // Generierung inline und hatte den Skip bisher nicht — Claude erfand so
+    // z.B. Winter-Posts im Sommer.
+    const topicText = [entry.topic, entry.angle, (entry.keywords ?? []).join(' ')].filter(Boolean).join(' ');
+    if (isTopicOutOfSeason(topicText, scheduledDate)) {
+      const season = getSeasonContext(scheduledDate);
+      const msg = `Saisonfremdes Thema: "${entry.topic}" passt nicht zu ${season.seasonLabel} (${season.monthLabel}). Bitte Thema aendern oder verschieben.`;
+      await supabase.from('social_editorial_plan').update({ status: 'skipped', error_message: msg }).eq('id', entry.id);
+      await setGenerationStatus({ status: 'idle', last_skipped_at: new Date().toISOString(), last_entry_id: entry.id });
+      return NextResponse.json({ skipped: 'out_of_season', entry_id: entry.id, reason: msg });
+    }
 
     // Caption-Prompt zusammenbauen
     const captionPrompt = entry.prompt?.trim() || `Schreibe einen Social-Media-Post:
@@ -223,6 +238,7 @@ Max 500 Zeichen, klarer CTA am Ende.`;
     const generated = await generateCaption(captionPrompt, {}, {
       maxLength: 500,
       defaultHashtags: (entry.keywords ?? []).map((k: string) => k.startsWith('#') ? k : `#${k}`),
+      postDate: scheduledDate,
     });
 
     // 3-stufiger Faktencheck (kann per Setting abgeschaltet werden)

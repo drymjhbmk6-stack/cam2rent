@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml as h } from '@/lib/email';
-import { getResendFromEmail, getSiteUrl } from '@/lib/env-mode';
+import { getResendFromEmail, getSiteUrl, getTestModeEmailRedirect } from '@/lib/env-mode';
 import { generateSurveyToken } from '@/lib/survey-token';
 import { isoToDE } from '@/lib/format-utils';
 
@@ -69,6 +69,20 @@ function wrapLayout(body: string, baseUrl: string): string {
 </html>`;
 }
 
+/**
+ * Im Test-Modus wird jede Kundenmail an TEST_MODE_REDIRECT_EMAIL umgeleitet
+ * (falls gesetzt), damit Test-Buchungen keine echten Kunden erreichen. Ohne
+ * gesetzten Redirect bleibt der urspruengliche Empfaenger. Der Betreff traegt
+ * dann einen Hinweis auf die urspruengliche Adresse.
+ */
+async function resolveRecipient(originalTo: string, subject: string): Promise<{ to: string; subject: string }> {
+  const redirect = await getTestModeEmailRedirect();
+  if (redirect) {
+    return { to: redirect, subject: `[TEST → ${originalTo}] ${subject}` };
+  }
+  return { to: originalTo, subject };
+}
+
 function ctaButton(href: string, label: string): string {
   return `<table cellpadding="0" cellspacing="0" style="margin:24px 0;">
     <tr><td style="background:#0a0a0a;border-radius:8px;padding:12px 28px;">
@@ -99,11 +113,12 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `, baseUrl);
 
+  const { to: recipient, subject: finalSubject } = await resolveRecipient(data.customerEmail, subject);
   const result = await resend.emails.send({
     from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
-    to: data.customerEmail,
-    subject,
+    to: recipient,
+    subject: finalSubject,
     html,
   });
 
@@ -145,11 +160,12 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `, baseUrl);
 
+  const { to: recipient, subject: finalSubject } = await resolveRecipient(data.customerEmail, subject);
   const result = await resend.emails.send({
     from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
-    to: data.customerEmail,
-    subject,
+    to: recipient,
+    subject: finalSubject,
     html,
   });
 
@@ -187,11 +203,12 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `, baseUrl);
 
+  const { to: recipient, subject: finalSubject } = await resolveRecipient(data.customerEmail, subject);
   const result = await resend.emails.send({
     from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
-    to: data.customerEmail,
-    subject,
+    to: recipient,
+    subject: finalSubject,
     html,
   });
 
@@ -237,11 +254,12 @@ export async function sendReviewRequest(data: ReminderEmailData): Promise<string
     </p>
   `, baseUrl);
 
+  const { to: recipient, subject: finalSubject } = await resolveRecipient(data.customerEmail, subject);
   const result = await resend.emails.send({
     from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
-    to: data.customerEmail,
-    subject,
+    to: recipient,
+    subject: finalSubject,
     html,
   });
 

@@ -144,9 +144,25 @@ export type AdminProducts = Record<string, AdminProduct>;
 /** Berechnet den Mietpreis aus der 30-Tage-Tabelle */
 export function calcPriceFromTable(product: AdminProduct, days: number): number {
   if (days <= 0) return 0;
-  if (days <= 30) return product.priceTable[days - 1] ?? 0;
-  const day30Price = product.priceTable[29] ?? 0;
-  return day30Price + (days - 30) * product.perDayAfter30;
+  const table = product.priceTable ?? [];
+  if (days <= 30) {
+    const exact = table[days - 1];
+    if (exact != null) return exact;
+    // Tabelle zu kurz: letzten vorhandenen Wert nehmen und mit perDayAfter30
+    // hochrechnen — NIE still 0 € zurueckgeben (falscher Gratis-Mietpreis).
+    let lastIdx = table.length - 1;
+    while (lastIdx >= 0 && table[lastIdx] == null) lastIdx--;
+    if (lastIdx < 0) return 0;
+    const lastPrice = table[lastIdx];
+    const extraDays = days - 1 - lastIdx;
+    return lastPrice + Math.max(0, extraDays) * (product.perDayAfter30 || 0);
+  }
+  // > 30 Tage: ab Tag-30-Preis (oder letztem verfuegbaren) hochrechnen
+  let idx30 = Math.min(29, table.length - 1);
+  while (idx30 >= 0 && table[idx30] == null) idx30--;
+  const basePrice = idx30 >= 0 ? table[idx30] : 0;
+  const baseDay = idx30 >= 0 ? idx30 + 1 : 30;
+  return basePrice + (days - baseDay) * (product.perDayAfter30 || 0);
 }
 
 // ─── Legacy compatibility (6-key format still used by API) ───────────────────
