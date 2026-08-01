@@ -238,10 +238,13 @@ export default function KundenPage() {
   // Vorhandene Anfangsbuchstaben (für aktive/disabled Reiter)
   const availableLetters = new Set(base.map(firstLetter));
 
-  // Buchstaben-Filter greift nur ohne aktive Suche
-  const filtered = letter && !search.trim()
-    ? base.filter((c) => firstLetter(c) === letter)
-    : base;
+  // Buchstaben-Filter greift nur ohne aktive Suche.
+  // Ohne Suche und ohne gewählten Buchstaben bleibt die Liste leer.
+  const filtered = search.trim()
+    ? base
+    : letter
+      ? base.filter((c) => firstLetter(c) === letter)
+      : [];
 
   const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 
@@ -255,7 +258,11 @@ export default function KundenPage() {
             Kunden
           </h1>
           <p style={{ fontSize: 14, color: '#64748b', marginTop: 4, marginBottom: 0 }}>
-            {filtered.length} Kunden {search ? 'gefunden' : 'insgesamt'}
+            {search
+              ? `${filtered.length} Kunden gefunden`
+              : letter
+                ? `${filtered.length} Kunden mit „${letter}“`
+                : `${base.length} Kunden insgesamt`}
           </p>
         </div>
         <button
@@ -340,22 +347,6 @@ export default function KundenPage() {
             marginBottom: 20,
           }}
         >
-          <button
-            onClick={() => setLetter('')}
-            style={{
-              minWidth: 34,
-              padding: '6px 10px',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-              background: letter === '' ? '#06b6d4' : '#111827',
-              color: letter === '' ? '#0a0f1e' : '#94a3b8',
-            }}
-          >
-            Alle
-          </button>
           {ALPHABET.map((l) => {
             const has = availableLetters.has(l);
             const active = letter === l;
@@ -388,7 +379,9 @@ export default function KundenPage() {
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Laden...</div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Keine Kunden gefunden.</div>
+          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+            {!search.trim() && !letter ? 'Buchstaben wählen, um Kunden anzuzeigen.' : 'Keine Kunden gefunden.'}
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: 1040, borderCollapse: 'collapse' }}>
