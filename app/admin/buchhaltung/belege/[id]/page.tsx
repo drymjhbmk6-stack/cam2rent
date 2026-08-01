@@ -53,6 +53,11 @@ interface Beleg {
   verdacht_duplikat_grund?: string | null;
   verdacht_duplikat_dismissed_at?: string | null;
   verdacht_duplikat_existing?: { id: string; beleg_nr: string } | null;
+  fremdwaehrung?: string | null;
+  wechselkurs?: number | null;
+  wechselkurs_datum?: string | null;
+  original_summe_brutto?: number | null;
+  waehrung_hinweis_dismissed_at?: string | null;
 }
 interface Position {
   id: string; reihenfolge: number; bezeichnung: string; menge: number;
@@ -136,6 +141,7 @@ export default function BelegDetailPage() {
   const [verknuepfFor, setVerknuepfFor] = useState<
     { id: string; label: string; menge: number; linked: number } | null
   >(null);
+  const [rateInput, setRateInput] = useState('');
 
   async function reload() {
     setLoading(true);
@@ -397,11 +403,49 @@ export default function BelegDetailPage() {
     setBusy(false);
   }
 
+  async function handleSetRate() {
+    const rate = parseFloat(rateInput.replace(',', '.'));
+    if (!Number.isFinite(rate) || rate <= 0) { setError('Ungültiger Kurs.'); return; }
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/waehrung`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_rate', rate }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? 'Kurs konnte nicht angewendet werden');
+      setBusy(false);
+      return;
+    }
+    setRateInput('');
+    await reload();
+    setBusy(false);
+  }
+
+  async function handleDismissWaehrung() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/waehrung`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'dismiss' }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? 'Hinweis konnte nicht ausgeblendet werden');
+      setBusy(false);
+      return;
+    }
+    await reload();
+    setBusy(false);
+  }
+
   if (loading) return <div className="p-6 text-slate-400">Lädt…</div>;
   if (!beleg) return <div className="p-6 text-rose-400">{error ?? 'Nicht gefunden'}</div>;
 
   const isLocked = beleg.status === 'festgeschrieben';
   const hasOpenDuplicate = !!beleg.verdacht_duplikat_beleg_id && !beleg.verdacht_duplikat_dismissed_at;
+  const isForeignCurrency = !!beleg.fremdwaehrung;
+  const showWaehrungBanner = isForeignCurrency && !beleg.waehrung_hinweis_dismissed_at && !isLocked;
+  const kursDatumFmt = beleg.wechselkurs_datum ? fmtDate(beleg.wechselkurs_datum) : null;
   const allClassified = positionen.length > 0 && positionen.every((p) => p.klassifizierung !== 'pending');
   const offeneKiCount = positionen.filter(
     (p) => !p.locked && p.ki_vorschlag && (p.ki_vorschlag.klassifizierung || p.ki_vorschlag.kategorie),
@@ -482,6 +526,82 @@ export default function BelegDetailPage() {
                 </Link>
               </>
             )}
+          </div>
+        )}
+        {showWaehrungBanner && (
+          <div className="p-4 bg-amber-500/10 border-2 border-amber-500/40 text-amber-100 rounded text-sm space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg leading-none">💱</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-amber-100">
+                  Rechnung in Fremdwährung ({beleg.fremdwaehrung}) erkannt
+                </div>
+                {beleg.wechselkurs ? (
+                  <div className="text-xs text-amber-200/90 mt-1 space-y-0.5">
+                    <div>
+                      Die Beträge wurden automatisch in Euro umgerechnet — Kurs
+                      {' '}<span className="font-mono">1&nbsp;{beleg.fremdwaehrung} = {beleg.wechselkurs.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}&nbsp;€</span>
+                      {kursDatumFmt && <> (EZB-Referenzkurs, Stand {kursDatumFmt})</>}.
+                    </div>
+                    {beleg.original_summe_brutto != null && (
+                      <div>
+                        Original-Betrag laut Rechnung:{' '}
+                        <span className="font-mono">{beleg.original_summe_brutto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}&nbsp;{beleg.fremdwaehrung}</span>
+                        {' → '}umgerechnet <span className="font-mono">{fmtEuro(Number(beleg.summe_brutto))}</span>.
+                      </div>
+                    )}
+                    <div className="text-amber-300/70">
+                      Bitte prüfen — du bezahlst den Original-Betrag. Kurs unten anpassen oder die
+                      Positionen einzeln bearbeiten. Für die Buchhaltung gilt der Euro-Wert.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-amber-200/90 mt-1">
+                    Der Wechselkurs konnte nicht automatisch geladen werden — die Beträge stehen
+                    aktuell <strong>unverändert</strong> (als {beleg.fremdwaehrung}-Zahlen, noch nicht in Euro
+                    umgerechnet). Bitte den Kurs eintragen, dann werden alle Positionen umgerechnet.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-500/30">
+              <label className="text-xs text-amber-200/90">
+                Kurs 1&nbsp;{beleg.fremdwaehrung} =
+              </label>
+              <input
+                value={rateInput}
+                onChange={(e) => setRateInput(e.target.value)}
+                inputMode="decimal"
+                placeholder={beleg.wechselkurs ? beleg.wechselkurs.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) : '0,00'}
+                className="w-28 bg-[#111827] border border-amber-600/50 rounded px-2 py-1 text-sm text-right font-mono focus:outline-none focus:border-amber-400"
+              />
+              <span className="text-xs text-amber-200/90">€</span>
+              <button
+                onClick={handleSetRate}
+                disabled={busy || !rateInput.trim()}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+              >
+                {busy ? 'Rechne um…' : 'Kurs anwenden'}
+              </button>
+              {beleg.wechselkurs != null && (
+                <button
+                  onClick={handleDismissWaehrung}
+                  disabled={busy}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-sm"
+                >
+                  Passt so
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {isForeignCurrency && (beleg.waehrung_hinweis_dismissed_at || isLocked) && (
+          <div className="p-2 bg-slate-700/30 border border-slate-600 text-slate-400 rounded text-xs">
+            💱 In {beleg.fremdwaehrung} ausgestellt
+            {beleg.wechselkurs
+              ? <> · umgerechnet mit Kurs 1&nbsp;{beleg.fremdwaehrung} = <span className="font-mono">{beleg.wechselkurs.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</span>&nbsp;€{kursDatumFmt && ` (Stand ${kursDatumFmt})`}</>
+              : <> · <span className="text-amber-400">nicht umgerechnet</span></>}
+            {beleg.original_summe_brutto != null && <> · Original {beleg.original_summe_brutto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}&nbsp;{beleg.fremdwaehrung}</>}
           </div>
         )}
         {beleg.ocr_status === 'failed' && (

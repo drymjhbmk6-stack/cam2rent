@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 import { findContentDuplicate, persistDuplicateWarning, type DuplicateMatch } from '@/lib/buchhaltung/duplicate-check';
+import { normalizeCurrency, fetchEurRate } from '@/lib/buchhaltung/currency';
 
 /**
  * OCR-Logik fuer einen einzelnen Beleg, herausgezogen aus der Route, damit
@@ -66,6 +67,29 @@ async function setOcrStatus(
   }
   if (error) {
     console.error('[ocr] setOcrStatus:', error.message);
+  }
+}
+
+// Defensiver Update der Fremdwaehrungs-Felder. Fehlt die Migration
+// (supabase-belege-fremdwaehrung.sql), laufen wir lautlos weiter — der OCR-Pfad
+// darf nicht brechen, nur weil die Spalten noch nicht existieren.
+async function setBelegCurrency(
+  supabase: SupabaseClient,
+  belegId: string,
+  patch: {
+    fremdwaehrung: string | null;
+    wechselkurs: number | null;
+    wechselkurs_datum: string | null;
+    original_summe_brutto: number | null;
+    waehrung_hinweis_dismissed_at: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase.from('belege').update(patch).eq('id', belegId);
+  if (error && /fremdwaehrung|wechselkurs|original_summe_brutto|waehrung_hinweis/i.test(error.message)) {
+    return; // Migration fehlt — Betraege bleiben 1:1 (unkonvertiert) gespeichert.
+  }
+  if (error) {
+    console.error('[ocr] setBelegCurrency:', error.message);
   }
 }
 
@@ -192,6 +216,23 @@ export async function runOcrForBeleg(
     bezahl_datum: beleg.bezahl_datum ?? newBelegDatum,
   }).eq('id', belegId);
 
+  // Fremdwaehrung erkennen + EZB-Kurs zum Rechnungsdatum ziehen. Ist die
+  // Rechnung nicht in EUR, werden die Netto-Einzelpreise in EUR umgerechnet
+  // (Buchhaltung rechnet ausschliesslich in EUR). Der Original-Kurs + -Betrag
+  // wird am Beleg dokumentiert, der Admin kann den Kurs im UI ueberschreiben.
+  const foreignCurrency = normalizeCurrency(invoice.currency);
+  let convFactor = 1;                      // EUR pro 1 Einheit Fremdwaehrung
+  let rateDate: string | null = null;
+  if (foreignCurrency) {
+    const rateInfo = await fetchEurRate(foreignCurrency, newBelegDatum);
+    if (rateInfo) {
+      convFactor = rateInfo.rate;
+      rateDate = rateInfo.rateDate;
+    }
+    // rateInfo null (Netzfehler) -> convFactor bleibt 1: Betraege werden
+    // unkonvertiert gespeichert, der Banner weist auf den fehlenden Kurs hin.
+  }
+
   // Existierende Positionen droppen (nur bei "leerem" Beleg ohne Klassifizierung)
   const { data: existingPos } = await supabase.from('beleg_positionen').select('id, klassifizierung').eq('beleg_id', belegId);
   const hasClassified = (existingPos ?? []).some((p) => (p as { klassifizierung: string }).klassifizierung !== 'pending');
@@ -205,7 +246,7 @@ export async function runOcrForBeleg(
       reihenfolge: i,
       bezeichnung: it.description,
       menge: it.quantity,
-      einzelpreis_netto: it.unit_price_net,
+      einzelpreis_netto: (Number(it.unit_price_net) || 0) * convFactor,
       mwst_satz: it.tax_rate,
       ki_vorschlag: {
         klassifizierung: it.suggested_classification === 'asset' ? 'afa'
@@ -231,6 +272,27 @@ export async function runOcrForBeleg(
   }
 
   await recomputeBelegSummen(supabase, belegId);
+
+  // Fremdwaehrungs-Metadaten am Beleg speichern (bzw. bei EUR wieder leeren,
+  // damit ein Re-OCR eines korrigierten Belegs den Banner entfernt).
+  const foreignGross = Number(invoice.totals?.gross) > 0
+    ? Number(invoice.totals.gross)
+    : invoice.items.reduce((s, it) => s + (Number(it.line_total_gross) || 0), 0);
+  await setBelegCurrency(supabase, belegId, foreignCurrency
+    ? {
+        fremdwaehrung: foreignCurrency,
+        wechselkurs: rateDate ? convFactor : null,
+        wechselkurs_datum: rateDate,
+        original_summe_brutto: foreignGross > 0 ? Math.round(foreignGross * 100) / 100 : null,
+        waehrung_hinweis_dismissed_at: null,
+      }
+    : {
+        fremdwaehrung: null,
+        wechselkurs: null,
+        wechselkurs_datum: null,
+        original_summe_brutto: null,
+        waehrung_hinweis_dismissed_at: null,
+      });
 
   // Inhaltsbasierter Duplikat-Check. Reload zuerst, weil summe_brutto gerade
   // frisch berechnet wurde.

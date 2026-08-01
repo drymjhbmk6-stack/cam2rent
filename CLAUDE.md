@@ -5729,6 +5729,52 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
+### Belege: Fremdwährungs-Rechnungen → Auto-Umrechnung in EUR (Stand 2026-08-01)
+Eine Eingangsrechnung in Fremdwährung (typisch USD, aber auch GBP/CHF/…) wird
+beim OCR erkannt und **automatisch mit dem EZB-Referenzkurs zum Rechnungsdatum
+in Euro umgerechnet** — Buchhaltung/EÜR/DATEV rechnen ausschließlich in EUR.
+Ein amber Hinweis-Banner auf der Beleg-Detailseite zeigt Originalwährung + Kurs,
+und der Admin kann den Kurs **überschreiben** (Positionen werden dann linear neu
+skaliert) oder mit „Passt so" bestätigen. Gilt nur für die **Belege-Welt**
+(`run-ocr.ts`), NICHT für den alten Einkauf/purchases-Upload
+(`/admin/einkauf/upload`) — dort wird die Währung weiterhin ignoriert (offener
+Folge-Change).
+- **Erkennung + Kurs:** `lib/buchhaltung/currency.ts` → `normalizeCurrency(raw)`
+  (Symbol/Code → ISO, EUR/leer/nicht unterstützt → `null` = keine Umrechnung) +
+  `fetchEurRate(cur, datum)` (EZB-Kurs via `api.frankfurter.dev`, EUR pro 1
+  Einheit Fremdwährung; Wochenende/Feiertag → letzter Handelstag, meldet echtes
+  Kurs-Datum; 5-s-Timeout; Netzfehler → `null`). frankfurter deckt ~30 EZB-
+  Währungen ab, kostenlos, kein Key. Der OCR-Prompt (`invoice-extract.ts`) weist
+  Claude an, den ISO-Code zu melden und Beträge NICHT selbst umzurechnen.
+- **OCR-Pfad** (`run-ocr.ts`): Fremdwährung erkannt → Kurs zum `beleg_datum`
+  laden → jede Position `einzelpreis_netto × Kurs` (in EUR gespeichert; `gesamt_*`
+  sind DB-generiert, `mwst_satz` bleibt) → `setBelegCurrency` schreibt
+  `fremdwaehrung`/`wechselkurs`/`wechselkurs_datum`/`original_summe_brutto` an den
+  Beleg (bei EUR-Beleg werden die Felder geleert → Re-OCR entfernt einen stale
+  Banner). **Kurs nicht ladbar** (`convFactor=1`): Beträge bleiben unkonvertiert,
+  `wechselkurs=null`, Banner fordert manuelle Kurseingabe. Alles defensiv gegen
+  fehlende Migration (`setBelegCurrency` schluckt Spalten-Fehler → OCR bricht nie).
+- **Migration `supabase/supabase-belege-fremdwaehrung.sql`** (idempotent, additiv):
+  `belege.fremdwaehrung TEXT` (ISO, NULL=EUR), `wechselkurs NUMERIC` (EUR pro 1
+  Einheit), `wechselkurs_datum DATE`, `original_summe_brutto NUMERIC` (Brutto in
+  Originalwährung), `waehrung_hinweis_dismissed_at TIMESTAMPTZ` + Partial-Index.
+- **Endpoint `POST /api/admin/belege/[id]/waehrung`** (Permission via Prefix
+  `/api/admin/belege` → `finanzen`): `{action:'set_rate', rate}` skaliert alle
+  Positions-Netto linear (`Faktor = neuerKurs / bisherigerKurs`, bzw. `= neuerKurs`
+  falls noch nicht umgerechnet), recomputet Summen, schreibt Kurs+heutiges Datum;
+  `{action:'dismiss'}` blendet den Hinweis aus. 409 bei festgeschrieben, 400 bei
+  EUR-Beleg/ungültigem Kurs, 503 bei fehlender Migration. Audit
+  `beleg.waehrung_set_rate` / `beleg.waehrung_dismiss`.
+- **UI** (`/admin/buchhaltung/belege/[id]`): amber Banner (`💱`) über dem OCR-/
+  Positions-Bereich, sichtbar bei `fremdwaehrung && !dismissed && !festgeschrieben`
+  — zeigt Kurs + „Original X USD → umgerechnet Y €", Kurs-Eingabefeld +
+  „Kurs anwenden" + „Passt so". Nach Dismiss/Festschreibung nur noch eine dezente
+  Info-Zeile. Positionen bleiben zusätzlich einzeln editierbar (bestehende Inline-
+  Bearbeitung). GET liefert die Felder automatisch (`select('*')`).
+- **Go-Live TODO:** Migration `supabase/supabase-belege-fremdwaehrung.sql`
+  ausführen. Ohne sie läuft der OCR-Pfad defensiv weiter (Beträge 1:1 als EUR,
+  kein Banner), der Kurs-Endpoint liefert 503.
+
 ### Belege: Positionen inline bearbeiten (Stand 2026-05-21)
 Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Felder hart auf `disabled` — eine fehlerhafte OCR-Analyse (Bezeichnung, Menge, Netto, MwSt %) liess sich gar nicht über die UI korrigieren, obwohl `PATCH /api/admin/beleg-positionen/[id]` das längst unterstützt. Jetzt: pro Position ein **„✏ Bearbeiten"-Button** in der Sub-Zeile (sichtbar nur wenn Beleg nicht festgeschrieben und Position nicht `locked`). Klick → Felder Bezeichnung/Menge/Einzel-Netto/MwSt % werden editierbar (cyan Rahmen), **Einzel-Brutto bleibt read-only und wird live aus Netto × MwSt berechnet** (das Datenmodell speichert Netto + MwSt-Satz, Brutto ist abgeleitet — eine Amazon-Rechnung mit eigener USt-Rundung kann daher 1 Cent abweichen, für Kleinunternehmer/EÜR irrelevant). „Speichern" schickt die Korrektur an die bestehende API (`recomputeBelegSummen` aktualisiert die Beleg-Summen), „Abbrechen" verwirft. Validierung clientseitig (Bezeichnung nicht leer, Netto ≥ 0, Menge ≥ 1, MwSt 0–100). Eine Position gleichzeitig editierbar. Audit: `beleg_position.update` (bereits vorhanden).
 
@@ -5872,6 +5918,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Fremdwährungs-Migration auszuführen:** `supabase/supabase-belege-fremdwaehrung.sql`
+  (idempotent, additiv: `belege.fremdwaehrung`/`wechselkurs`/`wechselkurs_datum`/
+  `original_summe_brutto`/`waehrung_hinweis_dismissed_at`). Ohne sie läuft der
+  OCR-Pfad defensiv weiter (Fremdwährungs-Beträge werden 1:1 als EUR gespeichert,
+  kein Umrechnungs-Banner), der Kurs-Endpoint liefert 503. Siehe „Belege:
+  Fremdwährungs-Rechnungen → Auto-Umrechnung in EUR". Empfohlen ASAP ausführen.
+  **Offener Folge-Change:** alter Einkauf-Upload (`/admin/einkauf/upload`,
+  purchases-Welt) rechnet Fremdwährung weiterhin nicht um.
 - **Push-Typen-pro-Mitarbeiter Migration auszuführen:**
   `supabase/supabase-admin-users-push-prefs.sql` (idempotent, additiv:
   `admin_users.push_prefs JSONB`). Ohne sie läuft alles weiter (Push-Filter

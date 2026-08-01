@@ -204,6 +204,12 @@ Antworte AUSSCHLIESSLICH als JSON ohne Markdown-Codefences. Schema:
   "notes": ""
 }
 
+Waehrung: Gib im Feld "currency" den ISO-Code der auf der Rechnung ausgewiesenen
+Waehrung an (z.B. "EUR", "USD", "GBP", "CHF"). Erkenne sie am Waehrungssymbol
+($, £, €, ¥) oder Code. Rechne die Betraege NICHT um — gib alle Betraege exakt so
+zurueck, wie sie auf der Rechnung stehen (in der Original-Waehrung). Die
+Euro-Umrechnung passiert spaeter serverseitig.
+
 Wenn Felder nicht erkennbar sind: null oder weglassen (bei optionalen Feldern).
 Betraege immer als Zahlen (nicht Strings). Deutsche Umlaute korrekt.`;
 
