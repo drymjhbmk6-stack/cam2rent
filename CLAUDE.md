@@ -2573,6 +2573,36 @@ unverändert (`location.trim().length > 0`).
 - **Default:** solange noch nie gespeichert wurde, wird `BUSINESS.fullAddress`
   vorgeschlagen (im Settings-Editor UND als einzige Haken-Option in der Übergabe).
 
+### Abholung durch eine dritte Person (nicht der Kunde) (Stand 2026-08-01)
+Holt jemand anderes als der Kunde die Kamera ab (Ehepartner, Kollege, Bote), kann
+der Admin das im Übergabe-Wizard (`/admin/buchungen/[id]/uebergabe`) im Mieter-
+Schritt (Schritt 3) dokumentieren. **Rechtlicher Rahmen:** Der Kunde bleibt
+Vertragspartner und Haftender — die dritte Person unterschreibt nur den Erhalt.
+**Keine Migration** — `bookings.handover_data` ist freies JSONB, das neue Feld
+`pickup` hängt sich additiv dran.
+- **UI:** Neuer Umschalter „Abholende Person ist nicht der Kunde"
+  (`ThirdPartyPickupBlock`) über dem Namensfeld im Mieter-Signatur-Schritt.
+  Aktiv → drei Felder: **Verhältnis zum Kunden** (optional, Freitext), Pflicht-
+  Häkchen **„Vollmacht des Kunden liegt vor"** + **„Ausweis der abholenden Person
+  geprüft"**. Beim Aktivieren wird das Namensfeld geleert (falls es noch der
+  Kundenname war) → Admin trägt die abholende Person ein; Titel/Label des Schritts
+  wechseln auf „Unterschrift abholende Person" / „…der abholenden Person".
+- **Gate:** „Speichern" bleibt gesperrt, bis bei aktivem Dritte-Person-Modus
+  **beide** Pflicht-Häkchen gesetzt sind (zusätzlich zu Name + Unterschrift).
+- **Server** (`POST /api/admin/handover/[bookingId]`): erzwingt bei
+  `pickup.byThirdParty` Vollmacht **und** Ausweisprüfung (sonst 400), sanitisiert
+  + speichert `handover_data.pickup = { byThirdParty, personName, relation?,
+  powerOfAttorney, idChecked }`. `byThirdParty:false` (oder Feld fehlt) = Kunde
+  holt selbst ab, Verhalten 1:1 wie zuvor. Audit `booking.handover_completed`
+  enthält zusätzlich `pickupByThirdParty` + `pickupPersonName`.
+- **Anzeige:** Das abgeschlossene Protokoll (`DoneView`) zeigt bei Abholung durch
+  Dritte einen amber Info-Block (abgeholt von / Verhältnis / Vollmacht ✓ /
+  Ausweis ✓) und beschriftet die Signatur-Spalte „Abholende Person (i.A.)" statt
+  „Mieter".
+- **Bewusst NICHT:** kein separater Ausweis-Upload der dritten Person (nur
+  Bestätigung „geprüft"), keine strukturierte Vollmacht-Datei — der Admin prüft
+  physisch vor Ort. Kann bei Bedarf später ergänzt werden.
+
 ### Übergabeprotokoll-Wizard mit Scanner (Stand 2026-05-16)
 Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard: Zustand → Vermieter → Mieter → Fertig) nutzt in Schritt 1 jetzt denselben Scanner-Workflow wie das Versand-Packen. Statt der reinen Checkbox-Liste: `<ScannerBar>` + `<ItemList>` (gruppiert, Mengen-Counter) + `<SerialScanner continuous>` + `<ScannerLiveList>` aus `components/admin/scan-workflow.tsx`. Kamera-Seriennummer / Zubehör-Exemplar-Code wird gescannt → Slot automatisch abgehakt, Toast-Feedback (grün/amber/rot), Auto-Close wenn alle scanbaren Stücke erfasst sind, Substitution erlaubt (analog Pack-Schritt 1). `bookingToScanInput()` setzt `skipReturnLabel: true` (Abholung → kein Rücksendeetikett). Manuelles Abhaken per Klick auf die Item-Zeile bleibt parallel möglich.
 

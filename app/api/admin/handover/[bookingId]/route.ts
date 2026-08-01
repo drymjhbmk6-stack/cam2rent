@@ -75,6 +75,15 @@ export async function POST(
       landlord?: { dataUrl?: string; name?: string };
       renter?: { dataUrl?: string; name?: string };
     };
+    // Abholung durch eine dritte Person (nicht der Kunde). Bei byThirdParty
+    // sind Vollmacht + Ausweispruefung Pflicht (der Kunde bleibt Haftender).
+    pickup?: {
+      byThirdParty?: boolean;
+      personName?: string;
+      relation?: string;
+      powerOfAttorney?: boolean;
+      idChecked?: boolean;
+    };
     // Tatsaechlich gescannte Unit-IDs aus dem Scanner-Workflow (Kamera +
     // Zubehoer-Exemplare, inkl. Substitute). Analog zum Versand-Pack-Flow:
     // applyScannedUnits() tauscht die Buchungs-Zuordnung aus, damit das
@@ -98,6 +107,25 @@ export async function POST(
   if (!renterSig || !renterName) {
     return NextResponse.json({ error: 'Mieter-Signatur + Name erforderlich.' }, { status: 400 });
   }
+
+  // Abholung durch dritte Person: bei aktivem Flag sind Vollmacht +
+  // Ausweispruefung zwingend (Kunde bleibt Vertragspartner + Haftender).
+  const pickupByThirdParty = !!body.pickup?.byThirdParty;
+  if (pickupByThirdParty && (!body.pickup?.powerOfAttorney || !body.pickup?.idChecked)) {
+    return NextResponse.json(
+      { error: 'Bei Abholung durch eine dritte Person sind Vollmacht und Ausweisprüfung Pflicht.' },
+      { status: 400 },
+    );
+  }
+  const pickup = pickupByThirdParty
+    ? {
+        byThirdParty: true,
+        personName: (body.pickup?.personName ?? renterName).toString().trim().slice(0, 120),
+        relation: (body.pickup?.relation ?? '').toString().trim().slice(0, 200) || undefined,
+        powerOfAttorney: true,
+        idChecked: true,
+      }
+    : { byThirdParty: false };
 
   const supabase = createServiceClient();
 
@@ -175,6 +203,7 @@ export async function POST(
         }))
       : [],
     photoPath: storagePath,
+    pickup,
     signatures: {
       landlord: { dataUrl: landlordSig, name: landlordName.slice(0, 120), signedAt: now, ip },
       renter:   { dataUrl: renterSig,   name: renterName.slice(0, 120),   signedAt: now, ip },
@@ -222,6 +251,8 @@ export async function POST(
         renterName,
         location: handoverData.location || null,
         photoPath: storagePath,
+        pickupByThirdParty: pickupByThirdParty,
+        pickupPersonName: pickupByThirdParty ? pickup.personName : null,
         statusSetToPickedUp: statusUpdated,
       },
       request: req,

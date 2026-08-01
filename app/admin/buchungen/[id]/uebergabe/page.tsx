@@ -68,6 +68,15 @@ interface HandoverData {
   condition: { tested: boolean; noDamage: boolean; otherNote?: string };
   items: Array<{ name: string; ok: boolean }>;
   photoPath?: string;
+  // Abholung durch eine dritte Person (nicht der Kunde). byThirdParty=false
+  // (oder Feld fehlt) = Kunde holt selbst ab, wie bisher.
+  pickup?: {
+    byThirdParty: boolean;
+    personName?: string;
+    relation?: string;
+    powerOfAttorney?: boolean;
+    idChecked?: boolean;
+  };
   signatures: {
     landlord: { dataUrl: string; name: string; signedAt: string };
     renter: { dataUrl: string; name: string; signedAt: string };
@@ -153,6 +162,28 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [landlordSig, setLandlordSig] = useState<string | null>(null);
   const [renterName, setRenterName] = useState(booking.customer_name ?? '');
   const [renterSig, setRenterSig] = useState<string | null>(null);
+
+  // Abholung durch dritte Person (nicht der Kunde). Der Kunde bleibt
+  // Vertragspartner + Haftender — die dritte Person unterschreibt nur den
+  // Erhalt. Vollmacht + Ausweisprüfung sind dann Pflicht.
+  const [pickupThirdParty, setPickupThirdParty] = useState(false);
+  const [pickupRelation, setPickupRelation] = useState('');
+  const [pickupPoa, setPickupPoa] = useState(false);
+  const [pickupIdChecked, setPickupIdChecked] = useState(false);
+
+  function toggleThirdParty(v: boolean) {
+    setPickupThirdParty(v);
+    if (v) {
+      // Namensfeld leeren, wenn es noch der Kundenname ist → Admin trägt die
+      // abholende Person ein.
+      if (renterName.trim() === (booking.customer_name ?? '').trim()) setRenterName('');
+    } else {
+      if (!renterName.trim()) setRenterName(booking.customer_name ?? '');
+      setPickupPoa(false);
+      setPickupIdChecked(false);
+      setPickupRelation('');
+    }
+  }
 
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -306,6 +337,10 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   async function submitAll() {
     if (!landlordSig || !landlordName.trim()) { setSubmitError('Vermieter-Signatur + Name erforderlich.'); return; }
     if (!renterSig || !renterName.trim()) { setSubmitError('Mieter-Signatur + Name erforderlich.'); return; }
+    if (pickupThirdParty && (!pickupPoa || !pickupIdChecked)) {
+      setSubmitError('Bei Abholung durch eine dritte Person: Vollmacht + Ausweisprüfung bestätigen.');
+      return;
+    }
     if (!photoFile) { setSubmitError('Foto ist Pflicht.'); return; }
 
     setSaving(true);
@@ -336,6 +371,15 @@ function Wizard({ booking }: { booking: BookingDetail }) {
           landlord: { dataUrl: landlordSig, name: landlordName.trim() },
           renter: { dataUrl: renterSig, name: renterName.trim() },
         },
+        pickup: pickupThirdParty
+          ? {
+              byThirdParty: true,
+              personName: renterName.trim(),
+              relation: pickupRelation.trim() || undefined,
+              powerOfAttorney: pickupPoa,
+              idChecked: pickupIdChecked,
+            }
+          : { byThirdParty: false },
         scannedUnits: {
           cameraUnitIds: scannedCameraUnitIds,
           accessoryUnitIds: scannedAccessoryUnitIds,
@@ -438,16 +482,36 @@ function Wizard({ booking }: { booking: BookingDetail }) {
 
         {step === 'renter' && (
           <Step2Sign
-            title="Unterschrift Mieter"
-            description="Bestätigt den Erhalt des Equipments und den dokumentierten Zustand."
+            title={pickupThirdParty ? 'Unterschrift abholende Person' : 'Unterschrift Mieter'}
+            description={pickupThirdParty
+              ? 'Die abholende Person bestätigt den Erhalt des Equipments im Auftrag des Kunden.'
+              : 'Bestätigt den Erhalt des Equipments und den dokumentierten Zustand.'}
             name={renterName}
             setName={setRenterName}
+            nameLabel={pickupThirdParty ? 'Vor- und Nachname der abholenden Person *' : 'Vor- und Nachname *'}
             onSign={(d) => setRenterSig(d)}
             onBack={() => setStep('landlord')}
             onNext={submitAll}
-            canNext={!!renterSig && renterName.trim().length > 0}
+            canNext={
+              !!renterSig &&
+              renterName.trim().length > 0 &&
+              (!pickupThirdParty || (pickupPoa && pickupIdChecked))
+            }
             nextLabel={saving ? 'Speichert…' : 'Speichern'}
             nextDisabled={saving}
+            topContent={
+              <ThirdPartyPickupBlock
+                enabled={pickupThirdParty}
+                setEnabled={toggleThirdParty}
+                relation={pickupRelation}
+                setRelation={setPickupRelation}
+                poa={pickupPoa}
+                setPoa={setPickupPoa}
+                idChecked={pickupIdChecked}
+                setIdChecked={setPickupIdChecked}
+                customerName={booking.customer_name ?? null}
+              />
+            }
           />
         )}
 
@@ -796,6 +860,78 @@ function Step1(props: {
   );
 }
 
+// ─── Abholung durch dritte Person ────────────────────────────────────────────
+
+function ThirdPartyPickupBlock(props: {
+  enabled: boolean;
+  setEnabled: (v: boolean) => void;
+  relation: string;
+  setRelation: (v: string) => void;
+  poa: boolean;
+  setPoa: (v: boolean) => void;
+  idChecked: boolean;
+  setIdChecked: (v: boolean) => void;
+  customerName: string | null;
+}) {
+  return (
+    <div className="mb-5 rounded-lg border border-slate-700 bg-slate-950 p-4">
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={props.enabled}
+          onChange={(e) => props.setEnabled(e.target.checked)}
+          className="w-5 h-5 accent-amber-500 mt-0.5 shrink-0"
+        />
+        <span>
+          <span className="text-sm font-semibold text-amber-300">Abholende Person ist nicht der Kunde</span>
+          <span className="block text-xs text-slate-400 mt-0.5">
+            Eine dritte Person holt im Auftrag des Kunden{props.customerName ? ` (${props.customerName})` : ''} ab.
+            Der Kunde bleibt Vertragspartner und haftet für das Equipment.
+          </span>
+        </span>
+      </label>
+
+      {props.enabled && (
+        <div className="mt-4 space-y-3 border-t border-slate-800 pt-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Verhältnis zum Kunden (optional)</label>
+            <input
+              type="text"
+              value={props.relation}
+              onChange={(e) => props.setRelation(e.target.value)}
+              placeholder="z.B. Ehepartner, Kollege, Bote"
+              className="w-full px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-base focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={props.poa}
+              onChange={(e) => props.setPoa(e.target.checked)}
+              className="w-5 h-5 accent-amber-500 shrink-0"
+            />
+            <span className="text-sm">Vollmacht des Kunden liegt vor *</span>
+          </label>
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={props.idChecked}
+              onChange={(e) => props.setIdChecked(e.target.checked)}
+              className="w-5 h-5 accent-amber-500 shrink-0"
+            />
+            <span className="text-sm">Ausweis der abholenden Person geprüft *</span>
+          </label>
+          {(!props.poa || !props.idChecked) && (
+            <p className="text-xs text-amber-400">
+              Beide Häkchen sind Pflicht, bevor die abholende Person unterschreiben kann.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Step 2 + 3: Signatur ────────────────────────────────────────────────────
 
 function Step2Sign(props: {
@@ -803,6 +939,8 @@ function Step2Sign(props: {
   description: string;
   name: string;
   setName: (v: string) => void;
+  nameLabel?: string;
+  topContent?: React.ReactNode;
   onSign: (dataUrl: string | null) => void;
   onBack: () => void;
   onNext: () => void;
@@ -829,8 +967,10 @@ function Step2Sign(props: {
       <h2 className="font-bold text-lg mb-1">{props.title}</h2>
       <p className="text-sm text-slate-400 mb-6">{props.description}</p>
 
+      {props.topContent}
+
       <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Vor- und Nachname *</label>
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">{props.nameLabel ?? 'Vor- und Nachname *'}</label>
         <input
           type="text"
           value={props.name}
@@ -953,6 +1093,18 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             </div>
           )}
 
+          {handover.pickup?.byThirdParty && (
+            <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+              <div className="text-xs uppercase tracking-wider text-amber-300 mb-1.5">Abholung durch dritte Person</div>
+              <ul className="text-sm space-y-1">
+                <li>Abgeholt von: <span className="font-medium">{handover.pickup.personName || handover.signatures.renter.name}</span></li>
+                {handover.pickup.relation && <li>Verhältnis zum Kunden: {handover.pickup.relation}</li>}
+                <li>{handover.pickup.powerOfAttorney ? '✓' : '✗'} Vollmacht des Kunden lag vor</li>
+                <li>{handover.pickup.idChecked ? '✓' : '✗'} Ausweis der abholenden Person geprüft</li>
+              </ul>
+            </div>
+          )}
+
           <div className="mb-4 bg-slate-950/50 rounded-lg p-3 border border-slate-800">
             <EquipmentSummary booking={booking} />
           </div>
@@ -988,7 +1140,9 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
               <img src={handover.signatures.landlord.dataUrl} alt="Vermieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Mieter</div>
+              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+                {handover.pickup?.byThirdParty ? 'Abholende Person (i.A.)' : 'Mieter'}
+              </div>
               <div className="font-medium text-sm mb-1">{handover.signatures.renter.name}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={handover.signatures.renter.dataUrl} alt="Mieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
