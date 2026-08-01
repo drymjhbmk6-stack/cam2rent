@@ -621,7 +621,15 @@ export default function CheckoutPage() {
       }, 0);
     }
 
-    // Default: remainder after auto-discounts
+    // Default: Rest nach Auto-Rabatten.
+    // FIX (H-8): Bei einem not_combinable-Coupon werden Mengen-/Frühbucher-/
+    // Treuerabatt weiter unten genullt (siehe effective*-Berechnung). Die
+    // Coupon-Basis darf dann NICHT um diese (letztlich 0) Rabatte gekürzt sein
+    // — sonst zahlt der Kunde zu viel (20 % auf 100 € ergaben fälschlich 85,60 €
+    // statt 80 €). Nur der Produktrabatt bleibt bestehen.
+    if (appliedCoupon.not_combinable) {
+      return Math.max(0, cartTotal - productDiscountAmount);
+    }
     return afterAutoDiscounts;
   })();
 

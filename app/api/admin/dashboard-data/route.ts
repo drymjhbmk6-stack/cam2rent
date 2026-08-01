@@ -237,7 +237,8 @@ export async function GET() {
 
       // camera_utilization (30 Tage) — unabhaengig von allen anderen Queries,
       // daher direkt im Parallel-Batch statt als sequentieller Nach-Await.
-      computeCameraUtilization(supabase, 30),
+      // Test-/Live-Isolation (M-6): nur Buchungen des aktiven Modus zaehlen.
+      computeCameraUtilization(supabase, 30, { isTest: testMode }),
     ]);
 
     // ── Calculate revenue sums ───────────────────────────────────

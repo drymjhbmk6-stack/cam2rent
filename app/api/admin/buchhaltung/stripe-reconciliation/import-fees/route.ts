@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
     amount: number;
     expenseDate: string;
     hasBookingId: boolean;
+    isTest: boolean;
   }): Promise<'inserted' | 'healed' | 'skip'> {
     if (opts.amount <= 0) return 'skip';
 
@@ -85,7 +86,9 @@ export async function POST(req: NextRequest) {
       gross_amount: opts.amount,
       source_type: 'stripe_fee',
       source_id: opts.sourceId,
-      is_test: testMode,
+      // is_test der gematchten Buchung (nicht pauschal der globale Modus),
+      // damit die Gebuehr in der richtigen Test/Live-Welt landet.
+      is_test: opts.isTest,
     });
     return error ? 'skip' : 'inserted';
   }
@@ -95,12 +98,41 @@ export async function POST(req: NextRequest) {
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
   const { data: transactions } = await supabase
     .from('stripe_transactions')
-    .select('id, stripe_payment_intent_id, stripe_charge_id, fee, stripe_created_at, booking_id, match_status')
+    .select('id, stripe_payment_intent_id, stripe_charge_id, fee, stripe_created_at, booking_id, match_status, is_test')
     .gt('fee', 0)
     .gte('stripe_created_at', fromIso)
     .lte('stripe_created_at', toIso);
 
+  // is_test der gematchten Buchungen bulk laden — die Gebuehren-Ausgabe soll
+  // in die is_test-Welt der Buchung fallen, und Transaktionen der fremden Welt
+  // werden uebersprungen.
+  const bookingIds = Array.from(
+    new Set(
+      (transactions || [])
+        .map((t: { booking_id: string | null }) => t.booking_id)
+        .filter((id: string | null): id is string => !!id),
+    ),
+  );
+  const bookingIsTest = new Map<string, boolean>();
+  if (bookingIds.length > 0) {
+    const { data: bRows } = await supabase
+      .from('bookings')
+      .select('id, is_test')
+      .in('id', bookingIds);
+    for (const b of bRows || []) bookingIsTest.set(b.id as string, !!b.is_test);
+  }
+
   for (const tx of transactions || []) {
+    // is_test bevorzugt aus der gematchten Buchung, sonst aus der Transaktion,
+    // sonst globaler Modus. Transaktionen der fremden Test/Live-Welt ueberspringen.
+    const txIsTest =
+      tx.booking_id && bookingIsTest.has(tx.booking_id)
+        ? bookingIsTest.get(tx.booking_id)!
+        : typeof tx.is_test === 'boolean'
+          ? tx.is_test
+          : testMode;
+    if (txIsTest !== testMode) continue;
+
     const piShort = `${tx.stripe_payment_intent_id.slice(0, 20)}...`;
     const expenseDate = tx.stripe_created_at ? tx.stripe_created_at.split('T')[0] : from;
 
@@ -236,6 +268,7 @@ export async function POST(req: NextRequest) {
       amount: effectiveStripeFee,
       expenseDate,
       hasBookingId: !!tx.booking_id,
+      isTest: txIsTest,
     });
     if (stripeResult === 'inserted') imported++;
     else if (stripeResult === 'healed') updated++;
@@ -250,6 +283,7 @@ export async function POST(req: NextRequest) {
         amount: effectivePaypalFee,
         expenseDate,
         hasBookingId: !!tx.booking_id,
+        isTest: txIsTest,
       });
       if (paypalResult === 'inserted') paypalImported++;
       else if (paypalResult === 'healed') updated++;

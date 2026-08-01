@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
+import { toIsoDate } from '@/lib/booking-buffer';
 
 interface BufferDays {
   versand_before: number;
@@ -101,8 +102,10 @@ export async function computeAccessoryAvailability(opts: {
   fromDate.setDate(fromDate.getDate() - beforeDays);
   toDate.setDate(toDate.getDate() + afterDays);
 
-  const bufferedFrom = fromDate.toISOString().split('T')[0];
-  const bufferedTo = toDate.toISOString().split('T')[0];
+  // toIsoDate liest die lokalen Kalenderkomponenten (DST-fest) statt
+  // toISOString() (UTC → off-by-one an DST-Kanten).
+  const bufferedFrom = toIsoDate(fromDate);
+  const bufferedTo = toIsoDate(toDate);
 
   // 3. Alle Zubehörteile laden — inkl. upgrade_group/is_upgrade_base
   //    fuer die Set-Expansion (Default-Item wird uebersprungen wenn der
@@ -268,8 +271,8 @@ export async function computeAccessoryAvailability(opts: {
     bFrom.setDate(bFrom.getDate() - bBefore);
     bTo.setDate(bTo.getDate() + bAfter);
 
-    const bookingBufferedFrom = bFrom.toISOString().split('T')[0];
-    const bookingBufferedTo = bTo.toISOString().split('T')[0];
+    const bookingBufferedFrom = toIsoDate(bFrom);
+    const bookingBufferedTo = toIsoDate(bTo);
 
     if (!(bufferedFrom <= bookingBufferedTo && bufferedTo >= bookingBufferedFrom)) {
       continue;

@@ -15,7 +15,7 @@ import { logAudit } from '@/lib/audit';
 
 const CODE_PATTERN = /^[A-Z0-9]{2,5}$/;
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('inventar_code_segmente')

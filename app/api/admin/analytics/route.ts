@@ -324,16 +324,31 @@ export async function GET(req: NextRequest) {
 
   // ── HISTORY ───────────────────────────────────────────────────────────────
   if (type === 'history') {
-    const daysRaw = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10);
-    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 400) : 30;
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const data = await fetchAllRows<{ session_id: string; visitor_id: string; created_at: string }>((from, to) =>
-      supabase
-        .from('page_views')
-        .select('session_id, visitor_id, created_at')
-        .gte('created_at', since)
-        .range(from, to),
-    );
+    // FIX (M-7): wenn ein expliziter range-Filter mitkommt, dem gewaehlten
+    // Zeitraum folgen (inkl. vergangener custom-Fenster) statt fix „letzte N
+    // Tage bis heute". Ohne range-Parameter Fallback auf das days-Verhalten
+    // (Backward-Compat fuer Aufrufer, die nur ?days=N schicken).
+    const hasRange = req.nextUrl.searchParams.has('range');
+    let data: { session_id: string; visitor_id: string; created_at: string }[];
+    if (hasRange) {
+      data = await fetchAllRows<{ session_id: string; visitor_id: string; created_at: string }>((from, to) =>
+        applyRange(
+          supabase.from('page_views').select('session_id, visitor_id, created_at'),
+          parsed,
+        ).range(from, to),
+      );
+    } else {
+      const daysRaw = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10);
+      const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 400) : 30;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      data = await fetchAllRows<{ session_id: string; visitor_id: string; created_at: string }>((from, to) =>
+        supabase
+          .from('page_views')
+          .select('session_id, visitor_id, created_at')
+          .gte('created_at', since)
+          .range(from, to),
+      );
+    }
 
     const dayMap = new Map<string, { views: number; visitors: Set<string>; sessions: Set<string> }>();
     for (const row of data) {
@@ -374,10 +389,17 @@ export async function GET(req: NextRequest) {
     const sessionsWithBooking = new Set(rows.filter((r) => isBookingWizardPath(r.path)).map((r) => r.session_id)).size;
     const sessionsWithCheckout = new Set(rows.filter((r) => r.path === '/checkout' || r.path.startsWith('/checkout/') || r.path.startsWith('/buchung-bestaetigt')).map((r) => r.session_id)).size;
 
+    // FIX (L-15): "Erfolgreich bezahlt" darf nur wirklich bezahlte Buchungen
+    // zaehlen — awaiting_payment (Zahlungslink offen) und pending_verification
+    // (Ausweis fehlt) sind noch NICHT bezahlt und wuerden die Quote aufblaehen.
     const bookingsQ = applyRange(
       supabase.from('bookings').select('id', { count: 'exact', head: true }),
       parsed,
-    ).neq('status', 'cancelled').eq('is_test', testMode);
+    )
+      .neq('status', 'cancelled')
+      .neq('status', 'awaiting_payment')
+      .neq('status', 'pending_verification')
+      .eq('is_test', testMode);
     const { count: bookingCount } = await bookingsQ;
 
     const base = allSessions || 1;
@@ -554,7 +576,15 @@ export async function GET(req: NextRequest) {
     // Units pro Kamera + clampt auf den Zeitraum) — gleiche Quelle wie das
     // Dashboard-Widget, statt der früheren groben „Miettage ÷ Zeitraum"-Schätzung.
     const rangeDays = Math.max(1, parsed.days);
-    const utilRows = await computeCameraUtilization(supabase, rangeDays);
+    // Test-/Live-Isolation (M-6) + expliziter Zeitraum bei custom (M-7): fuer
+    // vergangene custom-Fenster den echten from/to durchreichen, sonst misst
+    // die Auslastung faelschlich „letzte N Tage bis heute".
+    const utilOpts: { isTest: boolean; from?: string; to?: string } = { isTest: testMode };
+    if (parsed.range === 'custom' && parsed.endISO) {
+      utilOpts.from = getBerlinDateKey(parsed.startISO);
+      utilOpts.to = getBerlinDateKey(parsed.endISO);
+    }
+    const utilRows = await computeCameraUtilization(supabase, rangeDays, utilOpts);
     const utilByProductId = new Map(utilRows.map((u) => [u.id, u.utilization]));
 
     const products = Array.from(viewMap.entries())

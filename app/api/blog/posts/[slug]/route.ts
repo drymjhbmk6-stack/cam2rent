@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { trackBlogView } from '@/lib/blog-view-tracking';
 
 type Ctx = { params: Promise<{ slug: string }> };
 
 /** GET /api/blog/posts/[slug] - Einzelner Blog-Post (public) */
-export async function GET(req: NextRequest, ctx: Ctx) {
+export async function GET(_req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
   const supabase = createServiceClient();
 
@@ -20,14 +19,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Artikel nicht gefunden.' }, { status: 404 });
   }
 
-  // View-Count + zeitgestempeltes Event (fire-and-forget). Bot vs. Mensch
-  // getrennt gezählt über den User-Agent — siehe lib/blog-view-tracking.ts.
-  trackBlogView(supabase, {
-    postId: data.id,
-    slug,
-    userAgent: req.headers.get('user-agent'),
-    currentViewCount: data.view_count ?? 0,
-  });
+  // Kein View-Count-Increment hier: dieser Endpoint hat keinen Aufrufer (die
+  // Detailseite ist SSR und zählt selbst über trackBlogView) — würde sonst per
+  // curl beliebig hochzählbar sein (View-Inflation). Nur noch lesen.
 
   return NextResponse.json({ post: data });
 }

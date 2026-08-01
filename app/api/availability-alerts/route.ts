@@ -134,7 +134,14 @@ export async function POST(req: NextRequest) {
   dedupeQuery = rentalFrom ? dedupeQuery.eq('rental_from', rentalFrom) : dedupeQuery.is('rental_from', null);
   dedupeQuery = rentalTo ? dedupeQuery.eq('rental_to', rentalTo) : dedupeQuery.is('rental_to', null);
 
-  const { data: existing } = await dedupeQuery.maybeSingle();
+  // .limit(1) statt .maybeSingle(): nach einem initialen Race koennen mehrere
+  // offene Alert-Zeilen derselben Kombi existieren — .maybeSingle() wuerde dann
+  // erroren (data=null) → jeder weitere Vorfall wuerde als "erstes Auftreten"
+  // gewertet und den Admin per Push zuspammen. Neueste Zeile hochzaehlen.
+  const { data: existingRows } = await dedupeQuery
+    .order('last_seen_at', { ascending: false })
+    .limit(1);
+  const existing = existingRows?.[0] ?? null;
 
   let isFirstOccurrence = true;
 

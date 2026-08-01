@@ -9,6 +9,7 @@ import { buildBlogSystemPrompt, HUMANIZER_PASS, parseBlogJson } from '@/lib/blog
 import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -356,11 +357,14 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
       // Zeitplan: Artikel als "scheduled" mit dem geplanten Veröffentlichungsdatum
       postStatus = 'scheduled';
       const time = (scheduleEntry.scheduled_time || '09:00').slice(0, 5); // HH:MM
-      // Timezone-korrekt: Deutsche Zeit (CET/CEST) in UTC umrechnen
-      const localDate = new Date(`${scheduleEntry.scheduled_date}T${time}:00`);
-      const berlinOffset = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' })).getTime() - new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
-      const utcDate = new Date(localDate.getTime() - berlinOffset);
-      scheduledAt = utcDate.toISOString();
+      // Timezone-korrekt: die eingestellte Berlin-Wanduhrzeit exakt in UTC.
+      // Der frueher hier stehende manuelle Offset-Abzug zog den Berlin-Offset
+      // ein zweites Mal ab (der Container laeuft bereits auf TZ=Europe/Berlin),
+      // sodass scheduled_at 1-2 h zu frueh lag. berlinLocalInputToUTC nimmt
+      // "YYYY-MM-DDTHH:mm" als Berlin-gemeint und liefert den korrekten
+      // UTC-Instant — deckt sich mit dem naiven Parse in blog-publish (TZ=Berlin).
+      scheduledAt = berlinLocalInputToUTC(`${scheduleEntry.scheduled_date}T${time}`)
+        ?? new Date(`${scheduleEntry.scheduled_date}T${time}:00`).toISOString();
     } else if (autoMode === 'voll') {
       postStatus = 'published';
       publishedAt = now;

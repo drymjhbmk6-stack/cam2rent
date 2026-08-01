@@ -35,6 +35,38 @@ import {
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
+ * H-12 (2026-08-01): Mappt den DB-/Cart-Haftungswert
+ * ('standard' | 'premium' | 'none') auf das Anzeige-Label für den Mietvertrag,
+ * damit die Haftungsoption NICHT aus dem Preis geraten wird (Basis ≥15 Tage
+ * kostet ≥25 € und wurde sonst fälschlich "Premium"). Unbekannt → undefined →
+ * generateContractPDF nutzt seine Preis-Heuristik als Fallback.
+ */
+function haftungOptionLabel(h: string | null | undefined): string | undefined {
+  if (h === 'premium') return 'Premium-Haftungsschutz';
+  if (h === 'none') return 'Ohne Haftungsschutz';
+  if (h === 'standard') return 'Basis-Haftungsschutz';
+  return undefined;
+}
+
+/**
+ * H-2 (2026-08-01): pro frisch angelegter Buchung die TATSÄCHLICH persistierten
+ * (Stripe-abgeleiteten) Geldwerte festhalten, damit der after()-Block für
+ * E-Mail UND Mietvertrag exakt den gezahlten Betrag verwendet — statt eines
+ * rohen Recomputes, der Sonderkondition + Frühbucher-Skalierung ignoriert und
+ * so einen falschen Betrag ins Rechtsdokument schrieb.
+ */
+type GroupPersisted = {
+  priceTotal: number;
+  priceRental: number;
+  priceAccessories: number;
+  priceHaftung: number;
+  shipping: number;
+  deposit: number;
+  discountAmount: number;
+  haftung: string | null | undefined;
+};
+
+/**
  * Gruppiert Cart-Items nach Mietzeitraum.
  * Gibt ein Array von Gruppen zurück, jede mit eigenem Zeitraum und Items.
  */
@@ -298,6 +330,7 @@ export async function POST(req: NextRequest) {
                       priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
                       taxMode: taxModeIdem,
                       taxRate: taxRateIdem,
+                      haftungOption: haftungOptionLabel(fullBooking.haftung),
                       signatureDataUrl: sig.signatureDataUrl,
                       signatureMethod: sig.signatureMethod,
                       signerName: sig.signerName, ipAddress: ip,
@@ -646,6 +679,8 @@ export async function POST(req: NextRequest) {
     // confirm-cart-Call verschickt. Sonst entstehen Doppel-Mails (siehe
     // CLAUDE.md → "Doppelte Buchungsmails").
     const freshlyInsertedIds = new Set<string>();
+    // H-2: persistierte Geldwerte pro (finaler) Buchungs-ID für den after()-Block.
+    const groupPersisted = new Map<string, GroupPersisted>();
 
     // Versand pro Gruppe vorab berechnen, damit wir den Anteil-Faktor
     // (subtotal+shipping pro Gruppe / Gesamt) kennen, ueber den intent.amount
@@ -1005,6 +1040,19 @@ export async function POST(req: NextRequest) {
           firstItem.rentalTo,
         ).catch((err) => console.error(`Accessory-unit assignment error for ${bookingId}:`, err));
       }
+
+      // H-2: die tatsächlich persistierten (Stripe-abgeleiteten) Werte für
+      // E-Mail + Mietvertrag festhalten (keyed nach finaler bookingId).
+      groupPersisted.set(bookingId, {
+        priceTotal: Math.max(0, groupTotal),
+        priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        priceAccessories: finalGroupAccPrice,
+        priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        shipping: groupShipping,
+        deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+        discountAmount: effectiveDiscount,
+        haftung: firstItem.haftung,
+      });
     }
 
     // 5. Coupon used_count atomar erhöhen.
@@ -1304,22 +1352,34 @@ export async function POST(req: NextRequest) {
               ? firstItem.productName
               : groupItems.map((it) => it.productName).join(', ');
             const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+
+            // H-2: exakt die persistierten (Stripe-abgeleiteten) Geldwerte
+            // verwenden, damit Mietvertrag + Bestätigungsmail genau den
+            // gezahlten Betrag zeigen. Der frühere Roh-Recompute ignorierte
+            // Sonderkondition + Frühbucher-Skalierung → falscher Betrag im
+            // Rechtsdokument. Fallback (nach frischem Insert nie erwartet) =
+            // grobe Neuberechnung.
+            const persisted = groupPersisted.get(bookingIds[gi]);
             const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
             const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-            const emailShipping = calcShipping(
-              groupSubtotal,
-              r_shippingMethod as ShippingMethod,
-              r_deliveryMode as 'versand' | 'abholung',
-              shippingCfg,
-              r_country
-            ).price;
-            const groupTotal = groupSubtotal
-              - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
-              - Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
-              - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
-              - Math.round((r_earlyBirdDiscount ?? 0) * ratio * 100) / 100
-              - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
-              + emailShipping;
+            const emailShipping = persisted
+              ? persisted.shipping
+              : calcShipping(
+                  groupSubtotal,
+                  r_shippingMethod as ShippingMethod,
+                  r_deliveryMode as 'versand' | 'abholung',
+                  shippingCfg,
+                  r_country
+                ).price;
+            const groupTotal = persisted
+              ? persisted.priceTotal
+              : groupSubtotal
+                - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+                - Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
+                - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+                - Math.round((r_earlyBirdDiscount ?? 0) * ratio * 100) / 100
+                - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
+                + emailShipping;
 
             // Seriennummer laden falls Unit zugeordnet
             let serialNumber = '';
@@ -1351,12 +1411,13 @@ export async function POST(req: NextRequest) {
                   rentalFrom: fmtDateForContract(firstItem.rentalFrom),
                   rentalTo: fmtDateForContract(firstItem.rentalTo),
                   rentalDays: firstItem.days,
-                  priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-                  priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
-                  priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+                  priceRental: persisted?.priceRental ?? groupItems.reduce((s, it) => s + it.priceRental, 0),
+                  priceAccessories: persisted?.priceAccessories ?? groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+                  priceHaftung: persisted?.priceHaftung ?? groupItems.reduce((s, it) => s + it.priceHaftung, 0),
                   priceShipping: emailShipping,
                   priceTotal: Math.max(0, groupTotal),
-                  deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+                  deposit: persisted?.deposit ?? groupItems.reduce((s, it) => s + it.deposit, 0),
+                  haftungOption: haftungOptionLabel(persisted?.haftung ?? firstItem.haftung),
                   taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
                   taxRate: parseFloat(txMap['tax_rate'] || '19'),
                   signatureDataUrl: contractSignature.signatureDataUrl,
@@ -1391,18 +1452,21 @@ export async function POST(req: NextRequest) {
               shippingMethod: r_shippingMethod,
               haftung: firstItem.haftung,
               accessories: allAccessories,
-              priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-              priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
-              priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+              priceRental: persisted?.priceRental ?? groupItems.reduce((s, it) => s + it.priceRental, 0),
+              priceAccessories: persisted?.priceAccessories ?? groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+              priceHaftung: persisted?.priceHaftung ?? groupItems.reduce((s, it) => s + it.priceHaftung, 0),
               priceTotal: Math.max(0, groupTotal),
-              deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+              deposit: persisted?.deposit ?? groupItems.reduce((s, it) => s + it.deposit, 0),
               shippingPrice: emailShipping,
-              discountAmount:
+              // H-2: der tatsächlich abgezogene Rabatt (base − gezahlt), inkl.
+              // Sonderkondition — statt Roh-Summe der Body-Rabattfelder.
+              discountAmount: persisted?.discountAmount ?? (
                 Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
                 + Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_earlyBirdDiscount ?? 0) * ratio * 100) / 100
-                + Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100,
+                + Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
+              ),
               couponCode: r_couponCode || undefined,
               taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
               taxRate: parseFloat(txMap['tax_rate'] || '19'),

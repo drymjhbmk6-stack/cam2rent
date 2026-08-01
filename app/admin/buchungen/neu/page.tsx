@@ -7,6 +7,7 @@ import SignatureStep, { type SignatureResult } from '@/components/booking/Signat
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
 import { fmtEuro, escapeHtml } from '@/lib/format-utils';
+import { calcSetPrice } from '@/lib/set-price';
 
 // ─── Business-Daten (zentral definiert in lib/business-config.ts) ────────────
 const BIZ = {
@@ -117,9 +118,7 @@ function getAccessoryPrice(acc: DynAccessory, days: number): number {
 }
 
 function getSetPrice(set: DynSet, days: number): number {
-  const p = set.price ?? 0;
-  const mode = set.pricing_mode ?? set.pricingMode ?? 'perDay';
-  return mode === 'flat' ? p : p * days;
+  return calcSetPrice(set.price ?? 0, set.pricing_mode ?? set.pricingMode, days);
 }
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */

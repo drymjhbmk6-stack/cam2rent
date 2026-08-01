@@ -11,7 +11,7 @@ import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml } from '@/lib/email';
 import QRCode from 'qrcode';
-import { getResendFromEmail } from '@/lib/env-mode';
+import { getResendFromEmail, getTestModeEmailRedirect, isTestMode } from '@/lib/env-mode';
 import { logAudit } from '@/lib/audit';
 
 const LEGAL_SLUG_MAP: Record<string, string> = {
@@ -253,10 +253,31 @@ export async function POST(
     const bis = booking.rental_to ? new Date(booking.rental_to).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '';
 
     const fromEmail = await getResendFromEmail();
-    await resend.emails.send({
+    // Test-Modus: alle Kundenmails an die Redirect-Adresse umleiten (analog
+    // sendAndLog), damit im Test-Betrieb nichts an echte Kunden rausgeht.
+    const redirect = await getTestModeEmailRedirect();
+    const isTest = await isTestMode();
+    const baseSubject = `Deine Dokumente — Buchung ${id}`;
+    const finalTo = redirect ?? to;
+    const finalSubject = redirect
+      ? `[TEST → urspruenglich: ${to}] ${baseSubject}`
+      : baseSubject;
+
+    // Log-Insert defensiv: fehlt die is_test-Spalte (alte DB), einmal ohne sie
+    // erneut versuchen — der Log-Eintrag darf nie den Response killen.
+    const logEmailRow = async (row: Record<string, unknown>) => {
+      const { error: logErr } = await supabase.from('email_log').insert({ ...row, is_test: isTest });
+      if (logErr && /is_test|column|schema cache|PGRST/i.test(logErr.message || '')) {
+        try {
+          await supabase.from('email_log').insert(row);
+        } catch { /* best-effort */ }
+      }
+    };
+
+    const result = await resend.emails.send({
       from: fromEmail,
-      to,
-      subject: `Deine Dokumente — Buchung ${id}`,
+      to: finalTo,
+      subject: finalSubject,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
         <h2 style="color:#0f172a;">Deine Dokumente von cam2rent</h2>
         <p>Hallo ${escapeHtml(booking.customer_name || 'Kunde')},</p>
@@ -273,13 +294,29 @@ export async function POST(
       attachments,
     });
 
+    // Resend liefert bei API-Fehlern (Rate-Limit, ungueltige Adresse, Outage)
+    // { data: null, error } und wirft NICHT — sonst landet die fehlgeschlagene
+    // Mail faelschlich als "sent" im Log.
+    if (result.error) {
+      await logEmailRow({
+        booking_id: id,
+        email_type: 'manual_documents',
+        subject: baseSubject,
+        customer_email: to,
+        status: 'failed',
+        error_message: result.error.message ?? 'Resend send failed',
+      });
+      return NextResponse.json({ error: 'E-Mail konnte nicht gesendet werden.' }, { status: 502 });
+    }
+
     // E-Mail im Log speichern
-    await supabase.from('email_log').insert({
+    await logEmailRow({
       booking_id: id,
       email_type: 'manual_documents',
-      subject: `Deine Dokumente — Buchung ${id}`,
+      subject: baseSubject,
       customer_email: to,
       status: 'sent',
+      resend_message_id: result.data?.id ?? null,
     });
 
     await logAudit({

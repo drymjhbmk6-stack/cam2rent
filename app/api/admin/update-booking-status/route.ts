@@ -22,7 +22,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'bookingId und status erforderlich.' }, { status: 400 });
   }
 
-  const allowed = ['confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
+  // 'cancelled' bewusst NICHT erlaubt — Storno muss über den PATCH-Pfad
+  // (/api/admin/booking/[id]) mit allen Nebenwirkungen (Refund, Kaution-Release,
+  // Zubehör-Freigabe, Storno-Mail/Beleg) laufen, nicht über diesen guardlosen Endpoint.
+  const allowed = ['confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'damaged'];
   if (!allowed.includes(status)) {
     return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }

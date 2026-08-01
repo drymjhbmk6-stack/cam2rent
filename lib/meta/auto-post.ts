@@ -106,7 +106,12 @@ export async function autoPost(
     const scheduled_at = mode === 'scheduled' ? new Date(Date.now() + delayMinutes * 60 * 1000).toISOString() : null;
     const status = mode === 'scheduled' ? 'scheduled' : 'draft';
 
-    const platforms: string[] = template.platforms ?? ['facebook', 'instagram'];
+    // Instagram verlangt IMMER ein Bild — ohne Media schlaegt IG-Publish
+    // dauerhaft fehl (Post bleibt "partial"). Daher IG bei fehlendem Bild
+    // aus den Ziel-Plattformen herausnehmen (Facebook bleibt).
+    const hasMedia = Boolean(generated.image_url);
+    let platforms: string[] = template.platforms ?? ['facebook', 'instagram'];
+    if (!hasMedia) platforms = platforms.filter((p) => p !== 'instagram');
     const fb_account_id = platforms.includes('facebook') ? accounts.fb : null;
     const ig_account_id = platforms.includes('instagram') ? accounts.ig : null;
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { mirrorInventarToLegacy, deleteMirror } from '@/lib/inventar-mirror';
+import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
 
 export async function GET(
   _req: NextRequest,
@@ -89,16 +90,51 @@ export async function DELETE(
   const { id } = await params;
   const supabase = createServiceClient();
   // Sicherheit: nur loeschen wenn nie vermietet (status=verfuegbar)
-  const { data: unit } = await supabase.from('inventar_units').select('status').eq('id', id).single();
+  const { data: unit } = await supabase
+    .from('inventar_units')
+    .select('status, produkt_id')
+    .eq('id', id)
+    .single();
   if (unit && (unit as { status: string }).status === 'vermietet') {
     return NextResponse.json({ error: 'Stueck ist vermietet — kann nicht geloescht werden' }, { status: 409 });
   }
+
+  // Zugehoeriges Zubehoer (alte Welt) VOR dem Delete aufloesen — nach dem
+  // Loeschen ist die produkt_id-Zuordnung nicht mehr abfragbar. Wird unten
+  // fuer einen Post-Delete-Resync gebraucht.
+  let affectedAccessoryId: string | null = null;
+  const produktId = (unit as { produkt_id?: string | null } | null)?.produkt_id ?? null;
+  if (produktId) {
+    try {
+      const { data: audit } = await supabase
+        .from('migration_audit')
+        .select('alte_id')
+        .eq('alte_tabelle', 'accessories')
+        .eq('neue_tabelle', 'produkte')
+        .eq('neue_id', produktId)
+        .maybeSingle();
+      affectedAccessoryId = (audit as { alte_id?: string } | null)?.alte_id ?? null;
+    } catch (e) {
+      console.error('[inventar DELETE] accessory lookup failed:', e);
+    }
+  }
+
   // Mirror in alter Welt zuerst entfernen — sonst bleiben Waisen-Eintraege.
   await deleteMirror(supabase, id).catch((e) => {
     console.error('[inventar DELETE] mirror cleanup failed:', e);
   });
   const { error } = await supabase.from('inventar_units').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // deleteMirror() ruft syncAccessoryQty NOCH VOR dem eigentlichen Delete auf —
+  // zu dem Zeitpunkt existiert die inventar_units-Zeile noch und zaehlt mit, der
+  // Bestand bliebe also ueberhoeht. Daher nach dem Delete erneut syncen.
+  if (affectedAccessoryId) {
+    await syncAccessoryQty(supabase, affectedAccessoryId).catch((e) => {
+      console.error('[inventar DELETE] post-delete qty resync failed:', e);
+    });
+  }
+
   await logAudit({ action: 'inventar.delete', entityType: 'inventar_unit', entityId: id, request: req });
   return NextResponse.json({ ok: true });
 }

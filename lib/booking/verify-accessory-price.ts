@@ -20,6 +20,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BookingAccessoryItem } from '@/lib/booking-accessories';
+import { calcSetPrice } from '@/lib/set-price';
 
 export interface AccessoryPriceCheckResult {
   /** Server-berechneter Gesamtpreis aller Zubehoer/Sets fuer die Buchung. */
@@ -58,7 +59,7 @@ export async function verifyAccessoryPrice(
   const idsArray = [...new Set(ids)];
 
   // Zubehoer aus DB
-  const accLookup = new Map<string, { name: string; price: number; pricingMode: 'flat' | 'perDay' }>();
+  const accLookup = new Map<string, { name: string; price: number; pricingMode: 'flat' | 'perDay' | null }>();
   try {
     const { data: accs } = await supabase
       .from('accessories')
@@ -87,7 +88,8 @@ export async function verifyAccessoryPrice(
         accLookup.set(s.id as string, {
           name: (s.name as string) ?? (s.id as string),
           price: Number(s.price ?? 0),
-          pricingMode: (s.pricing_mode as 'flat' | 'perDay') ?? 'flat',
+          // Set-Default bewusst dem Helper ueberlassen (einheitlich = flat).
+          pricingMode: (s.pricing_mode as 'flat' | 'perDay' | null) ?? null,
         });
       }
     } catch (err) {
@@ -102,7 +104,7 @@ export async function verifyAccessoryPrice(
       result.unknownIds.push(item.accessory_id);
       continue;
     }
-    const unitPrice = info.pricingMode === 'flat' ? info.price : info.price * days;
+    const unitPrice = calcSetPrice(info.price, info.pricingMode, days);
     const lineTotal = Math.round(unitPrice * item.qty * 100) / 100;
     result.computed += lineTotal;
     result.details.push({

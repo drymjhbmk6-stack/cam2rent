@@ -60,6 +60,23 @@ export function invalidateWbwConfigCache() {
   cachedConfig = null;
 }
 
+/**
+ * Verstrichene Monate seit Kaufdatum — IDENTISCHE Semantik wie
+ * `monthsBetween` in lib/replacement-value.ts (H-10): UTC-basiert mit
+ * Tages-Cut (ist der Zieltag im Monat kleiner als der Kauftag → −1 Monat).
+ * Damit liefern beide WBW-Formeln (Inventar-Liste vs. Mietvertrag/
+ * Haftungs-Box) fuer dasselbe Geraet dieselbe Monatszahl.
+ */
+function monthsElapsedSince(kaufdatum: string, asOf: Date): number {
+  const from = new Date(kaufdatum);
+  if (Number.isNaN(from.getTime())) return 0;
+  let months =
+    (asOf.getUTCFullYear() - from.getUTCFullYear()) * 12 +
+    (asOf.getUTCMonth() - from.getUTCMonth());
+  if (asOf.getUTCDate() < from.getUTCDate()) months -= 1;
+  return Math.max(0, months);
+}
+
 export async function saveWbwConfig(cfg: WbwConfig, supabase?: SupabaseClient): Promise<void> {
   const sb = supabase ?? createServiceClient();
   if (cfg.floor_percent < 0 || cfg.floor_percent > 100) throw new Error('floor_percent must be 0..100');
@@ -98,11 +115,7 @@ export function computeWBW(
     return Math.round(kaufpreis * 100) / 100;
   }
 
-  const kaufDate = new Date(unit.kaufdatum);
-  const monthsElapsed = Math.max(
-    0,
-    (asOf.getFullYear() - kaufDate.getFullYear()) * 12 + (asOf.getMonth() - kaufDate.getMonth()),
-  );
+  const monthsElapsed = monthsElapsedSince(unit.kaufdatum, asOf);
 
   if (monthsElapsed >= config.useful_life_months) {
     return Math.round(floor * 100) / 100;
@@ -134,11 +147,7 @@ export function explainWBW(
     return { value: Math.round(Number(unit.kaufpreis_netto) * 100) / 100, source: 'fresh' };
   }
   const value = computeWBW(unit, config, asOf);
-  const kaufDate = new Date(unit.kaufdatum);
-  const monthsElapsed = Math.max(
-    0,
-    (asOf.getFullYear() - kaufDate.getFullYear()) * 12 + (asOf.getMonth() - kaufDate.getMonth()),
-  );
+  const monthsElapsed = monthsElapsedSince(unit.kaufdatum, asOf);
   return {
     value,
     source: monthsElapsed >= config.useful_life_months ? 'floor' : 'computed',

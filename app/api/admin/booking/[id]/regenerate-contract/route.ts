@@ -83,6 +83,12 @@ export async function POST(
       priceRental: booking.price_rental || 0,
       priceAccessories: booking.price_accessories || 0,
       priceHaftung: booking.price_haftung || 0,
+      // Haftungsoption explizit aus booking.haftung ableiten (nicht ueber den
+      // priceHaftung-Betrag raten — das misklassifiziert lange Mietzeiten).
+      haftungOption:
+        booking.haftung === 'standard' ? 'Basis-Haftungsschutz'
+        : booking.haftung === 'premium' ? 'Premium-Haftungsschutz'
+        : 'Ohne Haftungsschutz',
       priceShipping: booking.shipping_price || 0,
       priceTotal: booking.price_total || 0,
       deposit: booking.deposit || 0,

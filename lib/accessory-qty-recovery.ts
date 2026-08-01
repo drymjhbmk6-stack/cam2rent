@@ -18,7 +18,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *
  *  - `accessory_units` (status IN ['available', 'rented']) → alte Welt
  *  - `inventar_units` (typ IN ['zubehoer','verbrauch'],
- *     tracking_mode='individual', status NICHT 'ausgemustert') → neue Welt
+ *     tracking_mode='individual', status IN ['verfuegbar','vermietet']) → neue
+ *     Welt (nur nutzbare Status; wartung/defekt/ausgemustert zaehlen nicht)
  *
  * Bulk-Accessories (`accessories.is_bulk=true`) werden bewusst NICHT
  * angefasst — dort ist `available_qty` der manuell gepflegte Lagerbestand
@@ -110,7 +111,7 @@ export async function computeAccessoryQtyRecovery(
       .in('produkt_id', produkteIds)
       .in('typ', ['zubehoer', 'verbrauch'])
       .eq('tracking_mode', 'individual')
-      .neq('status', 'ausgemustert');
+      .in('status', ['verfuegbar', 'vermietet']);
 
     for (const u of (invUnits ?? []) as Array<{ produkt_id: string | null }>) {
       if (!u.produkt_id) continue;

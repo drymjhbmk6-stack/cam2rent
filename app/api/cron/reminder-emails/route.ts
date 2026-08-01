@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { isTestMode } from '@/lib/env-mode';
 import {
   sendReturnReminder,
   sendOverdueNotice,
@@ -58,6 +59,11 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const results: SendResult[] = [];
 
+  // Test-/Live-Isolation: im Live-Modus nur echte Buchungen erinnern, im
+  // Test-Modus nur Test-Buchungen — sonst gehen Reminder-Mails zu Test-
+  // Buchungen an echte Kunden bzw. verfaelschen das email_log.
+  const testMode = await isTestMode();
+
   // Date targets
   const in2Days = dateOffset(2);
   const yesterday = dateOffset(-1);
@@ -105,6 +111,7 @@ export async function GET(req: NextRequest) {
       .from('bookings')
       .select('id, customer_email, customer_name, product_name, rental_to')
       .in('status', job.statuses)
+      .eq('is_test', testMode)
       .eq('rental_to', job.targetDate);
 
     if (bookingsErr || !bookings || bookings.length === 0) continue;
@@ -127,6 +134,7 @@ export async function GET(req: NextRequest) {
       email_type: string;
       status: 'sent' | 'failed';
       resend_message_id: string | null;
+      is_test: boolean;
     };
     // Parallel-Send statt sequenziell: jeder Resend-Call dauert ~200-400ms.
     // Bei 20 Bookings/Job × 5 Jobs sequenziell = 30-40s, parallel ~5s.
@@ -162,12 +170,24 @@ export async function GET(req: NextRequest) {
         email_type: job.emailType,
         status: ok ? 'sent' : 'failed',
         resend_message_id: messageId,
+        is_test: testMode,
       };
     });
 
     // 4. Batch-Insert aller Log-Rows fuer diesen Job statt N einzelner Inserts
     if (logRows.length) {
-      const { error: logErr } = await supabase.from('email_log').insert(logRows);
+      let { error: logErr } = await supabase.from('email_log').insert(logRows);
+      // Defensiv: fehlt die is_test-Spalte (Migration ausstehend), ohne sie retryen.
+      if (logErr && /is_test|column|schema cache|PGRST/i.test(logErr.message)) {
+        const stripped = logRows.map((r) => ({
+          booking_id: r.booking_id,
+          customer_email: r.customer_email,
+          email_type: r.email_type,
+          status: r.status,
+          resend_message_id: r.resend_message_id,
+        }));
+        ({ error: logErr } = await supabase.from('email_log').insert(stripped));
+      }
       if (logErr) {
         console.error(`[reminder-emails] Log-Insert-Fehler (${job.emailType}):`, logErr);
       }

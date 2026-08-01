@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
-import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString, getBerlinDateString } from '@/lib/timezone';
 
 const CATEGORY_LABELS: Record<string, string> = {
   stripe_fees: 'Zahlungsgebühren',
@@ -51,21 +51,30 @@ export async function GET(req: NextRequest) {
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
-  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, refund_amount, coupon_code, status, delivery_mode, created_at';
+  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, coupon_code, status, delivery_mode, created_at';
+  // Optionale Spalten, die je nach ausstehender Migration fehlen koennen
+  // (refund_amount / early_bird_discount / special_discount). Beim Schema-Fehler
+  // werden alle drei aus der Select-Liste gestrippt und der Query wiederholt.
+  const OPTIONAL_BOOKING_COLS = [', early_bird_discount', ', special_discount', ', refund_amount'];
   const buildBookingQuery = (cols: string) => supabase
     .from('bookings')
     .select(cols)
     .eq('is_test', false)
     .neq('status', 'cancelled')
+    // Zufluss-Prinzip: awaiting_payment / pending_verification zaehlen NICHT
+    // als Umsatz, weil das Geld noch nicht geflossen ist.
+    .not('status', 'in', '(awaiting_payment,pending_verification)')
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
     .order('created_at', { ascending: false });
 
   let { data: bookings, error: bookingsErr } = await buildBookingQuery(bookingCols);
-  if (bookingsErr && /refund_amount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
-    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die
-    // Spalte weiterlaufen (refund_amount wird dann als 0 behandelt).
-    ({ data: bookings, error: bookingsErr } = await buildBookingQuery(bookingCols.replace(', refund_amount', '')));
+  if (bookingsErr && /refund_amount|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
+    // Migration(en) noch nicht durch — ohne die optionalen Spalten weiterlaufen
+    // (die betroffenen Werte werden dann als 0 behandelt).
+    let stripped = bookingCols;
+    for (const c of OPTIONAL_BOOKING_COLS) stripped = stripped.replace(c, '');
+    ({ data: bookings, error: bookingsErr } = await buildBookingQuery(stripped));
   }
 
   // .select(<string-variable>) verliert die PostgREST-Typinferenz → expliziter
@@ -77,6 +86,7 @@ export async function GET(req: NextRequest) {
     price_haftung: number | null; shipping_price: number | null;
     price_total: number | null; discount_amount: number | null;
     duration_discount: number | null; loyalty_discount: number | null;
+    early_bird_discount: number | null; special_discount: number | null;
     refund_amount: number | null; coupon_code: string | null;
     status: string | null; delivery_mode: string | null; created_at: string | null;
   };
@@ -106,7 +116,8 @@ export async function GET(req: NextRequest) {
     const a = Number(b.price_accessories ?? 0);
     const h = Number(b.price_haftung ?? 0);
     const s = Number(b.shipping_price ?? 0);
-    const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0);
+    const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0)
+      + Number(b.early_bird_discount ?? 0) + Number(b.special_discount ?? 0);
     discounts += d;
 
     // Rabatt proportional auf Miete + Zubehoer verteilen — sonst zeigt die
@@ -153,7 +164,10 @@ export async function GET(req: NextRequest) {
     shipping += sNet;
 
     const bookingId = String(b.id);
-    const dateIso = (b.created_at ?? '').toString().slice(0, 10);
+    // Anzeige-Datum in Berlin-Zeit — created_at ist ein UTC-Timestamp; das
+    // reine slice(0,10) haette bei Buchungen nach 22:00/23:00 Berlin den
+    // Vortag angezeigt.
+    const dateIso = b.created_at ? getBerlinDateString(new Date(b.created_at)) : '';
     const productName = (b.product_name ?? '').toString();
     const days = b.days ?? 1;
     const rentalFromShort = (b.rental_from ?? '').toString().slice(0, 10);
@@ -216,6 +230,7 @@ export async function GET(req: NextRequest) {
     .from('expenses')
     .select('id, category, gross_amount, description, vendor, expense_date')
     .eq('is_test', false)
+    .is('deleted_at', null)
     .gte('expense_date', from)
     .lte('expense_date', to)
     .order('expense_date', { ascending: false });
@@ -306,6 +321,55 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[EÜR] beleg_positionen lesen fehlgeschlagen:', err);
     // defensiv — wenn Tabelle fehlt, läuft EÜR mit nur expenses + stripe weiter
+  }
+
+  // Quelle 3: lineare AfA der NEUEN Buchhaltungs-Welt (afa_buchungen).
+  // Der monatliche AfA-Cron schreibt pro Anlagegut eine afa_buchungen-Zeile
+  // fort — diese Abschreibungen wurden bisher von KEINEM Report gelesen und
+  // gehoeren als Aufwand in die EÜR. Keine Doppelzaehlung: die alte Welt
+  // laeuft ueber expenses.category='depreciation', GWG ueber beleg_positionen
+  // (asset_purchase) — afa_buchungen ist bislang nirgends erfasst.
+  // afa_buchungen selbst hat kein is_test — der Test/Live-Split haengt am
+  // Asset (assets_neu). Defensiv bei fehlender Tabelle → leer.
+  try {
+    const loadAfa = (assetTable: 'assets_neu' | 'assets') => supabase
+      .from('afa_buchungen')
+      .select(`id, afa_betrag, buchungsdatum, notizen, ${assetTable}!inner(bezeichnung, is_test)`)
+      .eq(`${assetTable}.is_test`, false)
+      // buchungsdatum ist eine DATE-Spalte → reine Datums-Strings (wie expenses).
+      .gte('buchungsdatum', from)
+      .lte('buchungsdatum', to);
+
+    let afaTable: 'assets_neu' | 'assets' = 'assets_neu';
+    let { data: afaRows, error: afaErr } = await loadAfa('assets_neu');
+    if (afaErr) {
+      // Hybrid-Fallback: falls assets_neu nicht existiert (Alt-Welt).
+      afaTable = 'assets';
+      ({ data: afaRows, error: afaErr } = await loadAfa('assets'));
+    }
+    if (!afaErr && afaRows) {
+      for (const raw of (afaRows as unknown as Record<string, unknown>[])) {
+        const assetRaw = raw[afaTable];
+        const asset = (Array.isArray(assetRaw) ? assetRaw[0] : assetRaw) as
+          | { bezeichnung?: string }
+          | null
+          | undefined;
+        const amount = Number(raw.afa_betrag || 0);
+        if (amount <= 0) continue;
+        categoryTotals['depreciation'] = (categoryTotals['depreciation'] || 0) + amount;
+        if (!categoryItems['depreciation']) categoryItems['depreciation'] = [];
+        categoryItems['depreciation'].push({
+          id: String(raw.id),
+          date: String(raw.buchungsdatum ?? ''),
+          description: String(raw.notizen || asset?.bezeichnung || 'Abschreibung'),
+          vendor: asset?.bezeichnung ?? '',
+          amount,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[EÜR] afa_buchungen lesen fehlgeschlagen:', err);
+    // defensiv — ohne AfA-Buchungen weiterlaufen
   }
 
   // Stripe-Gebühren kommen ausschliesslich aus der expenses-Tabelle

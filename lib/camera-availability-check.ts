@@ -9,7 +9,7 @@ import {
   type BufferDays,
 } from '@/lib/booking-buffer';
 import { isTestMode } from '@/lib/env-mode';
-import { getProductById } from '@/lib/get-products';
+import { getProductById, getProducts } from '@/lib/get-products';
 import { loadActiveHoldsForProduct, holdsToBlockedDayCount } from '@/lib/cart-holds';
 
 /**
@@ -94,6 +94,30 @@ export async function findCameraOverbookingConflict(
 
   const globalTest = await isTestMode();
 
+  // Name→ProductId-Zuordnung (spiegelt den Kunden-Kalender /api/availability):
+  // Gemischte Legacy-Buchungen (cameras=NULL) tragen im product_name-Komma-
+  // String mehrere Modelle, bekommen im Resolver aber alle dieselbe EINE
+  // Legacy-product_id → die Zuordnung pro Produkt muss ueber den NAMEN laufen,
+  // sonst zaehlt z.B. „OSMO Action 5 Pro , DJI Osmo Nano" 2× fuer OSMO und 0×
+  // fuer Nano (Ueber-/Unterbuchung).
+  const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const knownProductNames = new Set<string>();
+  try {
+    const all = await getProducts();
+    for (const p of all) knownProductNames.add(normName(p.name));
+  } catch {
+    // getProducts nicht ladbar → Namens-Match faellt auf product_id zurueck.
+  }
+  const thisNorm = normName(product.name);
+  const cameraBelongsToThisProduct = (c: { product_id: string | null; product_name: string }) => {
+    const nm = c.product_name ? normName(c.product_name) : '';
+    if (nm) {
+      if (nm === thisNorm) return true;
+      if (knownProductNames.has(nm)) return false; // gehoert zu einem anderen Modell
+    }
+    return c.product_id === productId;
+  };
+
   // Suchfenster grosszuegig um Puffer + moegliche Override-Datumsfelder.
   const baseBuffer = Math.max(
     buf.versand_before,
@@ -133,12 +157,30 @@ export async function findCameraOverbookingConflict(
     if (!globalTest) q = q.not('is_test', 'is', true);
     return (await q) as unknown as QResult;
   };
+  // (c) Gemischte Legacy-Buchungen OHNE cameras[]: das Modell steht nur im
+  //     product_name-Komma-String, die Buchungs-product_id ist ein anderes
+  //     Modell. Sonst wuerde eine „OSMO , Nano"-Buchung fuer den Nano-Check
+  //     gar nicht geladen → Nano ueberbuchbar. ilike fetcht Kandidaten grob,
+  //     die exakte Zuordnung macht cameraBelongsToThisProduct.
+  const nameNeedle = product.name.replace(/[%_\\]/g, '\\$&');
+  const buildQ3 = async (cols: string): Promise<QResult> => {
+    let q = supabase
+      .from('bookings')
+      .select(cols)
+      .ilike('product_name', `%${nameNeedle}%`)
+      .neq('product_id', productId)
+      .in('status', [...RESERVING_BOOKING_STATUSES])
+      .lte('rental_from', extTo)
+      .gte('rental_to', extFrom);
+    if (!globalTest) q = q.not('is_test', 'is', true);
+    return (await q) as unknown as QResult;
+  };
 
-  let [r1, r2] = await Promise.all([buildQ1(sel), buildQ2(sel)]);
+  let [r1, r2, r3] = await Promise.all([buildQ1(sel), buildQ2(sel), buildQ3(sel)]);
 
   // Override-Spalten fehlen (Migration nicht durch) → ohne sie neu fragen.
   if (r1.error && /ship_date_override|return_due_date_override/i.test(r1.error.message || '')) {
-    [r1, r2] = await Promise.all([buildQ1(selBase), buildQ2(selBase)]);
+    [r1, r2, r3] = await Promise.all([buildQ1(selBase), buildQ2(selBase), buildQ3(selBase)]);
   }
 
   // Bei DB-Fehler NICHT blind durchwinken — aber auch nicht den ganzen
@@ -150,7 +192,11 @@ export async function findCameraOverbookingConflict(
   }
 
   const mergedById = new Map<string, Row>();
-  for (const b of [...(r1.data ?? []), ...(r2.error ? [] : r2.data ?? [])]) {
+  for (const b of [
+    ...(r1.data ?? []),
+    ...(r2.error ? [] : r2.data ?? []),
+    ...(r3.error ? [] : r3.data ?? []),
+  ]) {
     const id = b.id as string;
     if (args.excludeBookingId && id === args.excludeBookingId) continue;
     mergedById.set(id, b);
@@ -186,7 +232,10 @@ export async function findCameraOverbookingConflict(
       const effFrom = toIsoDate(computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null));
       const effTo = toIsoDate(computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null));
       if (effFrom <= cur && effTo >= cur) {
-        bookedCount += resolveBookingCameras(bRaw).filter((c) => c.product_id === productId).length;
+        // Zuordnung pro Produkt primaer ueber den NAMEN (korrigiert gemischte
+        // Legacy-Buchungen, deren Kameras alle dieselbe product_id tragen),
+        // Fallback product_id.
+        bookedCount += resolveBookingCameras(bRaw).filter(cameraBelongsToThisProduct).length;
       }
     }
     bookedCount += holdDayCount.get(cur) ?? 0;

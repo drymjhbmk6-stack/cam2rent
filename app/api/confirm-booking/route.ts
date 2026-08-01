@@ -34,6 +34,21 @@ import { getTesterStripe } from '@/lib/tester-mode';
 const confirmLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
+ * H-12 (2026-08-01): Mappt den DB-Haftungswert (bookings.haftung /
+ * metadata.haftung: 'standard' | 'premium' | 'none') auf das Anzeige-Label
+ * für den Mietvertrag. So wird die Haftungsoption NICHT mehr aus dem Preis
+ * geraten (Basis ≥15 Tage kostet ≥25 € und wurde sonst fälschlich "Premium").
+ * Unbekannter Wert → undefined → generateContractPDF nutzt seine Preis-Heuristik
+ * als Fallback.
+ */
+function haftungOptionLabel(h: string | null | undefined): string | undefined {
+  if (h === 'premium') return 'Premium-Haftungsschutz';
+  if (h === 'none') return 'Ohne Haftungsschutz';
+  if (h === 'standard') return 'Basis-Haftungsschutz';
+  return undefined;
+}
+
+/**
  * POST /api/confirm-booking
  * Body: { payment_intent_id: string }
  *
@@ -176,6 +191,7 @@ export async function POST(req: NextRequest) {
               priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
               taxMode: (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
               taxRate: parseFloat(txM['tax_rate'] || '19'),
+              haftungOption: haftungOptionLabel(fullBooking.haftung),
               signatureDataUrl: sig.signatureDataUrl,
               signatureMethod: sig.signatureMethod,
               signerName: sig.signerName, ipAddress: ip,
@@ -697,6 +713,7 @@ export async function POST(req: NextRequest) {
             priceShipping: parseFloat(meta.shipping_price ?? '0'),
             priceTotal: intent.amount / 100,
             deposit: parseFloat(meta.deposit ?? '0'),
+            haftungOption: haftungOptionLabel(meta.haftung),
             taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
             taxRate: parseFloat(txMap['tax_rate'] || '19'),
             signatureDataUrl: contractSignature.signatureDataUrl,

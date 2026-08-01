@@ -131,7 +131,7 @@ export async function runStripeSync({
         // dieser PI als unmatched gelassen + reconciliation_note "Moegliche
         // Doppelzahlung" gesetzt. Die UI-Detection im GET-Endpoint erkennt das
         // zusaetzlich und bietet den Quick-Button "Als Doppelzahlung erfassen".
-        let booking: { id: string } | null = null;
+        let booking: { id: string; is_test?: boolean | null } | null = null;
         let matchSource: 'pi' | 'extension' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null =
           null;
         let duplicateNote: string | null = null;
@@ -154,7 +154,7 @@ export async function runStripeSync({
         {
           const { data: b } = await supabase
             .from('bookings')
-            .select('id')
+            .select('id, is_test')
             .eq('payment_intent_id', pi.id)
             .maybeSingle();
           if (b?.id) {
@@ -179,7 +179,7 @@ export async function runStripeSync({
           if (isExtension && metaBookingId) {
             const { data: b } = await supabase
               .from('bookings')
-              .select('id')
+              .select('id, is_test')
               .eq('id', metaBookingId)
               .maybeSingle();
             if (b?.id) {
@@ -192,7 +192,7 @@ export async function runStripeSync({
           if (!booking) {
             const { data: b } = await supabase
               .from('bookings')
-              .select('id')
+              .select('id, is_test')
               .eq('extension_payment_intent_id', pi.id)
               .maybeSingle();
             if (b?.id) {
@@ -210,7 +210,7 @@ export async function runStripeSync({
           if (preBookingId) {
             const { data: b } = await supabase
               .from('bookings')
-              .select('id')
+              .select('id, is_test')
               .eq('id', preBookingId)
               .maybeSingle();
             if (b?.id) {
@@ -231,7 +231,7 @@ export async function runStripeSync({
           if (receiptEmail) {
             const { data: candidates } = await supabase
               .from('bookings')
-              .select('id, payment_intent_id, customer_email, price_total')
+              .select('id, payment_intent_id, customer_email, price_total, is_test')
               .ilike('customer_email', receiptEmail)
               .gte('price_total', amount - 0.5)
               .lte('price_total', amount + 0.5)
@@ -243,7 +243,7 @@ export async function runStripeSync({
               return !piId || /^(PENDING|AWAITING|MANUAL-UNPAID)/i.test(piId);
             });
             if (eligible.length === 1) {
-              booking = { id: eligible[0].id };
+              booking = { id: eligible[0].id, is_test: eligible[0].is_test };
               matchSource = 'email_amount';
             } else if (eligible.length > 1) {
               duplicateNote = `Auto-Match abgebrochen: ${eligible.length} offene Buchungen mit Email "${receiptEmail}" und Betrag ${amount.toFixed(2)} EUR gefunden — bitte manuell zuordnen.`;
@@ -262,7 +262,7 @@ export async function runStripeSync({
             const toMs = intentCreatedMs + 7 * 24 * 60 * 60 * 1000;
             const { data: candidates } = await supabase
               .from('bookings')
-              .select('id, price_total, created_at')
+              .select('id, price_total, created_at, is_test')
               .eq('user_id', userId)
               .gte('created_at', new Date(fromMs).toISOString())
               .lte('created_at', new Date(toMs).toISOString())
@@ -274,7 +274,7 @@ export async function runStripeSync({
             if (exactAmount.length === 1) {
               const other = await hasOtherLink(exactAmount[0].id);
               if (!other) {
-                booking = { id: exactAmount[0].id };
+                booking = { id: exactAmount[0].id, is_test: exactAmount[0].is_test };
                 matchSource = 'metadata_user';
               } else {
                 duplicateNote = `Moegliche Doppelzahlung: Buchung ${exactAmount[0].id} wurde bereits ueber ${other.pi} bezahlt — pruefe Erstattung.`;
@@ -328,6 +328,11 @@ export async function runStripeSync({
           ...stripeFields,
           booking_id: booking?.id || null,
           match_status: booking?.id ? 'matched' : 'unmatched',
+          // Bei Match: is_test der gematchten Buchung uebernehmen (statt pauschal
+          // globalem Modus), damit die Transaktion in der richtigen Test/Live-Welt
+          // gefuehrt wird. Ohne Match bleibt der globale Modus (aus stripeFields).
+          is_test:
+            booking && typeof booking.is_test === 'boolean' ? booking.is_test : testMode,
         };
         const upsertRowWithNote =
           noteToWrite !== undefined ? { ...baseUpsertRow, reconciliation_note: noteToWrite } : baseUpsertRow;

@@ -109,6 +109,8 @@ const VERSICHERUNG_ALLOWLIST: Record<string, string> = {
   'lib/meta/social-prompt.ts': 'KI-Leitplanke: NIEMALS Versicherung',
   'lib/reels/script-ai.ts': 'KI-Leitplanke: keine Versicherungs-Aussagen',
   'components/admin/SocialEinstellungenContent.tsx': 'KI-Kontext-Hinweis: NIEMALS Versicherung',
+  // — Generierter Rechtstext-Fallback (aus Supabase via `npm run sync:legal`) —
+  'lib/legal/generated-fallbacks.ts': 'Generierter Rechtstext-Fallback: Pflicht-Negation „keine Versicherung im Sinne des VVG"',
 };
 
 /**

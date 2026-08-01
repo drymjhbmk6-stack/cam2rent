@@ -629,14 +629,15 @@ function generateCSV(
   productsData: ProductsData | null,
   trafficData: TrafficData | null,
   funnelData: FunnelData | null,
+  rangeLabel: string,
 ): string {
   const rows: string[][] = [];
 
   if (activeTab === 'live') {
     rows.push(['Metrik', 'Wert']);
     rows.push(['Gerade online', String(liveData?.active_count ?? 0)]);
-    rows.push(['Seitenaufrufe heute', String(liveData?.total_views ?? todayData?.total_views ?? 0)]);
-    rows.push(['Einzelne Besucher heute', String(liveData?.unique_visitors ?? todayData?.unique_visitors ?? 0)]);
+    rows.push([`Seitenaufrufe (${rangeLabel})`, String(liveData?.total_views ?? todayData?.total_views ?? 0)]);
+    rows.push([`Einzelne Besucher (${rangeLabel})`, String(liveData?.unique_visitors ?? todayData?.unique_visitors ?? 0)]);
     rows.push(['Seiten pro Besuch', String(liveData?.avg_pages_per_session ?? 0)]);
     if (liveData?.visitors?.length) {
       rows.push([]);
@@ -654,8 +655,8 @@ function generateCSV(
 
   if (activeTab === 'bookings') {
     rows.push(['Metrik', 'Wert']);
-    rows.push(['Buchungen heute', String(bookingsData?.today_bookings ?? 0)]);
-    rows.push(['Umsatz heute', String(bookingsData?.today_revenue ?? 0)]);
+    rows.push([`Buchungen (${rangeLabel})`, String(bookingsData?.today_bookings ?? 0)]);
+    rows.push([`Umsatz (${rangeLabel})`, String(bookingsData?.today_revenue ?? 0)]);
     rows.push(['Abschlussquote', `${bookingsData?.conversion_rate ?? 0}%`]);
     rows.push(['Durchschnittlicher Buchungswert', String(bookingsData?.avg_booking_value ?? 0)]);
     if (funnelData?.funnel?.length) {
@@ -709,8 +710,8 @@ function generateCSV(
     rows.push(['Neue Besucher', String(trafficData?.new_visitors ?? 0)]);
     rows.push(['Wiederkehrende Besucher', String(trafficData?.returning_visitors ?? 0)]);
     rows.push(['Absprungrate', `${trafficData?.bounce_rate ?? 0}%`]);
-    rows.push(['Besuche (30 Tage)', String(trafficData?.total_sessions ?? 0)]);
-    rows.push(['Einzelne Besucher (heute)', String(todayData?.unique_visitors ?? 0)]);
+    rows.push([`Besuche (${rangeLabel})`, String(trafficData?.total_sessions ?? 0)]);
+    rows.push([`Einzelne Besucher (${rangeLabel})`, String(todayData?.unique_visitors ?? 0)]);
     if (trafficData?.devices) {
       rows.push([]);
       rows.push(['Gerät', 'Prozent']);
@@ -910,9 +911,11 @@ export default function AnalyticsPage() {
   const fetchHistory = useCallback(async (daysOverride?: number) => {
     const days = daysOverride ?? 30;
     if (days <= 0) return;
-    const res = await safeFetch<HistoryData>(`/api/admin/analytics?type=history&days=${days}`);
+    // range mitschicken (M-7): der History-Branch folgt dann dem gewaehlten
+    // Zeitraum (auch vergangenen custom-Fenstern); `days` bleibt Fallback.
+    const res = await safeFetch<HistoryData>(`/api/admin/analytics?type=history&${rangeQS({ days: String(days) })}`);
     if (res) setHistoryData(res);
-  }, [safeFetch]);
+  }, [rangeQS, safeFetch]);
 
   const fetchBookings = useCallback(async () => {
     if (filtersIncomplete) return;
@@ -1027,7 +1030,12 @@ export default function AnalyticsPage() {
   };
 
   const handleExportCSV = () => {
-    const csv = generateCSV(activeTab, liveData, todayData, historyData, bookingsData, productsData, trafficData, funnelData);
+    // Dynamisches Zeitraum-Label (L-16) — bei custom die konkreten Daten.
+    let rangeLabel = getTimeRangeLabel(filters.timeRange);
+    if (filters.timeRange === 'custom' && filters.customFrom && filters.customTo) {
+      rangeLabel = `${filters.customFrom} – ${filters.customTo}`;
+    }
+    const csv = generateCSV(activeTab, liveData, todayData, historyData, bookingsData, productsData, trafficData, funnelData, rangeLabel);
     downloadCSV(csv);
     setShowExportDropdown(false);
   };

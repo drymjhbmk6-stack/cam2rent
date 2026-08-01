@@ -14,6 +14,7 @@ import {
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { createCancellationCreditNote } from '@/lib/buchhaltung/credit-note-document';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -132,44 +133,90 @@ export async function POST(req: NextRequest) {
   // payment_intent_id wie "MANUAL-..." → Stripe wuerde 404 zurueckgeben.
   // idempotencyKey verhindert doppelte Refunds bei Network-Retries.
   const isStripePI = !!booking.payment_intent_id?.startsWith('pi_');
-  if (refundAmountCents > 0 && isStripePI) {
-    try {
-      await stripe.refunds.create(
-        {
-          payment_intent: booking.payment_intent_id,
-          amount: refundAmountCents,
-        },
-        { idempotencyKey: `cancel-refund:${bookingId}` }
-      );
-    } catch (stripeErr) {
-      console.error('[cancel-booking] Stripe refund error:', stripeErr);
-      // Sweep 7 Vuln 24 — Refund-Fehler tracken + Admin-Notification.
-      // Vorher wurde der Fehler nur geloggt; Kunde sah "Storno bestaetigt",
-      // glaubt das Geld kommt zurueck, merkt aber erst beim Kontoauszug,
-      // dass nichts angekommen ist.
+  // refundStatus/stripeRefundId werden fuer Persistierung + Stornierungsbeleg
+  // durchgereicht (analog Admin-Storno-Pfad in /api/admin/booking/[id]).
+  let refundStatus = 'not_applicable';
+  let stripeRefundId: string | null = null;
+  if (refundAmountCents > 0) {
+    if (isStripePI) {
       try {
-        await supabase
-          .from('bookings')
-          .update({ refund_status: 'failed_pending_admin' })
-          .eq('id', bookingId);
-      } catch (rsErr) {
-        // Spalte existiert evtl. noch nicht in alten DBs — defensive
-        console.warn('[cancel-booking] refund_status-Update fehlgeschlagen:', rsErr);
+        const refund = await stripe.refunds.create(
+          {
+            payment_intent: booking.payment_intent_id,
+            amount: refundAmountCents,
+          },
+          { idempotencyKey: `cancel-refund:${bookingId}` }
+        );
+        stripeRefundId = refund.id;
+        refundStatus = refund.status === 'succeeded' ? 'succeeded' : 'pending';
+      } catch (stripeErr) {
+        refundStatus = 'failed_pending_admin';
+        console.error('[cancel-booking] Stripe refund error:', stripeErr);
+        // Sweep 7 Vuln 24 — Refund-Fehler tracken + Admin-Notification.
+        // Vorher wurde der Fehler nur geloggt; Kunde sah "Storno bestaetigt",
+        // glaubt das Geld kommt zurueck, merkt aber erst beim Kontoauszug,
+        // dass nichts angekommen ist.
+        try {
+          await supabase
+            .from('bookings')
+            .update({ refund_status: 'failed_pending_admin' })
+            .eq('id', bookingId);
+        } catch (rsErr) {
+          // Spalte existiert evtl. noch nicht in alten DBs — defensive
+          console.warn('[cancel-booking] refund_status-Update fehlgeschlagen:', rsErr);
+        }
+        try {
+          const { createAdminNotification } = await import('@/lib/admin-notifications');
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Refund fehlgeschlagen: ${bookingId}`,
+            message: `Stornierung wurde durchgefuehrt, aber Stripe-Refund von ${(refundAmountCents / 100).toFixed(2)} EUR ist fehlgeschlagen. Bitte manuell pruefen.`,
+            link: `/admin/buchungen/${bookingId}`,
+          });
+        } catch (notifErr) {
+          console.error('[cancel-booking] Admin-Notification fehlgeschlagen:', notifErr);
+        }
+        // Status ist bereits cancelled — Customer-Response 200, aber Admin
+        // ist jetzt informiert.
       }
-      try {
-        const { createAdminNotification } = await import('@/lib/admin-notifications');
-        await createAdminNotification(supabase, {
-          type: 'payment_failed',
-          title: `Refund fehlgeschlagen: ${bookingId}`,
-          message: `Stornierung wurde durchgefuehrt, aber Stripe-Refund von ${(refundAmountCents / 100).toFixed(2)} EUR ist fehlgeschlagen. Bitte manuell pruefen.`,
-          link: `/admin/buchungen/${bookingId}`,
-        });
-      } catch (notifErr) {
-        console.error('[cancel-booking] Admin-Notification fehlgeschlagen:', notifErr);
-      }
-      // Status ist bereits cancelled — Customer-Response 200, aber Admin
-      // ist jetzt informiert.
+    } else {
+      // Manuelle Buchung (MANUAL-/PENDING-...) → Admin erstattet selbst.
+      refundStatus = 'manual';
     }
+
+    // Erstatteten Betrag + Status auf der Buchung dokumentieren (defensiver
+    // Retry ohne die Spalten, falls supabase-bookings-refund.sql aussteht) —
+    // damit ein spaeterer Stornierungsbeleg „Davon erstattet" korrekt zeigt.
+    const refundEuro = refundAmountCents / 100;
+    const noteEntry = `Storno-Rueckerstattung ${refundEuro.toFixed(2)} EUR (${refundStatus})`;
+    const existingRefundNote = (booking.refund_note ?? '') as string;
+    const { error: refundUpdErr } = await supabase
+      .from('bookings')
+      .update({
+        refund_amount: refundEuro,
+        refund_note: existingRefundNote ? `${existingRefundNote} | ${noteEntry}` : noteEntry,
+      })
+      .eq('id', bookingId);
+    if (refundUpdErr && /refund_amount|refund_note/i.test(refundUpdErr.message || '')) {
+      console.warn('[cancel-booking] refund_amount/refund_note Migration steht aus — Betrag nicht persistiert.');
+    }
+  }
+
+  // Stornierungsbeleg (Gutschrift) anlegen + Originalrechnung auf 'cancelled'
+  // setzen — analog zum Admin-Storno-Pfad. createCancellationCreditNote legt die
+  // Gutschrift (voller Buchungsbetrag) an und storniert die Originalrechnung
+  // intern. Best-effort; bei fehlgeschlagenem Refund KEINE Gutschrift (Admin
+  // muss den Refund erst manuell klaeren). Awaited, damit der Beleg auf dem
+  // langlebigen Node-Server garantiert geschrieben wird.
+  const cancelPriceTotal = Number(booking.price_total ?? 0);
+  if (cancelPriceTotal > 0 && refundStatus !== 'failed_pending_admin') {
+    await createCancellationCreditNote(supabase, {
+      bookingId,
+      grossAmount: cancelPriceTotal,
+      reason: 'Stornierung durch Kunden (Selbstservice)',
+      refundStatus,
+      stripeRefundId,
+    }).catch((err) => console.error('[cancel-booking] Stornierungsbeleg fehlgeschlagen:', err));
   }
 
   // Kautions-Pre-Auth aufheben (sonst bleibt der Hold ~7 Tage auf der Karte

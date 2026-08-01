@@ -138,6 +138,19 @@ async function runGeneration(req: NextRequest): Promise<NextResponse> {
       postDate: entry.scheduled_date ? new Date(entry.scheduled_date) : undefined,
     });
 
+    // generateReel() wirft bei einem Render-Fehler NICHT, sondern liefert
+    // { status: 'failed', videoUrl: null }. Ohne diese Pruefung wuerde der
+    // Plan-Eintrag faelschlich auf 'generated' (bzw. der Reel auf 'scheduled')
+    // gesetzt + eine Review-Push verschickt — obwohl kein Video existiert.
+    if (result.status === 'failed') {
+      const failMsg = result.error ?? 'Reel-Generierung fehlgeschlagen';
+      await supabase
+        .from('social_reel_plan')
+        .update({ status: 'planned', error_message: failMsg })
+        .eq('id', entry.id);
+      return NextResponse.json({ error: failMsg, entry_id: entry.id, reel_id: result.reelId }, { status: 500 });
+    }
+
     // Im Voll-Modus: direkt scheduled_at setzen, damit reels-publish den Cron übernimmt
     if (mode === 'voll' && result.reelId) {
       const scheduledAt = new Date(

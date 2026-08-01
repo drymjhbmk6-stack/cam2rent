@@ -4893,6 +4893,127 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
   - `POST /api/admin/env-mode` → `env_mode.change` (Inline-Insert ersetzt durch `logAudit()`-Helper, da Inline-Insert denselben Spaltennamen-Bug hatte)
   - `POST /api/admin/settings` → `settings.update` (transiente Status-Keys wie `social_plan_job` sind von der Protokollierung ausgenommen)
 
+### Korrektheits-Audit — 100 % gelesen, alle echten Bugs gefixt (Stand 2026-08-01)
+Vollständiger, tatsächlich gelesener Korrektheits-Audit des kompletten Codes
+(21 Domänen-Slices, adversariale Verifikation, Abgleich gegen die bewussten
+CLAUDE.md-Trade-offs). Ergebnis-Report liegt als **`AUDIT.md`** im Repo-Root
+(14 HOCH, ~12 MITTEL, ~32 NIEDRIG, mit Datei:Zeile · Fehlerszenario · Verdikt +
+Abdeckungs-Matrix). Danach **alle echten Code-Bugs** in einem Rutsch gefixt (8
+parallele Cluster, disjunkte Datei-Sets, zentral `tsc`+`eslint`=0 Fehler, alle
+20 Vitest-Suites/350 Tests grün). Rein code-seitig — **keine neue Migration**
+nötig; bewusste Trade-offs, Consent-Wortlaut und DB-Rechtstexte bewusst außen vor.
+
+**HOCH (geldrelevant):**
+- **EÜR + DATEV zogen nicht alle Rabatte ab** (`reports/euer/route.ts`,
+  `datev-export/route.ts` + `preview-rows`): EÜR ignorierte `early_bird_discount`
+  + `special_discount`, DATEV zusätzlich `duration_discount`+`loyalty_discount` →
+  Umsatz/Gewinn überzeichnet (Steuer zu hoch, §19-Grenze inflationiert). Jetzt
+  ziehen beide Reports **alle 5 Rabattarten + `refund_amount`** ab. Beide Selects
+  mit defensivem Spalten-Strip-Retry.
+- **EÜR-Ausgaben ohne `deleted_at`-Filter** → soft-gelöschte Ausgaben minderten
+  weiter den Gewinn. `.is('deleted_at', null)` ergänzt.
+- **Neue-Welt-AfA fehlte komplett in EÜR + DATEV** (`afa_buchungen` wurde von
+  keinem Report gelesen) → Abschreibungsaufwand fehlte, Gewinn überzeichnet. Beide
+  Reports erfassen sie jetzt (via `assets_neu!inner`-Join, is_test über das Asset,
+  Hybrid-Fallback `assets`). Keine Doppelzählung — alte Welt läuft über
+  `expenses.category='depreciation'`, ein Asset lebt in genau einer Welt.
+- **`confirm-cart` E-Mail + Mietvertrag-PDF rechneten roh neu** und ignorierten
+  Sonderkondition/Frühbucher-Skalierung → Rechtsdokument zeigte falschen (höheren)
+  Betrag. Jetzt werden die **tatsächlich persistierten** (Stripe-abgeleiteten)
+  Gruppenwerte pro Buchung in einer Map gehalten und im `after()`-Block für
+  Vertrag + Mail verwendet.
+- **`stripe-webhook handleCartBooking` speicherte unskalierte Rabatte** + lud
+  `product_discount` nicht → Report-Umsatz war race-abhängig (Webhook-Sieger vs.
+  confirm-cart). Jetzt alle Rabatte gegen den Stripe-Betrag skaliert + gemergt,
+  `verifyAmountConsistency` prüft bewusst weiter die ROHEN gemeldeten Werte.
+- **`booking_edit` (Bestellbearbeitung) forderte ausgehandelte Rabatte als
+  Phantom-Nachzahlung** zurück → `early_bird`/`special` jetzt im Recompute
+  berücksichtigt + fortgeschrieben.
+- **`confirm-extension` verschluckte eine echte zweite Verlängerung**: Guard
+  `.is('extension_payment_intent_id', null)` griff nur beim 1. Mal → Kunde zahlte
+  `pi_B`, keine Verlängerung, **kein Refund** („Bereits verlängert"). Guard jetzt
+  pi-spezifisch (`.or(is.null, .neq.<pi>)`) — Same-pi-Race bleibt idempotent
+  abgefangen.
+- **Checkout-Overcharge bei `not_combinable`-Coupon** (`app/checkout/page.tsx`):
+  Coupon-Basis war bereits um den (danach genullten) Auto-Rabatt gekürzt → z. B.
+  83 € statt 80 €. Basis jetzt `cartTotal − productDiscount`.
+- **`daily-report`-Cron zeigte dauerhaft 0 € Umsatz** — falscher Spaltenname
+  `total_price` (heißt `price_total`). Korrigiert.
+- **Zwei divergierende WBW-Formeln** (`lib/inventar/wiederbeschaffungswert.ts`
+  ohne Tages-Cut vs. `lib/replacement-value.ts` mit Tages-Cut) → Inventaransicht
+  ≠ Mietvertrag/Haftungs-Box (Off-by-one-Monat). `computeWBW`/`explainWBW` nutzen
+  jetzt dieselbe `monthsElapsedSince`-Semantik (UTC + Tages-Cut). Missing-Value
+  (null = „Nicht gesetzt") unverändert.
+- **Haftungsoption im Vertrag aus Preis geraten** (`generate-contract.ts`) →
+  Basis-Haftungsschutz ab 15 Tagen (Preis ≥25 €) fälschlich als „Premium"
+  ausgewiesen. Alle Aufrufer setzen `haftungOption` jetzt explizit aus
+  `booking.haftung` (standard→Basis / premium→Premium / none→Ohne); Preis-Heuristik
+  nur noch Fallback.
+- **Harte Überbuchungssperre ohne Namens-Fallback** (`camera-availability-check.ts`)
+  → gemischt-modellige Legacy-Buchungen (`cameras`=NULL) passierten die Sperre,
+  obwohl der Kalender belegt zeigte. Dritter Loader (`product_name ilike` +
+  `neq product_id`) + `cameraBelongsToThisProduct` (Name vor `product_id`) ergänzt
+  — spiegelt jetzt den Kunden-Kalender.
+- **Inventar-Löschung ließ `available_qty` überhöht** (`admin/inventar/[id]`):
+  `deleteMirror` synct intern noch bei existierender Zeile → nach `.delete()` wird
+  `syncAccessoryQty` erneut aufgerufen (accessory_id vorher via `migration_audit`
+  aufgelöst).
+- **Regressionstest-Falle** (`widerruf-consistency.test.ts`): der generierte
+  Rechtstext-Fallback `lib/legal/generated-fallbacks.ts` (nach `npm run sync:legal`)
+  enthält die VVG-Pflichtnegation → in `VERSICHERUNG_ALLOWLIST` mit Begründung
+  aufgenommen (Test brach sonst deterministisch).
+
+**MITTEL:**
+- **Inventar-Bestandszählung** (`sync-accessory-qty.ts` + recovery + resync-qty):
+  `!= 'ausgemustert'` → `IN ('verfuegbar','vermietet')`, damit
+  `wartung`/`defekt`/`ausgemustert` NICHT als verfügbar zählen (Legacy-Semantik).
+- **USt-Vorbereitung** zieht jetzt `refund_amount` ab (Konsistenz zur EÜR).
+- **EÜR + USt** schließen `awaiting_payment`/`pending_verification` aus dem Umsatz
+  aus (Zuflussprinzip §4(3) EStG — Geld noch nicht geflossen).
+- **Stripe is_test tester-bewusst** (`import-fees` + `stripe-sync.ts`): `is_test`
+  der gematchten Buchung statt globalem Modus → Tester-Gebühr nicht mehr als
+  Live-Ausgabe.
+- **Set-Preis-Default vereinheitlicht** (neuer `lib/set-price.ts`): Admin-Neu-
+  Buchung nutzte `?? 'perDay'`, Kunde/Verify `?? 'flat'` → bei NULL-`pricing_mode`
+  100 € vs. 20 €. Jetzt überall `flat`-Default über einen Helper.
+- **Auslastung ohne is_test + ohne echten Zeitraum** (`camera-utilization.ts`):
+  optionaler `{isTest, from, to}`-Param; Analytics/Dashboard übergeben Modus +
+  bei `range='custom'` den echten Zeitraum. Signatur rückwärtskompatibel
+  (3. Aufrufer `utilization/route.ts` unberührt).
+- **reels-generate wertete Render-Fehler als Erfolg** → `status==='failed'` setzt
+  die Plan-Zeile jetzt auf error (kein generated/scheduled/Push).
+- **social-generate Auto-Pfad ohne Saison-Skip** → `isTopicOutOfSeason` + `postDate`
+  an `generateCaption` (wie der manuelle Pfad).
+- **Survey-Reward-Coupon-Race** → deterministischer Code `DANKE-<bookingId>` +
+  23505-Idempotenz-Fallback (kein Doppel-Gutschein), keine Migration.
+- **Middleware-Permission-Lücken** (`combined-labels`, `damage-attachment-url`,
+  `accessory-part-images`, `/admin/content`) gemappt; `/admin/schaeden`-Sidebar-Perm
+  auf `tagesgeschaeft` angeglichen.
+- **Storno-Kanten** (`cancel-booking` Self-Service legt jetzt Stornierungsbeleg an
+  + setzt Originalrechnung `cancelled`; Re-PATCH auf bereits stornierter Buchung
+  bricht idempotent ab; `resend-cancellation` Existenz-Guard gegen Doppel-Gutschrift).
+
+**NIEDRIG (Auswahl):** Reformationstag (31.10.) fälschlich als Berliner Feiertag
+entfernt (`german-holidays.ts`); `calcPriceFromTable` liefert bei zu kurzer
+`priceTable` keinen stillen 0-€-Preis mehr; `invoice-versions`-fingerprint
+enthält `early_bird`/`special`; Funnel „bezahlt" ohne `awaiting_payment`; CSV-Labels
+dynamisch statt „heute"; `send-email`/`reminder-emails` mit `is_test`+Test-Redirect+
+`result.error`-Prüfung; `update-booking-status` ohne `cancelled` in der Whitelist
+(Storno nur über den Nebenwirkungs-Pfad); Blog-View-Increment aus dem
+GET-`[slug]`-Endpoint entfernt (keine curl-Inflation); DST-feste Puffer-/Frist-Fenster
+via `toIsoDate`/`berlinDaysUntil`/`getBerlinDateString`; Reels-Voice-`afade`-out;
+IG-Post nur mit Bild; `coupon_race`-Icon.
+
+**Bewusst NICHT geändert (separat / Nutzer-Entscheidung):** dokumentierte
+Trade-offs (Postpone-Zubehör-Check, CSV-Minus-Text, 4× Netto-Herausrechnung,
+`refund_amount`+`price_total`-Doppelabzug-Falle), Consent-Banner-/Cookie-Richtlinie-
+Wortlaut, DB-Rechtstexte (§312g-DB, `sync:legal`-Ausführung), Set-Konfigurator-
+Rabatt (Feature), reine Doku-Divergenzen. Details siehe `AUDIT.md` + REFUTED-Abschnitt.
+
+**Zwei vorbestehende Lint-Errors mitgeräumt** (nicht Audit-Findings, aber blockten
+das „0 Errors"-Gate): `<a>`→`<Link>` in `admin/buchhaltung/page.tsx`, gerades `"`
+in `reels/einstellungen/page.tsx`, unused `_req` in `inventar/code-segmente`.
+
 ### Reliability-Audit Welle 1 (2026-05-08)
 Erster Tech-Debt-/Reliability-Pass mit `engineering:tech-debt` + `engineering:code-review`-Mindset, fokussiert auf Race-Conditions, Idempotenz und tote Code-Pfade. Drei parallele Explore-Agents (Performance, Dead/Duplicate-Code, Reliability-Gaps) haben konkrete Findings ausserhalb der Sweep-5-9-Befunde aufgespuert.
 

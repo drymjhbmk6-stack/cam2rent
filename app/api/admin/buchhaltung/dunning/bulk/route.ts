@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { getBerlinDateString } from '@/lib/timezone';
 
 /**
  * Bulk-Mahnung-Entwuerfe.
@@ -96,8 +97,9 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const newDueDate = new Date();
-    newDueDate.setDate(newDueDate.getDate() + 7);
+    // Neue Faelligkeit in Berlin-Zeit (heute + 7 Tage) — deckt sich mit der
+    // Einzel-Mahnung; setDate(+7).toISOString() kippt an der UTC-Tagesgrenze.
+    const newDueDate = getBerlinDateString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
     // Erst Rechnung atomar auf overdue setzen — Guard verhindert dass wir
     // eine zwischenzeitlich bezahlte Rechnung wieder auf overdue ziehen.
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest) {
         invoice_id: inv.id,
         level: nextLevel,
         fee_amount: fees[nextLevel] || 0,
-        new_due_date: newDueDate.toISOString().split('T')[0],
+        new_due_date: newDueDate,
         status: 'draft',
         sent_to_email: inv.sent_to_email,
       });

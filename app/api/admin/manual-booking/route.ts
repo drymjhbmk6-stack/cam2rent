@@ -238,6 +238,12 @@ export async function POST(req: NextRequest) {
               priceRental: parseFloat(price_rental || '0'),
               priceAccessories: parseFloat(price_accessories || '0'),
               priceHaftung: parseFloat(price_haftung || '0'),
+              // Haftungsoption explizit aus dem gewaehlten haftung-Wert ableiten
+              // (nicht ueber den priceHaftung-Betrag raten).
+              haftungOption:
+                haftung === 'standard' ? 'Basis-Haftungsschutz'
+                : haftung === 'premium' ? 'Premium-Haftungsschutz'
+                : 'Ohne Haftungsschutz',
               priceShipping: parseFloat(shipping_price || '0'),
               priceTotal: parseFloat(price_total || '0'),
               deposit: parseFloat(deposit || '0'),

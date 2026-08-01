@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { toIsoDate } from '@/lib/booking-buffer';
 
 export async function GET(req: NextRequest) {
   const productId = req.nextUrl.searchParams.get('product_id');
@@ -26,13 +27,14 @@ export async function GET(req: NextRequest) {
     afterDays = buf?.versand_after ?? 1;
   }
 
-  // Daten mit Puffer anpassen
+  // Daten mit Puffer anpassen. toIsoDate liest lokale Kalenderkomponenten
+  // (DST-fest) statt toISOString() (UTC → off-by-one an DST-Kanten).
   const bufferedFrom = new Date(from);
   bufferedFrom.setDate(bufferedFrom.getDate() - beforeDays);
   const bufferedTo = new Date(to);
   bufferedTo.setDate(bufferedTo.getDate() + afterDays);
-  const bFrom = bufferedFrom.toISOString().split('T')[0];
-  const bTo = bufferedTo.toISOString().split('T')[0];
+  const bFrom = toIsoDate(bufferedFrom);
+  const bTo = toIsoDate(bufferedTo);
 
   // Alle Units für das Produkt laden
   const { data: units } = await supabase

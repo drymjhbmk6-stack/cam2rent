@@ -22,6 +22,10 @@ interface Booking {
   price_haftung: number;
   shipping_price: number;
   discount_amount: number;
+  duration_discount: number;
+  loyalty_discount: number;
+  early_bird_discount: number;
+  special_discount: number;
   refund_amount: number;
   status: string;
   created_at: string;
@@ -93,7 +97,9 @@ export async function GET(req: NextRequest) {
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
   // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
-  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, refund_amount, status, created_at';
+  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, status, created_at';
+  // Optionale Spalten, die je nach ausstehender Migration fehlen koennen.
+  const OPTIONAL_DATEV_COLS = [', early_bird_discount', ', special_discount', ', refund_amount'];
   const buildDatevQuery = (cols: string) => supabase
     .from('bookings')
     .select(cols)
@@ -103,10 +109,12 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true });
 
   let { data: bookings, error: bookingsError } = await buildDatevQuery(datevCols);
-  if (bookingsError && /refund_amount|column|schema cache|PGRST/i.test(bookingsError.message)) {
-    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die
-    // Spalte exportieren (refund_amount zählt dann als 0).
-    ({ data: bookings, error: bookingsError } = await buildDatevQuery(datevCols.replace(', refund_amount', '')));
+  if (bookingsError && /refund_amount|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsError.message)) {
+    // Migration(en) noch nicht durch — ohne die optionalen Spalten exportieren
+    // (die betroffenen Werte zaehlen dann als 0).
+    let stripped = datevCols;
+    for (const c of OPTIONAL_DATEV_COLS) stripped = stripped.replace(c, '');
+    ({ data: bookings, error: bookingsError } = await buildDatevQuery(stripped));
   }
 
   if (bookingsError) {
@@ -241,8 +249,15 @@ export async function GET(req: NextRequest) {
       `${booking.product_name || 'Vermietung'} - ${booking.customer_name || 'Kunde'}`
     );
 
-    // Main rental revenue
-    const rentalAmount = (booking.price_rental || 0) + (booking.price_accessories || 0) - (booking.discount_amount || 0) - (booking.refund_amount || 0);
+    // Main rental revenue — alle Rabatt-Arten abziehen (nicht nur discount_amount):
+    // duration_discount, loyalty_discount, early_bird_discount, special_discount.
+    const rentalAmount = (booking.price_rental || 0) + (booking.price_accessories || 0)
+      - (booking.discount_amount || 0)
+      - (booking.duration_discount || 0)
+      - (booking.loyalty_discount || 0)
+      - (booking.early_bird_discount || 0)
+      - (booking.special_discount || 0)
+      - (booking.refund_amount || 0);
     if (rentalAmount > 0) {
       const buSchluessel = taxMode === 'regelbesteuerung' ? '3' : '';
       const line = buildLine(
@@ -330,6 +345,66 @@ export async function GET(req: NextRequest) {
     console.error('[datev-export] AfA-Abruf fehlgeschlagen', err);
     // Nicht blockend: wenn assets-Tabelle noch nicht existiert oder keine AfA-Daten,
     // bleibt der Export trotzdem gueltig.
+  }
+
+  // ── Lineare AfA der NEUEN Buchhaltungs-Welt (afa_buchungen) ────────────────
+  // Der monatliche AfA-Cron schreibt pro Anlagegut eine afa_buchungen-Zeile
+  // fort. Diese wurden bisher von KEINEM Export gelesen. Keine Doppelzaehlung:
+  // die alte Welt laeuft ueber expenses.category='depreciation' (oben), die neue
+  // ueber afa_buchungen. afa_buchungen hat kein is_test — der Split haengt am
+  // Asset (assets_neu). Soll AfA-Aufwandskonto (4830) an Bestandskonto nach art.
+  try {
+    // art (neue Welt) → BestandKey fuer den Kontenrahmen.
+    const artToBestand: Record<string, BestandKey> = {
+      kamera: 'rental_camera',
+      zubehoer: 'rental_accessory',
+      buero: 'office_equipment',
+      werkzeug: 'office_equipment',
+      sonstiges: 'office_equipment',
+    };
+    const afaKonto = kontenrahmen.aufwand.depreciation;
+
+    const loadAfa = (assetTable: 'assets_neu' | 'assets') => supabase
+      .from('afa_buchungen')
+      .select(`id, afa_betrag, buchungsdatum, notizen, ${assetTable}!inner(bezeichnung, is_test, art)`)
+      .eq(`${assetTable}.is_test`, false)
+      // buchungsdatum ist eine DATE-Spalte → reine Datums-Strings.
+      .gte('buchungsdatum', from)
+      .lte('buchungsdatum', to);
+
+    let afaTable: 'assets_neu' | 'assets' = 'assets_neu';
+    let { data: afaRows, error: afaErr } = await loadAfa('assets_neu');
+    if (afaErr) {
+      afaTable = 'assets';
+      ({ data: afaRows, error: afaErr } = await loadAfa('assets'));
+    }
+    if (!afaErr && afaRows) {
+      for (const raw of (afaRows as unknown as Record<string, unknown>[])) {
+        const assetRaw = raw[afaTable];
+        const asset = (Array.isArray(assetRaw) ? assetRaw[0] : assetRaw) as
+          | { bezeichnung?: string; art?: string }
+          | null
+          | undefined;
+        const amount = Number(raw.afa_betrag || 0);
+        if (amount <= 0) continue;
+        const bestandKey: BestandKey = artToBestand[asset?.art ?? ''] ?? 'office_equipment';
+        const bestandskonto = await accountForBestand(bestandKey);
+        const line = buildLine(
+          formatAmount(amount),
+          'S',
+          afaKonto,
+          bestandskonto,
+          '',
+          formatDateDATEV(String(raw.buchungsdatum)),
+          `AfA-${String(raw.id).slice(0, 6)}`,
+          escapeField(String(raw.notizen || asset?.bezeichnung || 'Abschreibung')),
+        );
+        lines.push(line);
+      }
+    }
+  } catch (err) {
+    console.error('[datev-export] afa_buchungen-Abruf fehlgeschlagen', err);
+    // Nicht blockend — Export bleibt ohne die neue-Welt-AfA gueltig.
   }
 
   // Build CSV with UTF-8 BOM
