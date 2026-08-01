@@ -421,6 +421,8 @@ export async function GET() {
       const id = b.id as string;
       const st = String(b.status ?? '');
       if (st === 'confirmed' || st === 'awaiting_pickup') {
+        // Termin bereits vereinbart → Aufgabe verschwindet.
+        if (b.pickup_coordination_done_at) continue;
         const rf = String(b.rental_from ?? '').slice(0, 10);
         if (!rf) continue;
         const pickupDate = toIsoDate(
@@ -435,6 +437,8 @@ export async function GET() {
           });
         }
       } else if (st === 'picked_up') {
+        // Termin bereits vereinbart → Aufgabe verschwindet.
+        if (b.return_coordination_done_at) continue;
         const rt = String(b.rental_to ?? '').slice(0, 10);
         if (!rt) continue;
         const returnDate = toIsoDate(

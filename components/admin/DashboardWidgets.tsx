@@ -605,8 +605,12 @@ interface QueueAction {
   color: string;
   /** kleiner = dringlicher, steht weiter oben in der Liste */
   weight: number;
-  /** 'link' = Navigation (Default), 'mark-shipped' = setzt Status direkt auf 'shipped' */
-  kind?: 'link' | 'mark-shipped';
+  /**
+   * 'link' = Navigation (Default), 'mark-shipped' = setzt Status direkt auf
+   * 'shipped', 'coord-done' = markiert die Abhol-/Rückgabe-Terminabsprache als
+   * vereinbart (Aufgabe verschwindet).
+   */
+  kind?: 'link' | 'mark-shipped' | 'coord-done';
 }
 
 // Beide Versandetiketten fertig? Versandlabel = hinterlegtes Tracking
@@ -680,6 +684,8 @@ interface QueueRow {
   bucket: number;
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
+  /** Nur Terminabsprache-Zeilen: Buchung + Richtung für den „vereinbart"-Button. */
+  coord?: { id: string; type: 'pickup' | 'return' };
 }
 
 // Fälligkeits-Buckets für die Gruppierung im Aufgaben-Widget.
@@ -786,15 +792,20 @@ export function ActionQueueWidget({ data, loading }: {
   const coordinationRows: QueueRow[] = (data?.coordinations ?? []).map((c) => ({
     key: `coord-${c.type}-${c.id}`,
     title: `${c.customer_name || 'Kunde'} · ${c.type === 'pickup' ? 'Abholung' : 'Rückgabe'} ${formatDate(c.due_date)}`,
-    subtitle: c.product_name || 'Buchung',
+    subtitle: c.type === 'pickup' ? '📞 Abholtermin vereinbaren' : '📞 Rückgabetermin vereinbaren',
     action: {
-      label: c.type === 'pickup' ? '📞 Abholtermin vereinbaren' : '📞 Rückgabetermin vereinbaren',
+      // Klick auf den Button markiert den Termin als vereinbart → Aufgabe
+      // verschwindet. Der Rest der Zeile bleibt ein Link zur Buchung (anrufen,
+      // Notiz hinterlegen, ggf. Termin-Override setzen).
+      label: '✓ Termin vereinbart',
       href: `/admin/buchungen/${c.id}`,
-      color: C.cyan,
+      color: C.green,
       weight: 1,
+      kind: 'coord-done',
     },
     sortDate: c.due_date,
     bucket: bucketForDays(daysUntilDue(c.due_date, today)),
+    coord: { id: c.id, type: c.type },
   }));
 
   const bookingRows: QueueRow[] = (data?.items ?? []).flatMap((b) => {
@@ -862,6 +873,27 @@ export function ActionQueueWidget({ data, loading }: {
       setDoneIds((prev) => new Set(prev).add(bookingId));
     } catch {
       setErrorId(bookingId);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Abhol-/Rückgabe-Terminabsprache als vereinbart markieren → Aufgabe wird
+  // optimistisch ausgeblendet.
+  async function markCoordinationDone(rowKey: string, coord: { id: string; type: 'pickup' | 'return' }) {
+    if (busyId) return;
+    setBusyId(rowKey);
+    setErrorId(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${coord.id}/coordination-done`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: coord.type, done: true }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setDoneIds((prev) => new Set(prev).add(rowKey));
+    } catch {
+      setErrorId(rowKey);
     } finally {
       setBusyId(null);
     }
@@ -957,10 +989,15 @@ export function ActionQueueWidget({ data, loading }: {
               </div>
             );
 
-            // Status-setzende Aktion (z.B. "Als versendet markieren") → Button,
-            // Rest der Zeile bleibt ein Link zur Buchungsdetailseite.
-            if (row.action.kind === 'mark-shipped') {
+            // Aktion mit Handler (Status setzen / Termin als vereinbart
+            // markieren) → Button, Rest der Zeile bleibt ein Link zur
+            // Buchungsdetailseite.
+            if (row.action.kind === 'mark-shipped' || row.action.kind === 'coord-done') {
               const busy = busyId === row.key;
+              const onClick =
+                row.action.kind === 'coord-done' && row.coord
+                  ? () => markCoordinationDone(row.key, row.coord!)
+                  : () => markShipped(row.key);
               return (
                 <Fragment key={row.key}>
                   {header}
@@ -971,7 +1008,7 @@ export function ActionQueueWidget({ data, loading }: {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => markShipped(row.key)}
+                      onClick={onClick}
                       style={{
                         fontSize: 11, fontWeight: 700, color: row.action.color,
                         background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,

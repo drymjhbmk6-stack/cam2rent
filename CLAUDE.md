@@ -1241,10 +1241,27 @@ vereinbart).
   Verifizierungen). Verschwinden automatisch, sobald die Buchung weiterläuft
   (übergeben/zurückgegeben). Der Admin macht den Termin dann per Nachricht/Anruf
   aus und kann bei Bedarf `ship_date_override`/`return_due_date_override` setzen.
+- **„Termin vereinbart" — Aufgabe manuell abhaken (Stand 2026-08-01):** Jede
+  Termin-Aufgabe im Widget hat rechts einen grünen Button **„✓ Termin
+  vereinbart"** (`QueueAction.kind='coord-done'`); der Rest der Zeile bleibt ein
+  Link auf die Buchung (anrufen/Notiz/Override). Klick ruft **`POST
+  /api/admin/booking/[id]/coordination-done`** (`{ type:'pickup'|'return',
+  done?:boolean }`, Permission via Prefix `/api/admin/booking` → `tagesgeschaeft`)
+  und blendet die Zeile optimistisch aus (`doneIds`, kein Parent-Reload). Der
+  Endpoint setzt `bookings.pickup_coordination_done_at` bzw.
+  `return_coordination_done_at` auf `now()` (mit `done:false` wieder leerbar →
+  Aufgabe erscheint erneut). `dashboard-data` überspringt die Coordination, sobald
+  der jeweilige Marker gesetzt ist (`select('*')` lädt ihn ohne API-Change; fehlt
+  die Migration → Marker `undefined` → Aufgabe bleibt wie bisher live). Migration
+  `supabase/supabase-bookings-coordination-done.sql` (idempotent, additiv, 2 neue
+  Timestamp-Spalten, getrennt von den Reminder-Dedup-Markern). Audit
+  `booking.coordination_done`.
 - **Go-Live TODO:**
-  1. Migration `supabase/supabase-bookings-coordination-reminder.sql` ausführen.
-     Ohne sie erscheinen die Aufgaben im Dashboard trotzdem (live), nur der Push
-     ist inaktiv (`migration_pending`).
+  1. Migrationen `supabase/supabase-bookings-coordination-reminder.sql` **und**
+     `supabase/supabase-bookings-coordination-done.sql` ausführen. Ohne die
+     Reminder-Migration erscheinen die Aufgaben im Dashboard trotzdem (live), nur
+     der Push ist inaktiv (`migration_pending`). Ohne die Done-Migration liefert
+     der „✓ Termin vereinbart"-Button 503 (Aufgabe lässt sich nicht abhaken).
   2. Hetzner-Crontab (mehrmals täglich, `--resolve` umgeht Cloudflare):
      ```
      0 8,13,18 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/pickup-return-reminder
