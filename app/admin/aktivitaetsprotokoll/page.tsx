@@ -119,6 +119,11 @@ const ACTION_LABELS: Record<string, string> = {
   'firmware.check_run': 'Firmware-Check (alle Kameras) ausgeführt',
   'firmware.check_one': 'Firmware-Check (eine Kamera) ausgeführt',
   'firmware.mark_seen': 'Firmware-Version als gesehen markiert',
+  // Verbrauchsmaterial
+  'verbrauch.create': 'Verbrauchsartikel angelegt',
+  'verbrauch.update': 'Verbrauchsartikel bearbeitet',
+  'verbrauch.adjust': 'Verbrauchsbestand angepasst',
+  'verbrauch.delete': 'Verbrauchsartikel gelöscht',
   // Legacy (Unterstrich-Namen, falls noch im Bestand)
   booking_cancelled: 'Buchung storniert',
   booking_confirmed: 'Buchung bestätigt',
@@ -175,6 +180,7 @@ const ENTITY_LABELS: Record<string, string> = {
   email_template: 'E-Mail-Vorlage',
   availability_alert: 'Verfügbarkeits-Alert',
   firmware_check: 'Firmware-Check',
+  verbrauchsartikel: 'Verbrauchsmaterial',
   nachricht: 'Konversation',
 };
 

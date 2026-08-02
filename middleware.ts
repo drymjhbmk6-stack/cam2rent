@@ -166,6 +166,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/anlagen', perm: 'finanzen' },
   { prefix: '/admin/inventar', perm: 'katalog' },
   { prefix: '/admin/firmware', perm: 'katalog' },
+  { prefix: '/admin/verbrauch', perm: 'katalog' },
   { prefix: '/admin/scan', perm: 'katalog' },
   { prefix: '/admin/kunden-uebersicht', perm: 'kunden' },
   { prefix: '/admin/tagesgeschaeft', perm: 'tagesgeschaeft' },
@@ -249,6 +250,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/suppliers', perm: 'katalog' },
   { prefix: '/api/admin/purchase-items', perm: 'katalog' },
   { prefix: '/api/admin/firmware', perm: 'katalog' },
+  { prefix: '/api/admin/verbrauch', perm: 'katalog' },
   // Rabatte & Aktionen
   { prefix: '/api/admin/coupons', perm: 'preise' },
   { prefix: '/api/admin/angebote', perm: 'preise' },

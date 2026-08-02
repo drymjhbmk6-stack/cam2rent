@@ -7,6 +7,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 import { sendShippingConfirmation } from '@/lib/email';
 import { fetchParcelsByOrderNumber, type ParcelStatus } from '@/lib/sendcloud-tracking';
 import { logAudit } from '@/lib/audit';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 /**
  * Automatische Versand-/Retoure-Statussteuerung via Sendcloud-Live-Status.
@@ -196,6 +197,9 @@ export async function GET(req: NextRequest) {
           const fromStatus = curStatus;
           curStatus = 'shipped';
           shipped++;
+
+          // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent).
+          deductConsumablesForBooking(supabase, b.id).catch(() => {});
 
           const trackingNumber = b.tracking_number || best?.trackingNumber || '';
           const trackingUrl = b.tracking_url || best?.trackingUrl || '';

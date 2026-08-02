@@ -153,6 +153,13 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
         </svg>
       );
+    case 'verbrauch_low_stock':
+      // Karton mit Warnung — Verbrauchsmaterial fast leer
+      return (
+        <svg style={iconStyle} fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V7a2 2 0 00-1-1.73l-6-3.5a2 2 0 00-2 0l-6 3.5A2 2 0 004 7v6M12 9v3m0 6h.01M12 15a3 3 0 100 6 3 3 0 000-6z" />
+        </svg>
+      );
     case 'pickup_coordination':
     case 'return_coordination':
       // Telefon-Hörer — Termin mit Kunde vereinbaren

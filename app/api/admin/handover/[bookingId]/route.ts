@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 import { getClientIp } from '@/lib/rate-limit';
 import { applyScannedUnits, parseScannedUnits } from '@/lib/scan-substitutions';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -238,6 +239,12 @@ export async function POST(
     statusUpdated = !!flipped;
   } catch (e) {
     console.error('[handover/save] Status-Flip auf picked_up fehlgeschlagen:', e);
+  }
+
+  // Verbrauchsmaterial-Auto-Abzug bei Abholung — nur wenn der Status wirklich
+  // auf picked_up geflippt ist (fire-and-forget, idempotent pro Buchung).
+  if (statusUpdated) {
+    deductConsumablesForBooking(supabase, bookingId).catch(() => {});
   }
 
   // Audit-Log (Admin-User wird im Helper auto-resolved)

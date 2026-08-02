@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { sendShippingConfirmation } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 /**
  * POST /api/admin/booking/[id]/mark-shipped
@@ -79,6 +80,9 @@ export async function POST(
       { status: 409 },
     );
   }
+
+  // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent pro Buchung).
+  deductConsumablesForBooking(supabase, id).catch(() => {});
 
   // Versandbestaetigung an den Kunden (fire-and-forget). Tracking wird genutzt,
   // falls vorhanden — sonst sendet die Mail ohne Tracking-Block.

@@ -130,6 +130,9 @@ const iconSocial = (
 const iconFilm = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 4h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" /></svg>
 );
+const iconVerbrauch = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>
+);
 
 // ============================================================
 // Navigation groups
@@ -167,6 +170,7 @@ const KATALOG_ITEMS: NavItem[] = [
   { href: '/admin/sets', label: 'Sets', icon: iconSets, perm: 'katalog' },
   { href: '/admin/zubehoer', label: 'Zubehör', icon: iconAccessory, perm: 'katalog' },
   { href: '/admin/inventar', label: 'Inventar', icon: iconSets, perm: 'katalog' },
+  { href: '/admin/verbrauch', label: 'Verbrauch', icon: iconVerbrauch, perm: 'katalog' },
   { href: '/admin/firmware', label: 'Firmware-Updates', icon: iconCog, perm: 'katalog' },
 ];
 
@@ -554,7 +558,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     mein: ['/admin/mein'],
     tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/sendungen', '/admin/verfuegbarkeit-alerts'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
-    katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/firmware'],
+    katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/verbrauch', '/admin/firmware'],
     preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
     content: ['/admin/blog', '/admin/social', '/admin/content'],
     webseite: ['/admin/startseite', '/admin/legal'],

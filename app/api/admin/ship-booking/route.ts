@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendShippingConfirmation } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { buildTrackingUrl, isAllowedCarrier } from '@/lib/tracking-url';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 /**
  * POST /api/admin/ship-booking
@@ -97,6 +98,9 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent pro Buchung).
+    deductConsumablesForBooking(supabase, bookingId).catch(() => {});
 
     // Versand-E-Mail an Kunden (fire-and-forget)
     if (booking.customer_email) {

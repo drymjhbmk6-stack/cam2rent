@@ -61,6 +61,7 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
 
   // ── Katalog ───────────────────────────────────────────────
   { type: 'firmware_update_available', label: 'Firmware-Update verfügbar', permission: 'katalog', group: 'Katalog' },
+  { type: 'verbrauch_low_stock', label: 'Verbrauchsmaterial fast leer', permission: 'katalog', group: 'Katalog' },
 
   // ── Berichte ──────────────────────────────────────────────
   { type: 'new_feedback', label: 'Neues Feedback', permission: 'berichte', group: 'Berichte' },

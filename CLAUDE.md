@@ -5626,6 +5626,49 @@ Vermischung.
   sie bleibt das Feature inaktiv (APIs liefern leere Listen, normaler
   Buchungsflow unberührt).
 
+### Interner Verbraucher-Zähler (Verbrauchsmaterial, Stand 2026-08-02)
+Neuer Katalog-Bereich `/admin/verbrauch` (Sidebar-Gruppe „Katalog", nach
+„Inventar", Permission `katalog`) — ein reiner **Zähler für Verbrauchsmaterial**,
+das pro Versand/Abholung aufgebraucht wird und NICHT vermietet wird (z.B.
+Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
+`inventar_units`, keine Kunden-Sichtbarkeit, keine Verfügbarkeits-/Buchungslogik.
+- **Was der Admin kann:** Artikel anlegen (Name + Anfangsbestand), Bestand manuell
+  anpassen (−/+ Buttons + „auf Wert setzen"), pro Artikel **Auto-Abzug** aktivieren
+  (Häkchen) mit eigener **Abzugsmenge**, und eine **Warnschwelle** setzen.
+- **Migration `supabase/supabase-verbrauchsartikel.sql`** (idempotent): Tabelle
+  `verbrauchsartikel` (`name`, `bestand INTEGER`, `auto_deduct BOOLEAN`,
+  `deduct_qty INTEGER CHECK ≥1`, `warn_threshold INTEGER NULL`,
+  `low_stock_notified BOOLEAN` = Dedup gegen Push-Spam, `sort_order`,
+  Zeitstempel; RLS service-role-only) **+ additiv** `bookings.consumables_deducted_at
+  TIMESTAMPTZ` (Idempotenz-Marker fürs Auto-Abzug, Muster wie `return_arrived_at`).
+- **Auto-Abzug** über den Shared-Helper `lib/verbrauch-deduct.ts` →
+  `deductConsumablesForBooking(supabase, bookingId)` (fire-and-forget, defensiv,
+  wirft nie): (1) **atomarer Claim** auf `bookings.consumables_deducted_at`
+  (`.is(marker,null).or('is_test.is.null,is_test.eq.false')`) → exakt **einmal pro
+  Buchung**, unabhängig davon welcher Status-Schreiber gewinnt, **Test-Buchungen
+  ausgenommen**; (2) alle Artikel mit `auto_deduct=true` um `deduct_qty` runter,
+  **Floor bei 0** (nie negativ); (3) Unterschreitet der neue Bestand `warn_threshold`
+  und `!low_stock_notified` → einmalig `verbrauch_low_stock`-Benachrichtigung
+  (Push an Katalog-Mitarbeiter/Owner) + Flag setzen (wird beim manuellen
+  Hochsetzen über die Schwelle wieder zurückgesetzt → Warnung reaktiviert).
+- **Eingehängt in alle 6 Status-Schreiber** (fire-and-forget nach erfolgreichem
+  Flip auf `shipped`/`picked_up`): `booking/[id]/mark-shipped`, `ship-booking`,
+  `cron/sendcloud-status-sync` (shipped-Flip), `update-booking-status`
+  (shipped+picked_up), `booking/[id]` PATCH (shipped+picked_up),
+  `handover/[bookingId]` (picked_up, nur wenn `statusUpdated`). Der Helper ist
+  idempotent, daher auch bei den nicht-status-atomaren Schreibern sicher.
+- **APIs** (Permission `katalog` via `middleware.ts`, kein In-Route-Check):
+  `GET/POST /api/admin/verbrauch` (Liste / anlegen),
+  `PATCH/DELETE /api/admin/verbrauch/[id]`. PATCH kennt zwei Modi in einem Body:
+  Feld-Edit (`name`/`auto_deduct`/`deduct_qty`/`warn_threshold`/`bestand`) **und**
+  Delta `{ adjust: ±N }` (Floor bei 0). Defensiv bei fehlender Migration (GET →
+  leere Liste + `migration_pending`, POST/PATCH → 503). Audit `verbrauch.create`/
+  `.update`/`.adjust`/`.delete` (+ Labels im Aktivitätsprotokoll).
+- **Notification-Typ** `verbrauch_low_stock` in `lib/notification-types.ts`
+  (Gruppe Katalog, Permission `katalog`) + Icon in `NotificationDropdown` — greift
+  automatisch in die Pro-Mitarbeiter-Push-Prefs.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ## Offene Punkte
 
 ### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)
@@ -6106,6 +6149,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Verbraucher-Zähler-Migration auszuführen:** `supabase/supabase-verbrauchsartikel.sql`
+  (idempotent: Tabelle `verbrauchsartikel` + additiv `bookings.consumables_deducted_at`).
+  Ohne sie ist das Feature inaktiv: `/admin/verbrauch` lädt (leer + Migrations-Hinweis),
+  Anlegen liefert 503, der Auto-Abzug ist ein No-Op (Helper defensiv). Der neue
+  Notification-Typ `verbrauch_low_stock` ist ohne Migration wirkungslos. Siehe
+  „Interner Verbraucher-Zähler (Verbrauchsmaterial)". Empfohlen ASAP ausführen.
 - **Fremdwährungs-Migration auszuführen:** `supabase/supabase-belege-fremdwaehrung.sql`
   (idempotent, additiv: `belege.fremdwaehrung`/`wechselkurs`/`wechselkurs_datum`/
   `original_summe_brutto`/`waehrung_hinweis_dismissed_at`). Ohne sie läuft der

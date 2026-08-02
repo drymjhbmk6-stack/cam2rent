@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendReviewRequest } from '@/lib/email';
 import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 import { logAudit } from '@/lib/audit';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 /**
  * PATCH /api/admin/update-booking-status
@@ -49,6 +50,11 @@ export async function PATCH(req: NextRequest) {
     changes: { status },
     request: req,
   });
+
+  // Verbrauchsmaterial-Auto-Abzug bei Versand/Abholung (idempotent pro Buchung).
+  if (status === 'shipped' || status === 'picked_up') {
+    deductConsumablesForBooking(supabase, bookingId).catch(() => {});
+  }
 
   // Nach Abschluss: Abschluss-Bestätigung ("alles in Ordnung" + Kundenmaterial),
   // non-blocking. Dedup im Helper verhindert Doppel-Mail mit dem Retouren-Pfad.

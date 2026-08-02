@@ -26,6 +26,7 @@ import { sanitizeOverrideDate } from '@/lib/booking-buffer';
 import { createCancellationCreditNote, renderCancellationBelegPdf } from '@/lib/buchhaltung/credit-note-document';
 import { computeCancellationSuggestion, refundBelowSuggestion, normalizeCancellationReason } from '@/data/cancellation';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -2086,6 +2087,11 @@ export async function PATCH(
       { error: `Status hat sich zwischenzeitlich geändert (war: ${preStatus}). Bitte Buchung neu laden.` },
       { status: 409 },
     );
+  }
+
+  // Verbrauchsmaterial-Auto-Abzug bei Versand/Abholung (idempotent pro Buchung).
+  if (status === 'shipped' || status === 'picked_up') {
+    deductConsumablesForBooking(supabase, id).catch(() => {});
   }
 
   // Versand-Mail mit korrigiertem Tracking-Link an den Kunden (non-blocking).
