@@ -24,6 +24,12 @@ interface Verbrauchsartikel {
 interface AccessoryLite {
   id: string;
   name: string;
+  compatible_product_ids: string[];
+}
+
+interface CameraLite {
+  id: string;
+  name: string;
 }
 
 const CACHE_KEY = 'admin:verbrauch:items';
@@ -59,19 +65,38 @@ function renderNote(text: string) {
   );
 }
 
-// Mehrfachauswahl (Checkbox-Liste + Suche). Modul-scope, damit sie beim
-// Eltern-Re-Render (z.B. Checkbox-Toggle) nicht neu gemountet wird.
+// Mehrfachauswahl (Checkbox-Liste + Suche), nach Kamera gruppiert. Modul-scope,
+// damit sie beim Eltern-Re-Render (z.B. Checkbox-Toggle) nicht neu gemountet wird.
 function AccessoryMultiSelect({
   accessories,
+  cameras,
   selected,
   onToggle,
 }: {
   accessories: AccessoryLite[];
+  cameras: CameraLite[];
   selected: string[];
   onToggle: (id: string) => void;
 }) {
   const [q, setQ] = useState('');
-  const filtered = accessories.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
+  const query = q.trim().toLowerCase();
+  const filtered = query ? accessories.filter((a) => a.name.toLowerCase().includes(query)) : accessories;
+
+  // Nach Kamera gruppieren: ein Zubehör erscheint unter jeder kompatiblen Kamera.
+  // Leere compatible_product_ids = für alle Kameras → eigene Gruppe „Alle Kameras".
+  const knownIds = new Set(cameras.map((c) => c.id));
+  const groups: { key: string; label: string; items: AccessoryLite[] }[] = [];
+  for (const c of cameras) {
+    const items = filtered.filter((a) => (a.compatible_product_ids || []).includes(c.id));
+    if (items.length) groups.push({ key: c.id, label: c.name, items });
+  }
+  const universal = filtered.filter((a) => !(a.compatible_product_ids?.length));
+  if (universal.length) groups.push({ key: '__all__', label: 'Alle Kameras', items: universal });
+  const unmatched = filtered.filter(
+    (a) => (a.compatible_product_ids?.length ?? 0) > 0 && !a.compatible_product_ids.some((id) => knownIds.has(id)),
+  );
+  if (unmatched.length) groups.push({ key: '__none__', label: 'Ohne Kamera-Zuordnung', items: unmatched });
+
   return (
     <div className="rounded border border-slate-700 bg-[#0a0f1e]">
       <input
@@ -80,18 +105,25 @@ function AccessoryMultiSelect({
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
-      <div className="max-h-48 overflow-y-auto p-1">
+      <div className="max-h-56 overflow-y-auto p-1">
         {accessories.length === 0 && <div className="px-2 py-2 text-xs text-slate-500">Kein Zubehör geladen.</div>}
-        {filtered.map((a) => {
-          const on = selected.includes(a.id);
-          return (
-            <label key={a.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm ${on ? 'bg-cyan-500/10' : 'hover:bg-slate-800/60'}`}>
-              <input type="checkbox" checked={on} onChange={() => onToggle(a.id)} className="w-4 h-4" />
-              <span className="truncate">{a.name}</span>
-            </label>
-          );
-        })}
-        {filtered.length === 0 && accessories.length > 0 && (
+        {groups.map((g) => (
+          <div key={g.key}>
+            <div className="sticky top-0 bg-[#0a0f1e] px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-400/80">
+              {g.label}
+            </div>
+            {g.items.map((a) => {
+              const on = selected.includes(a.id);
+              return (
+                <label key={`${g.key}:${a.id}`} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm ${on ? 'bg-cyan-500/10' : 'hover:bg-slate-800/60'}`}>
+                  <input type="checkbox" checked={on} onChange={() => onToggle(a.id)} className="w-4 h-4" />
+                  <span className="truncate">{a.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        ))}
+        {groups.length === 0 && accessories.length > 0 && (
           <div className="px-2 py-2 text-xs text-slate-500">Keine Treffer.</div>
         )}
       </div>
@@ -113,6 +145,7 @@ export default function VerbrauchPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [migrationPending, setMigrationPending] = useState(false);
   const [accessories, setAccessories] = useState<AccessoryLite[]>([]);
+  const [cameras, setCameras] = useState<CameraLite[]>([]);
   const accById = new Map(accessories.map((a) => [a.id, a.name]));
   const [lightbox, setLightbox] = useState<string | null>(null);
   const didMount = useRef(false);
@@ -172,7 +205,11 @@ export default function VerbrauchPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && Array.isArray(data.accessories)) {
         const list: AccessoryLite[] = data.accessories
-          .map((a: { id: string; name: string }) => ({ id: a.id, name: a.name }))
+          .map((a: { id: string; name: string; compatible_product_ids?: string[] }) => ({
+            id: a.id,
+            name: a.name,
+            compatible_product_ids: Array.isArray(a.compatible_product_ids) ? a.compatible_product_ids : [],
+          }))
           .sort((x: AccessoryLite, y: AccessoryLite) => x.name.localeCompare(y.name));
         setAccessories(list);
       }
@@ -181,11 +218,26 @@ export default function VerbrauchPage() {
     }
   }
 
+  async function loadCameras() {
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json().catch(() => null);
+      const arr = Array.isArray(data) ? data : Array.isArray(data?.products) ? data.products : [];
+      const list: CameraLite[] = arr
+        .filter((p: { id?: string; name?: string }) => p?.id && p?.name)
+        .map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }));
+      setCameras(list);
+    } catch {
+      // Ohne Kameras fällt die Liste auf „Ohne Kamera-Zuordnung" zurück.
+    }
+  }
+
   useEffect(() => {
     if (didMount.current) return;
     didMount.current = true;
     void reload();
     void loadAccessories();
+    void loadCameras();
   }, []);
 
   // ESC schließt die Lightbox.
@@ -472,6 +524,7 @@ export default function VerbrauchPage() {
                 <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
                 <AccessoryMultiSelect
                   accessories={accessories}
+                  cameras={cameras}
                   selected={nLinked}
                   onToggle={(id) => setNLinked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))}
                 />
@@ -613,6 +666,7 @@ export default function VerbrauchPage() {
                       <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
                       <AccessoryMultiSelect
                         accessories={accessories}
+                        cameras={cameras}
                         selected={eLinked}
                         onToggle={(id) => setELinked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))}
                       />

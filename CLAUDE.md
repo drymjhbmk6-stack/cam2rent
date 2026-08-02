@@ -5739,6 +5739,13 @@ Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
     (URLs auf der Karte klickbar), Foto-Thumbnail auf der Karte (Klick →
     Lightbox), Trigger-/🔗-Badges. Foto + Notiz erscheinen erst, wenn die neuen
     Spalten in der DB existieren (sonst greift die Warnung).
+  - **Zubehör-Auswahl nach Kamera gruppiert:** die Mehrfach-Auswahl lädt
+    zusätzlich `/api/products` und gruppiert das Zubehör per
+    `accessories.compatible_product_ids` unter Kamera-Überschriften (leere
+    Kompatibilität → Gruppe „Alle Kameras", unbekannte IDs → „Ohne
+    Kamera-Zuordnung"). Ein Zubehör mit mehreren kompatiblen Kameras erscheint
+    unter jeder — so sind gleichnamige, kameraspezifische Einträge (z.B. drei
+    „Extra Akku", je Kamera) unterscheidbar. Auswahl bleibt id-basiert.
 - **Go-Live TODO:** siehe „Noch offen".
 
 ## Offene Punkte
