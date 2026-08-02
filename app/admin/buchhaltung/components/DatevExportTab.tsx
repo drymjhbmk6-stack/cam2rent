@@ -151,7 +151,7 @@ export default function DatevExportTab() {
           DATEV-Buchungsstapel Export
         </h3>
 
-        <div style={{ marginBottom: 20 }}><DateRangePicker onChange={handleRangeChange} /></div>
+        <div style={{ marginBottom: 20 }}><DateRangePicker onChange={handleRangeChange} persistKey="admin:buchhaltung:datev" /></div>
 
         <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
           Konten-Konfiguration: <a href="?tab=einstellungen" style={{ color: '#06b6d4', textDecoration: 'none' }}>Einstellungen →</a>

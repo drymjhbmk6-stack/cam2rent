@@ -7,6 +7,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const BOOKINGS_CACHE_KEY = 'admin:alle-buchungen';
 
@@ -88,12 +89,12 @@ export default function AdminBuchungenPage() {
   const [bookings, setBookings] = useState<Booking[]>(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) === undefined);
   const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  const [search, setSearch] = useState('');
-  const [hideFinished, setHideFinished] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>('action');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [statusFilter, setStatusFilter] = usePersistentState<StatusFilter>('admin:buchungen:statusFilter', 'all');
+  const [dateFilter, setDateFilter] = usePersistentState<DateFilter>('admin:buchungen:dateFilter', 'all');
+  const [search, setSearch] = usePersistentState('admin:buchungen:search', '');
+  const [hideFinished, setHideFinished] = usePersistentState('admin:buchungen:hideFinished', true);
+  const [sortKey, setSortKey] = usePersistentState<SortKey>('admin:buchungen:sortKey', 'action');
+  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('admin:buchungen:sortDir', 'asc');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;

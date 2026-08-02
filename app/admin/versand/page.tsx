@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, escapeHtml } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Booking {
   id: string;
@@ -104,7 +105,7 @@ export default function AdminVersandPage() {
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'versenden' | 'unterwegs' | 'rueckgabe'>('versenden');
+  const [tab, setTab] = usePersistentState<'versenden' | 'unterwegs' | 'rueckgabe'>('admin:versand:tab', 'versenden');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Ship modal state

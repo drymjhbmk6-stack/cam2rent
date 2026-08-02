@@ -5,6 +5,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import DamageReportModal from '@/components/admin/DamageReportModal';
 import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const DAMAGE_CACHE_KEY = 'admin:damage';
 
@@ -46,7 +47,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
 export default function AdminSchaedenPage() {
   const [reports, setReports] = useState<DamageReport[]>(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) === undefined);
-  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [filter, setFilter] = usePersistentState<StatusFilter>('admin:schaeden:filter', 'all');
   const [selectedReport, setSelectedReport] = useState<DamageReport | null>(null);
   const [editForm, setEditForm] = useState({
     damage_amount: '',

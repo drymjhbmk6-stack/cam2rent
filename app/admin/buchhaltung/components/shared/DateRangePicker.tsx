@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 type PeriodType = 'monat' | 'quartal' | 'jahr' | 'benutzerdefiniert';
 
@@ -12,6 +13,26 @@ interface DateRange {
 interface DateRangePickerProps {
   onChange: (range: DateRange) => void;
   initialPeriod?: PeriodType;
+  /**
+   * Wenn gesetzt, merkt sich der Picker den gewählten Zeitraum (Periode +
+   * benutzerdefinierte Daten) pro Gerät und stellt ihn beim nächsten Öffnen
+   * wieder her. Ohne Key = bisheriges Verhalten (nicht gespeichert).
+   */
+  persistKey?: string;
+}
+
+/**
+ * Hooks dürfen nicht bedingt aufgerufen werden → beide Varianten laufen immer,
+ * zurückgegeben wird nur die passende. Die inaktive Variante wird nie über
+ * ihren Setter verändert und schreibt daher nichts in localStorage.
+ */
+function useMaybePersistent<T>(
+  key: string | undefined,
+  def: T,
+): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const persisted = usePersistentState<T>(key ?? '__daterange_disabled__', def);
+  const plain = useState<T>(def);
+  return key ? persisted : plain;
 }
 
 // WICHTIG: NICHT ueber .toISOString() formatieren. new Date(y, m, d) erzeugt
@@ -50,10 +71,10 @@ function getYearRange(date: Date): DateRange {
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 }
 
-export default function DateRangePicker({ onChange, initialPeriod = 'monat' }: DateRangePickerProps) {
-  const [periodType, setPeriodType] = useState<PeriodType>(initialPeriod);
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+export default function DateRangePicker({ onChange, initialPeriod = 'monat', persistKey }: DateRangePickerProps) {
+  const [periodType, setPeriodType] = useMaybePersistent<PeriodType>(persistKey ? `${persistKey}:period` : undefined, initialPeriod);
+  const [customFrom, setCustomFrom] = useMaybePersistent<string>(persistKey ? `${persistKey}:from` : undefined, '');
+  const [customTo, setCustomTo] = useMaybePersistent<string>(persistKey ? `${persistKey}:to` : undefined, '');
 
   const computeRange = useCallback((): DateRange | null => {
     const now = new Date();

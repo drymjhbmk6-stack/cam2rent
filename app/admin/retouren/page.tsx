@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const RETOUREN_BOOKINGS_KEY = 'admin:retouren-bookings';
 
@@ -148,7 +149,7 @@ type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'abgeschlossen';
 export default function AdminVersandRueckgabePage() {
   const [bookings, setBookings] = useState<FulfillmentBooking[]>(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) === undefined);
-  const [tab, setTab] = useState<Tab>('versenden');
+  const [tab, setTab] = usePersistentState<Tab>('admin:retouren:tab', 'versenden');
   const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
 
   // Sendcloud-Etikett-Modal nur fuer das HIN-Etikett. Das Retour-Etikett

@@ -124,7 +124,7 @@ function EuerReport() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <DateRangePicker onChange={handleRangeChange} initialPeriod="jahr" />
+        <DateRangePicker onChange={handleRangeChange} initialPeriod="jahr" persistKey="admin:buchhaltung:euer" />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <ExportButton label="Als CSV exportieren" onClick={handleExport} variant="primary" disabled={!data} />
           <ExportButton label="WISO-CSV (buchungsgenau)" onClick={handleWisoExport} disabled={!data} />
@@ -451,7 +451,7 @@ function UmsatzlisteReport() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <DateRangePicker onChange={handleRangeChange} />
+        <DateRangePicker onChange={handleRangeChange} persistKey="admin:buchhaltung:umsatzliste" />
         <ExportButton label="CSV-Export" onClick={handleCsvExport} disabled={items.length === 0} />
       </div>
       <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
@@ -529,7 +529,7 @@ function UstVAPrep() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}><DateRangePicker onChange={handleRangeChange} initialPeriod="quartal" /></div>
+      <div style={{ marginBottom: 24 }}><DateRangePicker onChange={handleRangeChange} initialPeriod="quartal" persistKey="admin:buchhaltung:ustva" /></div>
       {loading ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Lade...</div>
       ) : data ? (

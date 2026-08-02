@@ -324,7 +324,7 @@ export default function StripeAbgleichTab() {
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
-        <DateRangePicker onChange={handleRangeChange} />
+        <DateRangePicker onChange={handleRangeChange} persistKey="admin:buchhaltung:stripe" />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={handleSync} disabled={syncing || !range.from} style={{ padding: '8px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: syncing ? 'not-allowed' : 'pointer', background: '#06b6d4', color: '#0f172a', border: 'none', opacity: syncing ? 0.5 : 1 }}>
             {syncing ? 'Synchronisiere...' : 'Synchronisieren'}

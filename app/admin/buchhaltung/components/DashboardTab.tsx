@@ -149,7 +149,7 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
 
       {/* Header mit Zeitraum + Steuermodus */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
-        <DateRangePicker onChange={handleRangeChange} />
+        <DateRangePicker onChange={handleRangeChange} persistKey="admin:buchhaltung:dashboard" />
         {data?.taxMode && (
           <div style={{ fontSize: 13, color: '#94a3b8', background: '#0f172a', padding: '6px 14px', borderRadius: 8, border: '1px solid #1e293b' }}>
             Steuermodus: <span style={{ color: '#06b6d4', fontWeight: 600 }}>{getTaxModeLabel(data.taxMode as 'kleinunternehmer' | 'regelbesteuerung')}</span>

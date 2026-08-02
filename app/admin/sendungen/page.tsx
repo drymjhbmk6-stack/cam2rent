@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const SENDUNGEN_CACHE_KEY = 'admin:sendungen';
 
@@ -84,9 +85,9 @@ export default function SendungenPage() {
   const [entries, setEntries] = useState<SendungEntry[]>(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
-  const [carrierFilter, setCarrierFilter] = useState<'' | 'DHL' | 'DPD'>('');
-  const [q, setQ] = useState('');
-  const [showArchive, setShowArchive] = useState(false);
+  const [carrierFilter, setCarrierFilter] = usePersistentState<'' | 'DHL' | 'DPD'>('admin:sendungen:carrierFilter', '');
+  const [q, setQ] = usePersistentState('admin:sendungen:q', '');
+  const [showArchive, setShowArchive] = usePersistentState('admin:sendungen:showArchive', false);
 
   const load = useCallback(async () => {
     // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
