@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface AuditEntry {
   id: string;
@@ -197,12 +198,12 @@ export default function AktivitaetsprotokollPage() {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [filterAction, setFilterAction] = useState('');
-  const [filterEntityType, setFilterEntityType] = useState('');
-  const [filterAdmin, setFilterAdmin] = useState('');
-  const [filterSearch, setFilterSearch] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterAction, setFilterAction] = usePersistentState('admin:aktivitaetsprotokoll:action', '');
+  const [filterEntityType, setFilterEntityType] = usePersistentState('admin:aktivitaetsprotokoll:entityType', '');
+  const [filterAdmin, setFilterAdmin] = usePersistentState('admin:aktivitaetsprotokoll:admin', '');
+  const [filterSearch, setFilterSearch] = usePersistentState('admin:aktivitaetsprotokoll:search', '');
+  const [filterDateFrom, setFilterDateFrom] = usePersistentState('admin:aktivitaetsprotokoll:dateFrom', '');
+  const [filterDateTo, setFilterDateTo] = usePersistentState('admin:aktivitaetsprotokoll:dateTo', '');
 
   // Bekannte Admin-User fuer das Mitarbeiter-Filter-Dropdown
   const [availableAdmins, setAvailableAdmins] = useState<{ id: string; name: string }[]>([]);

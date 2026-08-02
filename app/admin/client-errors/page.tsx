@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface ClientError {
   id: string;
@@ -82,11 +83,11 @@ export default function ClientErrorsPage() {
   const [loading, setLoading] = useState(true);
   const [migrationPending, setMigrationPending] = useState(false);
 
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [onlyAdmin, setOnlyAdmin] = useState(false);
+  const [search, setSearch] = usePersistentState('admin:client-errors:search', '');
+  const [searchInput, setSearchInput] = usePersistentState('admin:client-errors:searchInput', '');
+  const [dateFrom, setDateFrom] = usePersistentState('admin:client-errors:dateFrom', '');
+  const [dateTo, setDateTo] = usePersistentState('admin:client-errors:dateTo', '');
+  const [onlyAdmin, setOnlyAdmin] = usePersistentState('admin:client-errors:onlyAdmin', false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 

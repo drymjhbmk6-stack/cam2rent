@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AnlagenTabs from '@/components/admin/AnlagenTabs';
 import { formatCurrency, fmtDate } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Asset {
   id: string;
@@ -52,10 +53,10 @@ const cyan = '#06b6d4';
 export default function AnlagenPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterKind, setFilterKind] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('active');
-  const [filterMethod, setFilterMethod] = useState<string>('');
-  const [search, setSearch] = useState('');
+  const [filterKind, setFilterKind] = usePersistentState<string>('admin:anlagen:kind', '');
+  const [filterStatus, setFilterStatus] = usePersistentState<string>('admin:anlagen:status', 'active');
+  const [filterMethod, setFilterMethod] = usePersistentState<string>('admin:anlagen:method', '');
+  const [search, setSearch] = usePersistentState('admin:anlagen:search', '');
   const [isTestMode, setIsTestMode] = useState(false);
 
   useEffect(() => {

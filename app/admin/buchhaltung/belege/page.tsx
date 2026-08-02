@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Beleg {
   id: string;
@@ -85,16 +86,16 @@ function getSortValue(b: Beleg, key: SortKey): string | number {
 export default function BelegeListePage() {
   const [belege, setBelege] = useState<Beleg[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = usePersistentState('admin:belege:status', '');
+  const [q, setQ] = usePersistentState('admin:belege:q', '');
   const [scanResult, setScanResult] = useState<{ scanned: number; flagged: number } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [retryStatus, setRetryStatus] = useState<{ done: number; remaining: number; succeeded: number } | null>(null);
   const retryAbortRef = useRef(false);
   // Default: neueste oben — Datum absteigend.
-  const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = usePersistentState<SortKey>('admin:belege:sortKey', 'beleg_datum');
+  const [sortDir, setSortDir] = usePersistentState<SortDir>('admin:belege:sortDir', 'desc');
   const [previewBelegId, setPreviewBelegId] = useState<string | null>(null);
   // Jahr-Dropdown (null = noch nicht initialisiert → springt auf neuestes Jahr)
   const [yearFilter, setYearFilter] = useState<string | null>(null);

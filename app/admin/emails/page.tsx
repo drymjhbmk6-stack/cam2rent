@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface EmailEntry {
   id: string;
@@ -108,9 +109,9 @@ export default function AdminEmailLogPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = usePersistentState('admin:emails:search', '');
+  const [typeFilter, setTypeFilter] = usePersistentState('admin:emails:type', '');
+  const [statusFilter, setStatusFilter] = usePersistentState('admin:emails:status', '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [resendStatusMap, setResendStatusMap] = useState<Record<string, ResendStatus>>({});
 

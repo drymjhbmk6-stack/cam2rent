@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Ausgabe {
   id: string;
@@ -31,10 +32,10 @@ export default function AusgabenNeuPage() {
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
   const todayStr = today.toISOString().slice(0, 10);
 
-  const [from, setFrom] = useState(firstOfMonth);
-  const [to, setTo] = useState(todayStr);
-  const [kategorie, setKategorie] = useState('');
-  const [quelle, setQuelle] = useState('');
+  const [from, setFrom] = usePersistentState('admin:ausgaben-neu:from', firstOfMonth);
+  const [to, setTo] = usePersistentState('admin:ausgaben-neu:to', todayStr);
+  const [kategorie, setKategorie] = usePersistentState('admin:ausgaben-neu:kategorie', '');
+  const [quelle, setQuelle] = usePersistentState('admin:ausgaben-neu:quelle', '');
   const [data, setData] = useState<Ausgabe[]>([]);
   const [kpi, setKpi] = useState({ total: 0, total_brutto: 0, top_kategorien: [] as Array<{ kategorie: string; brutto: number }> });
   const [loading, setLoading] = useState(false);

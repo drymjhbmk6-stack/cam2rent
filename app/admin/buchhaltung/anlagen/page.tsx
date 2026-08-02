@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Asset {
   id: string;
@@ -35,9 +36,9 @@ const fmtDate = fmtDateCanonical;
 export default function AnlagenNeuPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [kpi, setKpi] = useState({ total: 0, total_anschaffung: 0, total_buchwert: 0, gwg_count: 0, gwg_sum: 0 });
-  const [art, setArt] = useState('');
-  const [methode, setMethode] = useState('');
-  const [includeTest, setIncludeTest] = useState(false);
+  const [art, setArt] = usePersistentState('admin:buchhaltung-anlagen:art', '');
+  const [methode, setMethode] = usePersistentState('admin:buchhaltung-anlagen:methode', '');
+  const [includeTest, setIncludeTest] = usePersistentState('admin:buchhaltung-anlagen:includeTest', false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
