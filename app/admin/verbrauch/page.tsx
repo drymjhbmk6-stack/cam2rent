@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 
@@ -12,13 +13,25 @@ interface Verbrauchsartikel {
   deduct_qty: number;
   warn_threshold: number | null;
   low_stock_notified: boolean;
+  deduct_trigger: 'shipment' | 'return' | null;
+  linked_accessory_id: string | null;
+  image_url: string | null;
   sort_order: number;
+}
+
+interface AccessoryLite {
+  id: string;
+  name: string;
 }
 
 const CACHE_KEY = 'admin:verbrauch:items';
 
 function isLow(a: Verbrauchsartikel): boolean {
   return typeof a.warn_threshold === 'number' && a.bestand <= a.warn_threshold;
+}
+
+function triggerLabel(t: string | null | undefined): string {
+  return t === 'return' ? 'bei Rückgabe' : 'bei Versand / Abholung';
 }
 
 export default function VerbrauchPage() {
@@ -28,6 +41,8 @@ export default function VerbrauchPage() {
   const [loading, setLoading] = useState(() => getCached(CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [migrationPending, setMigrationPending] = useState(false);
+  const [accessories, setAccessories] = useState<AccessoryLite[]>([]);
+  const accById = new Map(accessories.map((a) => [a.id, a.name]));
   const didMount = useRef(false);
 
   // Neu-Anlegen-Formular
@@ -37,18 +52,26 @@ export default function VerbrauchPage() {
   const [nAuto, setNAuto] = useState(false);
   const [nQty, setNQty] = useState('1');
   const [nWarn, setNWarn] = useState('');
+  const [nTrigger, setNTrigger] = useState<'shipment' | 'return'>('shipment');
+  const [nLinked, setNLinked] = useState('');
+  const [nImage, setNImage] = useState('');
   const [saving, setSaving] = useState(false);
+  const newTmpId = useRef('tmp-' + Math.random().toString(36).slice(2, 10));
 
-  // Inline-Bearbeitung der Einstellungen
+  // Inline-Bearbeitung
   const [editId, setEditId] = useState<string | null>(null);
   const [eName, setEName] = useState('');
   const [eAuto, setEAuto] = useState(false);
   const [eQty, setEQty] = useState('1');
   const [eWarn, setEWarn] = useState('');
+  const [eTrigger, setETrigger] = useState<'shipment' | 'return'>('shipment');
+  const [eLinked, setELinked] = useState('');
+  const [eImage, setEImage] = useState('');
 
   // Bestand-direkt-setzen
   const [setValById, setSetValById] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function reload() {
     try {
@@ -70,10 +93,26 @@ export default function VerbrauchPage() {
     }
   }
 
+  async function loadAccessories() {
+    try {
+      const res = await fetch('/api/admin/accessories');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.accessories)) {
+        const list: AccessoryLite[] = data.accessories
+          .map((a: { id: string; name: string }) => ({ id: a.id, name: a.name }))
+          .sort((x: AccessoryLite, y: AccessoryLite) => x.name.localeCompare(y.name));
+        setAccessories(list);
+      }
+    } catch {
+      // Dropdown bleibt leer — nicht kritisch.
+    }
+  }
+
   useEffect(() => {
     if (didMount.current) return;
     didMount.current = true;
     void reload();
+    void loadAccessories();
   }, []);
 
   function resetNew() {
@@ -82,6 +121,32 @@ export default function VerbrauchPage() {
     setNAuto(false);
     setNQty('1');
     setNWarn('');
+    setNTrigger('shipment');
+    setNLinked('');
+    setNImage('');
+    newTmpId.current = 'tmp-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  async function uploadImage(id: string, file: File): Promise<string | null> {
+    setUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('id', id);
+      fd.append('file', file);
+      const res = await fetch('/api/admin/verbrauch-image', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? 'Upload fehlgeschlagen.');
+        return null;
+      }
+      return data.url as string;
+    } catch (e) {
+      setError(`Upload-Fehler: ${(e as Error).message}`);
+      return null;
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleCreate() {
@@ -101,6 +166,9 @@ export default function VerbrauchPage() {
           auto_deduct: nAuto,
           deduct_qty: parseInt(nQty, 10) || 1,
           warn_threshold: nWarn.trim() === '' ? null : parseInt(nWarn, 10) || 0,
+          deduct_trigger: nTrigger,
+          linked_accessory_id: nLinked || null,
+          image_url: nImage || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -116,7 +184,6 @@ export default function VerbrauchPage() {
     }
   }
 
-  // Optimistisch das Item lokal ersetzen.
   function applyLocal(updated: Verbrauchsartikel) {
     setItems((prev) => {
       const next = prev.map((it) => (it.id === updated.id ? updated : it));
@@ -165,6 +232,9 @@ export default function VerbrauchPage() {
     setEAuto(a.auto_deduct);
     setEQty(String(a.deduct_qty));
     setEWarn(a.warn_threshold === null ? '' : String(a.warn_threshold));
+    setETrigger(a.deduct_trigger === 'return' ? 'return' : 'shipment');
+    setELinked(a.linked_accessory_id ?? '');
+    setEImage(a.image_url ?? '');
   }
 
   async function saveEdit(id: string) {
@@ -177,6 +247,9 @@ export default function VerbrauchPage() {
       auto_deduct: eAuto,
       deduct_qty: parseInt(eQty, 10) || 1,
       warn_threshold: eWarn.trim() === '' ? null : parseInt(eWarn, 10) || 0,
+      deduct_trigger: eTrigger,
+      linked_accessory_id: eLinked || null,
+      image_url: eImage || null,
     });
     if (ok) setEditId(null);
   }
@@ -213,8 +286,8 @@ export default function VerbrauchPage() {
             <h1 className="text-2xl font-semibold">Verbrauch</h1>
             <p className="text-slate-400 text-sm mt-1">
               Interner Zähler für Verbrauchsmaterial (z.B. Gummibärchentüten,
-              Füllmaterial). Optional automatischer Abzug, sobald eine Buchung als
-              versendet oder abgeholt markiert wird.
+              Füllmaterial, Klebepads). Optional automatischer Abzug bei Versand/
+              Abholung oder bei Rückgabe — auch verknüpft mit einem Zubehör.
             </p>
           </div>
           <button
@@ -244,25 +317,77 @@ export default function VerbrauchPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-sm space-y-1">
                 <span className="text-slate-400">Name</span>
-                <input className={inputCls} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="z.B. Gummibärchentüten" />
+                <input className={inputCls} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="z.B. Klebepad" />
               </label>
               <label className="text-sm space-y-1">
                 <span className="text-slate-400">Anfangsbestand</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={0} value={nBestand} onChange={(e) => setNBestand(e.target.value)} />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Abzugsmenge pro Buchung</span>
+                <span className="text-slate-400">Abzugsmenge pro Buchung / Stück</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={1} value={nQty} onChange={(e) => setNQty(e.target.value)} />
               </label>
               <label className="text-sm space-y-1">
                 <span className="text-slate-400">Warnung ab Bestand (leer = aus)</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={0} value={nWarn} onChange={(e) => setNWarn(e.target.value)} placeholder="z.B. 3" />
               </label>
+              <label className="text-sm space-y-1">
+                <span className="text-slate-400">Abzug bei</span>
+                <select className={inputCls} value={nTrigger} onChange={(e) => setNTrigger(e.target.value as 'shipment' | 'return')}>
+                  <option value="shipment">Versand / Abholung</option>
+                  <option value="return">Rückgabe</option>
+                </select>
+              </label>
+              <label className="text-sm space-y-1">
+                <span className="text-slate-400">Verknüpft mit Zubehör (optional)</span>
+                <select className={inputCls} value={nLinked} onChange={(e) => setNLinked(e.target.value)}>
+                  <option value="">— pauschal pro Buchung —</option>
+                  {accessories.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </label>
             </div>
+            {nLinked && (
+              <p className="text-xs text-slate-400">
+                Wird pro zurückgegebenem/versendetem Exemplar dieses Zubehörs abgezogen
+                (Abzugsmenge × Stückzahl).
+              </p>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={nAuto} onChange={(e) => setNAuto(e.target.checked)} className="w-4 h-4" />
-              <span>Automatisch abziehen bei „versendet“ / „abgeholt“</span>
+              <span>Automatisch abziehen</span>
             </label>
+
+            {/* Foto */}
+            <div className="flex items-center gap-3">
+              {nImage ? (
+                <Image src={nImage} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
+              ) : (
+                <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
+              )}
+              <div className="flex flex-col gap-1">
+                <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
+                  {uploading ? 'Lädt…' : nImage ? 'Foto ändern' : '📷 Foto hochladen'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!f) return;
+                      const url = await uploadImage(newTmpId.current, f);
+                      if (url) setNImage(url);
+                    }}
+                  />
+                </label>
+                {nImage && (
+                  <button onClick={() => setNImage('')} className="text-xs text-rose-400 hover:text-rose-300 w-fit">Foto entfernen</button>
+                )}
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">
                 {saving ? 'Speichern…' : 'Anlegen'}
@@ -289,14 +414,18 @@ export default function VerbrauchPage() {
             const low = isLow(a);
             const editing = editId === a.id;
             const busy = busyId === a.id;
+            const linkedName = a.linked_accessory_id ? accById.get(a.linked_accessory_id) : null;
             return (
               <div
                 key={a.id}
                 className={`p-4 bg-[#111827] border rounded ${low ? 'border-amber-500/50' : 'border-slate-800'}`}
               >
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                  {/* Bestand + Name */}
+                  {/* Foto + Bestand + Name */}
                   <div className="flex items-center gap-4 min-w-0">
+                    {a.image_url ? (
+                      <Image src={a.image_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-cover rounded border border-slate-700 flex-shrink-0" />
+                    ) : null}
                     <div className="text-center">
                       <div className={`text-3xl font-bold tabular-nums ${low ? 'text-amber-400' : 'text-slate-50'}`}>
                         {a.bestand}
@@ -308,11 +437,16 @@ export default function VerbrauchPage() {
                       <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
                         {a.auto_deduct ? (
                           <span className="px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-300">
-                            Auto-Abzug −{a.deduct_qty}/Buchung
+                            Auto-Abzug −{a.deduct_qty} {triggerLabel(a.deduct_trigger)}
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600 text-slate-400">
                             Kein Auto-Abzug
+                          </span>
+                        )}
+                        {linkedName && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
+                            🔗 {linkedName}
                           </span>
                         )}
                         {a.warn_threshold !== null && (
@@ -354,17 +488,63 @@ export default function VerbrauchPage() {
                       <input className={inputCls} value={eName} onChange={(e) => setEName(e.target.value)} />
                     </label>
                     <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Abzugsmenge pro Buchung</span>
+                      <span className="text-slate-400">Abzugsmenge pro Buchung / Stück</span>
                       <input className={inputCls} type="number" inputMode="numeric" min={1} value={eQty} onChange={(e) => setEQty(e.target.value)} />
                     </label>
                     <label className="text-sm space-y-1">
                       <span className="text-slate-400">Warnung ab Bestand (leer = aus)</span>
                       <input className={inputCls} type="number" inputMode="numeric" min={0} value={eWarn} onChange={(e) => setEWarn(e.target.value)} />
                     </label>
+                    <label className="text-sm space-y-1">
+                      <span className="text-slate-400">Abzug bei</span>
+                      <select className={inputCls} value={eTrigger} onChange={(e) => setETrigger(e.target.value as 'shipment' | 'return')}>
+                        <option value="shipment">Versand / Abholung</option>
+                        <option value="return">Rückgabe</option>
+                      </select>
+                    </label>
+                    <label className="text-sm space-y-1">
+                      <span className="text-slate-400">Verknüpft mit Zubehör (optional)</span>
+                      <select className={inputCls} value={eLinked} onChange={(e) => setELinked(e.target.value)}>
+                        <option value="">— pauschal pro Buchung —</option>
+                        {accessories.map((ac) => (
+                          <option key={ac.id} value={ac.id}>{ac.name}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="flex items-center gap-2 text-sm sm:mt-6">
                       <input type="checkbox" checked={eAuto} onChange={(e) => setEAuto(e.target.checked)} className="w-4 h-4" />
-                      <span>Automatisch abziehen bei „versendet“ / „abgeholt“</span>
+                      <span>Automatisch abziehen</span>
                     </label>
+
+                    {/* Foto */}
+                    <div className="sm:col-span-2 flex items-center gap-3">
+                      {eImage ? (
+                        <Image src={eImage} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
+                      ) : (
+                        <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
+                      )}
+                      <div className="flex flex-col gap-1">
+                        <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
+                          {uploading ? 'Lädt…' : eImage ? 'Foto ändern' : '📷 Foto hochladen'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = '';
+                              if (!f) return;
+                              const url = await uploadImage(a.id, f);
+                              if (url) setEImage(url);
+                            }}
+                          />
+                        </label>
+                        {eImage && (
+                          <button onClick={() => setEImage('')} className="text-xs text-rose-400 hover:text-rose-300 w-fit">Foto entfernen</button>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="sm:col-span-2 flex gap-2">
                       <button onClick={() => saveEdit(a.id)} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">Speichern</button>
                       <button onClick={() => setEditId(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Abbrechen</button>

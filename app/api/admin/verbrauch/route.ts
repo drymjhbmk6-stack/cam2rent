@@ -63,18 +63,30 @@ export async function POST(req: NextRequest) {
       ? null
       : Math.max(0, toInt(warnRaw, 0));
 
-  const { data, error } = await supabase
-    .from('verbrauchsartikel')
-    .insert({
-      name: name.slice(0, 200),
-      bestand,
-      auto_deduct: !!body?.auto_deduct,
-      deduct_qty,
-      warn_threshold,
-      sort_order,
-    })
-    .select()
-    .single();
+  const payload: Record<string, unknown> = {
+    name: name.slice(0, 200),
+    bestand,
+    auto_deduct: !!body?.auto_deduct,
+    deduct_qty,
+    warn_threshold,
+    deduct_trigger: body?.deduct_trigger === 'return' ? 'return' : 'shipment',
+    linked_accessory_id:
+      typeof body?.linked_accessory_id === 'string' && body.linked_accessory_id.trim()
+        ? body.linked_accessory_id.trim().slice(0, 200)
+        : null,
+    image_url: typeof body?.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null,
+    sort_order,
+  };
+
+  let { data, error } = await supabase.from('verbrauchsartikel').insert(payload).select().single();
+
+  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen + Retry.
+  if (error && /deduct_trigger|linked_accessory_id|image_url|column|schema cache|PGRST/i.test(error.message || '')) {
+    delete payload.deduct_trigger;
+    delete payload.linked_accessory_id;
+    delete payload.image_url;
+    ({ data, error } = await supabase.from('verbrauchsartikel').insert(payload).select().single());
+  }
 
   if (error) {
     if (isMissingTable(error.message)) {

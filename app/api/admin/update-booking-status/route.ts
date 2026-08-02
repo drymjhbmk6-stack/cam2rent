@@ -61,6 +61,8 @@ export async function PATCH(req: NextRequest) {
   if (status === 'completed') {
     dispatchCompletionEmail(supabase, bookingId)
       .catch((err: unknown) => console.error('Completion email error:', err));
+    // Verbrauchsmaterial mit Rückgabe-Trigger abziehen (idempotent pro Buchung).
+    deductConsumablesForBooking(supabase, bookingId, 'return').catch(() => {});
   }
 
   // Nach Abschluss: Bewertungsanfrage per E-Mail (non-blocking)

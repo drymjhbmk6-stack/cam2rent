@@ -5667,6 +5667,38 @@ Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
 - **Notification-Typ** `verbrauch_low_stock` in `lib/notification-types.ts`
   (Gruppe Katalog, Permission `katalog`) + Icon in `NotificationDropdown` — greift
   automatisch in die Pro-Mitarbeiter-Push-Prefs.
+- **Trigger-Zeitpunkt + Zubehör-Verknüpfung + Foto (Erweiterung Stand 2026-08-02):**
+  drei additive Spalten (idempotent an dieselbe Migration angehängt):
+  `verbrauchsartikel.deduct_trigger TEXT DEFAULT 'shipment'` (`shipment` = bei
+  Versand/Abholung, `return` = bei Rückgabe/Buchung `completed`; **nicht** `trigger`
+  genannt = Postgres-Keyword, CHECK per DO-Guard), `linked_accessory_id TEXT NULL`
+  (Verknüpfung mit `accessories.id`), `image_url TEXT NULL` (Referenzfoto). Plus
+  `bookings.consumables_returned_deducted_at TIMESTAMPTZ` = **separater** Rückgabe-
+  Marker (unabhängig vom Versand-Marker → dieselbe Buchung kann bei Versand UND
+  Rückgabe je einmal abziehen).
+  - **Helper `deductConsumablesForBooking(supabase, bookingId, phase='shipment')`**
+    ist jetzt phasen-fähig: claimt den phasen-eigenen Marker, filtert Artikel per
+    `deduct_trigger === phase` (fehlende Spalte → `'shipment'`). **Verknüpfte**
+    Artikel werden nur abgezogen, wenn die Buchung das Zubehör enthält, und
+    **skaliert nach Stückzahl** (Set-Auflösung via `resolveAccessoryItems` aus
+    `lib/booking-accessory-apply.ts`, `deduct_qty × count`). Unverknüpfte = einmal
+    pro Buchung wie bisher. Die 6 Versand-Hooks bleiben unverändert (Default-Phase).
+    Anwendungsfall: Klebepad ↔ Helmhalterung → 2 Halterungen zurück = 2× Pad-Abzug.
+  - **4 Rückgabe-Hooks** (fire-and-forget, `phase='return'`, nur bei `completed`,
+    NICHT bei `damaged`): `return-booking`, `return-checklist`,
+    `update-booking-status`, `booking/[id]` PATCH. Der Return-Marker garantiert
+    Einmaligkeit über alle vier.
+  - **Foto-Upload** `POST /api/admin/verbrauch-image` (multipart `id`+`file`,
+    Magic-Byte-Check via `isAllowedImage`/`detectImageType`, Bucket
+    `product-images` Pfad `verbrauch/<id>/…`, max 8 MB, JPG/PNG/WebP) — mirror von
+    `accessory-part-images`, gibt `{ url }` zurück; die URL wird über POST/PATCH
+    `image_url` gespeichert. Permission `katalog` über den `/api/admin/verbrauch`-
+    Prefix. Neu-Anlegen nutzt eine temporäre `tmp-…`-ID für den Pfad.
+  - **API + UI:** POST/PATCH akzeptieren `deduct_trigger`/`linked_accessory_id`/
+    `image_url` (defensiver Insert/Update-Retry ohne die neuen Spalten). Die Seite
+    lädt zusätzlich `/api/admin/accessories` fürs Verknüpfungs-Dropdown, zeigt
+    „Abzug bei"-Select, „Verknüpft mit Zubehör"-Select, Foto-Upload + Thumbnail
+    auf der Karte, Trigger-/🔗-Badges.
 - **Go-Live TODO:** siehe „Noch offen".
 
 ## Offene Punkte
@@ -6149,12 +6181,17 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
-- **Verbraucher-Zähler-Migration auszuführen:** `supabase/supabase-verbrauchsartikel.sql`
-  (idempotent: Tabelle `verbrauchsartikel` + additiv `bookings.consumables_deducted_at`).
-  Ohne sie ist das Feature inaktiv: `/admin/verbrauch` lädt (leer + Migrations-Hinweis),
-  Anlegen liefert 503, der Auto-Abzug ist ein No-Op (Helper defensiv). Der neue
-  Notification-Typ `verbrauch_low_stock` ist ohne Migration wirkungslos. Siehe
-  „Interner Verbraucher-Zähler (Verbrauchsmaterial)". Empfohlen ASAP ausführen.
+- **Verbraucher-Zähler-Migration auszuführen (bzw. ERNEUT):** `supabase/supabase-verbrauchsartikel.sql`
+  (idempotent: Tabelle `verbrauchsartikel` + additiv `bookings.consumables_deducted_at`
+  **+ neu** die Spalten `deduct_trigger`, `linked_accessory_id`, `image_url` und
+  `bookings.consumables_returned_deducted_at`). **Falls die Migration schon einmal
+  lief, erneut ausführen** — die `ALTER … ADD COLUMN IF NOT EXISTS` fügen nur die
+  neuen Spalten hinzu. Ohne die neuen Spalten läuft der Versand-Abzug weiter, aber
+  Rückgabe-Trigger + Zubehör-Verknüpfung + Foto sind inaktiv (Helper/API defensiv).
+  Ohne die Grund-Migration ist das Feature ganz inaktiv: `/admin/verbrauch` lädt
+  (leer + Migrations-Hinweis), Anlegen 503, Auto-Abzug No-Op. Der Notification-Typ
+  `verbrauch_low_stock` ist ohne Migration wirkungslos. Siehe „Interner
+  Verbraucher-Zähler (Verbrauchsmaterial)". Empfohlen ASAP ausführen.
 - **Fremdwährungs-Migration auszuführen:** `supabase/supabase-belege-fremdwaehrung.sql`
   (idempotent, additiv: `belege.fremdwaehrung`/`wechselkurs`/`wechselkurs_datum`/
   `original_summe_brutto`/`waehrung_hinweis_dismissed_at`). Ohne sie läuft der

@@ -2306,6 +2306,8 @@ export async function PATCH(
   if (status === 'completed') {
     dispatchCompletionEmail(supabase, id)
       .catch((err) => console.error('[booking-update] completion email failed:', err));
+    // Verbrauchsmaterial mit Rückgabe-Trigger abziehen (idempotent pro Buchung).
+    deductConsumablesForBooking(supabase, id, 'return').catch(() => {});
   }
 
   // Audit-Log mit passendem Action-Namen

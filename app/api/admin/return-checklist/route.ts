@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
+import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -109,6 +110,8 @@ export async function PATCH(req: NextRequest) {
     // Abschluss-Bestätigung an den Kunden (non-blocking, Dedup im Helper).
     dispatchCompletionEmail(supabase, bookingId)
       .catch((err) => console.error('[return-checklist] completion email failed:', err));
+    // Verbrauchsmaterial mit Rückgabe-Trigger abziehen (idempotent pro Buchung).
+    deductConsumablesForBooking(supabase, bookingId, 'return').catch(() => {});
   } else if (status === 'damage_reported') {
     updateData.status = 'damage_reported';
   } else {

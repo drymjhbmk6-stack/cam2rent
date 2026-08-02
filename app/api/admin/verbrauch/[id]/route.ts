@@ -66,6 +66,15 @@ export async function PATCH(
     updates.warn_threshold =
       w === null || w === '' || w === undefined ? null : Math.max(0, toInt(w, 0));
   }
+  if ('deduct_trigger' in body) updates.deduct_trigger = body.deduct_trigger === 'return' ? 'return' : 'shipment';
+  if ('linked_accessory_id' in body) {
+    const v = body.linked_accessory_id;
+    updates.linked_accessory_id = typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null;
+  }
+  if ('image_url' in body) {
+    const v = body.image_url;
+    updates.image_url = typeof v === 'string' && v.trim() ? v.trim() : null;
+  }
 
   // Bestand: entweder direkt setzen oder per Delta anpassen (Floor bei 0).
   let bestandChanged = false;
@@ -97,12 +106,20 @@ export async function PATCH(
 
   updates.updated_at = new Date().toISOString();
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('verbrauchsartikel')
     .update(updates)
     .eq('id', id)
     .select()
     .single();
+
+  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen + Retry.
+  if (error && /deduct_trigger|linked_accessory_id|image_url|column|schema cache|PGRST/i.test(error.message || '')) {
+    delete updates.deduct_trigger;
+    delete updates.linked_accessory_id;
+    delete updates.image_url;
+    ({ data, error } = await supabase.from('verbrauchsartikel').update(updates).eq('id', id).select().single());
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

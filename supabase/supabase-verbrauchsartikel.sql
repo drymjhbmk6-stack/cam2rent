@@ -8,8 +8,11 @@
 -- Buchungslogik, kein Zusammenhang mit `accessories`/`inventar_units`.
 --
 --  - `bestand`        aktueller Zähler (manuell + Auto-Abzug)
---  - `auto_deduct`    bei Buchungs-Status shipped/picked_up automatisch abziehen
---  - `deduct_qty`     Menge, die pro Buchung abgezogen wird
+--  - `auto_deduct`    automatisch abziehen (an/aus)
+--  - `deduct_trigger` WANN: 'shipment' (Versand/Abholung) | 'return' (Rückgabe)
+--  - `linked_accessory_id` optional mit einem Zubehör verknüpft (Abzug nur wenn
+--    die Buchung dieses Zubehör enthält, skaliert nach Stückzahl)
+--  - `deduct_qty`     Menge, die pro Buchung (bzw. pro verknüpftem Stück) abgezogen wird
 --  - `warn_threshold` Nachschub-Warnung ab diesem Mindestbestand (NULL = aus)
 --  - `low_stock_notified` Dedup-Flag gegen Push-Spam (zurückgesetzt, sobald der
 --    Bestand wieder über die Schwelle steigt)
@@ -34,10 +37,39 @@ CREATE TABLE IF NOT EXISTS verbrauchsartikel (
   -- Dedup gegen Push-Spam: wird true beim Warnen, false sobald Bestand wieder
   -- über die Schwelle steigt.
   low_stock_notified BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Wann der Auto-Abzug greift: 'shipment' (bei Versand/Abholung, Default) oder
+  -- 'return' (bei Rückgabe = Buchung abgeschlossen). NICHT `trigger` genannt —
+  -- das ist ein reserviertes Postgres-Keyword.
+  deduct_trigger     TEXT NOT NULL DEFAULT 'shipment',
+  -- Optionale Verknüpfung mit einem Zubehör (accessories.id). Gesetzt → der
+  -- Abzug greift nur für Buchungen, die dieses Zubehör enthalten, und skaliert
+  -- mit der Stückzahl (z.B. Klebepad ↔ Helmhalterung: 2 Halterungen zurück =
+  -- 2× Abzug). NULL = pauschal einmal pro Buchung.
+  linked_accessory_id TEXT,
+  -- Optionales Referenz-Foto (öffentliche URL im Bucket product-images).
+  image_url          TEXT,
   sort_order         INTEGER NOT NULL DEFAULT 0,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Additiv für bereits existierende Tabellen (Migration erneut ausführbar).
+ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS deduct_trigger TEXT NOT NULL DEFAULT 'shipment';
+ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS linked_accessory_id TEXT;
+ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- CHECK auf gültige Trigger-Werte (idempotent per Guard, da ADD CONSTRAINT kein
+-- IF NOT EXISTS kennt).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'verbrauchsartikel_deduct_trigger_chk'
+  ) THEN
+    ALTER TABLE verbrauchsartikel
+      ADD CONSTRAINT verbrauchsartikel_deduct_trigger_chk
+      CHECK (deduct_trigger IN ('shipment', 'return'));
+  END IF;
+END$$;
 
 CREATE INDEX IF NOT EXISTS verbrauchsartikel_sort_idx
   ON verbrauchsartikel (sort_order);
@@ -69,3 +101,8 @@ END$$;
 -- egal welcher der Status-Schreiber gewinnt (Dashboard-Button, Versand-Form,
 -- Sendcloud-Cron, Übergabe-Protokoll, Status-Dropdown).
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS consumables_deducted_at TIMESTAMPTZ;
+
+-- Separater Marker für den Rückgabe-Abzug (deduct_trigger = 'return'). Unabhängig
+-- vom Versand-Marker, damit dieselbe Buchung bei Versand UND bei Rückgabe je
+-- genau einmal abziehen kann. Gesetzt beim ersten Übergang nach 'completed'.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS consumables_returned_deducted_at TIMESTAMPTZ;
