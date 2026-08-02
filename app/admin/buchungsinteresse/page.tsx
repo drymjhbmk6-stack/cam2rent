@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -142,7 +142,15 @@ export default function BuchungsinteressePage() {
 
   const customValid = !!customFrom && !!customTo && customFrom <= customTo;
 
+  // Stale-Response-Guard: Beim erneuten Öffnen der Seite fetcht der Mount-Effekt
+  // zuerst den Default-Zeitraum, dann lädt usePersistentState den gemerkten
+  // Zeitraum nach → zweiter Fetch. Ohne Guard könnte die langsamere erste
+  // Antwort die neuere überschreiben (Pill zeigt 24 Std, Zahlen aber 30 Tage).
+  // Nur die jeweils letzte Anfrage darf State setzen.
+  const reqIdRef = useRef(0);
+
   const load = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     const key = interestCacheKey(appliedQuery);
     const cached = getCached<InterestData>(key);
     // Cache für diese Auswertung → sofort anzeigen, still revalidieren.
@@ -154,17 +162,19 @@ export default function BuchungsinteressePage() {
     }
     try {
       const res = await fetch(`/api/admin/booking-interest?${appliedQuery}`);
+      if (myId !== reqIdRef.current) return; // eine neuere Anfrage läuft → verwerfen
       if (res.ok) {
         const json = await res.json();
+        if (myId !== reqIdRef.current) return;
         setData(json);
         setCached(key, json);
       } else {
         setData(null);
       }
     } catch {
-      setData(null);
+      if (myId === reqIdRef.current) setData(null);
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }, [appliedQuery]);
 

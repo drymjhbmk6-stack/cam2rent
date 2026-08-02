@@ -59,16 +59,23 @@ export function useCachedFetch<T>(
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   const mountedRef = useRef(true);
+  // Stale-Response-Guard: Wechselt der `key` (z.B. weil ein gemerkter Filter
+  // nach dem Mount aus localStorage nachgeladen wird), laufen kurz zwei Fetches
+  // parallel. Ohne Guard könnte die langsamere ältere Antwort die neuere
+  // überschreiben (Anzeige passt dann nicht zum aktiven Filter). Nur die jeweils
+  // letzte Anfrage darf `data`/`loading` setzen; das Cachen pro Key bleibt.
+  const reqIdRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     try {
       const result = await fetcherRef.current();
       cache.set(key, result);
-      if (mountedRef.current) setData(result);
+      if (mountedRef.current && myId === reqIdRef.current) setData(result);
     } catch {
       // Letzten guten Stand behalten — kein Absturz bei Netzfehler/Poll.
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && myId === reqIdRef.current) setLoading(false);
     }
   }, [key]);
 
