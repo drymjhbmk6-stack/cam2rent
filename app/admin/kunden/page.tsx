@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const kundenCacheKey = (filter: string) => `admin:kunden:${filter}`;
 
@@ -90,9 +91,9 @@ export default function KundenPage() {
   // Startwert aus dem Cache seeden (Initial-Filter '') → Wiederbesuch ohne Spinner.
   const [customers, setCustomers] = useState<Customer[]>(() => getCached<Customer[]>(kundenCacheKey('')) ?? []);
   const [loading, setLoading] = useState(() => getCached<Customer[]>(kundenCacheKey('')) === undefined);
-  const [filter, setFilter] = useState('');
-  const [search, setSearch] = useState('');
-  const [letter, setLetter] = useState('');
+  const [filter, setFilter] = usePersistentState('admin:kunden:filter', '');
+  const [search, setSearch] = usePersistentState('admin:kunden:search', '');
+  const [letter, setLetter] = usePersistentState('admin:kunden:letter', '');
   const [resettingId, setResettingId] = useState<string | null>(null);
 
   const fetchCustomers = useCallback(async () => {

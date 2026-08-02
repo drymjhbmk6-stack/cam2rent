@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const invKey = (typ: string, status: string, belegStatus: string, q: string, produktId: string) =>
   `admin:inventar:${typ}|${status}|${belegStatus}|${q}|${produktId}`;
@@ -95,10 +96,11 @@ export default function InventarPage() {
   const [loading, setLoading] = useState(
     () => getCached<Unit[]>(invKey(searchParams.get('typ') ?? '', '', '', '', produktId)) === undefined,
   );
+  // `typ` bleibt URL-gesteuert (?typ=) + Bestandteil des Cache-Keys → NICHT persistieren.
   const [typ, setTyp] = useState(searchParams.get('typ') ?? '');
-  const [status, setStatus] = useState('');
-  const [belegStatus, setBelegStatus] = useState('');
-  const [q, setQ] = useState('');
+  const [status, setStatus] = usePersistentState('admin:inventar:status', '');
+  const [belegStatus, setBelegStatus] = usePersistentState('admin:inventar:belegStatus', '');
+  const [q, setQ] = usePersistentState('admin:inventar:q', '');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function handleDelete(id: string, label: string) {

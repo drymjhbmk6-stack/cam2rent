@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const reviewsCacheKey = (filter: string) => `admin:reviews:${filter}`;
 
@@ -52,7 +53,7 @@ function Stars({ rating }: { rating: number }) {
 export default function AdminBewertungenPage() {
   const [reviews, setReviews] = useState<Review[]>(() => getCached<Review[]>(reviewsCacheKey('all')) ?? []);
   const [loading, setLoading] = useState(() => getCached<Review[]>(reviewsCacheKey('all')) === undefined);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [filter, setFilter] = usePersistentState<'all' | 'pending' | 'approved'>('admin:bewertungen:filter', 'all');
   const [replyId, setReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);

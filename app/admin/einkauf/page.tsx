@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { usePersistentState } from '@/lib/use-persistent-state';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
 import PurchaseItemClassifier, { type ClassifierItem, type ProductOption, type AssetOption } from '@/components/admin/PurchaseItemClassifier';
 
@@ -141,23 +142,23 @@ function StatusBadge({ status }: { status: string }) {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function EinkaufPage() {
-  const [tab, setTab] = useState<Tab>('lieferanten');
+  const [tab, setTab] = usePersistentState<Tab>('admin:einkauf:tab', 'lieferanten');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Lieferanten state
-  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierSearch, setSupplierSearch] = usePersistentState('admin:einkauf:supplierSearch', '');
   const [editingSupplier, setEditingSupplier] = useState<string | null>(null);
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [supplierForm, setSupplierForm] = useState({ name: '', contact_person: '', email: '', phone: '', website: '', supplier_number: '', notes: '' });
 
   // Einkauf state
-  const [filterSupplier, setFilterSupplier] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterYear, setFilterYear] = useState<string>('');     // '' = alle, sonst '2025'
-  const [filterMonth, setFilterMonth] = useState<string>('');   // '' = alle, sonst '1'..'12'
-  const [purchaseSearch, setPurchaseSearch] = useState('');     // Volltext (Produkt, Rechnungsnummer, Notiz)
+  const [filterSupplier, setFilterSupplier] = usePersistentState('admin:einkauf:filterSupplier', '');
+  const [filterStatus, setFilterStatus] = usePersistentState('admin:einkauf:filterStatus', '');
+  const [filterYear, setFilterYear] = usePersistentState<string>('admin:einkauf:filterYear', '');     // '' = alle, sonst '2025'
+  const [filterMonth, setFilterMonth] = usePersistentState<string>('admin:einkauf:filterMonth', '');   // '' = alle, sonst '1'..'12'
+  const [purchaseSearch, setPurchaseSearch] = usePersistentState('admin:einkauf:purchaseSearch', '');     // Volltext (Produkt, Rechnungsnummer, Notiz)
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null);
   const [showNewPurchase, setShowNewPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({

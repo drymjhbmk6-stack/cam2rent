@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getGermanHolidayMap } from '@/lib/german-holidays';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const akCacheKey = (from: string, to: string) => `admin:auftragskalender:${from}:${to}`;
 
@@ -125,7 +126,7 @@ export default function AuftragskalenderPage() {
   const [notes, setNotes] = useState<CalendarNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showTest, setShowTest] = useState(true);
+  const [showTest, setShowTest] = usePersistentState('admin:auftragskalender:showTest', true);
   const [noteModalDate, setNoteModalDate] = useState<string | null>(null);
 
   useEffect(() => {

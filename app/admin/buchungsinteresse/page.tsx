@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const interestCacheKey = (query: string) => `admin:booking-interest:${query}`;
 
@@ -125,19 +126,19 @@ export default function BuchungsinteressePage() {
   const [loading, setLoading] = useState(() => getCached<InterestData>(interestCacheKey('days=30')) === undefined);
 
   // Zeitraum-State: entweder ein Preset ODER ein freier Zeitraum.
-  const [mode, setMode] = useState<'preset' | 'custom'>('preset');
-  const [preset, setPreset] = useState<PresetKey>('30d');
+  const [mode, setMode] = usePersistentState<'preset' | 'custom'>('admin:buchungsinteresse:mode', 'preset');
+  const [preset, setPreset] = usePersistentState<PresetKey>('admin:buchungsinteresse:preset', '30d');
   const today = useMemo(() => todayBerlin(), []);
   const thirtyDaysAgo = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
   }, []);
-  const [customFrom, setCustomFrom] = useState(thirtyDaysAgo);
-  const [customTo, setCustomTo] = useState(today);
+  const [customFrom, setCustomFrom] = usePersistentState('admin:buchungsinteresse:customFrom', thirtyDaysAgo);
+  const [customTo, setCustomTo] = usePersistentState('admin:buchungsinteresse:customTo', today);
   // Was wurde zuletzt geladen (verhindert dass jede Tasteneingabe in den
   // Datumsfeldern direkt einen Reload triggert — Anwenden-Button steuert das).
-  const [appliedQuery, setAppliedQuery] = useState<string>('days=30');
+  const [appliedQuery, setAppliedQuery] = usePersistentState<string>('admin:buchungsinteresse:appliedQuery', 'days=30');
 
   const customValid = !!customFrom && !!customTo && customFrom <= customTo;
 

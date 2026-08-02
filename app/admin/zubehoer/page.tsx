@@ -9,6 +9,7 @@ import InventarCodeBuilder from '@/components/admin/InventarCodeBuilder';
 import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const ACCESSORIES_CACHE_KEY = 'admin:accessories';
 import { useBrandColors } from '@/hooks/useBrandColors';
@@ -335,8 +336,8 @@ export default function AdminZubehoerPage() {
     }
   }
 
-  const [filterCategory, setFilterCategory] = useState('');
-  const [view, setView] = useState<'public' | 'internal'>('public');
+  const [filterCategory, setFilterCategory] = usePersistentState('admin:zubehoer:filterCategory', '');
+  const [view, setView] = usePersistentState<'public' | 'internal'>('admin:zubehoer:view', 'public');
 
   // Alle vorhandenen Kategorien sammeln
   const allCategories = [...new Set(accessories.map((a) => a.category).filter(Boolean))].sort();

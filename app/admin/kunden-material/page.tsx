@@ -6,6 +6,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const DEFAULT_UGC_COUNTS = { pending: 0, approved: 0, featured: 0, rejected: 0, withdrawn: 0 };
 const ugcCacheKey = (filter: string) => `admin:ugc:${filter}`;
@@ -84,7 +85,7 @@ export default function KundenMaterialPage() {
   const [counts, setCounts] = useState<Counts>(
     () => getCached<{ entries: UgcEntry[]; counts: Counts }>(ugcCacheKey('pending'))?.counts ?? DEFAULT_UGC_COUNTS,
   );
-  const [filter, setFilter] = useState<UgcStatus | 'all'>('pending');
+  const [filter, setFilter] = usePersistentState<UgcStatus | 'all'>('admin:kunden-material:filter', 'pending');
   const [loading, setLoading] = useState(() => getCached(ugcCacheKey('pending')) === undefined);
   const [error, setError] = useState<string | null>(null);
 

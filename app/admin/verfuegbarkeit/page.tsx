@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const GANTT_CACHE_KEY = 'admin:availability-gantt';
 
@@ -149,12 +150,13 @@ function getBookingSpan(b: GanttBooking, buf: BufferDays): { start: string; end:
 
 export default function AdminVerfuegbarkeitPage() {
   const { products: shopProducts } = useProducts();
-  const [tab, setTab] = useState<Tab>('kameras');
+  const [tab, setTab] = usePersistentState<Tab>('admin:verfuegbarkeit:tab', 'kameras');
   // Kamera-Filter fuer Sets-/Zubehoer-Tab. Leerstring = alle Kameras.
-  const [cameraFilter, setCameraFilter] = useState<string>('');
+  const [cameraFilter, setCameraFilter] = usePersistentState<string>('admin:verfuegbarkeit:cameraFilter', '');
   // Freitext-Suche (pro aktivem Tab angewendet).
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePersistentState('admin:verfuegbarkeit:search', '');
   // Mehrfach-Auswahl-Filter (leer = alle). Pro Tab eigene Menge.
+  // NICHT persistiert: Set<string> → JSON.stringify(Set) = {} (nicht wiederherstellbar).
   const [camModelFilter, setCamModelFilter] = useState<Set<string>>(new Set());
   const [accCategoryFilter, setAccCategoryFilter] = useState<Set<string>>(new Set());
   const [setBadgeFilter, setSetBadgeFilter] = useState<Set<string>>(new Set());
