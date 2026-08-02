@@ -2684,6 +2684,33 @@ Tab-basiertes Cockpit mit **6 Top-Level-Tabs** (frueher 9, zusammengelegt). Quer
 - **Berichte** (`?tab=reports&sub=...`): Wrapper mit Pills `analyse | datev`. Analyse = bestehender `ReportsTab` (EÜR, USt-VA, Umsatzliste). DATEV = bestehender `DatevExportTab`.
 - **Einstellungen**: unveraendert.
 
+### WISO-Steuer-Export der EÜR (Stand 2026-08-02)
+Buchungsgenauer CSV-Export der EÜR fuer den Import in **WISO Steuer:Sparbuch
+(Windows)** — dort EÜR oeffnen → Reiter **„Daten im-/exportieren"** →
+CSV-Import mit Spalten-Zuordnungs-Assistent. WISO Steuer:Web / Mac koennen NUR
+Bankumsaetze importieren, keine fertige EÜR — dort bleibt nur manuelles
+Eintippen. DATEV-Export ist fuer den Steuerberater/DATEV, NICHT fuer WISO.
+- **Geteilte Lib `lib/buchhaltung/euer-data.ts`** → `computeEuerData(supabase,
+  from, to)`: der komplette EÜR-Rechenkern (Rabatt-/Erstattungs-Wasserfall,
+  `beleg_positionen` der neuen Welt, `afa_buchungen`) wurde 1:1 aus
+  `reports/euer/route.ts` herausgeloest. Die EÜR-Route ist jetzt ein duenner
+  Wrapper darauf → **eine Quelle der Wahrheit**, WISO-CSV und EÜR-Ansicht zeigen
+  garantiert dieselben Zahlen. `CATEGORY_LABELS` + Typen ebenfalls exportiert.
+- **Endpoint `GET /api/admin/buchhaltung/reports/wiso-export?from=&to=`**
+  (Permission `finanzen`): flacht die EÜR-Items zu **einer CSV-Zeile pro
+  Einnahmen-/Ausgaben-Posten** ab. Spalten `Datum;Betrag;Typ;Kategorie;
+  Buchungstext` (Semikolon, BOM/UTF-8, Datum TT.MM.JJJJ). **Betraege sind
+  positive Absolutwerte** (kein fuehrendes Minus) — sonst wuerde der
+  Formula-Injection-Schutz in `lib/csv.ts` ein Apostroph voranstellen und WISO
+  die Zelle als Text statt Zahl lesen; Einnahme/Ausgabe steht stattdessen in der
+  Spalte `Typ` (im WISO-Assistenten den EÜR-Konten zuordnen). 0-EUR-Posten (voll
+  rabattiert/erstattet) werden weggelassen, Zeilen chronologisch sortiert. Nutzt
+  `buildCsvRow` (formula-safe).
+- **UI** (`ReportsTab.tsx`, EÜR-Sub-Tab): zweiter Button **„WISO-CSV
+  (buchungsgenau)"** neben „Als CSV exportieren" (= Uebersicht/Summen) +
+  Hinweistext. Client laedt den Endpoint als Blob-Download `wiso-euer-<from>-<to>.csv`.
+- **Keine Migration, kein Schema-Change.** Reine Report-/Export-Ergaenzung.
+
 **Backwards-Compat-Routing:** `legacyTabRedirect()` in `page.tsx` mappt alte Bookmark-URLs (`?tab=rechnungen|offene-posten|gutschriften|datev`) automatisch auf neue Sub-Tabs via `router.replace`. Cockpit-Inbox-Aktionen routen ebenfalls ueber Legacy-Mapping.
 
 #### Cockpit-Inbox (Etappe 1)

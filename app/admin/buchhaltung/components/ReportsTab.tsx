@@ -111,12 +111,28 @@ function EuerReport() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
+  async function handleWisoExport() {
+    if (!range.from || !range.to) return;
+    const res = await fetch(`/api/admin/buchhaltung/reports/wiso-export?from=${range.from}&to=${range.to}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `wiso-euer-${range.from}-${range.to}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
         <DateRangePicker onChange={handleRangeChange} initialPeriod="jahr" />
-        <ExportButton label="Als CSV exportieren" onClick={handleExport} variant="primary" disabled={!data} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <ExportButton label="Als CSV exportieren" onClick={handleExport} variant="primary" disabled={!data} />
+          <ExportButton label="WISO-CSV (buchungsgenau)" onClick={handleWisoExport} disabled={!data} />
+        </div>
       </div>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 24px', lineHeight: 1.5 }}>
+        {'„Als CSV exportieren“ = Übersicht (Summen). „WISO-CSV“ = buchungsgenaue Einzelzeilen für den Import in WISO Steuer:Sparbuch (EÜR → „Daten im-/exportieren“).'}
+      </p>
       {loading ? (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748b' }}>Lade EÜR-Daten...</div>
       ) : data ? (
