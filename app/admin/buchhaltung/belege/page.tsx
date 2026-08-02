@@ -369,7 +369,7 @@ export default function BelegeListePage() {
         <div className="flex flex-wrap gap-3 mb-4">
           <input
             type="text"
-            placeholder="Suchen…"
+            placeholder="Suchen (Inhalt, Lieferant, Nr.)…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base flex-1 min-w-[200px]"

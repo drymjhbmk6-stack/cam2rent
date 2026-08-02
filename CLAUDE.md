@@ -6094,6 +6094,29 @@ Jahre/Monate erscheinen. **Hinweis:** Jahre/Monate werden aus den geladenen
 200 Belegen abgeleitet — bei mehr als 200 Belegen fehlen die ältesten als
 Auswahl (dann wäre serverseitige Aggregation nötig).
 
+### Belege: inhaltliche Suche (Positionen + Lieferant, Stand 2026-08-02)
+Das Suchfeld auf `/admin/buchhaltung/belege` durchsuchte vorher nur die
+Beleg-Direktfelder (`beleg_nr`, `rechnungsnummer_lieferant`, `notizen`) — man
+konnte also nicht nach dem **Inhalt** eines Belegs suchen (z.B. „Speicherkarte",
+„Stativ"). Jetzt durchsucht `GET /api/admin/belege?q=…` zusätzlich die
+**Positions-Inhalte** (`beleg_positionen.bezeichnung` / `kategorie` / `notizen`)
+und den **Lieferantennamen** (`lieferanten.name`).
+- **Umsetzung** (`app/api/admin/belege/route.ts`, nur wenn `q` gesetzt): PostgREST
+  kann nicht direkt über verknüpfte Tabellen filtern, daher zwei Vor-Lookups —
+  (1) `beleg_positionen` per `.or(bezeichnung/kategorie/notizen ilike)` → distinkte
+  `beleg_id`s, (2) `lieferanten` per `.ilike('name', …)` → `id`s. Beide fließen
+  als `id.in.(…)` bzw. `lieferant_id.in.(…)` in den bestehenden OR-Ausdruck mit
+  ein (zusätzlich zu den 3 Direktfeldern). Ein Beleg matcht also, wenn **irgendein**
+  dieser Felder den Suchbegriff enthält.
+- Der Suchbegriff läuft weiter durch `sanitizeSearchInput` (max 100 Zeichen,
+  PostgREST-Trennzeichen neutralisiert). Positions-Lookup auf 5000, Lieferanten
+  auf 500 Zeilen gecappt (Defense-in-Depth; für die Projektgröße unkritisch).
+  Kein Index/Migration — `ilike '%…%'` per Seq-Scan ist bei einigen Hundert
+  Belegen / wenigen Tausend Positionen ausreichend schnell.
+- Frontend-Placeholder auf „Suchen (Inhalt, Lieferant, Nr.)…" geändert. Sonst
+  unverändert — die bestehende „bei Suche Jahr-/Monatsfilter ausblenden"-Logik
+  greift automatisch (siehe Abschnitt oben).
+
 ### Belege: Rechnungs-Dokument-Vorschau (Stand 2026-05-21)
 Das hochgeladene Rechnungs-Dokument (Anhang) ließ sich bisher nur per Klick in
 einem neuen Tab öffnen — keine Vorschau. Neue Komponente

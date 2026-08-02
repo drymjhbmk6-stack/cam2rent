@@ -45,7 +45,41 @@ export async function GET(req: NextRequest) {
   if (lieferantId) query = query.eq('lieferant_id', lieferantId);
   if (from) query = query.gte('beleg_datum', from);
   if (to) query = query.lte('beleg_datum', to);
-  if (q) query = query.or(`beleg_nr.ilike.%${q}%,rechnungsnummer_lieferant.ilike.%${q}%,notizen.ilike.%${q}%`);
+  if (q) {
+    // Inhaltliche Suche: neben den Beleg-Direktfeldern (Nr., Rechnungsnummer,
+    // Notizen) auch die Positions-Inhalte (Bezeichnung/Kategorie/Notiz der
+    // beleg_positionen) und den Lieferantennamen durchsuchen. Beides liegt in
+    // verknuepften Tabellen — PostgREST kann darueber nicht direkt filtern,
+    // daher zwei Vor-Lookups auf die passenden beleg_ids/lieferant_ids und
+    // dann per `id.in.(…)` / `lieferant_id.in.(…)` in den OR-Ausdruck mischen.
+    const orParts = [
+      `beleg_nr.ilike.%${q}%`,
+      `rechnungsnummer_lieferant.ilike.%${q}%`,
+      `notizen.ilike.%${q}%`,
+    ];
+
+    // Belege, deren Positions-Inhalt den Suchbegriff enthaelt.
+    const { data: posMatch } = await supabase
+      .from('beleg_positionen')
+      .select('beleg_id')
+      .or(`bezeichnung.ilike.%${q}%,kategorie.ilike.%${q}%,notizen.ilike.%${q}%`)
+      .limit(5000);
+    const posBelegIds = [...new Set((posMatch ?? [])
+      .map((p) => (p as { beleg_id: string | null }).beleg_id)
+      .filter((id): id is string => !!id))];
+    if (posBelegIds.length) orParts.push(`id.in.(${posBelegIds.join(',')})`);
+
+    // Belege des passenden Lieferanten (Name-Treffer).
+    const { data: liefMatch } = await supabase
+      .from('lieferanten')
+      .select('id')
+      .ilike('name', `%${q}%`)
+      .limit(500);
+    const liefIds = (liefMatch ?? []).map((l) => (l as { id: string }).id);
+    if (liefIds.length) orParts.push(`lieferant_id.in.(${liefIds.join(',')})`);
+
+    query = query.or(orParts.join(','));
+  }
 
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
