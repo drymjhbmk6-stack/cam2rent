@@ -74,7 +74,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: firstZodError(parsed.error) }, { status: 400 });
     }
-    const { payment_intent_id, deposit_intent_id, contractSignature } = parsed.data;
+    const { payment_intent_id, deposit_intent_id } = parsed.data;
+    let contractSignature = parsed.data.contractSignature;
 
     // 1. Verify payment with Stripe — 'processing' (PayPal/Klarna/SEPA async)
     // mit 202 zurueckgeben, der Webhook traegt die Buchung gleich nach.
@@ -101,6 +102,28 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // Durabler Signatur-Fallback: liegt die Unterschrift nicht im Request-Body
+    // (sessionStorage hat den Stripe-Redirect nicht ueberlebt, oder der Webhook
+    // hat die Buchung ohne Vertrag angelegt), holen wir sie aus dem serverseitig
+    // von create-payment-intent abgelegten Kontext. Sonst bliebe die Buchung
+    // dauerhaft contract_signed=false, obwohl der Kunde unterschrieben hat.
+    if (!contractSignature?.agreedToTerms || !contractSignature?.signerName) {
+      try {
+        const { data: sigCtx } = await supabase
+          .from('admin_settings')
+          .select('value')
+          .eq('key', `checkout_${payment_intent_id}`)
+          .maybeSingle();
+        if (sigCtx?.value) {
+          const parsedCtx = typeof sigCtx.value === 'string' ? JSON.parse(sigCtx.value) : sigCtx.value;
+          const s = parsedCtx?.contractSignature;
+          if (s?.agreedToTerms && s?.signerName && (s.signatureMethod === 'canvas' || s.signatureMethod === 'typed')) {
+            contractSignature = s;
+          }
+        }
+      } catch { /* best-effort — Body bleibt der Primaerpfad */ }
+    }
 
     // Idempotency-Check VOR Status-Check. Wenn der Stripe-Webhook die Buchung
     // bereits angelegt hat (Webhook bestaetigt seinerseits succeeded), antworten

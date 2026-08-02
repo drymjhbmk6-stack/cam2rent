@@ -1086,6 +1086,11 @@ export default function BuchenPage() {
               ? { early_service_consent_at: new Date().toISOString() }
               : {}),
           },
+          // Vertragssignatur serverseitig durabel ablegen — sonst liegt sie nur
+          // im Browser-sessionStorage und geht beim Stripe-Redirect / Webhook-
+          // Race verloren (Vertrag wuerde nie gespeichert, Buchung bliebe
+          // "noch zu unterschreiben"). confirm-booking liest sie als Fallback.
+          contractSignature: contractSignature ?? undefined,
         }),
       });
       const data = await res.json();

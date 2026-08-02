@@ -676,6 +676,38 @@ GoBD-sicher). Dockt an das bestehende IMAP-Polling + die
   - **Cart-Checkout (`app/checkout/page.tsx`):** Im „Details"-Schritt neue Pflicht-Sektion „Mietvertrag unterschreiben" über den AGB-Checkboxen. Ohne Signatur amber Box + „Jetzt unterschreiben"-Button, der ein Modal mit `SignatureStep` öffnet (eine kombinierte Vertragsvorschau über **alle** Warenkorb-Positionen: distinct Produktnamen, aggregierte Zubehör-Namen via `useAccessories`, früheste/späteste Mietdaten, max. Tage, Summe Kaution; Preis = `total`). `onSigned` setzt `contractSignature`-State + schreibt `cam2rent_contract_signature` in sessionStorage (den `handleProceedToPayment`/`handlePendingBooking` ohnehin lesen → confirm-cart erzeugt die echten Per-Buchung-PDFs serverseitig). Alle drei „Weiter zur Zahlung"/„Buchung anfragen"-Buttons sind zusätzlich auf `!!contractSignature` gegated. Eine Signatur aus dem Direkt-Flow wird beim Mount aus sessionStorage übernommen (grüne „unterschrieben"-Box + „Ändern").
   - **Admin-Warnung vor Übergabe/Versand:** roter „⚠️ Mietvertrag nicht unterschrieben"-Banner (mit Link auf `/admin/buchungen/[id]/vertrag-unterschreiben`) wenn `booking.contract_signed` falsy ist — auf der Buchungsdetailseite (`app/admin/buchungen/[id]/page.tsx`, direkt unter der NextActionBar, ausgeblendet bei Status `pending_verification|awaiting_payment|cancelled|completed`), in der Übergabe-Seite (`uebergabe/page.tsx`) und im Versand-Pack-Workflow (`versand/[id]/packen/page.tsx`). Alle drei lesen `contract_signed` aus `GET /api/admin/booking/[id]` (war schon im Response, Interface-Feld ergänzt). Reine Anzeige-Warnung — kein harter Block.
 
+### Signatur überlebt Stripe-Redirect / Webhook-Race — Vertrag wird zuverlässig gespeichert (Stand 2026-08-02)
+**Bug:** Kunde unterschreibt (Canvas ODER Namen eintippen), zahlt — die Buchung
+bleibt aber dauerhaft „noch zu unterschreiben" (`contract_signed=false`), der
+Vertrag wird nie gespeichert. **Ursache:** Die Signatur lebte im Browser
+**ausschließlich im sessionStorage** und musste den Stripe-Redirect überleben
+und `confirm-cart`/`confirm-booking` per Request-Body erreichen. Ging sie
+verloren (Redirect purged sessionStorage / anderer Tab / **Webhook legt die
+Buchung im Race zuerst ohne Vertrag an** und der spätere confirm-Call bringt
+keine Signatur mit), erzeugte **niemand** den Vertrag — der Webhook hat die
+Signatur nicht, und serverseitig war sie nirgends gespeichert → nicht
+regenerierbar.
+- **Fix — Signatur serverseitig durabel machen:**
+  - **Cart-Flow:** `app/checkout/page.tsx` nimmt `contractSignature` in den
+    `checkoutContext` auf, den `checkout-intent` ohnehin verbatim nach
+    `admin_settings.checkout_<pi>` schreibt (überlebt Redirect/Webhook-Race).
+    `confirm-cart` liest die Signatur als **Fallback aus diesem DB-Kontext**,
+    wenn der Request-Body keine (gültige) mitbringt (`contractSignature` ist
+    jetzt `let` + Fallback-Block direkt nach `createServiceClient()`).
+  - **Direkt-/Angebots-Flow:** `app/kameras/[slug]/buchen/page.tsx` schickt
+    `contractSignature` an `create-payment-intent`; die Route legt sie
+    **best-effort** (Zahlung wird nie blockiert) unter `checkout_<pi>` ab
+    (Größen-Guard 700 KB). `confirm-booking` liest sie als Fallback (analog,
+    `let` + Block nach `createServiceClient()`).
+  - Der sessionStorage-Body bleibt der Primärpfad; der DB-Kontext ist nur der
+    durable Fallback — keine Verhaltensänderung im Normalfall, keine Migration.
+- **Fix — `/api/contracts/sign` selbstheilend:** Bei bereits existierendem
+  `rental_agreements`-Eintrag (Idempotenz-Return) wird `bookings.contract_signed`
+  jetzt idempotent auf `true` nachgezogen, falls es durch einen abgebrochenen
+  früheren Speichervorgang (Insert ok, `bookings`-Update nicht) noch `false`
+  stand. Vorher meldete das Neu-Unterschreiben „alreadySigned"-Erfolg, aber die
+  Buchung blieb für immer „nicht unterschrieben".
+
 ### Mietvertrag zurücksetzen → Kunde unterschreibt neu (Stand 2026-06-14)
 Hintergrund: vereinzelt wurde ein Vertrags-PDF **ohne** Unterschrift erzeugt
 (PDF-/Signatur-Glitch). Der Admin kann den Vertrag jetzt komplett zurücksetzen,

@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    const contractSignature = body.contractSignature as {
+    let contractSignature = body.contractSignature as {
       signatureDataUrl: string | null;
       signatureMethod: 'canvas' | 'typed';
       signerName: string;
@@ -199,6 +199,30 @@ export async function POST(req: NextRequest) {
     // schneller als der Browser-Redirect, und manche Karten liefern beim Return
     // einen failed-Status, obwohl die Zahlung tatsaechlich erfolgreich war.
     const supabase = createServiceClient();
+
+    // Durabler Signatur-Fallback: die Unterschrift liegt im Browser nur im
+    // sessionStorage und kann den Stripe-Redirect / einen Webhook-Race nicht
+    // ueberleben. checkout-intent hat sie aber serverseitig im Checkout-Kontext
+    // (admin_settings.checkout_<pi>) mitgespeichert. Fehlt sie im Request-Body,
+    // holen wir sie von dort — sonst bliebe die Buchung dauerhaft
+    // contract_signed=false, obwohl der Kunde unterschrieben hat.
+    if (!contractSignature?.agreedToTerms || !contractSignature?.signerName) {
+      try {
+        const { data: sigCtx } = await supabase
+          .from('admin_settings')
+          .select('value')
+          .eq('key', `checkout_${payment_intent_id}`)
+          .maybeSingle();
+        if (sigCtx?.value) {
+          const parsedCtx = typeof sigCtx.value === 'string' ? JSON.parse(sigCtx.value) : sigCtx.value;
+          const s = parsedCtx?.contractSignature;
+          if (s?.agreedToTerms && s?.signerName && (s.signatureMethod === 'canvas' || s.signatureMethod === 'typed')) {
+            contractSignature = s;
+          }
+        }
+      } catch { /* best-effort — sessionStorage-Body bleibt der Primaerpfad */ }
+    }
+
     const { data: existingRows } = await supabase
       .from('bookings')
       .select('id')

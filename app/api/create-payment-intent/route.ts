@@ -19,10 +19,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { amountCents, depositCents, metadata } = body as {
+    const { amountCents, depositCents, metadata, contractSignature } = body as {
       amountCents: number;
       depositCents?: number;
       metadata: Record<string, string>;
+      contractSignature?: {
+        signatureDataUrl: string | null;
+        signatureMethod: 'canvas' | 'typed';
+        signerName: string;
+        agreedToTerms: boolean;
+      };
     };
 
     if (!amountCents || amountCents < 50) {
@@ -259,6 +265,38 @@ export async function POST(req: NextRequest) {
       metadata,
       ...(depositCents && depositCents > 0 ? { setup_future_usage: 'off_session' } : {}),
     });
+
+    // Vertragssignatur serverseitig durabel ablegen (Direkt-/Angebots-Flow).
+    // Der Browser haelt sie nur im sessionStorage — beim Stripe-Redirect oder
+    // einem Webhook-Race erreicht sie confirm-booking sonst evtl. nie, und der
+    // Vertrag wuerde nie gespeichert (Buchung bliebe "noch zu unterschreiben").
+    // Best-effort: ein Fehler hier darf die Zahlung NICHT blockieren.
+    if (
+      contractSignature?.agreedToTerms &&
+      typeof contractSignature.signerName === 'string' &&
+      contractSignature.signerName.trim() &&
+      (contractSignature.signatureMethod === 'canvas' || contractSignature.signatureMethod === 'typed') &&
+      (contractSignature.signatureDataUrl === null ||
+        (typeof contractSignature.signatureDataUrl === 'string' && contractSignature.signatureDataUrl.length <= 700_000))
+    ) {
+      try {
+        const supabase = createServiceClient();
+        await supabase.from('admin_settings').upsert({
+          key: `checkout_${paymentIntent.id}`,
+          value: JSON.stringify({
+            contractSignature: {
+              signatureDataUrl: contractSignature.signatureDataUrl,
+              signatureMethod: contractSignature.signatureMethod,
+              signerName: contractSignature.signerName.trim().slice(0, 200),
+              agreedToTerms: true,
+            },
+          }),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (sigErr) {
+        console.error('[create-payment-intent] Signatur-Kontext speichern fehlgeschlagen:', sigErr);
+      }
+    }
 
     // Deposit-Hold (Kaution-Vorautorisierung)
     let depositIntentId: string | null = null;

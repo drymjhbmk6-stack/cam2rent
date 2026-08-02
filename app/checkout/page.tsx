@@ -750,6 +750,11 @@ export default function CheckoutPage() {
             billingZip: billingDiffers ? billingZip : '',
             billingCity: billingDiffers ? billingCity : '',
             earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
+            // Vertragssignatur serverseitig mitspeichern — sie liegt sonst NUR im
+            // Browser-sessionStorage und geht beim Stripe-Redirect / Webhook-Race
+            // verloren. Ohne diesen durablen Fallback bliebe die Buchung dauerhaft
+            // contract_signed=false, obwohl der Kunde unterschrieben hat.
+            contractSignature: contractSignature ?? null,
           },
         }),
       });

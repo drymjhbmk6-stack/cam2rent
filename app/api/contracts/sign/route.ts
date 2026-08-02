@@ -91,6 +91,23 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (existing) {
+      // Selbstheilung: Es gibt bereits einen gespeicherten Vertrag, aber die
+      // Buchung koennte durch einen abgebrochenen frueheren Speichervorgang
+      // (rental_agreements-Insert erfolgreich, bookings-Update nicht) noch auf
+      // contract_signed=false stehen. Dann sah der Kunde/Admin die Buchung
+      // dauerhaft als "noch zu unterschreiben", obwohl der Vertrag existiert.
+      // Hier setzen wir das Flag idempotent nach.
+      const { data: bk } = await supabase
+        .from('bookings')
+        .select('contract_signed')
+        .eq('id', bookingId)
+        .maybeSingle();
+      if (bk && !bk.contract_signed) {
+        await supabase
+          .from('bookings')
+          .update({ contract_signed: true, contract_signed_at: new Date().toISOString() })
+          .eq('id', bookingId);
+      }
       return NextResponse.json({ success: true, contractUrl: existing.pdf_url, alreadySigned: true });
     }
 
