@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { sanitizeLinkedIds, sanitizeNotiz, MISSING_NEW_COL_RE, NEW_COL_WARNING, stripNewCols } from '@/lib/verbrauch-sanitize';
 
 /**
  * PATCH  /api/admin/verbrauch/[id]  → Felder aktualisieren ODER Bestand anpassen
@@ -67,14 +68,15 @@ export async function PATCH(
       w === null || w === '' || w === undefined ? null : Math.max(0, toInt(w, 0));
   }
   if ('deduct_trigger' in body) updates.deduct_trigger = body.deduct_trigger === 'return' ? 'return' : 'shipment';
-  if ('linked_accessory_id' in body) {
-    const v = body.linked_accessory_id;
-    updates.linked_accessory_id = typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null;
+  if ('linked_accessory_ids' in body) {
+    updates.linked_accessory_ids = sanitizeLinkedIds(body.linked_accessory_ids);
+    updates.linked_accessory_id = null; // Legacy-Einzelfeld leeren (Array ist autoritativ).
   }
   if ('image_url' in body) {
     const v = body.image_url;
     updates.image_url = typeof v === 'string' && v.trim() ? v.trim() : null;
   }
+  if ('notiz' in body) updates.notiz = sanitizeNotiz(body.notiz);
 
   // Bestand: entweder direkt setzen oder per Delta anpassen (Floor bei 0).
   let bestandChanged = false;
@@ -106,6 +108,7 @@ export async function PATCH(
 
   updates.updated_at = new Date().toISOString();
 
+  const warnings: string[] = [];
   let { data, error } = await supabase
     .from('verbrauchsartikel')
     .update(updates)
@@ -113,11 +116,11 @@ export async function PATCH(
     .select()
     .single();
 
-  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen + Retry.
-  if (error && /deduct_trigger|linked_accessory_id|image_url|column|schema cache|PGRST/i.test(error.message || '')) {
-    delete updates.deduct_trigger;
-    delete updates.linked_accessory_id;
-    delete updates.image_url;
+  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen +
+  // Retry, aber mit sichtbarer Warnung (sonst verschwinden Foto/Notiz still).
+  if (error && MISSING_NEW_COL_RE.test(error.message || '')) {
+    stripNewCols(updates);
+    warnings.push(NEW_COL_WARNING);
     ({ data, error } = await supabase.from('verbrauchsartikel').update(updates).eq('id', id).select().single());
   }
 
@@ -134,7 +137,7 @@ export async function PATCH(
     request: req,
   });
 
-  return NextResponse.json({ item: data });
+  return NextResponse.json({ item: data, warnings: warnings.length ? warnings : undefined });
 }
 
 export async function DELETE(

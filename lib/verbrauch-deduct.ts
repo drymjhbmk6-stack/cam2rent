@@ -13,7 +13,22 @@ interface ConsumableRow {
   warn_threshold: number | null;
   low_stock_notified: boolean;
   deduct_trigger?: string | null;
+  linked_accessory_ids?: string[] | null;
   linked_accessory_id?: string | null;
+}
+
+/**
+ * Verknüpfte Zubehör-IDs eines Artikels — bevorzugt die Liste
+ * `linked_accessory_ids`, fällt auf das Legacy-Einzelfeld `linked_accessory_id`
+ * zurück, wenn die Liste leer/fehlt.
+ */
+function linkedIdsOf(it: ConsumableRow): string[] {
+  const arr = Array.isArray(it.linked_accessory_ids)
+    ? it.linked_accessory_ids.map((s) => (s || '').trim()).filter((s) => s.length > 0)
+    : [];
+  if (arr.length > 0) return Array.from(new Set(arr));
+  const single = (it.linked_accessory_id || '').trim();
+  return single ? [single] : [];
 }
 
 /**
@@ -144,20 +159,22 @@ export async function deductConsumablesForBooking(
     if (items.length === 0) return;
 
     // 4. Für verknüpfte Artikel einmalig die Zubehör-Stückzahlen der Buchung
-    //    ermitteln (nur wenn überhaupt ein verknüpfter Artikel dabei ist).
-    const linkedIds = new Set(
-      items.map((it) => (it.linked_accessory_id || '').trim()).filter((id) => id.length > 0),
-    );
+    //    ermitteln (alle verknüpften IDs über alle Artikel gesammelt).
+    const allLinkedIds = new Set<string>();
+    for (const it of items) for (const id of linkedIdsOf(it)) allLinkedIds.add(id);
     const linkedCounts =
-      linkedIds.size > 0 ? await countLinkedAccessories(supabase, bookingId, linkedIds) : new Map<string, number>();
+      allLinkedIds.size > 0
+        ? await countLinkedAccessories(supabase, bookingId, allLinkedIds)
+        : new Map<string, number>();
 
     // 5. Pro Artikel abziehen (Floor bei 0), optional Nachschub-Warnung.
     for (const it of items) {
-      const linkedId = (it.linked_accessory_id || '').trim();
+      const ids = linkedIdsOf(it);
       let abzug: number;
-      if (linkedId) {
-        const count = linkedCounts.get(linkedId) || 0;
-        if (count <= 0) continue; // Zubehör nicht in dieser Buchung → kein Abzug.
+      if (ids.length > 0) {
+        // Summe der Stückzahlen ALLER verknüpften Zubehörteile in der Buchung.
+        const count = ids.reduce((sum, id) => sum + (linkedCounts.get(id) || 0), 0);
+        if (count <= 0) continue; // keins der verknüpften Teile in der Buchung.
         abzug = Math.max(1, Number(it.deduct_qty) || 1) * count;
       } else {
         abzug = Math.max(1, Number(it.deduct_qty) || 1);

@@ -5668,22 +5668,26 @@ Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
   (Gruppe Katalog, Permission `katalog`) + Icon in `NotificationDropdown` — greift
   automatisch in die Pro-Mitarbeiter-Push-Prefs.
 - **Trigger-Zeitpunkt + Zubehör-Verknüpfung + Foto (Erweiterung Stand 2026-08-02):**
-  drei additive Spalten (idempotent an dieselbe Migration angehängt):
+  additive Spalten (idempotent an dieselbe Migration angehängt):
   `verbrauchsartikel.deduct_trigger TEXT DEFAULT 'shipment'` (`shipment` = bei
   Versand/Abholung, `return` = bei Rückgabe/Buchung `completed`; **nicht** `trigger`
-  genannt = Postgres-Keyword, CHECK per DO-Guard), `linked_accessory_id TEXT NULL`
-  (Verknüpfung mit `accessories.id`), `image_url TEXT NULL` (Referenzfoto). Plus
-  `bookings.consumables_returned_deducted_at TIMESTAMPTZ` = **separater** Rückgabe-
-  Marker (unabhängig vom Versand-Marker → dieselbe Buchung kann bei Versand UND
-  Rückgabe je einmal abziehen).
+  genannt = Postgres-Keyword, CHECK per DO-Guard),
+  `linked_accessory_ids TEXT[] DEFAULT '{}'` (Verknüpfung mit **mehreren**
+  `accessories.id`; das alte `linked_accessory_id TEXT` bleibt als Lese-Fallback),
+  `image_url TEXT NULL` (Referenzfoto), `notiz TEXT NULL` (Freitext, z.B.
+  Nachbestell-Link). Plus `bookings.consumables_returned_deducted_at TIMESTAMPTZ`
+  = **separater** Rückgabe-Marker (unabhängig vom Versand-Marker → dieselbe
+  Buchung kann bei Versand UND Rückgabe je einmal abziehen).
   - **Helper `deductConsumablesForBooking(supabase, bookingId, phase='shipment')`**
-    ist jetzt phasen-fähig: claimt den phasen-eigenen Marker, filtert Artikel per
+    ist phasen-fähig: claimt den phasen-eigenen Marker, filtert Artikel per
     `deduct_trigger === phase` (fehlende Spalte → `'shipment'`). **Verknüpfte**
-    Artikel werden nur abgezogen, wenn die Buchung das Zubehör enthält, und
-    **skaliert nach Stückzahl** (Set-Auflösung via `resolveAccessoryItems` aus
-    `lib/booking-accessory-apply.ts`, `deduct_qty × count`). Unverknüpfte = einmal
-    pro Buchung wie bisher. Die 6 Versand-Hooks bleiben unverändert (Default-Phase).
-    Anwendungsfall: Klebepad ↔ Helmhalterung → 2 Halterungen zurück = 2× Pad-Abzug.
+    Artikel (`linked_accessory_ids`, sonst Legacy-Einzelfeld) werden nur abgezogen,
+    wenn die Buchung **mindestens eines** der Zubehörteile enthält, und **skaliert
+    nach Gesamt-Stückzahl aller verknüpften Teile** (Set-Auflösung via
+    `resolveAccessoryItems` aus `lib/booking-accessory-apply.ts`,
+    `deduct_qty × Σ count`). Unverknüpfte = einmal pro Buchung. Die 6 Versand-Hooks
+    bleiben unverändert (Default-Phase). Anwendungsfall: ein Klebepad mit mehreren
+    Halterungs-Typen verknüpft → jede zurückgegebene Halterung zieht ein Pad ab.
   - **4 Rückgabe-Hooks** (fire-and-forget, `phase='return'`, nur bei `completed`,
     NICHT bei `damaged`): `return-booking`, `return-checklist`,
     `update-booking-status`, `booking/[id]` PATCH. Der Return-Marker garantiert
@@ -5694,11 +5698,15 @@ Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
     `accessory-part-images`, gibt `{ url }` zurück; die URL wird über POST/PATCH
     `image_url` gespeichert. Permission `katalog` über den `/api/admin/verbrauch`-
     Prefix. Neu-Anlegen nutzt eine temporäre `tmp-…`-ID für den Pfad.
-  - **API + UI:** POST/PATCH akzeptieren `deduct_trigger`/`linked_accessory_id`/
-    `image_url` (defensiver Insert/Update-Retry ohne die neuen Spalten). Die Seite
-    lädt zusätzlich `/api/admin/accessories` fürs Verknüpfungs-Dropdown, zeigt
-    „Abzug bei"-Select, „Verknüpft mit Zubehör"-Select, Foto-Upload + Thumbnail
-    auf der Karte, Trigger-/🔗-Badges.
+  - **API + UI:** Sanitizer in `lib/verbrauch-sanitize.ts`. POST/PATCH akzeptieren
+    `deduct_trigger`/`linked_accessory_ids`/`image_url`/`notiz`; der defensive
+    Insert/Update-Retry ohne die neuen Spalten liefert jetzt eine **`warnings`**-
+    Meldung zurück (statt still zu droppen) → das UI zeigt „…Migration (erneut)
+    ausführen". Die Seite lädt `/api/admin/accessories` für die **Mehrfach-
+    Auswahl** (Checkbox-Liste + Suche), zeigt „Abzug bei"-Select, Notiz-Textarea
+    (URLs auf der Karte klickbar), Foto-Thumbnail auf der Karte (Klick →
+    Lightbox), Trigger-/🔗-Badges. Foto + Notiz erscheinen erst, wenn die neuen
+    Spalten in der DB existieren (sonst greift die Warnung).
 - **Go-Live TODO:** siehe „Noch offen".
 
 ## Offene Punkte
@@ -6183,11 +6191,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
 ### Noch offen
 - **Verbraucher-Zähler-Migration auszuführen (bzw. ERNEUT):** `supabase/supabase-verbrauchsartikel.sql`
   (idempotent: Tabelle `verbrauchsartikel` + additiv `bookings.consumables_deducted_at`
-  **+ neu** die Spalten `deduct_trigger`, `linked_accessory_id`, `image_url` und
+  **+ neu** die Spalten `deduct_trigger`, `linked_accessory_ids TEXT[]`,
+  `linked_accessory_id` (Legacy), `image_url`, `notiz` und
   `bookings.consumables_returned_deducted_at`). **Falls die Migration schon einmal
   lief, erneut ausführen** — die `ALTER … ADD COLUMN IF NOT EXISTS` fügen nur die
   neuen Spalten hinzu. Ohne die neuen Spalten läuft der Versand-Abzug weiter, aber
-  Rückgabe-Trigger + Zubehör-Verknüpfung + Foto sind inaktiv (Helper/API defensiv).
+  Rückgabe-Trigger + Zubehör-Verknüpfung + Foto + Notiz sind inaktiv (Helper/API
+  defensiv; das UI zeigt beim Speichern eine Warnung, dass die Migration fehlt).
   Ohne die Grund-Migration ist das Feature ganz inaktiv: `/admin/verbrauch` lädt
   (leer + Migrations-Hinweis), Anlegen 503, Auto-Abzug No-Op. Der Notification-Typ
   `verbrauch_low_stock` ist ohne Migration wirkungslos. Siehe „Interner

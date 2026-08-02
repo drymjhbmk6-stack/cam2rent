@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { sanitizeLinkedIds, sanitizeNotiz, MISSING_NEW_COL_RE, NEW_COL_WARNING, stripNewCols } from '@/lib/verbrauch-sanitize';
 
 /**
  * GET  /api/admin/verbrauch  → alle Verbrauchsartikel (interner Zähler)
@@ -70,21 +71,21 @@ export async function POST(req: NextRequest) {
     deduct_qty,
     warn_threshold,
     deduct_trigger: body?.deduct_trigger === 'return' ? 'return' : 'shipment',
-    linked_accessory_id:
-      typeof body?.linked_accessory_id === 'string' && body.linked_accessory_id.trim()
-        ? body.linked_accessory_id.trim().slice(0, 200)
-        : null,
+    linked_accessory_ids: sanitizeLinkedIds(body?.linked_accessory_ids),
+    linked_accessory_id: null, // Legacy-Feld: neue Datensätze nutzen nur das Array.
     image_url: typeof body?.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null,
+    notiz: sanitizeNotiz(body?.notiz),
     sort_order,
   };
 
+  const warnings: string[] = [];
   let { data, error } = await supabase.from('verbrauchsartikel').insert(payload).select().single();
 
-  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen + Retry.
-  if (error && /deduct_trigger|linked_accessory_id|image_url|column|schema cache|PGRST/i.test(error.message || '')) {
-    delete payload.deduct_trigger;
-    delete payload.linked_accessory_id;
-    delete payload.image_url;
+  // Defensiv: neue Spalten fehlen (Migration nicht erneut ausgeführt) → droppen +
+  // Retry, aber mit sichtbarer Warnung (sonst verschwinden Foto/Notiz still).
+  if (error && MISSING_NEW_COL_RE.test(error.message || '')) {
+    stripNewCols(payload);
+    warnings.push(NEW_COL_WARNING);
     ({ data, error } = await supabase.from('verbrauchsartikel').insert(payload).select().single());
   }
 
@@ -103,5 +104,5 @@ export async function POST(req: NextRequest) {
     request: req,
   });
 
-  return NextResponse.json({ item: data });
+  return NextResponse.json({ item: data, warnings: warnings.length ? warnings : undefined });
 }

@@ -14,8 +14,10 @@ interface Verbrauchsartikel {
   warn_threshold: number | null;
   low_stock_notified: boolean;
   deduct_trigger: 'shipment' | 'return' | null;
+  linked_accessory_ids: string[] | null;
   linked_accessory_id: string | null;
   image_url: string | null;
+  notiz: string | null;
   sort_order: number;
 }
 
@@ -25,6 +27,8 @@ interface AccessoryLite {
 }
 
 const CACHE_KEY = 'admin:verbrauch:items';
+const URL_SPLIT_RE = /(https?:\/\/[^\s]+)/g;
+const URL_TEST_RE = /^https?:\/\//;
 
 function isLow(a: Verbrauchsartikel): boolean {
   return typeof a.warn_threshold === 'number' && a.bestand <= a.warn_threshold;
@@ -34,15 +38,83 @@ function triggerLabel(t: string | null | undefined): string {
   return t === 'return' ? 'bei Rückgabe' : 'bei Versand / Abholung';
 }
 
+// Verknüpfte IDs eines Artikels — Array bevorzugt, Legacy-Einzelfeld als Fallback.
+function linkedIdsOf(a: Verbrauchsartikel): string[] {
+  const arr = Array.isArray(a.linked_accessory_ids) ? a.linked_accessory_ids.filter(Boolean) : [];
+  if (arr.length > 0) return arr;
+  return a.linked_accessory_id ? [a.linked_accessory_id] : [];
+}
+
+// Notiz-Text rendern und URLs klickbar machen (sicher, kein dangerouslySetInnerHTML).
+function renderNote(text: string) {
+  const parts = text.split(URL_SPLIT_RE);
+  return parts.map((part, i) =>
+    URL_TEST_RE.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline break-all">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
+}
+
+// Mehrfachauswahl (Checkbox-Liste + Suche). Modul-scope, damit sie beim
+// Eltern-Re-Render (z.B. Checkbox-Toggle) nicht neu gemountet wird.
+function AccessoryMultiSelect({
+  accessories,
+  selected,
+  onToggle,
+}: {
+  accessories: AccessoryLite[];
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [q, setQ] = useState('');
+  const filtered = accessories.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="rounded border border-slate-700 bg-[#0a0f1e]">
+      <input
+        className="w-full px-2 py-1.5 bg-transparent border-b border-slate-700 text-slate-50 text-sm outline-none"
+        placeholder="Zubehör suchen…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      <div className="max-h-48 overflow-y-auto p-1">
+        {accessories.length === 0 && <div className="px-2 py-2 text-xs text-slate-500">Kein Zubehör geladen.</div>}
+        {filtered.map((a) => {
+          const on = selected.includes(a.id);
+          return (
+            <label key={a.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm ${on ? 'bg-cyan-500/10' : 'hover:bg-slate-800/60'}`}>
+              <input type="checkbox" checked={on} onChange={() => onToggle(a.id)} className="w-4 h-4" />
+              <span className="truncate">{a.name}</span>
+            </label>
+          );
+        })}
+        {filtered.length === 0 && accessories.length > 0 && (
+          <div className="px-2 py-2 text-xs text-slate-500">Keine Treffer.</div>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="px-2 py-1.5 border-t border-slate-700 text-xs text-slate-400">
+          {selected.length} ausgewählt — pro zurückgegebenem/versendetem Exemplar wird abgezogen (Abzugsmenge × Stückzahl).
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function VerbrauchPage() {
   const [items, setItems] = useState<Verbrauchsartikel[]>(
     () => getCached<Verbrauchsartikel[]>(CACHE_KEY) ?? [],
   );
   const [loading, setLoading] = useState(() => getCached(CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [migrationPending, setMigrationPending] = useState(false);
   const [accessories, setAccessories] = useState<AccessoryLite[]>([]);
   const accById = new Map(accessories.map((a) => [a.id, a.name]));
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const didMount = useRef(false);
 
   // Neu-Anlegen-Formular
@@ -53,8 +125,9 @@ export default function VerbrauchPage() {
   const [nQty, setNQty] = useState('1');
   const [nWarn, setNWarn] = useState('');
   const [nTrigger, setNTrigger] = useState<'shipment' | 'return'>('shipment');
-  const [nLinked, setNLinked] = useState('');
+  const [nLinked, setNLinked] = useState<string[]>([]);
   const [nImage, setNImage] = useState('');
+  const [nNotiz, setNNotiz] = useState('');
   const [saving, setSaving] = useState(false);
   const newTmpId = useRef('tmp-' + Math.random().toString(36).slice(2, 10));
 
@@ -65,10 +138,10 @@ export default function VerbrauchPage() {
   const [eQty, setEQty] = useState('1');
   const [eWarn, setEWarn] = useState('');
   const [eTrigger, setETrigger] = useState<'shipment' | 'return'>('shipment');
-  const [eLinked, setELinked] = useState('');
+  const [eLinked, setELinked] = useState<string[]>([]);
   const [eImage, setEImage] = useState('');
+  const [eNotiz, setENotiz] = useState('');
 
-  // Bestand-direkt-setzen
   const [setValById, setSetValById] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -115,6 +188,14 @@ export default function VerbrauchPage() {
     void loadAccessories();
   }, []);
 
+  // ESC schließt die Lightbox.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
   function resetNew() {
     setNName('');
     setNBestand('0');
@@ -122,9 +203,14 @@ export default function VerbrauchPage() {
     setNQty('1');
     setNWarn('');
     setNTrigger('shipment');
-    setNLinked('');
+    setNLinked([]);
     setNImage('');
+    setNNotiz('');
     newTmpId.current = 'tmp-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function noteWarnings(w: unknown) {
+    if (Array.isArray(w) && w.length > 0) setWarning(String(w[0]));
   }
 
   async function uploadImage(id: string, file: File): Promise<string | null> {
@@ -156,6 +242,7 @@ export default function VerbrauchPage() {
     }
     setSaving(true);
     setError(null);
+    setWarning(null);
     try {
       const res = await fetch('/api/admin/verbrauch', {
         method: 'POST',
@@ -167,8 +254,9 @@ export default function VerbrauchPage() {
           deduct_qty: parseInt(nQty, 10) || 1,
           warn_threshold: nWarn.trim() === '' ? null : parseInt(nWarn, 10) || 0,
           deduct_trigger: nTrigger,
-          linked_accessory_id: nLinked || null,
+          linked_accessory_ids: nLinked,
           image_url: nImage || null,
+          notiz: nNotiz.trim() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -176,6 +264,7 @@ export default function VerbrauchPage() {
         setError(data.error ?? `HTTP ${res.status}`);
         return;
       }
+      noteWarnings(data.warnings);
       resetNew();
       setShowNew(false);
       await reload();
@@ -206,6 +295,7 @@ export default function VerbrauchPage() {
         setError(data.error ?? `HTTP ${res.status}`);
         return null;
       }
+      noteWarnings(data.warnings);
       if (data.item) applyLocal(data.item as Verbrauchsartikel);
       return data.item as Verbrauchsartikel;
     } finally {
@@ -233,8 +323,9 @@ export default function VerbrauchPage() {
     setEQty(String(a.deduct_qty));
     setEWarn(a.warn_threshold === null ? '' : String(a.warn_threshold));
     setETrigger(a.deduct_trigger === 'return' ? 'return' : 'shipment');
-    setELinked(a.linked_accessory_id ?? '');
+    setELinked(linkedIdsOf(a));
     setEImage(a.image_url ?? '');
+    setENotiz(a.notiz ?? '');
   }
 
   async function saveEdit(id: string) {
@@ -242,20 +333,22 @@ export default function VerbrauchPage() {
       setError('Name darf nicht leer sein.');
       return;
     }
+    setWarning(null);
     const ok = await patch(id, {
       name: eName.trim(),
       auto_deduct: eAuto,
       deduct_qty: parseInt(eQty, 10) || 1,
       warn_threshold: eWarn.trim() === '' ? null : parseInt(eWarn, 10) || 0,
       deduct_trigger: eTrigger,
-      linked_accessory_id: eLinked || null,
+      linked_accessory_ids: eLinked,
       image_url: eImage || null,
+      notiz: eNotiz.trim() || null,
     });
     if (ok) setEditId(null);
   }
 
   async function handleDelete(a: Verbrauchsartikel) {
-    if (!confirm(`„${a.name}" wirklich löschen? Der Zähler geht dabei verloren.`)) return;
+    if (!confirm(`„${a.name}“ wirklich löschen? Der Zähler geht dabei verloren.`)) return;
     setBusyId(a.id);
     try {
       const res = await fetch(`/api/admin/verbrauch/${a.id}`, { method: 'DELETE' });
@@ -277,6 +370,36 @@ export default function VerbrauchPage() {
   const inputCls =
     'px-2 py-1.5 rounded bg-[#0a0f1e] border border-slate-700 text-slate-50 text-sm w-full';
 
+  function photoBlock(url: string, onPick: (f: File) => void, onClear: () => void) {
+    return (
+      <div className="flex items-center gap-3">
+        {url ? (
+          <button type="button" onClick={() => setLightbox(url)} title="Vergrößern">
+            <Image src={url} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
+          </button>
+        ) : (
+          <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
+        )}
+        <div className="flex flex-col gap-1">
+          <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
+            {uploading ? 'Lädt…' : url ? 'Foto ändern' : '📷 Foto hochladen'}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) onPick(f);
+              }}
+            />
+          </label>
+          {url && <button onClick={onClear} className="text-xs text-rose-400 hover:text-rose-300 w-fit">Foto entfernen</button>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
       <AdminBackLink />
@@ -287,7 +410,7 @@ export default function VerbrauchPage() {
             <p className="text-slate-400 text-sm mt-1">
               Interner Zähler für Verbrauchsmaterial (z.B. Gummibärchentüten,
               Füllmaterial, Klebepads). Optional automatischer Abzug bei Versand/
-              Abholung oder bei Rückgabe — auch verknüpft mit einem Zubehör.
+              Abholung oder bei Rückgabe — auch verknüpft mit Zubehör.
             </p>
           </div>
           <button
@@ -302,6 +425,13 @@ export default function VerbrauchPage() {
           <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-sm">
             Migration <code>supabase-verbrauchsartikel.sql</code> ist noch nicht
             ausgeführt — Anlegen ist erst danach möglich.
+          </div>
+        )}
+
+        {warning && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-sm flex items-start justify-between gap-3">
+            <span>{warning}</span>
+            <button onClick={() => setWarning(null)} className="text-amber-400 hover:text-amber-200">✕</button>
           </div>
         )}
 
@@ -338,56 +468,24 @@ export default function VerbrauchPage() {
                   <option value="return">Rückgabe</option>
                 </select>
               </label>
-              <label className="text-sm space-y-1">
-                <span className="text-slate-400">Verknüpft mit Zubehör (optional)</span>
-                <select className={inputCls} value={nLinked} onChange={(e) => setNLinked(e.target.value)}>
-                  <option value="">— pauschal pro Buchung —</option>
-                  {accessories.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="text-sm space-y-1">
+                <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
+                <AccessoryMultiSelect
+                  accessories={accessories}
+                  selected={nLinked}
+                  onToggle={(id) => setNLinked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))}
+                />
+              </div>
             </div>
-            {nLinked && (
-              <p className="text-xs text-slate-400">
-                Wird pro zurückgegebenem/versendetem Exemplar dieses Zubehörs abgezogen
-                (Abzugsmenge × Stückzahl).
-              </p>
-            )}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={nAuto} onChange={(e) => setNAuto(e.target.checked)} className="w-4 h-4" />
               <span>Automatisch abziehen</span>
             </label>
-
-            {/* Foto */}
-            <div className="flex items-center gap-3">
-              {nImage ? (
-                <Image src={nImage} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
-              ) : (
-                <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
-              )}
-              <div className="flex flex-col gap-1">
-                <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
-                  {uploading ? 'Lädt…' : nImage ? 'Foto ändern' : '📷 Foto hochladen'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (!f) return;
-                      const url = await uploadImage(newTmpId.current, f);
-                      if (url) setNImage(url);
-                    }}
-                  />
-                </label>
-                {nImage && (
-                  <button onClick={() => setNImage('')} className="text-xs text-rose-400 hover:text-rose-300 w-fit">Foto entfernen</button>
-                )}
-              </div>
-            </div>
-
+            <label className="text-sm space-y-1 block">
+              <span className="text-slate-400">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
+              <textarea className={inputCls + ' min-h-[60px]'} value={nNotiz} onChange={(e) => setNNotiz(e.target.value)} placeholder="z.B. Nachbestellen bei https://…" />
+            </label>
+            {photoBlock(nImage, async (f) => { const u = await uploadImage(newTmpId.current, f); if (u) setNImage(u); }, () => setNImage(''))}
             <div className="flex gap-2">
               <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">
                 {saving ? 'Speichern…' : 'Anlegen'}
@@ -414,7 +512,7 @@ export default function VerbrauchPage() {
             const low = isLow(a);
             const editing = editId === a.id;
             const busy = busyId === a.id;
-            const linkedName = a.linked_accessory_id ? accById.get(a.linked_accessory_id) : null;
+            const linkedNames = linkedIdsOf(a).map((id) => accById.get(id) || id);
             return (
               <div
                 key={a.id}
@@ -424,7 +522,9 @@ export default function VerbrauchPage() {
                   {/* Foto + Bestand + Name */}
                   <div className="flex items-center gap-4 min-w-0">
                     {a.image_url ? (
-                      <Image src={a.image_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-cover rounded border border-slate-700 flex-shrink-0" />
+                      <button type="button" onClick={() => setLightbox(a.image_url!)} title="Vergrößern" className="flex-shrink-0">
+                        <Image src={a.image_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-cover rounded border border-slate-700" />
+                      </button>
                     ) : null}
                     <div className="text-center">
                       <div className={`text-3xl font-bold tabular-nums ${low ? 'text-amber-400' : 'text-slate-50'}`}>
@@ -444,11 +544,11 @@ export default function VerbrauchPage() {
                             Kein Auto-Abzug
                           </span>
                         )}
-                        {linkedName && (
-                          <span className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
-                            🔗 {linkedName}
+                        {linkedNames.map((n, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">
+                            🔗 {n}
                           </span>
-                        )}
+                        ))}
                         {a.warn_threshold !== null && (
                           <span className={`px-2 py-0.5 rounded border ${low ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-700/40 border-slate-600 text-slate-400'}`}>
                             Warnung ab {a.warn_threshold}
@@ -481,6 +581,13 @@ export default function VerbrauchPage() {
                   </div>
                 </div>
 
+                {/* Notiz-Zeile */}
+                {a.notiz && (
+                  <div className="mt-2 text-xs text-slate-400 whitespace-pre-wrap break-words">
+                    📝 {renderNote(a.notiz)}
+                  </div>
+                )}
+
                 {editing && (
                   <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-sm space-y-1">
@@ -502,49 +609,25 @@ export default function VerbrauchPage() {
                         <option value="return">Rückgabe</option>
                       </select>
                     </label>
-                    <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Verknüpft mit Zubehör (optional)</span>
-                      <select className={inputCls} value={eLinked} onChange={(e) => setELinked(e.target.value)}>
-                        <option value="">— pauschal pro Buchung —</option>
-                        {accessories.map((ac) => (
-                          <option key={ac.id} value={ac.id}>{ac.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm sm:mt-6">
+                    <div className="text-sm space-y-1 sm:col-span-2">
+                      <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
+                      <AccessoryMultiSelect
+                        accessories={accessories}
+                        selected={eLinked}
+                        onToggle={(id) => setELinked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
                       <input type="checkbox" checked={eAuto} onChange={(e) => setEAuto(e.target.checked)} className="w-4 h-4" />
                       <span>Automatisch abziehen</span>
                     </label>
-
-                    {/* Foto */}
-                    <div className="sm:col-span-2 flex items-center gap-3">
-                      {eImage ? (
-                        <Image src={eImage} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
-                      ) : (
-                        <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
-                      )}
-                      <div className="flex flex-col gap-1">
-                        <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
-                          {uploading ? 'Lädt…' : eImage ? 'Foto ändern' : '📷 Foto hochladen'}
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const f = e.target.files?.[0];
-                              e.target.value = '';
-                              if (!f) return;
-                              const url = await uploadImage(a.id, f);
-                              if (url) setEImage(url);
-                            }}
-                          />
-                        </label>
-                        {eImage && (
-                          <button onClick={() => setEImage('')} className="text-xs text-rose-400 hover:text-rose-300 w-fit">Foto entfernen</button>
-                        )}
-                      </div>
+                    <label className="text-sm space-y-1 sm:col-span-2">
+                      <span className="text-slate-400">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
+                      <textarea className={inputCls + ' min-h-[60px]'} value={eNotiz} onChange={(e) => setENotiz(e.target.value)} />
+                    </label>
+                    <div className="sm:col-span-2">
+                      {photoBlock(eImage, async (f) => { const u = await uploadImage(a.id, f); if (u) setEImage(u); }, () => setEImage(''))}
                     </div>
-
                     <div className="sm:col-span-2 flex gap-2">
                       <button onClick={() => saveEdit(a.id)} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">Speichern</button>
                       <button onClick={() => setEditId(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Abbrechen</button>
@@ -556,6 +639,16 @@ export default function VerbrauchPage() {
           })}
         </div>
       </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <Image src={lightbox} alt="" width={900} height={900} unoptimized className="max-w-[92vw] max-h-[88vh] w-auto h-auto object-contain rounded" />
+          <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 text-white/80 hover:text-white text-3xl leading-none">✕</button>
+        </div>
+      )}
     </div>
   );
 }

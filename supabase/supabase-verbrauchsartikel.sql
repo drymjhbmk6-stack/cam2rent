@@ -10,8 +10,9 @@
 --  - `bestand`        aktueller Zähler (manuell + Auto-Abzug)
 --  - `auto_deduct`    automatisch abziehen (an/aus)
 --  - `deduct_trigger` WANN: 'shipment' (Versand/Abholung) | 'return' (Rückgabe)
---  - `linked_accessory_id` optional mit einem Zubehör verknüpft (Abzug nur wenn
---    die Buchung dieses Zubehör enthält, skaliert nach Stückzahl)
+--  - `linked_accessory_ids` optional mit mehreren Zubehörteilen verknüpft (Abzug
+--    nur wenn die Buchung eines davon enthält, skaliert nach Gesamt-Stückzahl)
+--  - `notiz`           Freitext (z.B. Nachbestell-Link / Lieferant)
 --  - `deduct_qty`     Menge, die pro Buchung (bzw. pro verknüpftem Stück) abgezogen wird
 --  - `warn_threshold` Nachschub-Warnung ab diesem Mindestbestand (NULL = aus)
 --  - `low_stock_notified` Dedup-Flag gegen Push-Spam (zurückgesetzt, sobald der
@@ -41,13 +42,19 @@ CREATE TABLE IF NOT EXISTS verbrauchsartikel (
   -- 'return' (bei Rückgabe = Buchung abgeschlossen). NICHT `trigger` genannt —
   -- das ist ein reserviertes Postgres-Keyword.
   deduct_trigger     TEXT NOT NULL DEFAULT 'shipment',
-  -- Optionale Verknüpfung mit einem Zubehör (accessories.id). Gesetzt → der
-  -- Abzug greift nur für Buchungen, die dieses Zubehör enthalten, und skaliert
-  -- mit der Stückzahl (z.B. Klebepad ↔ Helmhalterung: 2 Halterungen zurück =
-  -- 2× Abzug). NULL = pauschal einmal pro Buchung.
+  -- Optionale Verknüpfung mit Zubehör (accessories.id-Liste). Gesetzt → der
+  -- Abzug greift nur für Buchungen, die MINDESTENS EINES dieser Zubehörteile
+  -- enthalten, und skaliert mit der Gesamt-Stückzahl aller verknüpften Teile
+  -- (z.B. Klebepad ↔ mehrere Halterungs-Typen: 2 Halterungen zurück = 2× Abzug).
+  -- Leer = pauschal einmal pro Buchung.
+  linked_accessory_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- Legacy-Einzelfeld (Vorgänger von linked_accessory_ids). Nur noch als Fallback
+  -- gelesen, wenn linked_accessory_ids leer ist. Kein Schreibpfad mehr.
   linked_accessory_id TEXT,
   -- Optionales Referenz-Foto (öffentliche URL im Bucket product-images).
   image_url          TEXT,
+  -- Freitext-Notiz (z.B. Nachbestell-Link / Lieferant).
+  notiz              TEXT,
   sort_order         INTEGER NOT NULL DEFAULT 0,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -56,7 +63,9 @@ CREATE TABLE IF NOT EXISTS verbrauchsartikel (
 -- Additiv für bereits existierende Tabellen (Migration erneut ausführbar).
 ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS deduct_trigger TEXT NOT NULL DEFAULT 'shipment';
 ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS linked_accessory_id TEXT;
+ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS linked_accessory_ids TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE verbrauchsartikel ADD COLUMN IF NOT EXISTS notiz TEXT;
 
 -- CHECK auf gültige Trigger-Werte (idempotent per Guard, da ADD CONSTRAINT kein
 -- IF NOT EXISTS kennt).
