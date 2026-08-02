@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
@@ -114,12 +114,14 @@ export default function AdminEmailLogPage() {
   const [statusFilter, setStatusFilter] = usePersistentState('admin:emails:status', '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [resendStatusMap, setResendStatusMap] = useState<Record<string, ResendStatus>>({});
+  const emailsReqIdRef = useRef(0);
 
   useEffect(() => {
     loadEmails();
   }, [page, typeFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadEmails() {
+    const myId = ++emailsReqIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: '50' });
@@ -127,14 +129,16 @@ export default function AdminEmailLogPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (search) params.set('search', search);
       const res = await fetch(`/api/admin/email-log?${params}`);
+      if (myId !== emailsReqIdRef.current) return;
       const data = await res.json();
+      if (myId !== emailsReqIdRef.current) return;
       setEmails(data.emails ?? []);
       setTotalPages(data.totalPages ?? 1);
       setTotal(data.total ?? 0);
     } catch {
-      setEmails([]);
+      if (myId === emailsReqIdRef.current) setEmails([]);
     } finally {
-      setLoading(false);
+      if (myId === emailsReqIdRef.current) setLoading(false);
     }
   }
 

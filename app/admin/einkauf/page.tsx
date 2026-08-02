@@ -185,12 +185,15 @@ export default function EinkaufPage() {
     if (res.ok) { const j = await res.json(); setSuppliers(j.suppliers); }
   }, []);
 
+  const purchasesReqIdRef = useRef(0);
   const fetchPurchases = useCallback(async () => {
+    const myId = ++purchasesReqIdRef.current;
     const url = filterSupplier
       ? `/api/admin/purchases?supplierId=${filterSupplier}`
       : '/api/admin/purchases';
     const res = await fetch(url);
-    if (res.ok) { const j = await res.json(); setPurchases(j.purchases); }
+    if (myId !== purchasesReqIdRef.current) return;
+    if (res.ok) { const j = await res.json(); if (myId !== purchasesReqIdRef.current) return; setPurchases(j.purchases); }
   }, [filterSupplier]);
 
   const fetchClassifierData = useCallback(async () => {

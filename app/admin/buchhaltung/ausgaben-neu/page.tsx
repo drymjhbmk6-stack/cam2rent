@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -39,19 +39,23 @@ export default function AusgabenNeuPage() {
   const [data, setData] = useState<Ausgabe[]>([]);
   const [kpi, setKpi] = useState({ total: 0, total_brutto: 0, top_kategorien: [] as Array<{ kategorie: string; brutto: number }> });
   const [loading, setLoading] = useState(false);
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     const load = async () => {
+      const myId = ++reqIdRef.current;
       setLoading(true);
       const sp = new URLSearchParams();
       sp.set('from', from); sp.set('to', to);
       if (kategorie) sp.set('kategorie', kategorie);
       if (quelle) sp.set('quelle', quelle);
       const res = await fetch(`/api/admin/ausgaben?${sp.toString()}`);
+      if (myId !== reqIdRef.current) return;
       const d = await res.json();
+      if (myId !== reqIdRef.current) return;
       setData(d.ausgaben ?? []);
       setKpi(d.kpi ?? kpi);
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     };
     load();
   }, [from, to, kategorie, quelle]);

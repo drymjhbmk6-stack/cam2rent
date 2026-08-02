@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
@@ -20,12 +20,16 @@ export default function BlogKommentarePage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = usePersistentState('admin:blog-kommentare:filter', 'pending');
+  const commentsReqIdRef = useRef(0);
 
   const loadComments = useCallback(async () => {
+    const myId = ++commentsReqIdRef.current;
     setLoading(true);
     const params = filter !== 'all' ? `?status=${filter}` : '';
     const res = await fetch(`/api/admin/blog/comments${params}`);
+    if (myId !== commentsReqIdRef.current) return;
     const data = await res.json();
+    if (myId !== commentsReqIdRef.current) return;
     setComments(data.comments ?? []);
     setLoading(false);
   }, [filter]);

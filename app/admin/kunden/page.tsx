@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
@@ -96,7 +96,11 @@ export default function KundenPage() {
   const [letter, setLetter] = usePersistentState('admin:kunden:letter', '');
   const [resettingId, setResettingId] = useState<string | null>(null);
 
+  // Stale-Response-Guard: nur die jeweils letzte Anfrage darf State setzen.
+  const reqIdRef = useRef(0);
+
   const fetchCustomers = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     const key = kundenCacheKey(filter);
     const cached = getCached<Customer[]>(key);
     // Cache für diesen Filter da → sofort anzeigen, still revalidieren.
@@ -113,11 +117,13 @@ export default function KundenPage() {
       : '';
     try {
       const res = await fetch(`/api/admin/kunden${params}`);
+      if (myId !== reqIdRef.current) return;
       const data = await res.json();
+      if (myId !== reqIdRef.current) return;
       setCustomers(data.customers || []);
       setCached(key, data.customers || []);
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }, [filter]);
 

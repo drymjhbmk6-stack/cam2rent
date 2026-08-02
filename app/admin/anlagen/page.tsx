@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AnlagenTabs from '@/components/admin/AnlagenTabs';
@@ -58,6 +58,7 @@ export default function AnlagenPage() {
   const [filterMethod, setFilterMethod] = usePersistentState<string>('admin:anlagen:method', '');
   const [search, setSearch] = usePersistentState('admin:anlagen:search', '');
   const [isTestMode, setIsTestMode] = useState(false);
+  const assetsReqIdRef = useRef(0);
 
   useEffect(() => {
     // Im Test-Modus zusaetzlich Test-Assets anzeigen — sonst sieht man die
@@ -70,14 +71,15 @@ export default function AnlagenPage() {
   }, []);
 
   useEffect(() => {
+    const myId = ++assetsReqIdRef.current;
     const params = new URLSearchParams();
     if (filterKind) params.set('kind', filterKind);
     if (filterStatus) params.set('status', filterStatus);
     if (isTestMode) params.set('include_test', '1');
     fetch(`/api/admin/assets?${params.toString()}`)
       .then((r) => r.json())
-      .then((d) => setAssets(d.assets ?? []))
-      .finally(() => setLoading(false));
+      .then((d) => { if (myId !== assetsReqIdRef.current) return; setAssets(d.assets ?? []); })
+      .finally(() => { if (myId === assetsReqIdRef.current) setLoading(false); });
   }, [filterKind, filterStatus, isTestMode]);
 
   const filtered = useMemo(() => {

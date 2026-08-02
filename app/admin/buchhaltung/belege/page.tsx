@@ -102,18 +102,22 @@ export default function BelegeListePage() {
   // Monats-Reiter: 'YYYY-MM' oder '' (= alle Monate des gewaehlten Jahres)
   const [monthFilter, setMonthFilter] = useState<string>('');
   const initRef = useRef(false);
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     const load = async () => {
+      const myId = ++reqIdRef.current;
       setLoading(true);
       const sp = new URLSearchParams();
       if (statusFilter) sp.set('status', statusFilter);
       if (q) sp.set('q', q);
       sp.set('limit', '200');
       const res = await fetch(`/api/admin/belege?${sp.toString()}`);
+      if (myId !== reqIdRef.current) return;
       const data = await res.json();
+      if (myId !== reqIdRef.current) return;
       setBelege(data.belege ?? []);
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     };
     const debounce = setTimeout(load, 300);
     return () => clearTimeout(debounce);

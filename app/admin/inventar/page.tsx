@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
@@ -102,6 +102,7 @@ export default function InventarPage() {
   const [belegStatus, setBelegStatus] = usePersistentState('admin:inventar:belegStatus', '');
   const [q, setQ] = usePersistentState('admin:inventar:q', '');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const reqIdRef = useRef(0);
 
   async function handleDelete(id: string, label: string) {
     if (!confirm(
@@ -140,6 +141,7 @@ export default function InventarPage() {
       setLoading(true);
     }
     const load = async () => {
+      const myId = ++reqIdRef.current;
       const sp = new URLSearchParams();
       if (typ) sp.set('typ', typ);
       if (status) sp.set('status', status);
@@ -148,11 +150,13 @@ export default function InventarPage() {
       if (produktId) sp.set('produkt_id', produktId);
       try {
         const res = await fetch(`/api/admin/inventar?${sp.toString()}`);
+        if (myId !== reqIdRef.current) return;
         const data = await res.json();
+        if (myId !== reqIdRef.current) return;
         setUnits(data.units ?? []);
         setCached(key, data.units ?? []);
       } finally {
-        setLoading(false);
+        if (myId === reqIdRef.current) setLoading(false);
       }
     };
     const debounce = setTimeout(load, 300);

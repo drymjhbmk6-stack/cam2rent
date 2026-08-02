@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -217,7 +217,11 @@ export default function AktivitaetsprotokollPage() {
   // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Stale-Response-Guard: nur die jeweils letzte Anfrage darf State setzen.
+  const reqIdRef = useRef(0);
+
   const fetchEntries = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     setLoading(true);
     const params = new URLSearchParams();
     params.set('page', String(page));
@@ -230,8 +234,10 @@ export default function AktivitaetsprotokollPage() {
 
     try {
       const res = await fetch(`/api/admin/audit-log?${params.toString()}`);
+      if (myId !== reqIdRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        if (myId !== reqIdRef.current) return;
         setEntries(data.entries);
         setTotal(data.total);
         setTotalPages(data.totalPages);
@@ -240,7 +246,7 @@ export default function AktivitaetsprotokollPage() {
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }, [page, filterAction, filterEntityType, filterAdmin, filterSearch, filterDateFrom, filterDateTo]);
 

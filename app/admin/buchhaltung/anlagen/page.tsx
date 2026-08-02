@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -40,19 +40,23 @@ export default function AnlagenNeuPage() {
   const [methode, setMethode] = usePersistentState('admin:buchhaltung-anlagen:methode', '');
   const [includeTest, setIncludeTest] = usePersistentState('admin:buchhaltung-anlagen:includeTest', false);
   const [loading, setLoading] = useState(true);
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     const load = async () => {
+      const myId = ++reqIdRef.current;
       setLoading(true);
       const sp = new URLSearchParams();
       if (art) sp.set('art', art);
       if (methode) sp.set('afa_methode', methode);
       if (includeTest) sp.set('include_test', '1');
       const res = await fetch(`/api/admin/anlagen-neu?${sp.toString()}`);
+      if (myId !== reqIdRef.current) return;
       const data = await res.json();
+      if (myId !== reqIdRef.current) return;
       setAssets(data.assets ?? []);
       setKpi(data.kpi ?? kpi);
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     };
     load();
   }, [art, methode, includeTest]);

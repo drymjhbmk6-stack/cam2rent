@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
@@ -32,14 +32,18 @@ export default function SocialPostsList() {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [statusFilter, setStatusFilter] = usePersistentState('admin:social-posts:statusFilter', '');
   const [loading, setLoading] = useState(true);
+  const postsReqIdRef = useRef(0);
 
   async function load() {
+    const myId = ++postsReqIdRef.current;
     setLoading(true);
     const url = new URL('/api/admin/social/posts', window.location.origin);
     if (statusFilter) url.searchParams.set('status', statusFilter);
     url.searchParams.set('limit', '100');
     const res = await fetch(url.toString());
+    if (myId !== postsReqIdRef.current) return;
     const data = await res.json();
+    if (myId !== postsReqIdRef.current) return;
     setPosts(data.posts ?? []);
     setLoading(false);
   }

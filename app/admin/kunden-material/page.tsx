@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
@@ -93,7 +93,11 @@ export default function KundenMaterialPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
 
+  // Stale-Response-Guard: nur die jeweils letzte Anfrage darf State setzen.
+  const reqIdRef = useRef(0);
+
   const load = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     const key = ugcCacheKey(filter);
     const cached = getCached<{ entries: UgcEntry[]; counts: Counts }>(key);
     // Cache für diesen Filter → sofort anzeigen, still revalidieren. Sonst Spinner.
@@ -108,7 +112,9 @@ export default function KundenMaterialPage() {
     try {
       const url = filter === 'all' ? '/api/admin/customer-ugc?status=all' : `/api/admin/customer-ugc?status=${filter}`;
       const res = await fetch(url);
+      if (myId !== reqIdRef.current) return;
       const data = await res.json();
+      if (myId !== reqIdRef.current) return;
       if (!res.ok) throw new Error(data?.error ?? 'Fehler beim Laden.');
       const nextEntries = data.entries ?? [];
       const nextCounts = data.counts ?? DEFAULT_UGC_COUNTS;
@@ -116,9 +122,9 @@ export default function KundenMaterialPage() {
       setCounts(nextCounts);
       setCached(key, { entries: nextEntries, counts: nextCounts });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
+      if (myId === reqIdRef.current) setError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }, [filter]);
 

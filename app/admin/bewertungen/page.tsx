@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -58,15 +58,21 @@ export default function AdminBewertungenPage() {
   const [replyText, setReplyText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Stale-Response-Guard: nur die jeweils letzte Anfrage darf State setzen.
+  const reqIdRef = useRef(0);
+
   async function loadReviews() {
+    const myId = ++reqIdRef.current;
     try {
       const res = await fetch(`/api/admin/reviews?filter=${filter}`);
+      if (myId !== reqIdRef.current) return;
       const data = await res.json();
+      if (myId !== reqIdRef.current) return;
       setReviews(data.reviews ?? []);
       setCached(reviewsCacheKey(filter), data.reviews ?? []);
     } catch {
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }
 
