@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -789,7 +790,7 @@ function downloadCSV(csv: string) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('live');
+  const [activeTab, setActiveTab] = usePersistentState<Tab>('admin:analytics:activeTab', 'live');
   const [clock, setClock] = useState('');
   const [liveData, setLiveData] = useState<LiveData | null>(null);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
@@ -806,12 +807,13 @@ export default function AnalyticsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [blogData, setBlogData] = useState<any>(null);
   const [patternsData, setPatternsData] = useState<PatternsData | null>(null);
-  const [patternDays, setPatternDays] = useState<string>('30'); // 7 | 30 | 90 | 365 | all
+  const [patternDays, setPatternDays] = usePersistentState<string>('admin:analytics:patternDays', '30'); // 7 | 30 | 90 | 365 | all
   const [showWeekdayHeatmap, setShowWeekdayHeatmap] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Filters
-  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS });
+  // Filters (Zeitraum/Produkt/Status über Besuche hinweg merken; customFrom/To
+  // reisen mit, sind aber durch `filtersIncomplete` gegen Fetch-Loops geschützt)
+  const [filters, setFilters] = usePersistentState<FilterState>('admin:analytics:filters', { ...DEFAULT_FILTERS });
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [presetName, setPresetName] = useState('');

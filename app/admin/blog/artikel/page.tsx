@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Post {
   id: string; title: string; slug: string; status: string;
@@ -21,8 +22,8 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }
 export default function BlogArtikelPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [filter, setFilter] = usePersistentState('admin:blog-artikel:filter', 'all');
+  const [search, setSearch] = usePersistentState('admin:blog-artikel:search', '');
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Conversation {
   id: string;
@@ -57,7 +58,7 @@ export default function AdminNachrichtenPage() {
   const [msgLoading, setMsgLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = usePersistentState<FilterType>('admin:nachrichten:filter', 'all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen): zeigt, wie die

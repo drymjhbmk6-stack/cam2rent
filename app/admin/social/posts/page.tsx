@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface SocialPost {
   id: string;
@@ -29,7 +30,7 @@ const STATUS_FILTERS = [
 
 export default function SocialPostsList() {
   const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = usePersistentState('admin:social-posts:statusFilter', '');
   const [loading, setLoading] = useState(true);
 
   async function load() {

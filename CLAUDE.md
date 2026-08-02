@@ -3950,6 +3950,46 @@ Pro Einkauf koennen jetzt mehrere Belege hinterlegt werden — Rechnung, Quittun
 - **Sitemap dynamic:** `app/sitemap.ts` nutzt `dynamic = 'force-dynamic'` + `revalidate = 3600` + `withTimeout(5s)` für DB-Calls. Wird nicht mehr beim Build generiert (sonst Build-Timeout bei langsamer Supabase).
 - **Server:** Hetzner Cloud CPX32 (4 vCPU AMD, 8 GB RAM) — Upgrade von CX23 am 2026-04-19 wegen Build-OOM bei großen Dependency-Trees (Social-Modul).
 
+### Admin-Filter/Suche/Tabs pro Gerät merken — `usePersistentState` (Stand 2026-08-02)
+Admin-Filter, Suchbegriffe, aktive Tabs/Sub-Tabs, Ansichts-Umschalter,
+Sortierung und Zeitraum-Auswahl bleiben jetzt **über Seitenbesuche hinweg
+erhalten** — der Admin muss Filter nicht bei jedem Öffnen neu setzen.
+- **Hook `lib/use-persistent-state.ts`** → `usePersistentState<T>(key, default)`:
+  Drop-in für `useState`, speichert den Wert aber pro Gerät/Browser in
+  `localStorage` (`key`-Schema `admin:<seite>:<feld>`). **Hydration-sicher:**
+  erster Render (Server + erste Client-Hydration) nutzt IMMER `default`, der
+  gespeicherte Wert wird erst nach dem Mount nachgeladen (ein zusätzlicher
+  Render, kein Server/Client-Mismatch) — passt zum `useCachedFetch`-Muster
+  (Client-Pages ohne echtes Daten-SSR). Persistenz ist **pro Gerät**, NICHT
+  kontogebunden (konsistent zu allen anderen Admin-UI-Prefs: Sidebar-Gruppen,
+  Ansichtsmodi). Erster Persist-Lauf wird übersprungen, damit der Default den
+  gespeicherten Wert nicht überschreibt, bevor er gelesen wurde.
+- **`DateRangePicker`** (Buchhaltung, shared) hat eine optionale
+  `persistKey`-Prop; gesetzt → Periode + benutzerdefinierte Daten werden
+  gemerkt. Gesetzt für EÜR/Umsatzliste/USt-VA/Stripe-Abgleich/Dashboard/DATEV
+  (je eigener Key). Ohne Key = unverändert (nicht gespeichert). Interner Helper
+  `useMaybePersistent` (beide Hook-Varianten laufen immer, nur die passende wird
+  zurückgegeben — Rules-of-Hooks-konform; die inaktive schreibt nie).
+- **Ausgerollt auf die Admin-Listen-/Report-Seiten** (Filter/Suche/Tab/View/
+  Sort): Buchungen, Retouren, Versand, Sendungen, Schäden, Kunden, Kundenmaterial,
+  Bewertungen, Buchungsinteresse (Zeitraum), Zubehör, Inventar, Verfügbarkeit
+  (Tab/Kamera-Filter/Suche), Auftragskalender (Test-Toggle), Einkauf, Belege,
+  Ausgaben, Anlagen (beide), E-Mail-Protokoll, Aktivitätsprotokoll, Client-Errors,
+  Analytics (Tab/Filter/Range), Blog-Artikel/-Kommentare/-Themen, Social-Posts/
+  -Reels, Nachrichten (Kanal-Filter). Keys durchgängig `admin:<seite>:<feld>`.
+- **Bewusst NICHT persistiert:** Paginierung/Seitenzahl, gefetchte Daten/Loading,
+  `useCachedFetch`/`getCached`-Seedings, Modal-/Bulk-Auswahl-/Formular-/Edit-State,
+  Monats-Navigation im Kalender, Detail-Auswahl (z.B. offene Konversation).
+  **`Set`-basierte Chip-Filter** (Verfügbarkeit `camModelFilter` etc.) sind
+  ausgelassen — `JSON.stringify(Set)` = `{}` (nicht wiederherstellbar); ggf.
+  später als Array<->Set-Konvertierung nachrüstbar. Bereits per URL-Query
+  (RechnungenTab, Inventar `?typ=`) oder eigenem localStorage-Key
+  (`admin_auftragskalender_view`, Analytics-`presets`) persistierte Werte wurden
+  NICHT doppelt angefasst. Belege-Jahr/Monat ausgelassen (Auto-Init auf neuesten
+  Monat).
+- **Keine Migration, kein Schema-Change, kein Server-State** — reine Client-UX.
+  Zurücksetzen: Browser-localStorage leeren (bzw. Filter im UI neu setzen).
+
 ### Ladezeit: Client-Cache (Stale-While-Revalidate) für Admin-Listen (Stand 2026-07-30)
 Admin-Seiten sind `'use client'` + `useEffect`+`fetch` → beim JEDEM Öffnen erst
 leerer Spinner, dann Daten. Neuer **modul-weiter Client-Cache**

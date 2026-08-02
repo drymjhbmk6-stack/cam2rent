@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 const inputStyle: React.CSSProperties = {
   background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
@@ -22,7 +23,7 @@ function toSlug(text: string): string {
 }
 
 export default function BlogThemenPage() {
-  const [tab, setTab] = useState<'categories' | 'topics' | 'series'>('categories');
+  const [tab, setTab] = usePersistentState<'categories' | 'topics' | 'series'>('admin:blog-themen:tab', 'categories');
   const [categories, setCategories] = useState<Category[]>([]);
   const [topics, setTopics] = useState<AutoTopic[]>([]);
   const [seriesList, setSeriesList] = useState<Series[]>([]);

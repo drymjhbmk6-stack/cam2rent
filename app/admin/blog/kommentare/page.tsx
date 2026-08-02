@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Comment {
   id: string; author_name: string; author_email: string; content: string;
@@ -18,7 +19,7 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }
 export default function BlogKommentarePage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending');
+  const [filter, setFilter] = usePersistentState('admin:blog-kommentare:filter', 'pending');
 
   const loadComments = useCallback(async () => {
     setLoading(true);
