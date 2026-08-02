@@ -88,10 +88,21 @@ export default function DateRangePicker({ onChange, initialPeriod = 'monat', per
     }
   }, [periodType, customFrom, customTo]);
 
+  // Bei `persistKey` lädt usePersistentState den gemerkten Zeitraum ERST nach dem
+  // Mount nach. Ohne Gate würde `onChange` zuerst mit dem Default und dann mit
+  // dem gemerkten Wert feuern → der Konsument stößt ZWEI Fetches an, die
+  // konkurrieren (Stale-Response-Race: die langsamere Default-Antwort kann die
+  // richtige überschreiben). Deshalb feuert `onChange` bei gesetztem persistKey
+  // erst, wenn der gemerkte Wert angewandt ist (ein Tick nach Mount) → genau
+  // EIN Fetch mit dem finalen Zeitraum. Ohne persistKey: Verhalten unverändert.
+  const [ready, setReady] = useState(!persistKey);
+  useEffect(() => { setReady(true); }, []);
+
   useEffect(() => {
+    if (!ready) return;
     const range = computeRange();
     if (range) onChange(range);
-  }, [computeRange, onChange]);
+  }, [ready, computeRange, onChange]);
 
   const inputStyle: React.CSSProperties = {
     padding: '8px 12px',

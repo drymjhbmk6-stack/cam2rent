@@ -811,6 +811,14 @@ export default function AnalyticsPage() {
   const [showWeekdayHeatmap, setShowWeekdayHeatmap] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Stale-Response-Guard pro Fetch-Typ: Beim erneuten Öffnen fetchen die Effekte
+  // zuerst mit dem Default-Filter, dann lädt usePersistentState den gemerkten
+  // Filter nach → zweiter Fetch. Ohne Guard könnte die langsamere ältere Antwort
+  // die neuere überschreiben (Pille zeigt z.B. 30 Tage, Zahlen aber heute). Jede
+  // Fetch-Art bekommt einen eigenen Zähler, damit sie sich nicht gegenseitig
+  // invalidieren (laufen unabhängig/parallel).
+  const reqIdsRef = useRef({ live: 0, history: 0, bookings: 0, traffic: 0, customers: 0, blog: 0, patterns: 0 });
+
   // Filters (Zeitraum/Produkt/Status über Besuche hinweg merken; customFrom/To
   // reisen mit, sind aber durch `filtersIncomplete` gegen Fetch-Loops geschützt)
   const [filters, setFilters] = usePersistentState<FilterState>('admin:analytics:filters', { ...DEFAULT_FILTERS });
@@ -882,12 +890,14 @@ export default function AnalyticsPage() {
 
   const fetchLive = useCallback(async () => {
     if (filtersIncomplete) return;
+    const myId = ++reqIdsRef.current.live;
     const liveUrl = `/api/admin/analytics?type=live&${rangeQS()}`;
     const todayUrl = `/api/admin/analytics?type=today&${rangeQS()}`;
     const [liveRes, todayRes] = await Promise.all([
       safeFetch<LiveData>(liveUrl),
       safeFetch<TodayData>(todayUrl),
     ]);
+    if (myId !== reqIdsRef.current.live) return;
     if (liveRes) setLiveData(liveRes);
     if (todayRes) setTodayData(todayRes);
   }, [filtersIncomplete, rangeQS, safeFetch]);
@@ -913,19 +923,23 @@ export default function AnalyticsPage() {
   const fetchHistory = useCallback(async (daysOverride?: number) => {
     const days = daysOverride ?? 30;
     if (days <= 0) return;
+    const myId = ++reqIdsRef.current.history;
     // range mitschicken (M-7): der History-Branch folgt dann dem gewaehlten
     // Zeitraum (auch vergangenen custom-Fenstern); `days` bleibt Fallback.
     const res = await safeFetch<HistoryData>(`/api/admin/analytics?type=history&${rangeQS({ days: String(days) })}`);
+    if (myId !== reqIdsRef.current.history) return;
     if (res) setHistoryData(res);
   }, [rangeQS, safeFetch]);
 
   const fetchBookings = useCallback(async () => {
     if (filtersIncomplete) return;
+    const myId = ++reqIdsRef.current.bookings;
     const [b, f, p] = await Promise.all([
       safeFetch<BookingsData>(`/api/admin/analytics?type=bookings&${rangeQS()}`),
       safeFetch<FunnelData>(`/api/admin/analytics?type=funnel&${rangeQS()}`),
       safeFetch<ProductsData>(`/api/admin/analytics?type=products&${rangeQS()}`),
     ]);
+    if (myId !== reqIdsRef.current.bookings) return;
     if (b) setBookingsData(b);
     if (f) setFunnelData(f);
     if (p) setProductsData(p);
@@ -933,29 +947,37 @@ export default function AnalyticsPage() {
 
   const fetchTraffic = useCallback(async () => {
     if (filtersIncomplete) return;
+    const myId = ++reqIdsRef.current.traffic;
     const res = await safeFetch<TrafficData>(`/api/admin/analytics?type=traffic&${rangeQS()}`);
+    if (myId !== reqIdsRef.current.traffic) return;
     if (res) setTrafficData(res);
   }, [filtersIncomplete, rangeQS, safeFetch]);
 
   const fetchCustomers = useCallback(async () => {
     if (filtersIncomplete) return;
+    const myId = ++reqIdsRef.current.customers;
     const res = await safeFetch<{
       totalCustomers: number; repeatCustomers: number; repeatRate: number;
       avgLifetimeValue: number; avgOrderValue: number; newCustomers30d: number;
       abandonedCarts: number; recoveredCarts: number; recoveryRate: number;
     }>(`/api/admin/analytics?type=customers&${rangeQS()}`);
+    if (myId !== reqIdsRef.current.customers) return;
     if (res) setCustomersData(res);
   }, [filtersIncomplete, rangeQS, safeFetch]);
 
   const fetchBlog = useCallback(async () => {
     if (filtersIncomplete) return;
+    const myId = ++reqIdsRef.current.blog;
     const res = await safeFetch(`/api/admin/analytics?type=blog&${rangeQS()}`);
+    if (myId !== reqIdsRef.current.blog) return;
     if (res) setBlogData(res);
   }, [filtersIncomplete, rangeQS, safeFetch]);
 
   // Tageszeit-/Wochentag-Muster (eigener pdays-Zeitraum, unabhaengig vom Haupt-Filter).
   const fetchPatterns = useCallback(async () => {
+    const myId = ++reqIdsRef.current.patterns;
     const res = await safeFetch<PatternsData>(`/api/admin/analytics?type=patterns&pdays=${patternDays}`);
+    if (myId !== reqIdsRef.current.patterns) return;
     if (res) setPatternsData(res);
   }, [safeFetch, patternDays]);
 
