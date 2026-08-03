@@ -21,6 +21,17 @@ const MIME: Record<string, string> = {
   mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
 };
 
+// Textdateien (.txt) haben keine Magic-Bytes → per Name/MIME zulassen, aber
+// gegen als Text getarnte Binärdateien absichern (keine NUL-Bytes im Sample).
+function isPlainText(file: File, buffer: Buffer): boolean {
+  const nameTxt = /\.txt$/i.test(file.name || '');
+  const mimeTxt = (file.type || '').toLowerCase().startsWith('text/plain');
+  if (!nameTxt && !mimeTxt) return false;
+  const sample = buffer.subarray(0, 8192);
+  for (let i = 0; i < sample.length; i++) if (sample[i] === 0) return false;
+  return true;
+}
+
 function isMissingBucket(err: { message?: string } | null): boolean {
   if (!err) return false;
   return /bucket not found|not found|does not exist/i.test(err.message ?? '');
@@ -50,15 +61,21 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const detected = detectFileType(buffer) as DetectedFileType | null;
-  if (!detected || !EXT[detected]) {
+
+  let ext: string;
+  let mime: string;
+  if (detected && EXT[detected]) {
+    ext = EXT[detected];
+    mime = MIME[detected];
+  } else if (isPlainText(file, buffer)) {
+    ext = 'txt';
+    mime = 'text/plain; charset=utf-8';
+  } else {
     return NextResponse.json(
-      { error: 'Dateityp nicht erlaubt. Erlaubt: Bilder, PDF, Videos.' },
+      { error: 'Dateityp nicht erlaubt. Erlaubt: Bilder, PDF, Videos, Textdateien (.txt).' },
       { status: 400 },
     );
   }
-
-  const ext = EXT[detected];
-  const mime = MIME[detected];
   const fileId = randomUUID();
   const path = `${me.id}/${fileId}.${ext}`;
   const filename = (file.name || `datei.${ext}`).slice(0, 200);
@@ -135,7 +152,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 5);
+  // ?download=1 erzwingt den Download (Content-Disposition: attachment) mit dem
+  // freundlichen Dateinamen aus ?name= (z.B. für .txt-Dateien).
+  const forceDownload = req.nextUrl.searchParams.get('download') === '1';
+  const dlName = (req.nextUrl.searchParams.get('name') || '').replace(/[\\/\r\n"]/g, '').slice(0, 200);
+  const opts = forceDownload ? { download: dlName || true } : undefined;
+
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 5, opts);
   if (error || !data?.signedUrl) {
     return NextResponse.json({ error: error?.message ?? 'URL nicht erzeugbar.' }, { status: 404 });
   }

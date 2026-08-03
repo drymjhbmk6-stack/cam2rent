@@ -5446,8 +5446,13 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
       `<admin_user_id>/<uuid>.<ext>`.
       - **Upload/Signed-URL/Delete** `app/api/admin/mein/notizen/attachment`
         (POST/GET/DELETE): POST = multipart `file`, Magic-Byte-Check via
-        `detectFileType` (Bild/PDF/Video, max 50 MB), Upload in den Bucket.
-        GET `?path=` = Signed-URL-Redirect (5 Min); Zugriff nur wenn der Pfad
+        `detectFileType` (Bild/PDF/Video, max 50 MB) **+ `.txt`-Textdateien**
+        (kein Magic-Byte → per Name/`text/plain`-MIME zugelassen, NUL-Byte-
+        Sanity-Check gegen getarnte Binärdateien, `text/plain; charset=utf-8`),
+        Upload in den Bucket. GET `?path=` = Signed-URL-Redirect (5 Min);
+        optional `?download=1&name=<datei>` erzwingt den Download
+        (Content-Disposition via Supabase `download`-Option) — im UI der
+        „⬇ Download"-Link bei Nicht-Bild-Anhängen. Zugriff nur wenn der Pfad
         mit der eigenen User-ID beginnt ODER der Pfad in einer mit mir
         geteilten Notiz steckt (`attachments cs [{path}]` + owner/shared-`.or`).
         DELETE `?path=` entfernt nur eigene Storage-Dateien (Präfix-Check).

@@ -92,11 +92,15 @@ function colorBg(color: string | null): string {
 function attachmentUrl(path: string): string {
   return `/api/admin/mein/notizen/attachment?path=${encodeURIComponent(path)}`;
 }
+function downloadUrl(path: string, filename: string): string {
+  return `${attachmentUrl(path)}&download=1&name=${encodeURIComponent(filename)}`;
+}
 function isImage(mime: string): boolean { return mime.startsWith('image/'); }
 function isVideo(mime: string): boolean { return mime.startsWith('video/'); }
 function fileIcon(mime: string): string {
   if (mime === 'application/pdf') return '📄';
   if (isVideo(mime)) return '🎬';
+  if (mime.startsWith('text/')) return '📝';
   return '📎';
 }
 function fmtBytes(n: number): string {
@@ -622,7 +626,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
 
         {/* Anhänge der aktiven Seite */}
         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
-          📎 Bilder &amp; Dateien {isBook ? `auf Seite ${activeIdx + 1}` : ''} (Bilder, PDF, Videos)
+          📎 Bilder &amp; Dateien {isBook ? `auf Seite ${activeIdx + 1}` : ''} (Bilder, PDF, Videos, Text)
         </label>
         {(activePage?.attachments.length ?? 0) > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -647,9 +651,12 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                     style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
                   />
                 ) : (
-                  <a href={attachmentUrl(a.path)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, fontSize: 28, textDecoration: 'none' }}>
-                    {fileIcon(a.mime)}
-                  </a>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, height: 80 }}>
+                    <a href={attachmentUrl(a.path)} target="_blank" rel="noopener noreferrer" title="Öffnen" style={{ fontSize: 28, textDecoration: 'none', lineHeight: 1 }}>
+                      {fileIcon(a.mime)}
+                    </a>
+                    <a href={downloadUrl(a.path, a.filename)} title="Herunterladen" style={{ fontSize: 10, color: '#38bdf8', textDecoration: 'none' }}>⬇ Download</a>
+                  </div>
                 )}
                 {ro ? (
                   <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.label || a.filename}>
@@ -676,7 +683,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,application/pdf,video/*"
+          accept="image/*,application/pdf,video/*,text/plain,.txt"
           multiple
           onChange={(e) => handleFiles(e.target.files)}
           style={{ display: 'none' }}
