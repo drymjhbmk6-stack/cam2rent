@@ -453,12 +453,18 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     const uploaded: Attachment[] = [];
     try {
       for (const file of Array.from(files)) {
-        const fd = new FormData();
-        fd.append('file', file);
-        const res = await fetch('/api/admin/mein/notizen/attachment', { method: 'POST', body: fd });
-        const json = await res.json();
-        if (!res.ok) { setErr(json.error ?? 'Upload fehlgeschlagen'); continue; }
-        uploaded.push(json.attachment as Attachment);
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch('/api/admin/mein/notizen/attachment', { method: 'POST', body: fd });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) { setErr(json.error ?? `Upload fehlgeschlagen (HTTP ${res.status}).`); continue; }
+          uploaded.push(json.attachment as Attachment);
+        } catch {
+          // Netzwerkfehler ("Failed to fetch") sauber abfangen — keine
+          // unhandled rejection, stattdessen verständliche Meldung.
+          setErr(`„${file.name}" konnte nicht hochgeladen werden — Verbindung unterbrochen? Bitte erneut versuchen.`);
+        }
       }
       if (uploaded.length > 0) {
         setPages((prev) => prev.map((p, i) => (i === activeIdx ? { ...p, attachments: [...p.attachments, ...uploaded] } : p)));
