@@ -109,6 +109,8 @@ export default function AdminEmailLogPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [sentCount, setSentCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
   const [search, setSearch] = usePersistentState('admin:emails:search', '');
   const [typeFilter, setTypeFilter] = usePersistentState('admin:emails:type', '');
   const [statusFilter, setStatusFilter] = usePersistentState('admin:emails:status', '');
@@ -135,6 +137,8 @@ export default function AdminEmailLogPage() {
       setEmails(data.emails ?? []);
       setTotalPages(data.totalPages ?? 1);
       setTotal(data.total ?? 0);
+      setSentCount(data.sentCount ?? 0);
+      setFailedCount(data.failedCount ?? 0);
     } catch {
       if (myId === emailsReqIdRef.current) setEmails([]);
     } finally {
@@ -188,9 +192,6 @@ export default function AdminEmailLogPage() {
       fetchResendStatus(email.id);
     }
   }
-
-  const sentCount = emails.filter((e) => e.status === 'sent').length;
-  const failedCount = emails.filter((e) => e.status === 'failed').length;
 
   return (
     <div className="min-h-screen bg-brand-bg">
