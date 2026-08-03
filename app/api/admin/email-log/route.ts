@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const page = parseInt(sp.get('page') || '1', 10);
   const limit = parseInt(sp.get('limit') || '50', 10);
-  const typeFilter = sp.get('type') || '';
+  // "type" kann ein einzelner Typ ODER eine kommagetrennte Liste sein (Filter-Gruppen,
+  // z.B. "auto_cancel,auto_cancel_payment,..." fuer "Auto-Storno (alle)").
+  const typeList = (sp.get('type') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const statusFilter = sp.get('status') || '';
   const search = sp.get('search') || '';
   const bookingId = sp.get('bookingId') || '';
@@ -29,7 +34,8 @@ export async function GET(req: NextRequest) {
     .select('*', { count: 'exact' })
     .order('sent_at', { ascending: false })
     .range(offset, offset + limit - 1);
-  if (typeFilter) query = query.eq('email_type', typeFilter);
+  if (typeList.length === 1) query = query.eq('email_type', typeList[0]);
+  else if (typeList.length > 1) query = query.in('email_type', typeList);
   if (bookingId) query = query.eq('booking_id', bookingId);
   if (orFilter) query = query.or(orFilter);
   if (statusFilter) query = query.eq('status', statusFilter);
@@ -38,7 +44,8 @@ export async function GET(req: NextRequest) {
   // Filter (ausser Status), damit "Gesendet"/"Fehlgeschlagen" die echte Summe zeigen.
   const buildStatusCount = (status: 'sent' | 'failed') => {
     let q = supabase.from('email_log').select('*', { count: 'exact', head: true });
-    if (typeFilter) q = q.eq('email_type', typeFilter);
+    if (typeList.length === 1) q = q.eq('email_type', typeList[0]);
+    else if (typeList.length > 1) q = q.in('email_type', typeList);
     if (bookingId) q = q.eq('booking_id', bookingId);
     if (orFilter) q = q.or(orFilter);
     return q.eq('status', status);

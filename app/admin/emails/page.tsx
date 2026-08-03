@@ -103,6 +103,112 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   test: { label: 'Test-E-Mail', color: '#94a3b8', bg: '#94a3b814' },
 };
 
+// Kuratierter Typ-Filter: verwandte E-Mail-Typen sind zu Gruppen zusammengefasst.
+// Ein Options-Wert kann eine kommagetrennte Typ-Liste sein (Sammel-Filter, z.B.
+// "Auto-Storno (alle)") — die API filtert dann per .in(). Die Zeilen-Badges nutzen
+// weiterhin die feinen Einzel-Labels aus TYPE_LABELS.
+const TYPE_FILTER_GROUPS: { label: string; options: { label: string; value: string }[] }[] = [
+  {
+    label: 'Buchung',
+    options: [
+      { label: 'Buchungsbestätigung', value: 'booking_confirmation' },
+      { label: 'Buchung (Admin)', value: 'booking_admin' },
+      { label: 'Verlängerung', value: 'extension_confirmation' },
+      { label: 'Verlegung', value: 'booking_postponed' },
+      { label: 'Abschlussbestätigung', value: 'completion_confirmation' },
+    ],
+  },
+  {
+    label: 'Stornierungen',
+    options: [
+      { label: '★ Alle Stornierungen', value: 'cancellation_customer,cancellation_admin,auto_cancel,auto_cancel_payment,verification_auto_cancel,contract_auto_cancel' },
+      { label: '★ Auto-Storno (alle)', value: 'auto_cancel,auto_cancel_payment,verification_auto_cancel,contract_auto_cancel' },
+      { label: 'Stornierung (Kunde)', value: 'cancellation_customer' },
+      { label: 'Stornierung (Admin)', value: 'cancellation_admin' },
+      { label: 'Auto-Storno', value: 'auto_cancel' },
+      { label: 'Auto-Storno (unbezahlt)', value: 'auto_cancel_payment' },
+      { label: 'Auto-Storno (Verifizierung)', value: 'verification_auto_cancel' },
+      { label: 'Auto-Storno (Mietvertrag)', value: 'contract_auto_cancel' },
+    ],
+  },
+  {
+    label: 'Versand & Rückgabe',
+    options: [
+      { label: 'Versandbestätigung', value: 'shipping_confirmation' },
+      { label: '★ Rückgabe-Erinnerungen (alle)', value: 'return_reminder_2d,return_reminder_0d,return_checklist' },
+      { label: '★ Überfällig (alle)', value: 'overdue_1d,overdue_3d' },
+    ],
+  },
+  {
+    label: 'Mietvertrag',
+    options: [
+      { label: 'Vertrag unterschrieben', value: 'contract_signed' },
+      { label: '★ Vertrag-Erinnerungen (alle)', value: 'contract_resign_request,contract_sign_reminder' },
+    ],
+  },
+  {
+    label: 'Verifizierung & Konto',
+    options: [
+      { label: '★ Verifizierungs-Erinnerungen (alle)', value: 'verification_reminder,verification_reminder_manual' },
+      { label: 'Verifizierung: Abgelehnt', value: 'verification_rejected' },
+      { label: '★ Konto-Warnungen (alle)', value: 'account_unverified_warning,account_inactive_warning' },
+    ],
+  },
+  {
+    label: 'Rechnung & Zahlung',
+    options: [
+      { label: 'Zahlungs-Link', value: 'payment_link' },
+      { label: 'Rechnungsanpassung', value: 'invoice_adjustment' },
+      { label: 'Stornierungsbeleg / Gutschrift', value: 'credit_note' },
+      { label: 'Verkaufsrechnung', value: 'kauf_rechnung' },
+      { label: 'Wiederbeschaffungswerte (final)', value: 'wbw_confirmation' },
+    ],
+  },
+  {
+    label: 'Schaden',
+    options: [
+      { label: '★ Alle Schaden-Mails', value: 'damage_report_customer,damage_report_admin,damage_documented_customer,schadensersatz_forderung,damage_resolution' },
+      { label: 'Schadensmeldung (Kunde)', value: 'damage_report_customer' },
+      { label: 'Schadensmeldung (Admin)', value: 'damage_report_admin' },
+      { label: 'Schaden dokumentiert', value: 'damage_documented_customer' },
+      { label: 'Schadensersatz-Forderung', value: 'schadensersatz_forderung' },
+      { label: 'Schadensauflösung', value: 'damage_resolution' },
+    ],
+  },
+  {
+    label: 'Nachrichten & E-Mail',
+    options: [
+      { label: 'Nachricht (Admin)', value: 'message_admin' },
+      { label: 'Nachricht (Kunde)', value: 'message_customer' },
+      { label: '★ Eingehende E-Mails (alle)', value: 'inbound_received,inbound_beleg_received,inbound_reply' },
+    ],
+  },
+  {
+    label: 'Kundenmaterial',
+    options: [
+      { label: '★ Alle Kundenmaterial-Mails', value: 'ugc_approved,ugc_featured,ugc_rejected' },
+    ],
+  },
+  {
+    label: 'Newsletter',
+    options: [
+      { label: '★ Alle Newsletter', value: 'newsletter_confirm,newsletter_campaign,newsletter_test' },
+    ],
+  },
+  {
+    label: 'Marketing & Sonstiges',
+    options: [
+      { label: 'Bewertungsanfrage', value: 'review_request' },
+      { label: 'Bewertungs-Gutschein', value: 'review_reward_coupon' },
+      { label: 'Empfehlung', value: 'referral_reward' },
+      { label: 'Warenkorbabbruch', value: 'abandoned_cart' },
+      { label: 'Wochenbericht', value: 'weekly_report' },
+      { label: 'Dokumente (manuell)', value: 'manual_documents' },
+      { label: 'Test-E-Mail', value: 'test' },
+    ],
+  },
+];
+
 export default function AdminEmailLogPage() {
   const [emails, setEmails] = useState<EmailEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -241,8 +347,12 @@ export default function AdminEmailLogPage() {
                 className="text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black"
               >
                 <option value="">Alle Typen</option>
-                {Object.entries(TYPE_LABELS).map(([key, { label }]) => (
-                  <option key={key} value={key}>{label}</option>
+                {TYPE_FILTER_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
