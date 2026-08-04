@@ -116,11 +116,34 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Zubehör: benötigte Menge pro accessory_id aufsummieren und gegen Restbestand prüfen.
+  // Zubehör: benötigte Menge pro accessory_id aufsummieren und gegen Restbestand
+  // prüfen. Set-Einträge (Pseudo-Zubehör) werden vorher in ihre echten
+  // Bestandteile expandiert, damit die Set-Inhalte nicht überbucht werden.
+  const setItemsById = new Map<string, Array<{ accessory_id: string; qty: number }>>();
+  try {
+    const { data: setRows } = await supabase.from('sets').select('id, accessory_items');
+    for (const s of (setRows ?? []) as { id: string; accessory_items: unknown }[]) {
+      const items = Array.isArray(s.accessory_items)
+        ? (s.accessory_items as Array<{ accessory_id: string; qty: number }>).filter(
+            (it) => it && typeof it.accessory_id === 'string',
+          )
+        : [];
+      setItemsById.set(s.id, items);
+    }
+  } catch { /* keine Sets → keine Expansion */ }
+
   const neededAcc = new Map<string, number>();
   for (const l of lines) {
     for (const a of l.accessories) {
-      neededAcc.set(a.accessory_id, (neededAcc.get(a.accessory_id) ?? 0) + a.qty * Math.max(1, l.qty));
+      const need = a.qty * Math.max(1, l.qty);
+      const setItems = setItemsById.get(a.accessory_id);
+      if (setItems) {
+        for (const it of setItems) {
+          neededAcc.set(it.accessory_id, (neededAcc.get(it.accessory_id) ?? 0) + Math.max(1, it.qty) * need);
+        }
+      } else {
+        neededAcc.set(a.accessory_id, (neededAcc.get(a.accessory_id) ?? 0) + need);
+      }
     }
   }
   if (neededAcc.size > 0) {

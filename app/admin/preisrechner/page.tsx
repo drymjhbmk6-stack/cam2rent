@@ -8,6 +8,8 @@ import { useAccessories } from '@/components/AccessoriesProvider';
 
 interface Customer { id: string; full_name: string; email: string }
 
+interface SetOption { id: string; name: string; product_ids: string[] }
+
 interface Line {
   productId: string;
   qty: number;
@@ -15,7 +17,7 @@ interface Line {
   accessories: { accessory_id: string; qty: number }[];
 }
 
-interface QuoteAccessoryLine { accessoryId: string; name: string; qty: number; unitPrice: number; total: number; available: boolean; remaining: number | null }
+interface QuoteAccessoryLine { accessoryId: string; name: string; qty: number; unitPrice: number; total: number; available: boolean; remaining: number | null; isSet?: boolean }
 interface QuoteLine {
   productId: string; productName: string; qty: number;
   rentalUnitPrice: number; rentalTotal: number;
@@ -49,6 +51,7 @@ export default function PreisrechnerPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custSearch, setCustSearch] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [sets, setSets] = useState<SetOption[]>([]);
 
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
@@ -64,11 +67,18 @@ export default function PreisrechnerPage() {
   const [copied, setCopied] = useState(false);
 
   const accById = useMemo(() => new Map(accessories.map((a) => [a.id, a])), [accessories]);
+  const setById = useMemo(() => new Map(sets.map((s) => [s.id, s])), [sets]);
 
   useEffect(() => {
     fetch('/api/admin/kunden')
       .then((r) => r.json())
       .then((d) => setCustomers((d.customers ?? []).filter((c: Customer) => c.email)))
+      .catch(() => {});
+    fetch('/api/sets')
+      .then((r) => r.json())
+      .then((d) => setSets((d.sets ?? []).map((s: { id: string; name: string; product_ids?: string[] }) => ({
+        id: s.id, name: s.name, product_ids: Array.isArray(s.product_ids) ? s.product_ids : [],
+      }))))
       .catch(() => {});
   }, []);
 
@@ -85,6 +95,21 @@ export default function PreisrechnerPage() {
       .filter((c) => (c.full_name || '').toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
       .slice(0, 8);
   }, [customers, custSearch]);
+
+  function nameFor(id: string): string {
+    return setById.get(id)?.name ?? accById.get(id)?.name ?? id;
+  }
+
+  // Zubehör + Sets passend zur Kamera der Zeile. Sets über product_ids,
+  // Zubehör über compatibleProductIds (leer = alle Kameras).
+  function optionsFor(productId: string) {
+    const compatSets = sets.filter((s) => s.product_ids.length === 0 || s.product_ids.includes(productId));
+    const compatAcc = accessories.filter((a) => {
+      const c = a.compatibleProductIds;
+      return !c || c.length === 0 || c.includes(productId);
+    });
+    return { compatSets, compatAcc };
+  }
 
   function updateLine(idx: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
@@ -282,7 +307,10 @@ export default function PreisrechnerPage() {
                 <div className="space-y-1 mb-2">
                   {line.accessories.map((a) => (
                     <div key={a.accessory_id} className="flex items-center gap-2 text-sm">
-                      <span className="flex-1 text-brand-black dark:text-white">{accById.get(a.accessory_id)?.name ?? a.accessory_id}</span>
+                      <span className="flex-1 text-brand-black dark:text-white">
+                        {nameFor(a.accessory_id)}
+                        {setById.has(a.accessory_id) && <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-brand-primary/10 text-brand-primary">Set</span>}
+                      </span>
                       <input type="number" min={1} value={a.qty}
                         onChange={(e) => setAccQty(idx, a.accessory_id, parseInt(e.target.value, 10) || 1)}
                         className="w-16 text-base rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-brand-black dark:text-white" />
@@ -291,11 +319,25 @@ export default function PreisrechnerPage() {
                   ))}
                 </div>
               )}
-              <select value="" onChange={(e) => { addAccessory(idx, e.target.value); e.target.value = ''; }}
-                className="w-full text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-brand-steel">
-                <option value="">+ Zubehör hinzufügen…</option>
-                {accessories.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              {(() => {
+                const { compatSets, compatAcc } = optionsFor(line.productId);
+                return (
+                  <select value="" onChange={(e) => { addAccessory(idx, e.target.value); e.target.value = ''; }}
+                    className="w-full text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-brand-steel">
+                    <option value="">+ Set / Zubehör hinzufügen…</option>
+                    {compatSets.length > 0 && (
+                      <optgroup label="Sets">
+                        {compatSets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </optgroup>
+                    )}
+                    {compatAcc.length > 0 && (
+                      <optgroup label="Zubehör">
+                        {compatAcc.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </optgroup>
+                    )}
+                  </select>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -353,7 +395,7 @@ export default function PreisrechnerPage() {
                 </div>
                 {line.accessories.map((a) => (
                   <div key={a.accessoryId} className="flex items-center justify-between text-xs text-brand-steel mt-0.5">
-                    <span>+ {a.qty}× {a.name}{!a.available && <span className="ml-1 text-status-error">nur {a.remaining ?? 0} frei</span>}</span>
+                    <span>+ {a.qty}× {a.name}{a.isSet && <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-brand-primary/10 text-brand-primary">Set</span>}{!a.available && <span className="ml-1 text-status-error">nur {a.remaining ?? 0} frei</span>}</span>
                     <span>{eur(a.total)}</span>
                   </div>
                 ))}

@@ -49,6 +49,16 @@ export interface QuoteAccessoryLine {
   total: number;
   available: boolean;
   remaining: number | null;
+  /** true = dieser Eintrag ist ein Set (Pseudo-Zubehör, in Bestandteile expandiert). */
+  isSet?: boolean;
+}
+
+interface SetRow {
+  id: string;
+  name: string;
+  pricingMode: 'perDay' | 'flat';
+  price: number;
+  items: { accessory_id: string; qty: number }[];
 }
 
 export interface QuoteLine {
@@ -130,13 +140,47 @@ async function loadShippingConfig(supabase: SupabaseClient) {
   return DEFAULT_SHIPPING;
 }
 
+/**
+ * Laedt alle Sets (id, name, pricing_mode, price, accessory_items). Ein im
+ * Preisrechner/Reservierung gewaehltes Set wird als Pseudo-Zubehoer-Eintrag
+ * ({ accessory_id: setId, qty }) in `line.accessories` gefuehrt; hier loesen
+ * wir Preis + Bestandteile auf. Defensiv: bei Fehler leere Map.
+ */
+async function loadSets(supabase: SupabaseClient): Promise<Map<string, SetRow>> {
+  const map = new Map<string, SetRow>();
+  try {
+    const { data } = await supabase
+      .from('sets')
+      .select('id, name, pricing_mode, price, accessory_items');
+    for (const r of (data ?? []) as {
+      id: string; name: string | null; pricing_mode: string | null;
+      price: number | null; accessory_items: unknown;
+    }[]) {
+      const items = Array.isArray(r.accessory_items)
+        ? (r.accessory_items as { accessory_id: string; qty: number }[]).filter(
+            (it) => it && typeof it.accessory_id === 'string',
+          )
+        : [];
+      map.set(r.id, {
+        id: r.id,
+        name: r.name ?? r.id,
+        pricingMode: (r.pricing_mode as 'perDay' | 'flat') ?? 'perDay',
+        price: Number(r.price ?? 0),
+        items,
+      });
+    }
+  } catch { /* Fallback: keine Sets */ }
+  return map;
+}
+
 export async function computeQuote(supabase: SupabaseClient, input: QuoteInput): Promise<QuoteResult> {
   const days = inclusiveDays(input.rentalFrom, input.rentalTo);
-  const [products, accessories, haftungConfig, shippingConfig] = await Promise.all([
+  const [products, accessories, haftungConfig, shippingConfig, setById] = await Promise.all([
     getProducts(),
     getAccessories(),
     loadHaftungConfig(supabase),
     loadShippingConfig(supabase),
+    loadSets(supabase),
   ]);
   const productById = new Map(products.map((p) => [p.id, p]));
   const accById = new Map(accessories.map((a) => [a.id, a]));
@@ -167,11 +211,22 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
     }
   }
 
-  // Zubehör: benötigte Menge pro accessory_id + Restbestand.
+  // Zubehör: benötigte Menge pro accessory_id + Restbestand. Set-Einträge
+  // werden in ihre echten Bestandteile expandiert (analog Shop), damit die
+  // Verfügbarkeitsprüfung die Set-Inhalte nicht überbucht.
   const neededAcc = new Map<string, number>();
   for (const line of input.lines) {
     for (const a of line.accessories) {
-      neededAcc.set(a.accessory_id, (neededAcc.get(a.accessory_id) ?? 0) + Math.max(1, a.qty));
+      const aQty = Math.max(1, a.qty);
+      const set = setById.get(a.accessory_id);
+      if (set) {
+        for (const it of set.items) {
+          const need = Math.max(1, it.qty) * aQty;
+          neededAcc.set(it.accessory_id, (neededAcc.get(it.accessory_id) ?? 0) + need);
+        }
+      } else {
+        neededAcc.set(a.accessory_id, (neededAcc.get(a.accessory_id) ?? 0) + aQty);
+      }
     }
   }
   const accRemaining = new Map<string, number>();
@@ -210,21 +265,49 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
     const accLines: QuoteAccessoryLine[] = [];
     let accSum = 0;
     for (const a of line.accessories) {
-      const acc = accById.get(a.accessory_id);
       const aQty = Math.max(1, a.qty);
-      const unitPrice = acc ? getAccessoryPrice(acc, days) : 0;
-      const total = round2(unitPrice * aQty);
-      accSum += total;
-      const remaining = accRemaining.get(a.accessory_id);
-      accLines.push({
-        accessoryId: a.accessory_id,
-        name: acc?.name ?? a.accessory_id,
-        qty: aQty,
-        unitPrice,
-        total,
-        available: remaining === undefined ? true : remaining >= (neededAcc.get(a.accessory_id) ?? aQty),
-        remaining: remaining === undefined ? null : remaining,
-      });
+      const set = setById.get(a.accessory_id);
+      if (set) {
+        // Set: Preis flat/perDay, Verfügbarkeit aus den Bestandteilen (worst
+        // case über alle Positionen).
+        const unitPrice = set.pricingMode === 'flat' ? set.price : set.price * days;
+        const total = round2(unitPrice * aQty);
+        accSum += total;
+        let setAvailable = true;
+        let setRemaining: number | null = null;
+        for (const it of set.items) {
+          const needTotal = Math.max(1, it.qty) * aQty;
+          const rem = accRemaining.get(it.accessory_id);
+          if (rem === undefined) continue;
+          if (setRemaining === null || rem < setRemaining) setRemaining = rem;
+          if (rem < needTotal) setAvailable = false;
+        }
+        accLines.push({
+          accessoryId: a.accessory_id,
+          name: set.name,
+          qty: aQty,
+          unitPrice: round2(unitPrice),
+          total,
+          available: setAvailable,
+          remaining: setRemaining,
+          isSet: true,
+        });
+      } else {
+        const acc = accById.get(a.accessory_id);
+        const unitPrice = acc ? getAccessoryPrice(acc, days) : 0;
+        const total = round2(unitPrice * aQty);
+        accSum += total;
+        const remaining = accRemaining.get(a.accessory_id);
+        accLines.push({
+          accessoryId: a.accessory_id,
+          name: acc?.name ?? a.accessory_id,
+          qty: aQty,
+          unitPrice,
+          total,
+          available: remaining === undefined ? true : remaining >= (neededAcc.get(a.accessory_id) ?? aQty),
+          remaining: remaining === undefined ? null : remaining,
+        });
+      }
     }
 
     // Haftungsschutz pro Kamera → × qty.

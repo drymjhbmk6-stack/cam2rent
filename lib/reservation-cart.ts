@@ -47,6 +47,24 @@ async function loadHaftungConfig(): Promise<HaftungConfig> {
   return DEFAULT_HAFTUNG;
 }
 
+interface SetPriceRow { pricingMode: 'perDay' | 'flat'; price: number }
+
+/** Sets fuer die Preis-Aufloesung (Set-ID → flat/perDay-Preis). Defensiv. */
+async function loadSets(): Promise<Map<string, SetPriceRow>> {
+  const map = new Map<string, SetPriceRow>();
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase.from('sets').select('id, pricing_mode, price');
+    for (const r of (data ?? []) as { id: string; pricing_mode: string | null; price: number | null }[]) {
+      map.set(r.id, {
+        pricingMode: (r.pricing_mode as 'perDay' | 'flat') ?? 'perDay',
+        price: Number(r.price ?? 0),
+      });
+    }
+  } catch { /* Fallback: keine Sets */ }
+  return map;
+}
+
 function inclusiveDays(fromIso: string, toIso: string): number {
   const from = new Date(fromIso);
   const to = new Date(toIso);
@@ -70,10 +88,11 @@ export async function buildCartItemsFromReservation(
     items: ReservationItems;
   },
 ): Promise<ReservationCartItem[]> {
-  const [products, accessories, haftungConfig] = await Promise.all([
+  const [products, accessories, haftungConfig, setById] = await Promise.all([
     getProducts(),
     getAccessories(),
     loadHaftungConfig(),
+    loadSets(),
   ]);
   const productById = new Map(products.map((p) => [p.id, p]));
   const accById = new Map(accessories.map((a) => [a.id, a]));
@@ -87,16 +106,22 @@ export async function buildCartItemsFromReservation(
 
     const priceRental = getPriceForDays(product, days);
 
-    // Zubehoer-Preise + qty-Liste.
+    // Zubehoer-Preise + qty-Liste. Set-Eintraege (Pseudo-Zubehoer) bleiben mit
+    // ihrer Set-ID erhalten — der Checkout expandiert sie in echte Bestandteile.
     const accessoryItems: { accessory_id: string; qty: number }[] = [];
     const accessoryIds: string[] = [];
     let priceAccessories = 0;
     for (const a of line.accessories) {
-      const acc = accById.get(a.accessory_id);
       const qty = Math.max(1, a.qty);
       accessoryItems.push({ accessory_id: a.accessory_id, qty });
       accessoryIds.push(a.accessory_id);
-      if (acc) priceAccessories += getAccessoryPrice(acc, days) * qty;
+      const set = setById.get(a.accessory_id);
+      if (set) {
+        priceAccessories += (set.pricingMode === 'flat' ? set.price : set.price * days) * qty;
+      } else {
+        const acc = accById.get(a.accessory_id);
+        if (acc) priceAccessories += getAccessoryPrice(acc, days) * qty;
+      }
     }
 
     // Haftungsschutz-Preis (gestaffelt).

@@ -1147,6 +1147,37 @@ keine Persistenz.
   (qty>1 → mehrere qty=1-Zeilen, Zubehör auf der ersten) und navigiert zu
   `/admin/reservierungen`, das den Prefill beim Mount liest (Kunde per id aus der
   geladenen Liste, Zeitraum/Modus/Zeilen). Keine Migration.
+- **Sets wählbar + Zubehör nach Kamera gruppiert/gefiltert (Stand 2026-08-04):** Das
+  „+ hinzufügen"-Dropdown jeder Kamera-Zeile ist jetzt in **zwei `<optgroup>`** geteilt —
+  **Sets** + **Zubehör** — jeweils **gefiltert auf die in der Zeile gewählte Kamera**:
+  Sets über `sets.product_ids` (leer = alle), Zubehör über `accessories.compatible_product_ids`
+  (leer/fehlend = mit allen Kameras kompatibel, wird NIE weggefiltert — gleiche Semantik
+  wie der Buchungsflow). Dafür wurde `Accessory.compatibleProductIds` ans Frontend
+  durchgereicht (`data/accessories.ts` + `lib/get-accessories.ts` → `useAccessories()`),
+  die Seiten fetchen zusätzlich `/api/sets` (kein neuer Hook). **Sets als Pseudo-Zubehör
+  (Shop-Modell):** ein gewähltes Set liegt als `{accessory_id: setId, qty}` in
+  `line.accessories`. `computeQuote` (`lib/quote.ts`) erkennt Set-IDs (`loadSets` →
+  `setById`): Preis `pricingMode==='flat' ? price : price×days`, fließt in Zeilen-Subtotal
+  UND Rabatt-Basis; Verfügbarkeit expandiert die Set-Bestandteile (`sets.accessory_items`,
+  qty × Eintrag-qty) in den `neededAcc`-Check gegen `computeAccessoryAvailability`
+  (Set-Zeile zeigt worst-case-Restbestand + „Set"-Badge, `QuoteAccessoryLine.isSet`).
+  Die Reservierungs-Seite nutzt denselben gruppierten Picker; „→ Reservierung übernehmen"
+  behält Set-Einträge (als Pseudo-Zubehör) in den übertragenen `accessories`.
+
+### 48-Stunden-Reservierung — Sets im Picker (Stand 2026-08-04)
+Ergänzung zur „48-Stunden-Reservierung für Bestandskunden": das Zubehör-Dropdown auf
+`/admin/reservierungen` ist jetzt derselbe gruppierte Picker wie im Preisrechner (Sets +
+Zubehör nach Kamera, siehe oben). So kann der Admin ein **Set direkt reservieren**, und
+ein aus dem Preisrechner übernommenes Set wird korrekt angezeigt.
+- **Verfügbarkeits-Check** in `POST /api/admin/reservierung`: Set-IDs werden vor dem
+  `neededAcc`-Check in ihre Bestandteile expandiert (`sets.accessory_items`, qty ×
+  Zeilen-qty), damit die Set-Inhalte nicht überbucht werden (analog `computeQuote`).
+  Defensiv: keine Sets-Welt → keine Expansion.
+- **`buildCartItemsFromReservation`** (`lib/reservation-cart.ts`) ist set-aware: ein
+  Set-Eintrag rechnet seinen Set-Preis (flat/perDay) in `priceAccessories` ein und
+  **behält die Set-ID** in `accessories`/`accessoryItems` — der Checkout expandiert sie
+  in echte Bestandteile. So ist ein aus dem Rechner übernommenes Set im
+  Kunden-Warenkorb korrekt bepreist.
 
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.

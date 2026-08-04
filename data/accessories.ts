@@ -93,6 +93,13 @@ export interface Accessory {
    * Weglassen = kein Gruppenrabatt möglich für dieses Zubehör.
    */
   group?: string;
+
+  /**
+   * Kompatible Kameras (product_ids). Leer/undefined = mit ALLEN Kameras
+   * kompatibel. Genutzt fürs Filtern des Zubehör-Dropdowns nach Kamera
+   * (Preisrechner, Reservierung).
+   */
+  compatibleProductIds?: string[];
 }
 
 // ─── Accessories ──────────────────────────────────────────────────────────────
