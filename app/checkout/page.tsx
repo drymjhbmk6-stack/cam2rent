@@ -425,6 +425,8 @@ export default function CheckoutPage() {
 
   // Stripe
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // CustomerSession-Secret → Payment Element zeigt gespeicherte Karten des Kunden
+  const [customerSessionSecret, setCustomerSessionSecret] = useState<string | null>(null);
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const [intentError, setIntentError] = useState('');
 
@@ -763,6 +765,7 @@ export default function CheckoutPage() {
         throw new Error(data.error ?? 'Fehler beim Initialisieren der Zahlung.');
       }
       setClientSecret(data.clientSecret);
+      setCustomerSessionSecret(data.customerSessionClientSecret ?? null);
       setStep('payment');
     } catch (err) {
       setIntentError(
@@ -1498,6 +1501,9 @@ export default function CheckoutPage() {
                     stripe={stripePromise}
                     options={{
                       clientSecret,
+                      ...(customerSessionSecret
+                        ? { customerSessionClientSecret: customerSessionSecret }
+                        : {}),
                       appearance: {
                         theme: 'stripe',
                         variables: {

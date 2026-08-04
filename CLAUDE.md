@@ -898,6 +898,67 @@ dabei **wieder für andere Kunden buchbar** (Inventar-Freigabe).
   Anker/Marker nicht (defensive Fallbacks greifen, aber der Storno-Anker + die
   echte Zubehör-Freigabe wirken erst nach der Migration).
 
+### Gespeicherte Zahlungsmittel — Karte hinterlegen für schnelleres Buchen (Stand 2026-08-04)
+Kunden können im Konto eine Kreditkarte hinterlegen; sie erscheint dann in
+**beiden** Zahlungsflows (Warenkorb-Checkout `/checkout` UND Direkt-/Angebots-
+Buchung `/kameras/[slug]/buchen`) im Stripe Payment Element **vorausgewählt** →
+kein erneutes Karten-Eintippen. cam2rent hatte vorher KEINEN Stripe-Customer-
+Layer (Zahlungen liefen anonym über PaymentIntents) — der wird hier neu
+eingeführt.
+- **Ansatz (bewusst maximal additiv, degradiert überall auf das heutige
+  Verhalten):** Pro Kunde ein Stripe-Customer, an dem die gespeicherten Karten
+  hängen. Im Checkout wird der Customer an den PaymentIntent gehängt + eine
+  **`CustomerSession`** (nur `payment_method_redisplay` + `payment_method_remove`)
+  erzeugt und ans `<Elements>` durchgereicht → das native Payment Element zeigt
+  die gespeicherte Karte. **Bewusst KEIN `payment_method_save`** in der Session
+  (kollidiert mit dem `setup_future_usage`, das die Intent-Routen für die
+  Kaution-Vorautorisierung setzen) — das **Speichern** einer Karte läuft
+  ausschließlich über die dedizierte Konto-Seite (SetupIntent), konfliktfrei und
+  ohne Eingriff in den kritischen Confirm-Pfad. `setup_future_usage` unverändert.
+  Die bestehende Redirect-`confirmPayment`- + `confirm-cart`/`confirm-booking`-
+  Pipeline bleibt **1:1** — der Customer wird nur zusätzlich an die Intents
+  gehängt (nötig, damit die Kaution-Confirm mit einer customer-attachten
+  Payment-Method funktioniert; ohne Kaution-Modus irrelevant).
+- **Test/Live strikt getrennt:** Der Customer lebt in genau EINEM Stripe-Account.
+  Zwei Spalten `profiles.stripe_customer_id` (Live) + `stripe_customer_id_test`
+  (Tester ODER env-mode=test). Migration
+  `supabase/supabase-profiles-stripe-customer.sql` (idempotent, additiv).
+  **Service-role-only** — NICHT in den column-level `GRANT UPDATE` für
+  `authenticated` aufnehmen (Kunde darf die ID nicht selbst setzen); gesetzt wird
+  sie nur serverseitig beim Anlegen des Customers.
+- **Shared-Lib `lib/stripe-customer.ts`** (alle Helfer best-effort/defensiv →
+  null bei Fehler, Checkout läuft dann ohne gespeicherte Karten weiter):
+  `resolveUserStripe(userId)` (spiegelt `tester ? getTesterStripe() : getStripe()`
+  + `useTest`), `getStoredCustomerId`, `getOrCreateStripeCustomer` (legt Customer
+  im richtigen Account an + persistiert, verifiziert Existenz bei Account-/Mode-
+  Wechsel), `createPaymentElementSession` (CustomerSession, nur redisplay+remove),
+  `listSavedCards` (setzt jede Karte auf `allow_redisplay='always'`, sonst filtert
+  die Redisplay-Regel SetupIntent-Karten mit Default `'unspecified'` aus).
+- **Konto-Seite `/konto/zahlungsmittel`** (neuer Tab in `app/konto/layout.tsx`):
+  Karte hinterlegen (SetupIntent card-only → `confirmSetup` mit
+  `redirect:'if_required'`), Liste gespeicherter Karten (Marke/•••• last4/Ablauf),
+  Entfernen (detach). Nutzt `getStripePromise({ userId })` (Tester/Test/Live-Key).
+- **APIs** (Cookie-Auth, kunden-eigen): `POST /api/zahlungsmittel/setup-intent`
+  (Customer anlegen + SetupIntent, Rate-Limit 15/min), `GET /api/zahlungsmittel`
+  (Karten-Liste), `DELETE /api/zahlungsmittel` (`{paymentMethodId}`, Ownership-
+  Check pm.customer===customerId, detach).
+- **Intent-Routen** `app/api/checkout-intent` + `app/api/create-payment-intent`:
+  je ein best-effort Block direkt nach der Stripe-Instanz-Wahl → Customer +
+  CustomerSession; `customer` an Haupt- **und** Deposit-Intent; Antwort um
+  `customerSessionClientSecret` erweitert. **Client** (`app/checkout/page.tsx` +
+  `app/kameras/[slug]/buchen/page.tsx`): neuer State `customerSessionSecret` aus
+  der Antwort, optional als `customerSessionClientSecret` in die `<Elements>`-
+  `options` (fehlt es → heutiges Verhalten). Keine Änderung am Confirm/Redirect.
+- **DSGVO:** Kartendaten liegen ausschließlich bei Stripe (nie bei cam2rent) —
+  Hinweis auf der Konto-Seite. ⚠️ **Offen/gemeldet:** Datenschutzerklärung + AGB
+  sollten die Speicherung von Zahlungsmitteln bei Stripe erwähnen (nicht aus der
+  Sandbox anpassbar — DB-Rechtstexte über `/admin/legal`).
+- **Bewusst NICHT im Scope:** „Karte während des Checkouts speichern"-Checkbox
+  (native `payment_method_save` in der Session — wegen `setup_future_usage`-
+  Konflikt bewusst weggelassen; kommt ggf. als v2 nach Live-Test), PayPal-
+  Speicherung (nur Karten), 1-Klick-Bypass des Payment Elements.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Neukunden zahlen immer sofort — Zahlungslink-Pfad entfernt (Stand 2026-06-16)
 Der frühere „erste Buchung → `pending_verification` → Admin gibt frei → Kunde
 bekommt Zahlungslink per E-Mail"-Pfad ist aus dem **Kunden-Flow entfernt**.
@@ -6333,6 +6394,17 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Gespeicherte Zahlungsmittel — Migration auszuführen:**
+  `supabase/supabase-profiles-stripe-customer.sql` (idempotent, additiv:
+  `profiles.stripe_customer_id` + `stripe_customer_id_test`, service-role-only).
+  Ohne sie funktioniert das Feature best-effort trotzdem (Customer wird pro
+  Zahlung neu angelegt, weil die ID nicht persistiert werden kann → mehr
+  Stripe-Customer als nötig, aber kein Bruch; Konto-Seite + Checkout laufen).
+  Nach der Migration werden Customer-IDs sauber wiederverwendet. Empfohlen ASAP
+  ausführen. Voraussetzung fürs Speichern: die Stripe-Keys (Test/Live) sind
+  ohnehin schon gesetzt — kein neuer Env-/Cron-Eintrag nötig. Datenschutztext
+  (Zahlungsmittel-Speicherung bei Stripe) in AGB/Datenschutz über `/admin/legal`
+  ergänzen. Details siehe „Gespeicherte Zahlungsmittel".
 - **48-h-Reservierung — Migration + Cron auszuführen:** Migration
   `supabase/supabase-reservations.sql` (idempotent) ausführen. Ohne sie ist das Feature
   inaktiv (Anlegen liefert 503, Landing 404, Verfügbarkeits-Helfer sind No-Ops — der

@@ -9,6 +9,8 @@ import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 import { isAllowedCountry, DEFAULT_COUNTRY, countryName, loadAllowedCountryCodes } from '@/lib/allowed-countries';
+import { isTestMode } from '@/lib/env-mode';
+import { getOrCreateStripeCustomer, createPaymentElementSession } from '@/lib/stripe-customer';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -318,12 +320,37 @@ export async function POST(req: NextRequest) {
     // Damit werden echte Karten/PayPal nicht belastet — der Tester-Flow
     // funktioniert nur mit Test-Karten (z.B. 4242 4242 4242 4242).
     const stripe = tester ? getTesterStripe() : await getStripe();
+
+    // ── Gespeicherte Zahlungsmittel: Customer + Payment-Element-Session ────────
+    // Best-effort. Bei Fehler → kein customer, keine Session → Checkout wie
+    // zuvor. Kein Eingriff in setup_future_usage.
+    let intentCustomer: string | null = null;
+    let customerSessionClientSecret: string | null = null;
+    try {
+      const useTest = tester || (await isTestMode());
+      intentCustomer = await getOrCreateStripeCustomer({
+        userId,
+        email: customerEmail,
+        name: customerName,
+        stripe,
+        useTest,
+      });
+      if (intentCustomer) {
+        customerSessionClientSecret = await createPaymentElementSession(stripe, intentCustomer);
+      }
+    } catch (custErr) {
+      console.error('[checkout-intent] Customer/Session best-effort fehlgeschlagen:', custErr);
+      intentCustomer = null;
+      customerSessionClientSecret = null;
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'eur',
       description,
       automatic_payment_methods: { enabled: true },
       metadata,
+      ...(intentCustomer ? { customer: intentCustomer } : {}),
       ...(depositCents && depositCents > 0 ? { setup_future_usage: 'off_session' } : {}),
     });
 
@@ -344,6 +371,7 @@ export async function POST(req: NextRequest) {
           capture_method: 'manual',
           payment_method_types: ['card'],
           description: `Kaution · ${description}`.slice(0, 200),
+          ...(intentCustomer ? { customer: intentCustomer } : {}),
           metadata: { ...metadata, type: 'deposit_hold' },
         });
         depositIntentId = depositIntent.id;
@@ -382,6 +410,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       ...(depositIntentId ? { depositIntentId } : {}),
+      ...(customerSessionClientSecret ? { customerSessionClientSecret } : {}),
     });
   } catch (error) {
     console.error('Checkout PaymentIntent error:', error);

@@ -590,6 +590,8 @@ export default function BuchenPage() {
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
   // Stripe Payment Intent
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // CustomerSession-Secret → Payment Element zeigt gespeicherte Karten des Kunden
+  const [customerSessionSecret, setCustomerSessionSecret] = useState<string | null>(null);
 
   const [intentError, setIntentError] = useState<string | null>(null);
   // Dynamische Preise aus Supabase (Fallback: statische Dateiwerte)
@@ -1098,6 +1100,7 @@ export default function BuchenPage() {
         throw new Error(data.error ?? 'Unbekannter Fehler');
       }
       setClientSecret(data.clientSecret);
+      setCustomerSessionSecret(data.customerSessionClientSecret ?? null);
       setStep(6);
     } catch (err) {
       setIntentError(err instanceof Error ? err.message : 'Fehler beim Verbinden mit der Zahlungsseite.');
@@ -2401,6 +2404,9 @@ export default function BuchenPage() {
                 stripe={stripePromise}
                 options={{
                   clientSecret,
+                  ...(customerSessionSecret
+                    ? { customerSessionClientSecret: customerSessionSecret }
+                    : {}),
                   locale: 'de',
                   appearance: {
                     theme: 'stripe',
@@ -2418,6 +2424,7 @@ export default function BuchenPage() {
                   onBack={() => {
                     setStep(5);
                     setClientSecret(null);
+                    setCustomerSessionSecret(null);
                     setIntentError(null);
                   }}
                 />

@@ -13,6 +13,7 @@ const navItems = [
   { href: '/konto/favoriten', label: 'Favoriten' },
   { href: '/konto/nachrichten', label: 'Nachrichten' },
   { href: '/konto/sets', label: 'Eigene Sets' },
+  { href: '/konto/zahlungsmittel', label: 'Zahlungsmittel' },
 ];
 
 export default function KontoLayout({

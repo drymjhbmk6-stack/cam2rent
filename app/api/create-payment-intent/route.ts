@@ -7,6 +7,8 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
+import { isTestMode } from '@/lib/env-mode';
+import { getOrCreateStripeCustomer, createPaymentElementSession } from '@/lib/stripe-customer';
 
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -249,6 +251,30 @@ export async function POST(req: NextRequest) {
     const stripe = tester ? getTesterStripe() : await getStripe();
     if (tester) metadata.tester = '1';
 
+    // ── Gespeicherte Zahlungsmittel: Customer + Payment-Element-Session ────────
+    // Best-effort. Schlaegt irgendetwas fehl, laeuft der Checkout exakt wie
+    // zuvor (kein customer, keine Session → normales Payment Element ohne
+    // gespeicherte Karten). Kein Eingriff in setup_future_usage.
+    let intentCustomer: string | null = null;
+    let customerSessionClientSecret: string | null = null;
+    try {
+      const useTest = tester || (await isTestMode());
+      intentCustomer = await getOrCreateStripeCustomer({
+        userId: user.id,
+        email: metadata.customer_email ?? user.email,
+        name: metadata.customer_name ?? null,
+        stripe,
+        useTest,
+      });
+      if (intentCustomer) {
+        customerSessionClientSecret = await createPaymentElementSession(stripe, intentCustomer);
+      }
+    } catch (custErr) {
+      console.error('[create-payment-intent] Customer/Session best-effort fehlgeschlagen:', custErr);
+      intentCustomer = null;
+      customerSessionClientSecret = null;
+    }
+
     // Sprechende Description fuer PayPal-Verwendungszweck + Stripe-Quittung
     const description = buildPaymentDescription({
       productName: metadata.product_name ?? null,
@@ -263,6 +289,7 @@ export async function POST(req: NextRequest) {
       description,
       automatic_payment_methods: { enabled: true },
       metadata,
+      ...(intentCustomer ? { customer: intentCustomer } : {}),
       ...(depositCents && depositCents > 0 ? { setup_future_usage: 'off_session' } : {}),
     });
 
@@ -317,6 +344,7 @@ export async function POST(req: NextRequest) {
           capture_method: 'manual',
           payment_method_types: ['card'],
           description: `Kaution · ${description}`.slice(0, 200),
+          ...(intentCustomer ? { customer: intentCustomer } : {}),
           metadata: {
             ...metadata,
             type: 'deposit_hold',
@@ -329,6 +357,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       ...(depositIntentId ? { depositIntentId } : {}),
+      ...(customerSessionClientSecret ? { customerSessionClientSecret } : {}),
     });
   } catch (error) {
     console.error('Stripe PaymentIntent error:', error);
