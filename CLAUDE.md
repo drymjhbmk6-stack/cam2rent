@@ -1060,6 +1060,33 @@ Konto-Anlegen, keine Ausweis-Prüfung im Scope).
   + `/admin/emails` registriert.
 - **Go-Live TODO:** siehe „Noch offen".
 
+### Preisrechner — Angebots-/Verfügbarkeitstool (read-only, Stand 2026-08-04)
+Für telefonische Preisanfragen: `/admin/preisrechner` (Sidebar „Tagesgeschäft").
+Kamera(s) **mehrfach** + Zubehör + Haftungsschutz + Zeitraum wählen → **Preis wird
+berechnet + Verfügbarkeit geprüft**. Rein lesend — keine Buchung, kein Inventar-Hold,
+keine Persistenz.
+- **`lib/quote.ts` → `computeQuote(supabase, input)`:** serverseitige, autoritative
+  Rechnung mit denselben Helfern wie Checkout/Reservierung — Miete `getPriceForDays×qty`,
+  Zubehör `getAccessoryPrice×qty`, Haftung `calcHaftungTieredPrice` (pro Kamera ×qty),
+  Versand `calcShipping` (Config aus `admin_config.shipping`, Abholung=0), Rabatt (%/€ auf
+  Miete+Zubehör, nicht Haftung/Versand). Verfügbarkeit: Kamera je Modell via
+  `findCameraOverbookingConflict` (needed=Σqty), Zubehör via `computeAccessoryAvailability`
+  (Restbestand vs. benötigt) — **ohne** Hold/excludeUserId. Sonderkondition: bei
+  `customerUserId` wird `profiles.special_discount_*` via `getActiveSpecialDiscountPercent`
+  aufgelöst und als `customerSpecialPercent` **informativ** zurückgegeben (kein
+  Auto-Abzug; Client prefillt das Rabattfeld).
+- **`POST /api/admin/preis-check`** (Permission `tagesgeschaeft` via middleware) — dünner
+  Wrapper um `computeQuote`, rein lesend.
+- **UI** (`app/admin/preisrechner/page.tsx`): Picker analog `/admin/reservierungen` +
+  Mengen-Feld pro Kamera + Rabatt-Feld + optionaler Bestandskunde. „Berechnen" → Panel
+  mit Zeilen-Breakdown, Verfügbarkeits-Badges (✓ verfügbar / rot „nur N frei"),
+  Zwischensumme/Rabatt/Versand/**Gesamt** + Kaution-Info. **„📋 Angebot kopieren"**
+  (formatierter Klartext → Clipboard, für E-Mail/WhatsApp). **„→ Als 48h-Reservierung
+  übernehmen"** schreibt die Auswahl nach `sessionStorage['cam2rent_reservation_prefill']`
+  (qty>1 → mehrere qty=1-Zeilen, Zubehör auf der ersten) und navigiert zu
+  `/admin/reservierungen`, das den Prefill beim Mount liest (Kunde per id aus der
+  geladenen Liste, Zeitraum/Modus/Zeilen). Keine Migration.
+
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
 - **Enddatum:** Gesperrt wenn **Folgetag** Sonntag oder Feiertag ist (Kunde muss am nächsten Tag Paket abgeben).

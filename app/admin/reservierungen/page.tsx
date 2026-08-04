@@ -66,6 +66,10 @@ export default function ReservierungenPage() {
   const [error, setError] = useState('');
 
   const [reservations, setReservations] = useState<ReservationRow[]>([]);
+  // Aus dem Preisrechner übernommene Kunden-ID (wird nach dem Laden der
+  // Kundenliste aufgelöst und als ausgewählter Kunde gesetzt).
+  const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const accById = useMemo(() => new Map(accessories.map((a) => [a.id, a])), [accessories]);
@@ -76,13 +80,44 @@ export default function ReservierungenPage() {
       .then((d) => setCustomers((d.customers ?? []).filter((c: Customer) => c.email)))
       .catch(() => {});
     loadReservations();
+
+    // Übernahme aus dem Preisrechner (sessionStorage-Prefill).
+    try {
+      const raw = sessionStorage.getItem('cam2rent_reservation_prefill');
+      if (raw) {
+        sessionStorage.removeItem('cam2rent_reservation_prefill');
+        const p = JSON.parse(raw);
+        if (typeof p.rentalFrom === 'string') setRentalFrom(p.rentalFrom);
+        if (typeof p.rentalTo === 'string') setRentalTo(p.rentalTo);
+        if (p.deliveryMode === 'abholung' || p.deliveryMode === 'versand') setDeliveryMode(p.deliveryMode);
+        if (p.shippingMethod === 'express' || p.shippingMethod === 'standard') setShippingMethod(p.shippingMethod);
+        if (Array.isArray(p.lines) && p.lines.length > 0) {
+          setLines(p.lines.map((l: { productId?: string; haftung?: string; accessories?: { accessory_id: string; qty: number }[] }) => ({
+            productId: typeof l.productId === 'string' ? l.productId : '',
+            haftung: (l.haftung === 'standard' || l.haftung === 'premium' ? l.haftung : 'none') as Line['haftung'],
+            accessories: Array.isArray(l.accessories) ? l.accessories : [],
+          })).filter((l: Line) => l.productId));
+        }
+        if (typeof p.customerId === 'string' && p.customerId) setPendingCustomerId(p.customerId);
+        setPrefilled(true);
+      }
+    } catch { /* kein/ungültiger Prefill */ }
   }, []);
 
+  // Prefill-Kunde auflösen, sobald die Kundenliste geladen ist.
   useEffect(() => {
-    if (products.length > 0 && lines.length === 0) {
+    if (!pendingCustomerId || customers.length === 0) return;
+    const c = customers.find((x) => x.id === pendingCustomerId);
+    if (c) setCustomer(c);
+    setPendingCustomerId(null);
+  }, [pendingCustomerId, customers]);
+
+  useEffect(() => {
+    // Default-Zeile nur setzen, wenn NICHT aus dem Preisrechner vorbefüllt.
+    if (!prefilled && products.length > 0 && lines.length === 0) {
       setLines([{ productId: products[0].id, haftung: 'none', accessories: [] }]);
     }
-  }, [products, lines.length]);
+  }, [products, lines.length, prefilled]);
 
   function loadReservations() {
     fetch('/api/admin/reservierung')

@@ -148,6 +148,7 @@ const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen, perm: 'tagesgeschaeft' },
   { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus, perm: 'tagesgeschaeft' },
   { href: '/admin/reservierungen', label: 'Reservierungen (48h)', icon: iconCalendar, perm: 'tagesgeschaeft' },
+  { href: '/admin/preisrechner', label: 'Preisrechner', icon: iconPlus, perm: 'tagesgeschaeft' },
   { href: '/admin/verkauf', label: 'Verkäufe', icon: iconCart, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
