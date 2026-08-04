@@ -980,6 +980,51 @@ export default function BuchenPage() {
     });
   }, [dbAccessories]);
 
+  // Warenkorb-Weg (kein Angebot): keine Wizard-Unterschrift mehr. Kamera wird
+  // direkt in den Warenkorb gelegt; Login + Mietvertrag erhebt der Checkout
+  // einmalig fuer alle Positionen (das rechtsverbindliche Per-Buchung-PDF
+  // erzeugt confirm-cart serverseitig aus der Checkout-Unterschrift).
+  const addToCartAndCheckout = () => {
+    if (!breakdown || !range?.from || !product) return;
+    // Accessoires + Set in eine qty-aware Liste packen. Set wird als
+    // pseudo-Zubehoer (qty=1) gespeichert — die Booking-API/Packliste
+    // expandieren das beim Lesen ueber sets.accessory_items in die Einzelteile.
+    const baseAccessoryItems = accessories.map((id) => ({
+      accessory_id: id,
+      qty: accessoryQty[id] ?? 1,
+    }));
+    const finalAccessoryItems = selectedSet
+      ? [{ accessory_id: selectedSet.id, qty: 1 }, ...baseAccessoryItems]
+      : baseAccessoryItems;
+    const finalAccessories = selectedSet
+      ? [selectedSet.id, ...accessories]
+      : accessories;
+    addItem({
+      id: crypto.randomUUID(),
+      productId: product.id,
+      productName: product.name,
+      productSlug: product.slug,
+      rentalFrom: format(range.from, 'yyyy-MM-dd'),
+      rentalTo: format(range.to ?? range.from, 'yyyy-MM-dd'),
+      days: breakdown.days,
+      accessories: finalAccessories,
+      accessoryItems: finalAccessoryItems,
+      haftung,
+      priceRental: breakdown.rentalPrice,
+      priceAccessories: selectedSet
+        ? setPrice + breakdown.accessoryPrice
+        : breakdown.accessoryPrice,
+      priceHaftung: breakdown.haftungPrice,
+      subtotal: breakdown.rentalPrice
+        + (selectedSet ? setPrice + breakdown.accessoryPrice : breakdown.accessoryPrice)
+        + breakdown.haftungPrice,
+      deposit: product.deposit,
+      deliveryMode,
+      shippingMethod: deliveryMode === 'versand' ? shippingMethod : 'standard',
+    });
+    router.push('/warenkorb');
+  };
+
   const handleProceedToPayment = async () => {
     if (!breakdown || !range?.from) return;
     setIsCreatingIntent(true);
@@ -2737,22 +2782,39 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!user) {
-                        setShowAuthGate(true);
+                      if (offerMode) {
+                        // Angebot: Direktzahlung → Unterschrift im Wizard (Step 5).
+                        // Braucht ein Konto, da confirm-booking user_id verlangt.
+                        if (!user) { setShowAuthGate(true); } else { setStep(5); }
                       } else {
-                        setStep(5);
+                        // Warenkorb-Weg: keine Wizard-Unterschrift. Login +
+                        // Mietvertrag folgen einmalig im Checkout.
+                        addToCartAndCheckout();
                       }
                     }}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    {user ? 'Weiter: Mietvertrag' : 'Weiter: Anmelden & Mietvertrag'}
+                    {offerMode ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                      </svg>
+                    )}
+                    {offerMode
+                      ? (user ? 'Weiter: Mietvertrag' : 'Weiter: Anmelden & Mietvertrag')
+                      : `In den Warenkorb — ${fmt(effectiveTotal)} €`}
                   </button>
-                  {!user && (
+                  {offerMode && !user && (
                     <p className="mt-3 text-xs font-body text-brand-muted dark:text-gray-500 text-center">
                       Für den Mietvertrag benötigen wir dein Konto — Anmeldung oder Registrierung im nächsten Schritt.
+                    </p>
+                  )}
+                  {!offerMode && (
+                    <p className="mt-3 text-xs font-body text-brand-muted dark:text-gray-500 text-center">
+                      Den Mietvertrag unterschreibst du im Warenkorb einmal für deine gesamte Bestellung.
                     </p>
                   )}
                 </div>
