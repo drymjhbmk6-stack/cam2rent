@@ -100,10 +100,13 @@ type DayCellType =
   | 'free'
   | 'booked'
   | 'booked-pending'
+  | 'reserved'
   | 'buffer-hin'
   | 'buffer-hin-pending'
+  | 'buffer-hin-reserved'
   | 'buffer-rueck'
   | 'buffer-rueck-pending'
+  | 'buffer-rueck-reserved'
   | 'maintenance'
   | 'retired'
   | 'blocked'
@@ -413,18 +416,19 @@ export default function AdminVerfuegbarkeitPage() {
     const bMode = b.delivery_mode ?? 'versand';
     const { start: bufStartStr, end: bufEndStr } = getBookingSpan(b, buf);
 
+    const isReserved = b.status === 'reserved';
     const isPending = b.status === 'awaiting_payment' || b.status === 'pending_verification';
 
     if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
-      return { type: isPending ? 'booked-pending' : 'booked', booking: b };
+      return { type: isReserved ? 'reserved' : isPending ? 'booked-pending' : 'booked', booking: b };
     }
     if (dateStr >= bufStartStr && dateStr < b.rental_from) {
       const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
-      return { type: isPending ? 'buffer-hin-pending' : 'buffer-hin', booking: b, bufferLabel: label };
+      return { type: isReserved ? 'buffer-hin-reserved' : isPending ? 'buffer-hin-pending' : 'buffer-hin', booking: b, bufferLabel: label };
     }
     if (dateStr > b.rental_to && dateStr <= bufEndStr) {
       const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
-      return { type: isPending ? 'buffer-rueck-pending' : 'buffer-rueck', booking: b, bufferLabel: label };
+      return { type: isReserved ? 'buffer-rueck-reserved' : isPending ? 'buffer-rueck-pending' : 'buffer-rueck', booking: b, bufferLabel: label };
     }
     return null;
   }
@@ -436,10 +440,13 @@ export default function AdminVerfuegbarkeitPage() {
         case 'free': return { background: '#065f46', color: '#6ee7b7' };           // kräftiges Grün
         case 'booked': return { background: '#1d4ed8', color: '#ffffff' };          // kräftiges Blau
         case 'booked-pending': return { background: '#7c3aed', color: '#ffffff' }; // Lila (Zahlung offen)
+        case 'reserved': return { background: '#0891b2', color: '#ecfeff' };        // Cyan (48h-Reservierung)
         case 'buffer-hin': return { background: '#a16207', color: '#fef3c7' };      // kräftiges Gelb/Gold
         case 'buffer-hin-pending': return { background: '#6d28d9', color: '#ddd6fe' }; // Lila (Hinversand, Zahlung offen)
+        case 'buffer-hin-reserved': return { background: '#155e75', color: '#cffafe' }; // Cyan (Hinversand, reserviert)
         case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
         case 'buffer-rueck-pending': return { background: '#5b21b6', color: '#ddd6fe' }; // Lila (Rückversand, Zahlung offen)
+        case 'buffer-rueck-reserved': return { background: '#164e63', color: '#cffafe' }; // Cyan (Rückversand, reserviert)
         case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
         case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
         case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
@@ -472,7 +479,10 @@ export default function AdminVerfuegbarkeitPage() {
       return `${day}.${m}.${y}`;
     };
 
-    if (info.booking) {
+    if (info.booking && info.booking.status === 'reserved') {
+      content = `🔒 Reserviert (48h)${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Kunde'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
+      if (info.bufferLabel) content = `${info.bufferLabel}\n${content}`;
+    } else if (info.booking) {
       const pendingPrefix = info.booking.status === 'awaiting_payment' ? '⏳ Zahlung ausstehend\n'
         : info.booking.status === 'pending_verification' ? '⏳ Wartet auf Freigabe\n' : '';
       content = `${pendingPrefix}${info.booking.id}${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
@@ -781,6 +791,7 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7c3aed' }} /> ⏳ Zahlung offen</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#0891b2' }} /> 🔒 Reserviert (48h)</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Hinversand</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#c2410c' }} /> Rückversand</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#991b1b' }} /> Wartung</span>
@@ -894,7 +905,11 @@ export default function AdminVerfuegbarkeitPage() {
                                     onMouseLeave={() => setTooltip(null)}
                                     onClick={() => {
                                       if (info.booking) {
-                                        window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
+                                        if (info.booking.status === 'reserved') {
+                                          window.open('/admin/reservierungen', '_blank');
+                                        } else {
+                                          window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
+                                        }
                                       }
                                     }}
                                     style={{
@@ -904,14 +919,15 @@ export default function AdminVerfuegbarkeitPage() {
                                     }}
                                   >
                                     <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cs.color }}>
-                                      {(info.type === 'booked' || info.type === 'booked-pending') && info.booking && (
-                                        <span title={info.booking.customer_name}>
+                                      {(info.type === 'booked' || info.type === 'booked-pending' || info.type === 'reserved') && info.booking && (
+                                        <span title={info.type === 'reserved' ? `Reserviert — ${info.booking.customer_name}` : info.booking.customer_name}>
                                           {info.type === 'booked-pending' && '⏳ '}
+                                          {info.type === 'reserved' && '🔒 '}
                                           {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
                                         </span>
                                       )}
-                                      {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
-                                      {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
+                                      {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending' || info.type === 'buffer-hin-reserved') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
+                                      {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending' || info.type === 'buffer-rueck-reserved') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
                                       {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
                                     </div>
                                   </td>

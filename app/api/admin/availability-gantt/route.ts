@@ -4,6 +4,7 @@ import { getProducts } from '@/lib/get-products';
 import { resolveProdukteIdMap, loadInventarUnitsForProdukteBulk } from '@/lib/legacy-bridge';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { loadBufferDays } from '@/lib/booking-buffer';
+import { normalizeReservationItems } from '@/lib/reservation-holds';
 
 /**
  * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
@@ -200,6 +201,56 @@ export async function GET(req: NextRequest) {
     (blockedByProduct[bl.product_id] ||= []).push(bl);
   }
 
+  // ── Admin-48h-Reservierungen als Pseudo-Buchungen (Status 'reserved') ──────
+  // Offene, nicht abgelaufene Reservierungen im Zeitraum → pro Kamera-Zeile ein
+  // Overlay mit unit_id=null. Das Greedy-Packing (cameraAssignment im Frontend)
+  // legt sie wie unzugeordnete Buchungen auf genau eine freie Unit-Zeile.
+  // Test-Reservierungen werden mitgeladen (im Gantt wie Test-Buchungen markiert).
+  // Defensiv: fehlende reservations-Tabelle → leer, kein Fehler.
+  type ReservationOverlay = {
+    id: string; rental_from: string; rental_to: string; customer_name: string;
+    delivery_mode: string; status: string; unit_id: string | null; is_test: boolean;
+    ship_date_override: string | null; return_due_date_override: string | null;
+  };
+  const reservationsByProduct: Record<string, ReservationOverlay[]> = {};
+  try {
+    const { data: resData, error: resErr } = await supabase
+      .from('reservations')
+      .select('id, customer_name, items, rental_from, rental_to, delivery_mode, is_test')
+      .eq('status', 'open')
+      .gt('expires_at', new Date().toISOString())
+      .lte('rental_from', extLast)
+      .gte('rental_to', extFirst);
+    if (!resErr && Array.isArray(resData)) {
+      for (const r of resData as Array<Record<string, unknown>>) {
+        const { lines } = normalizeReservationItems(r.items);
+        const countByProduct = new Map<string, number>();
+        for (const line of lines) {
+          countByProduct.set(line.productId, (countByProduct.get(line.productId) ?? 0) + Math.max(1, line.qty));
+        }
+        for (const [pid, count] of countByProduct) {
+          const arr = (reservationsByProduct[pid] ||= []);
+          for (let i = 0; i < count; i++) {
+            arr.push({
+              id: `reservation:${r.id as string}${count > 1 ? `:${i}` : ''}`,
+              rental_from: r.rental_from as string,
+              rental_to: r.rental_to as string,
+              customer_name: (r.customer_name as string | null) || 'Reserviert',
+              delivery_mode: (r.delivery_mode as string) || 'versand',
+              status: 'reserved',
+              unit_id: null,
+              is_test: (r.is_test as boolean | null) ?? false,
+              ship_date_override: null,
+              return_due_date_override: null,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // reservations-Tabelle fehlt (Migration nicht durch) → keine Overlays.
+  }
+
   // Daten nach Produkt gruppieren — Inventar-Einheiten haben Vorrang.
   // Status-Mapping fuer alte UI: verfuegbar→available, vermietet→rented, ...
   const productData = visibleProducts.map((p) => {
@@ -241,20 +292,24 @@ export async function GET(req: NextRequest) {
       name: p.name,
       stock: p.stock,
       units: unitsForUi,
-      bookings: productBookings.map((b) => ({
-        id: b.id,
-        rental_from: b.rental_from,
-        rental_to: b.rental_to,
-        customer_name: b.customer_name,
-        delivery_mode: b.delivery_mode,
-        status: b.status,
-        unit_id: b._unitId,
-        is_test: b.is_test ?? false,
-        // Override-Datumsfelder (NULL = aus bufferDays + delivery_mode berechnen).
-        // Frontend nutzt sie in der Puffer-Visualisierung mit Vorrang vor bufferDays.
-        ship_date_override: (b as { ship_date_override?: string | null }).ship_date_override ?? null,
-        return_due_date_override: (b as { return_due_date_override?: string | null }).return_due_date_override ?? null,
-      })),
+      bookings: [
+        ...productBookings.map((b) => ({
+          id: b.id,
+          rental_from: b.rental_from,
+          rental_to: b.rental_to,
+          customer_name: b.customer_name,
+          delivery_mode: b.delivery_mode,
+          status: b.status,
+          unit_id: b._unitId as string | null,
+          is_test: b.is_test ?? false,
+          // Override-Datumsfelder (NULL = aus bufferDays + delivery_mode berechnen).
+          // Frontend nutzt sie in der Puffer-Visualisierung mit Vorrang vor bufferDays.
+          ship_date_override: (b as { ship_date_override?: string | null }).ship_date_override ?? null,
+          return_due_date_override: (b as { return_due_date_override?: string | null }).return_due_date_override ?? null,
+        })),
+        // Reservierungen (Status 'reserved') als Pseudo-Buchungen anhängen.
+        ...(reservationsByProduct[p.id] ?? []),
+      ],
       blocked: productBlocked,
     };
   });
