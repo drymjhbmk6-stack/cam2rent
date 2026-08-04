@@ -146,6 +146,7 @@ interface PermRule { prefix: string; perm: string }
 const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/einstellungen/mitarbeiter', perm: 'mitarbeiter_verwalten' },
   { prefix: '/admin/buchungen', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/reservierungen', perm: 'tagesgeschaeft' },
   { prefix: '/admin/verfuegbarkeit', perm: 'tagesgeschaeft' },
   { prefix: '/admin/auftragskalender', perm: 'tagesgeschaeft' },
   { prefix: '/admin/versand', perm: 'tagesgeschaeft' },
@@ -207,6 +208,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/auftragskalender', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/calendar-notes', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/manual-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/reservierung', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/update-booking-status', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/approve-booking', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/return-booking', perm: 'tagesgeschaeft' },

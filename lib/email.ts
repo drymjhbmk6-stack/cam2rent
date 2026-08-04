@@ -2345,6 +2345,127 @@ export async function sendContractResignRequest(data: {
 }
 
 
+// ─── Reservierung: 48h-Link an den Bestandskunden ────────────────────────────
+/**
+ * Schickt dem Bestandskunden den Link zu seiner 48-Stunden-Reservierung. Der
+ * Kunde oeffnet den Link (eingeloggt), bekommt die reservierte Auswahl in den
+ * Warenkorb gelegt, kann alles aendern und schliesst die Buchung selbst ab.
+ */
+export async function sendReservationLink(data: {
+  to: string;
+  customerName: string | null;
+  rentalFrom: string; // YYYY-MM-DD
+  rentalTo: string;   // YYYY-MM-DD
+  url: string;
+  expiresAt: string;  // ISO
+}): Promise<void> {
+  const fmt = (iso?: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('T')[0].split('-');
+    return d && m && y ? `${d}.${m}.${y}` : '';
+  };
+  const fmtDateTime = (iso: string) => {
+    try {
+      return new Intl.DateTimeFormat('de-DE', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        timeZone: 'Europe/Berlin',
+      }).format(new Date(iso)) + ' Uhr';
+    } catch { return ''; }
+  };
+  const zeitraum = `${fmt(data.rentalFrom)} – ${fmt(data.rentalTo)}`;
+  const frist = fmtDateTime(data.expiresAt);
+  const subject = stripSubject(`Deine Reservierung bei ${BUSINESS.name} – 48 Stunden gültig`);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Deine Ausrüstung ist reserviert</h1>
+          <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName || 'dort')},<br><br>
+            wie besprochen haben wir deine Wunsch-Ausrüstung für dich reserviert (Zeitraum <strong>${zeitraum}</strong>).
+            Über den Button unten kannst du deine Auswahl noch anpassen und die Buchung selbst abschließen.
+          </p>
+          <div style="margin:0 0 20px;padding:14px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+            <p style="margin:0;font-size:13px;color:#9a3412;line-height:1.6;">
+              ⏳ Deine Reservierung ist <strong>bis ${frist}</strong> gültig (48 Stunden). Danach wird sie
+              automatisch aufgehoben und die Ausrüstung wieder freigegeben.
+            </p>
+          </div>
+          <a href="${data.url}" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Reservierung ansehen &amp; buchen
+          </a>
+          <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+            Bitte melde dich mit deinem bestehenden Konto an, um die reservierte Auswahl zu sehen. Du kannst Kamera,
+            Zubehör und Zeitraum frei ändern — bezahlt wird am Ende der dann gültige Betrag.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; ${h(BUSINESS.slogan)} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({ to: data.to, subject, html, emailType: 'reservation_created' });
+}
+
+// ─── Reservierung: 48h abgelaufen ────────────────────────────────────────────
+export async function sendReservationExpired(data: {
+  to: string;
+  customerName: string | null;
+  rentalFrom: string;
+  rentalTo: string;
+}): Promise<void> {
+  const BASE_URL = await getSiteUrl();
+  const fmt = (iso?: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('T')[0].split('-');
+    return d && m && y ? `${d}.${m}.${y}` : '';
+  };
+  const zeitraum = `${fmt(data.rentalFrom)} – ${fmt(data.rentalTo)}`;
+  const subject = stripSubject(`Deine Reservierung bei ${BUSINESS.name} ist abgelaufen`);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Reservierung abgelaufen</h1>
+          <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName || 'dort')},<br><br>
+            deine Reservierung (Zeitraum <strong>${zeitraum}</strong>) ist nach 48 Stunden abgelaufen und wurde
+            automatisch aufgehoben. Die Ausrüstung ist wieder frei buchbar.
+          </p>
+          <a href="${BASE_URL}/kameras" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Jetzt im Shop buchen
+          </a>
+          <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+            Du möchtest trotzdem noch mieten? Melde dich einfach bei uns — wir reservieren gerne neu.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; ${h(BUSINESS.slogan)} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({ to: data.to, subject, html, emailType: 'reservation_expired' });
+}
+
+
 // ─── Mietvertrag: tägliche Erinnerung, wenn noch nicht unterschrieben ────────
 /**
  * Erinnert den Kunden, dass für seine Buchung noch kein unterschriebener

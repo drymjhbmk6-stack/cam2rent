@@ -7,6 +7,7 @@ import { generateBookingId } from '@/lib/booking-id';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { releaseUserCartHolds } from '@/lib/cart-holds';
+import { releaseUserReservations } from '@/lib/reservation-holds';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
@@ -616,6 +617,8 @@ export async function POST(req: NextRequest) {
       ).catch((err: unknown) => console.error('Abandoned cart recovery error:', err));
       releaseUserCartHolds(supabase, meta.user_id)
         .catch((err: unknown) => console.error('Cart-Hold release error:', err));
+      releaseUserReservations(supabase, meta.user_id)
+        .catch((err: unknown) => console.error('Reservation release error:', err));
     }
 
     // 6c. Suspicious Detection (non-blocking)

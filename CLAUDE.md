@@ -1010,6 +1010,56 @@ Sobald ein **eingeloggter** Kunde eine Kamera in den Warenkorb legt, wird der ge
      */15 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/cart-holds-cleanup
      ```
 
+### 48-Stunden-Reservierung für Bestandskunden (Self-Service, Stand 2026-08-04)
+Ein Bestandskunde ruft an → der Admin reserviert Kamera + Zubehör für einen Zeitraum
+(Inventar wird für andere blockiert) und schickt dem Kunden einen Link. Der Kunde öffnet
+den Link (eingeloggt), bekommt die reservierte Auswahl in den Warenkorb gelegt, kann
+**alles ändern** (Kamera, Zubehör, Zeitraum) und zahlt am Ende den dann gültigen Preis
+über den **normalen Checkout**. Schließt er nicht innerhalb von **48 h** ab, erlischt die
+Reservierung automatisch und das Inventar wird frei. **Nur für Bestandskunden** (kein
+Konto-Anlegen, keine Ausweis-Prüfung im Scope).
+- **Ansatz — kein fester Zahlungslink:** Ein Stripe-Payment-Link ginge nur für einen
+  festen Betrag; da der Kunde alles ändern darf, wird die Reservierung als **zeitlich
+  begrenzter Inventar-Hold** modelliert (analog `cart_holds`, aber admin-erzeugt, 48 h,
+  für Kamera UND Zubehör). Eigene Quelle `reservations` (nicht `cart_holds`, weil
+  `syncCartHolds` beim Cart-Sync fremde Holds löschen würde).
+- **Migration `supabase/supabase-reservations.sql`** (idempotent): Tabelle `reservations`
+  (`token`, `user_id`, `items JSONB` = `{lines:[{productId,qty,haftung,accessories:[{accessory_id,qty}]}]}`,
+  `rental_from/to`, `delivery_mode`, `shipping_method`, `is_test`,
+  `status open|completed|expired|cancelled`, `expires_at`), Indizes, RLS service-role.
+- **`lib/reservation-holds.ts`** (Vorbild `lib/cart-holds.ts`, defensiv/No-Op ohne Migration):
+  `loadActiveReservations`, `reservationsToCameraBlockedDays` (qty+Puffer),
+  `getReservationCameraBlockedDays`, `releaseUserReservations`. Wird in den **3
+  Verfügbarkeits-Pfaden** mitgezählt (genau wie Cart-Holds, `excludeUserId`-aware):
+  `app/api/availability/[productId]/route.ts` (Kunden-Kalender),
+  `lib/camera-availability-check.ts` (harte Überbuchungssperre),
+  `lib/accessory-availability.ts` (Zubehör qty-aware + Set-Expansion, neuer Param
+  `excludeUserId`).
+- **Anlegen:** `POST /api/admin/reservierung` (Permission `tagesgeschaeft`): Bestandskunde
+  (E-Mail Pflicht) + Verfügbarkeits-Check (`findCameraOverbookingConflict` +
+  `computeAccessoryAvailability`, 409 bei Konflikt) → `reservations`-Row mit `token` +
+  `expires_at=now+48h` → `sendReservationLink`-Mail → Audit `reservation.create`. Plus
+  `GET` (Liste) + `DELETE?id=` (zurückziehen, `reservation.cancel`).
+- **Kunden-Landing:** `GET /api/reservierung/[token]` (Session-Auth + Ownership
+  `user.id===user_id` + Token, 403/410 sonst) liefert fertige Warenkorb-Positionen via
+  `lib/reservation-cart.ts:buildCartItemsFromReservation` (Preise aus aktuellem Katalog:
+  `getPriceForDays`/`getAccessoryPrice`/`calcHaftungTieredPrice`). Seite
+  `app/reservierung/[token]/page.tsx` legt die Items in den `CartProvider` und leitet auf
+  `/checkout`. Der Kunde ändert dort alles frei; seine **eigene** Reservierung blockt ihn
+  nicht (`excludeUserId` im harten Kamera-Gate von checkout-intent/confirm-cart —
+  Zubehör ist ohnehin soft, kein Checkout-Hardgate).
+- **Abschluss gibt den Hold frei:** `releaseUserReservations(user.id)` in `confirm-cart`
+  + `confirm-booking` (neben `releaseUserCartHolds`) → Status `completed`, echte Buchung
+  übernimmt die Blockade.
+- **Ablauf:** Read-Filter `status='open' & expires_at>now` blendet abgelaufene sofort aus;
+  Cron `app/api/cron/reservations-cleanup/route.ts` setzt sie auf `expired` +
+  `sendReservationExpired`-Mail.
+- **Admin-UI:** `/admin/reservierungen` (Sidebar „Tagesgeschäft") — Anlege-Formular
+  (Kundensuche + Zeitraum + Kamera-/Zubehör-Zeilen) + Liste mit Restzeit, Link kopieren,
+  zurückziehen. E-Mail-Typen `reservation_created`/`reservation_expired` in `lib/email.ts`
+  + `/admin/emails` registriert.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
 - **Enddatum:** Gesperrt wenn **Folgetag** Sonntag oder Feiertag ist (Kunde muss am nächsten Tag Paket abgeben).
@@ -6256,6 +6306,17 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **48-h-Reservierung — Migration + Cron auszuführen:** Migration
+  `supabase/supabase-reservations.sql` (idempotent) ausführen. Ohne sie ist das Feature
+  inaktiv (Anlegen liefert 503, Landing 404, Verfügbarkeits-Helfer sind No-Ops — der
+  restliche Shop läuft unverändert). Plus Crontab-Eintrag (alle 30 Min, `--resolve`
+  umgeht Cloudflare):
+  ```
+  */30 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reservations-cleanup
+  ```
+  Ohne den Cron erlöschen abgelaufene Reservierungen trotzdem in der Verfügbarkeit
+  (Read-Filter), werden aber nicht auf `expired` gesetzt und der Kunde bekommt keine
+  Ablauf-Mail. Siehe „48-Stunden-Reservierung für Bestandskunden".
 - **Verbraucher-Zähler-Migration auszuführen (bzw. ERNEUT):** `supabase/supabase-verbrauchsartikel.sql`
   (idempotent: Tabelle `verbrauchsartikel` + additiv `bookings.consumables_deducted_at`
   **+ neu** die Spalten `deduct_trigger`, `linked_accessory_ids TEXT[]`,

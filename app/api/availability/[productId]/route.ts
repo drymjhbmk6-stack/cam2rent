@@ -7,6 +7,7 @@ import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { getHoldBlockedDays } from '@/lib/cart-holds';
+import { getReservationCameraBlockedDays } from '@/lib/reservation-holds';
 import {
   loadBufferDays,
   computeShipDate,
@@ -223,6 +224,19 @@ export async function GET(
     buf,
   });
 
+  // ── Admin-Reservierungen (48h-Holds) FREMDER Kunden als belegt zaehlen ─────
+  // Gleiche Mechanik wie Warenkorb-Holds: blockt Kamera fuer andere Kunden,
+  // eigene Reservierung des Betrachters ausgeschlossen. Defensiv (No-Op ohne
+  // reservations-Migration).
+  const reservationBlockedDays = await getReservationCameraBlockedDays(supabase, {
+    productId,
+    fromIso: extFirst,
+    toIso: extLast,
+    excludeUserId: viewerUserId,
+    globalTest,
+    buf,
+  });
+
   // ── Pro Tag berechnen ──────────────────────────────────────────────────────
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -301,8 +315,10 @@ export async function GET(
 
     // Warenkorb-Reservierungen fremder Kunden an diesem Tag.
     const heldCount = holdBlockedDays.get(dateStr) ?? 0;
+    // Admin-48h-Reservierungen fremder Kunden an diesem Tag.
+    const reservedCount = reservationBlockedDays.get(dateStr) ?? 0;
 
-    const available = Math.max(0, totalStock - bookedCount - blockedCount - heldCount);
+    const available = Math.max(0, totalStock - bookedCount - blockedCount - heldCount - reservedCount);
 
     let status: 'available' | 'partial' | 'booked' | 'blocked';
     if (blockedCount >= totalStock) {

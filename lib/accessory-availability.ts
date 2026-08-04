@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
 import { toIsoDate } from '@/lib/booking-buffer';
+import { loadActiveReservations } from '@/lib/reservation-holds';
 
 interface BufferDays {
   versand_before: number;
@@ -74,11 +75,15 @@ export async function computeAccessoryAvailability(opts: {
    *  die Buchung nicht gegen sich selbst blockiert (insb. Set-Buchungen, deren
    *  accessory_items nur die Set-ID enthalten). */
   excludeBookingId?: string;
+  /** Eigene Admin-Reservierungen dieses Users NICHT mitzaehlen (sonst blockiert
+   *  sich der Kunde beim Abschluss seiner eigenen Reservierung selbst). */
+  excludeUserId?: string | null;
 }): Promise<AccessoryAvailabilityResult> {
   const { from, to } = opts;
   const productId = opts.productId ?? null;
   const deliveryMode = opts.deliveryMode ?? 'versand';
   const excludeBookingId = opts.excludeBookingId ?? null;
+  const excludeUserId = opts.excludeUserId ?? null;
 
   const supabase = createServiceClient();
 
@@ -352,6 +357,48 @@ export async function computeAccessoryAvailability(opts: {
       for (const [accId, qty] of counts) {
         bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
       }
+    }
+  }
+
+  // 6b. Admin-48h-Reservierungen (Holds) als belegt mitzaehlen — gleiche
+  //     qty-aware Set-Expansion wie Buchungen. Eigene Reservierung des
+  //     Betrachters ausgeschlossen (excludeUserId). Defensiv (No-Op ohne
+  //     reservations-Migration).
+  // Grosszuegiges Ladefenster (Puffer-Raender), die exakte Overlap-Pruefung
+  // pro Reservierung folgt unten mit deren eigener Puffer-Spanne.
+  const resFromDate = new Date(fromDate); resFromDate.setDate(resFromDate.getDate() - 35);
+  const resToDate = new Date(toDate); resToDate.setDate(resToDate.getDate() + 35);
+  const reservations = await loadActiveReservations(supabase, {
+    fromIso: toIsoDate(resFromDate),
+    toIso: toIsoDate(resToDate),
+    excludeUserId,
+    globalTest,
+  });
+  for (const r of reservations) {
+    const rMode = r.deliveryMode;
+    const rBefore = rMode === 'abholung' ? buffer.abholung_before : buffer.versand_before;
+    const rAfter = rMode === 'abholung' ? buffer.abholung_after : buffer.versand_after;
+    const rFrom = new Date(r.rentalFrom);
+    const rTo = new Date(r.rentalTo);
+    rFrom.setDate(rFrom.getDate() - rBefore);
+    rTo.setDate(rTo.getDate() + rAfter);
+    const rBufferedFrom = toIsoDate(rFrom);
+    const rBufferedTo = toIsoDate(rTo);
+    if (!(bufferedFrom <= rBufferedTo && bufferedTo >= rBufferedFrom)) continue;
+
+    // Alle Zubehoer-Items aller Zeilen aufsummieren, dann wie eine Buchung
+    // expandieren (Set-Auflösung + Upgrade-Default-Override).
+    const items: AccessoryItemLite[] = [];
+    for (const line of r.items.lines) {
+      for (const a of line.accessories) {
+        if (!a.accessory_id || a.qty <= 0) continue;
+        items.push({ accessory_id: a.accessory_id, qty: a.qty * Math.max(1, line.qty) });
+      }
+    }
+    if (items.length === 0) continue;
+    const counts = expandBookingToAccCounts(items);
+    for (const [accId, qty] of counts) {
+      bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
     }
   }
 

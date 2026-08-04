@@ -11,6 +11,7 @@ import {
 import { isTestMode } from '@/lib/env-mode';
 import { getProductById, getProducts } from '@/lib/get-products';
 import { loadActiveHoldsForProduct, holdsToBlockedDayCount } from '@/lib/cart-holds';
+import { loadActiveReservations, reservationsToCameraBlockedDays } from '@/lib/reservation-holds';
 
 /**
  * Harte, serverseitige Ueberbuchungs-Sperre fuer Kameras.
@@ -215,6 +216,16 @@ export async function findCameraOverbookingConflict(
   });
   const holdDayCount = holdsToBlockedDayCount(otherHolds, buf);
 
+  // Admin-48h-Reservierungen FREMDER Kunden (eigene ausgeschlossen) blocken den
+  // Zeitraum ebenfalls. Defensiv (No-Op ohne reservations-Migration).
+  const otherReservations = await loadActiveReservations(supabase, {
+    fromIso: extFrom,
+    toIso: extTo,
+    excludeUserId: args.excludeUserId ?? null,
+    globalTest,
+  });
+  const reservationDayCount = reservationsToCameraBlockedDays(otherReservations, productId, buf);
+
   // Belegte Einheiten pro angefragtem Tag zaehlen. Bestehende Buchungen
   // belegen die Kamera physisch ueber [ship .. return] (inkl. ihrer eigenen
   // Puffer / Override-Termine).
@@ -239,6 +250,7 @@ export async function findCameraOverbookingConflict(
       }
     }
     bookedCount += holdDayCount.get(cur) ?? 0;
+    bookedCount += reservationDayCount.get(cur) ?? 0;
     if (bookedCount + needed > totalStock) {
       return {
         productId,

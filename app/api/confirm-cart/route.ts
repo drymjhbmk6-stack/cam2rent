@@ -11,6 +11,7 @@ import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { desiredFromBooking, resolveBookingCameras } from '@/lib/booking-cameras';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { releaseUserCartHolds } from '@/lib/cart-holds';
+import { releaseUserReservations } from '@/lib/reservation-holds';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
@@ -1202,6 +1203,9 @@ export async function POST(req: NextRequest) {
       // Warenkorb-Reservierungen freigeben — die echte Buchung existiert jetzt.
       releaseUserCartHolds(supabase, r_userId)
         .catch((err: unknown) => console.error('Cart-Hold release error:', err));
+      // Admin-48h-Reservierungen des Users freigeben (Hold → completed).
+      releaseUserReservations(supabase, r_userId)
+        .catch((err: unknown) => console.error('Reservation release error:', err));
     }
 
     // 7. Referral verarbeiten
