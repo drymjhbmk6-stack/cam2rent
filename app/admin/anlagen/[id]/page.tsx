@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { formatCurrency, fmtDate } from '@/lib/format-utils';
 
 interface Asset {
@@ -47,12 +48,13 @@ interface ReplacementValueMeta {
   config: { floor_percent: number; useful_life_months: number };
 }
 
-const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20 };
-const cyan = '#06b6d4';
-const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
+const card: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 20 };
+const cyan = 'var(--admin-accent)';
+const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
 
 export default function AssetDetailPage(props: { params: Promise<{ id: string }> }) {
   const { id } = use(props.params);
+  const confirm = useConfirm();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [history, setHistory] = useState<DepreciationEntry[]>([]);
   const [computed, setComputed] = useState<number | null>(null);
@@ -109,14 +111,17 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
     });
     const data = await res.json();
     if (res.status === 409 && data?.code === 'CONFIRM_OLD_YEAR_REQUIRED') {
-      const ok = confirm(
-        `⚠ Steuerlich kritisch!\n\n` +
-        `Anschaffungsjahr: ${data.purchase_year}\n` +
-        `Aktuelles Jahr: ${data.current_year}\n\n` +
-        `Eine GWG-Umstellung im Nachhinein ist nur zulässig, wenn die Steuererklärung für ${data.purchase_year} noch nicht beim Finanzamt eingereicht ist (oder der Bescheid noch nicht bestandskräftig ist).\n\n` +
-        `Bitte mit Steuerberater abklären, BEVOR du fortfährst.\n\n` +
-        `Wirklich umstellen?`,
-      );
+      const ok = await confirm({
+        title: '⚠ Steuerlich kritisch!',
+        message:
+          `Anschaffungsjahr: ${data.purchase_year}\n` +
+          `Aktuelles Jahr: ${data.current_year}\n\n` +
+          `Eine GWG-Umstellung im Nachhinein ist nur zulässig, wenn die Steuererklärung für ${data.purchase_year} noch nicht beim Finanzamt eingereicht ist (oder der Bescheid noch nicht bestandskräftig ist).\n\n` +
+          `Bitte mit Steuerberater abklären, BEVOR du fortfährst.\n\n` +
+          `Wirklich umstellen?`,
+        confirmLabel: 'Umstellen',
+        danger: true,
+      });
       if (!ok) return;
       return convertToGwg(true);
     }
@@ -181,28 +186,28 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
     setAsset(d2.asset);
   }
 
-  if (loading) return <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: 40, color: '#64748b' }}>Lade…</div>;
-  if (!asset) return <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: 40, color: '#ef4444' }}>Asset nicht gefunden</div>;
+  if (loading) return <div style={{ padding: 40, color: 'var(--admin-text-dim)' }}>Lade…</div>;
+  if (!asset) return <div style={{ padding: 40, color: 'var(--admin-danger)' }}>Asset nicht gefunden</div>;
 
   const monthlyRate = asset.depreciation_method === 'linear'
     ? (Number(asset.purchase_price) - Number(asset.residual_value ?? 0)) / Number(asset.useful_life_months)
     : 0;
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ padding: '24px 20px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <AdminBackLink href="/admin/anlagen" label="Zurück zum Anlagenverzeichnis" />
 
         <div style={{ marginTop: 16, marginBottom: 24 }}>
-          <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>{asset.name}</h1>
-          <div style={{ color: '#94a3b8', fontSize: 14 }}>
+          <h1 style={{ color: 'var(--admin-heading)', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>{asset.name}</h1>
+          <div style={{ color: 'var(--admin-muted)', fontSize: 14 }}>
             {asset.manufacturer} {asset.model} {asset.serial_number && <span>· SN {asset.serial_number}</span>}
             {asset.is_test && <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 11, fontWeight: 700 }}>TEST</span>}
           </div>
         </div>
 
         {msg && (
-          <div style={{ ...card, marginBottom: 20, borderColor: cyan, background: 'rgba(6,182,212,0.1)' }}>
+          <div style={{ ...card, marginBottom: 20, borderColor: cyan, background: 'var(--admin-accent-soft)' }}>
             <p style={{ color: cyan }}>{msg}</p>
           </div>
         )}
@@ -210,13 +215,13 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
           <div style={card}>
             <span style={label}>Anschaffungswert</span>
-            <div style={{ fontSize: 24, color: '#f1f5f9', fontWeight: 800 }}>{formatCurrency(asset.purchase_price)}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>am {fmtDate(asset.purchase_date)}</div>
+            <div style={{ fontSize: 24, color: 'var(--admin-heading)', fontWeight: 800 }}>{formatCurrency(asset.purchase_price)}</div>
+            <div style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginTop: 4 }}>am {fmtDate(asset.purchase_date)}</div>
           </div>
           <div style={card}>
             <span style={label}>Aktueller Zeitwert (DB)</span>
             <div style={{ fontSize: 24, color: cyan, fontWeight: 800 }}>{formatCurrency(asset.current_value)}</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Steuerlicher Buchwert — sinkt monatlich durch AfA.</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>Steuerlicher Buchwert — sinkt monatlich durch AfA.</div>
             {computed != null && Math.abs(Number(asset.current_value) - computed) > 0.5 && (
               <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
                 Berechnet aktuell: {formatCurrency(computed)} — AfA-Lauf ausstehend
@@ -232,13 +237,13 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           </div>
           <div style={card}>
             <span style={label}>Abschreibung</span>
-            <div style={{ fontSize: 15, color: '#e2e8f0', fontWeight: 600 }}>
+            <div style={{ fontSize: 15, color: 'var(--admin-text)', fontWeight: 600 }}>
               {asset.depreciation_method === 'linear'
                 ? `Linear ueber ${asset.useful_life_months} Monate`
                 : asset.depreciation_method === 'immediate' ? 'Sofort' : 'Keine AfA'}
             </div>
             {asset.depreciation_method === 'linear' && (
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginTop: 4 }}>
                 {formatCurrency(monthlyRate)} / Monat
               </div>
             )}
@@ -247,22 +252,23 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
 
         {/* Aktionen */}
         <div style={{ ...card, marginBottom: 20 }}>
-          <h3 style={{ color: '#f1f5f9', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Aktionen</h3>
+          <h3 style={{ color: 'var(--admin-heading)', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Aktionen</h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {asset.status === 'active' && (
               <>
                 {asset.depreciation_method !== 'immediate' && (
                   <button
-                    onClick={() => {
-                      const ok = confirm(
-                        `Asset auf GWG-Sofortabschreibung umstellen?\n\n` +
-                        `• Buchwert (${formatCurrency(asset.current_value)}) wird auf 0 € gesetzt\n` +
-                        `• Restbuchwert wird als Aufwand „GWG-Sofortabzug" gebucht\n` +
-                        `• Wiederbeschaffungswert = Kaufpreis (${formatCurrency(asset.purchase_price)})\n` +
-                        `• Methode wird auf „Sofort" geaendert\n\n` +
-                        `Sinnvoll fuer Sachen unter 800 € netto. Steuerlich darf die Umstellung nur im Anschaffungsjahr erfolgen — bei aelteren Jahren wird zusaetzlich gewarnt.\n\n` +
-                        `Fortfahren?`,
-                      );
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Auf GWG-Sofortabschreibung umstellen?',
+                        message:
+                          `• Buchwert (${formatCurrency(asset.current_value)}) wird auf 0 € gesetzt\n` +
+                          `• Restbuchwert wird als Aufwand „GWG-Sofortabzug" gebucht\n` +
+                          `• Wiederbeschaffungswert = Kaufpreis (${formatCurrency(asset.purchase_price)})\n` +
+                          `• Methode wird auf „Sofort" geaendert\n\n` +
+                          `Sinnvoll fuer Sachen unter 800 € netto. Steuerlich darf die Umstellung nur im Anschaffungsjahr erfolgen — bei aelteren Jahren wird zusaetzlich gewarnt.`,
+                        confirmLabel: 'Fortfahren',
+                      });
                       if (ok) convertToGwg(false);
                     }}
                     style={{ padding: '8px 14px', borderRadius: 8, background: '#f59e0b', color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
@@ -287,7 +293,7 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
 
         {/* Stammdaten */}
         <div style={{ ...card, marginBottom: 20 }}>
-          <h3 style={{ color: '#f1f5f9', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Stammdaten</h3>
+          <h3 style={{ color: 'var(--admin-heading)', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Stammdaten</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
             <Field k="Lieferant" v={asset.supplier?.name} />
             <Field k="Rechnungsnummer" v={asset.purchase?.invoice_number} />
@@ -300,20 +306,20 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           {asset.notes && (
             <>
               <span style={label}>Notizen</span>
-              <p style={{ color: '#94a3b8', fontSize: 13, whiteSpace: 'pre-wrap', marginTop: 4 }}>{asset.notes}</p>
+              <p style={{ color: 'var(--admin-muted)', fontSize: 13, whiteSpace: 'pre-wrap', marginTop: 4 }}>{asset.notes}</p>
             </>
           )}
         </div>
 
         {/* AfA-Historie */}
         <div style={card}>
-          <h3 style={{ color: '#f1f5f9', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>AfA-Historie</h3>
+          <h3 style={{ color: 'var(--admin-heading)', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>AfA-Historie</h3>
           {history.length === 0 ? (
-            <p style={{ color: '#64748b', fontSize: 13 }}>Noch keine AfA-Buchungen.</p>
+            <p style={{ color: 'var(--admin-text-dim)', fontSize: 13 }}>Noch keine AfA-Buchungen.</p>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   <th style={{ ...th, textAlign: 'left' }}>Datum</th>
                   <th style={{ ...th, textAlign: 'right' }}>Betrag</th>
                   <th style={{ ...th, textAlign: 'left' }}>Notiz</th>
@@ -321,10 +327,10 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
               </thead>
               <tbody>
                 {history.map((h) => (
-                  <tr key={h.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                  <tr key={h.id} style={{ borderBottom: '1px solid var(--admin-border)' }}>
                     <td style={td}>{fmtDate(h.expense_date)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#f59e0b', fontWeight: 600 }}>-{formatCurrency(h.gross_amount)}</td>
-                    <td style={{ ...td, color: '#94a3b8' }}>{h.notes ?? ''}</td>
+                    <td style={{ ...td, color: 'var(--admin-muted)' }}>{h.notes ?? ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -340,7 +346,7 @@ function Field({ k, v }: { k: string; v: string | null | undefined }) {
   return (
     <div>
       <span style={label}>{k}</span>
-      <div style={{ color: '#e2e8f0', fontSize: 13 }}>{v || '—'}</div>
+      <div style={{ color: 'var(--admin-text)', fontSize: 13 }}>{v || '—'}</div>
     </div>
   );
 }
@@ -354,6 +360,7 @@ function ReplacementValueCard({
   meta: ReplacementValueMeta | null;
   onSave: (value: number | null) => Promise<void>;
 }) {
+  const { error: toastError } = useToast();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<string>(
     asset.replacement_value_estimate != null ? String(asset.replacement_value_estimate).replace('.', ',') : '',
@@ -380,7 +387,7 @@ function ReplacementValueCard({
     }
     const n = parseFloat(cleaned);
     if (!Number.isFinite(n) || n < 0) {
-      alert('Bitte eine gültige Zahl eingeben.');
+      toastError('Bitte eine gültige Zahl eingeben.');
       return;
     }
     setSaving(true);
@@ -404,16 +411,16 @@ function ReplacementValueCard({
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
             placeholder="z.B. 600"
-            style={{ flex: 1, background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px', color: '#e2e8f0', fontSize: 14 }}
+            style={{ flex: 1, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '8px 10px', color: 'var(--admin-text)', fontSize: 14 }}
           />
-          <button onClick={commit} disabled={saving} style={{ padding: '8px 12px', borderRadius: 8, background: cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={commit} disabled={saving} style={{ padding: '8px 12px', borderRadius: 8, background: cyan, color: 'var(--admin-primary-text)', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             {saving ? '…' : 'OK'}
           </button>
-          <button onClick={() => setEditing(false)} style={{ padding: '8px 10px', borderRadius: 8, background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={() => setEditing(false)} style={{ padding: '8px 10px', borderRadius: 8, background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', fontSize: 12, cursor: 'pointer' }}>
             ✕
           </button>
         </div>
-        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>
           Leer lassen = Default (Buchwert) wird genutzt.
         </div>
       </>
@@ -424,16 +431,16 @@ function ReplacementValueCard({
     <>
       <span style={label}>Wiederbeschaffungswert</span>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <div style={{ fontSize: 24, color: isEstimateSet ? '#10b981' : '#22d3ee', fontWeight: 800 }}>{formatCurrency(effective)}</div>
+        <div style={{ fontSize: 24, color: isEstimateSet ? '#10b981' : 'var(--admin-accent-hover)', fontWeight: 800 }}>{formatCurrency(effective)}</div>
         <button
           onClick={() => setEditing(true)}
-          style={{ padding: '4px 8px', borderRadius: 6, background: 'transparent', color: cyan, border: '1px solid #1e293b', fontSize: 11, cursor: 'pointer' }}
+          style={{ padding: '4px 8px', borderRadius: 6, background: 'transparent', color: cyan, border: '1px solid var(--admin-border)', fontSize: 11, cursor: 'pointer' }}
           title="Wiederbeschaffungswert manuell setzen"
         >
           ✎ ändern
         </button>
       </div>
-      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+      <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>
         {sourceLabel}
         {meta?.source === 'computed' && meta?.config && (
           <span style={{ display: 'block', fontSize: 10, marginTop: 2 }}>
@@ -445,8 +452,8 @@ function ReplacementValueCard({
   );
 }
 
-const btnPrimary: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
-const btnSecondary: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontWeight: 600, fontSize: 12, cursor: 'pointer' };
-const btnDanger: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', fontWeight: 600, fontSize: 12, cursor: 'pointer' };
-const th: React.CSSProperties = { padding: '8px 12px', fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
-const td: React.CSSProperties = { padding: '10px 12px', color: '#e2e8f0' };
+const btnPrimary: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: cyan, color: 'var(--admin-primary-text)', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
+const btnSecondary: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', fontWeight: 600, fontSize: 12, cursor: 'pointer' };
+const btnDanger: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, background: 'transparent', color: 'var(--admin-danger)', border: '1px solid rgba(239,68,68,0.3)', fontWeight: 600, fontSize: 12, cursor: 'pointer' };
+const th: React.CSSProperties = { padding: '8px 12px', fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
+const td: React.CSSProperties = { padding: '10px 12px', color: 'var(--admin-text)' };
