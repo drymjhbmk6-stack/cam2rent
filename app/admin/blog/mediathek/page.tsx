@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface MediaImage {
   name: string;
@@ -11,6 +12,7 @@ interface MediaImage {
 }
 
 export default function BlogMediathekPage() {
+  const confirm = useConfirm();
   const [images, setImages] = useState<MediaImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -48,7 +50,8 @@ export default function BlogMediathekPage() {
   }
 
   async function deleteImage(name: string) {
-    if (!confirm('Bild wirklich löschen?')) return;
+    const ok = await confirm({ title: 'Bild löschen', message: 'Bild wirklich löschen?', confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     await fetch(`/api/admin/blog/media?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (selected === name) setSelected(null);
     loadImages();
@@ -69,44 +72,45 @@ export default function BlogMediathekPage() {
 
   return (
     <div className="p-4 sm:p-8">
-      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <div>
-          <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Mediathek</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>{images.length} Bilder im Blog-Speicher</p>
-        </div>
-        <label className="px-4 py-2 rounded-lg text-sm font-heading font-semibold cursor-pointer flex items-center gap-2" style={{ background: '#06b6d4', color: 'white' }}>
-          {uploading ? (
-            <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Laden...</>
-          ) : (
-            <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg> Bild hochladen</>
-          )}
-          <input type="file" accept="image/*" onChange={uploadFile} className="hidden" />
-        </label>
-      </div>
+      <PageHeader
+        backHref="/admin/blog"
+        backLabel="Zurück zum Blog"
+        title="Mediathek"
+        subtitle={`${images.length} Bilder im Blog-Speicher`}
+        actions={
+          <label className="px-4 py-2 rounded-lg text-sm font-heading font-semibold cursor-pointer flex items-center gap-2" style={{ background: 'var(--admin-accent)', color: '#fff' }}>
+            {uploading ? (
+              <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Laden...</>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg> Bild hochladen</>
+            )}
+            <input type="file" accept="image/*" onChange={uploadFile} className="hidden" />
+          </label>
+        }
+      />
 
       {msg && (
-        <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: msg.includes('fehlgeschlagen') ? '#ef4444' : '#22c55e' }}>
+        <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: 'var(--admin-input-bg)', color: msg.includes('fehlgeschlagen') ? 'var(--admin-danger)' : '#22c55e' }}>
           {msg}
         </div>
       )}
 
       {/* Ausgewähltes Bild Detail */}
       {selected && (
-        <div className="mb-6 rounded-xl p-4 flex flex-col sm:flex-row gap-4" style={{ background: '#1e293b', border: '1px solid #06b6d430' }}>
+        <div className="mb-6 rounded-xl p-4 flex flex-col sm:flex-row gap-4" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-accent-soft)' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={images.find((i) => i.name === selected)?.url} alt="" className="w-full sm:w-48 h-32 object-cover rounded-lg" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-heading font-semibold mb-1" style={{ color: '#e2e8f0' }}>{selected}</p>
-            <p className="text-xs mb-3 break-all" style={{ color: '#06b6d4' }}>{images.find((i) => i.name === selected)?.url}</p>
+            <p className="text-xs font-heading font-semibold mb-1" style={{ color: 'var(--admin-text)' }}>{selected}</p>
+            <p className="text-xs mb-3 break-all" style={{ color: 'var(--admin-accent)' }}>{images.find((i) => i.name === selected)?.url}</p>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => copyUrl(images.find((i) => i.name === selected)?.url ?? '')} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#06b6d4', color: '#0f172a' }}>
+              <button onClick={() => copyUrl(images.find((i) => i.name === selected)?.url ?? '')} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' }}>
                 URL kopieren
               </button>
               <button onClick={() => deleteImage(selected)} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#ef444420', color: '#ef4444' }}>
                 Löschen
               </button>
-              <button onClick={() => setSelected(null)} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#334155', color: '#94a3b8' }}>
+              <button onClick={() => setSelected(null)} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: 'var(--admin-faint)', color: 'var(--admin-muted)' }}>
                 Schließen
               </button>
             </div>
@@ -116,10 +120,10 @@ export default function BlogMediathekPage() {
 
       {/* Bilder-Grid */}
       {loading ? (
-        <p className="text-sm" style={{ color: '#64748b' }}>Laden...</p>
+        <p className="text-sm" style={{ color: 'var(--admin-text-dim)' }}>Laden...</p>
       ) : images.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-sm" style={{ color: '#475569' }}>Noch keine Bilder vorhanden.</p>
+          <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Bilder vorhanden.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -129,18 +133,18 @@ export default function BlogMediathekPage() {
               onClick={() => setSelected(selected === img.name ? null : img.name)}
               className="group relative rounded-xl overflow-hidden transition-all"
               style={{
-                border: selected === img.name ? '2px solid #06b6d4' : '2px solid transparent',
-                background: '#1e293b',
+                border: selected === img.name ? '2px solid var(--admin-accent)' : '2px solid transparent',
+                background: 'var(--admin-surface-2)',
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img.url} alt={img.name} className="w-full h-28 sm:h-32 object-cover group-hover:scale-105 transition-transform duration-200" />
               <div className="px-2 py-2">
-                <p className="text-[10px] font-body truncate" style={{ color: '#94a3b8' }}>{img.name}</p>
-                <p className="text-[10px] font-body" style={{ color: '#475569' }}>{formatSize(img.size)}</p>
+                <p className="text-[10px] font-body truncate" style={{ color: 'var(--admin-muted)' }}>{img.name}</p>
+                <p className="text-[10px] font-body" style={{ color: 'var(--admin-muted-2)' }}>{formatSize(img.size)}</p>
               </div>
               {selected === img.name && (
-                <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: '#06b6d4' }}>
+                <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'var(--admin-accent)' }}>
                   <svg className="w-3 h-3" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>
               )}

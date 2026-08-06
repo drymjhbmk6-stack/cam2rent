@@ -65,7 +65,7 @@ export default function BlogKommentarePage() {
             key={s}
             onClick={() => setFilter(s)}
             className="px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
-            style={filter === s ? { background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}
+            style={filter === s ? { background: 'var(--admin-accent)', color: '#fff' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}
           >
             {s === 'all' ? 'Alle' : STATUS_LABELS[s]?.label ?? s}
           </button>
