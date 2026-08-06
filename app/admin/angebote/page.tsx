@@ -5,6 +5,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import PriceInput from '@/components/admin/PriceInput';
 import UnsplashPicker from '@/components/admin/UnsplashPicker';
 import { isAngebotActive, type Angebot, type AngebotCameraOption } from '@/data/angebote';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface ProductOption { id: string; name: string }
 interface AccessoryOption { id: string; name: string; group?: string; compatible_product_ids: string[]; internal: boolean }
@@ -26,11 +27,11 @@ interface Draft {
 }
 
 const S = {
-  input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, width: '100%' } as React.CSSProperties,
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  section: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 20 } as React.CSSProperties,
-  btnPrimary: { background: '#06b6d4', color: 'white', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' } as React.CSSProperties,
-  btnGhost: { background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+  input: { background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14, width: '100%' } as React.CSSProperties,
+  label: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
+  section: { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 24, marginBottom: 20 } as React.CSSProperties,
+  btnPrimary: { background: 'var(--admin-accent)', color: 'white', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' } as React.CSSProperties,
+  btnGhost: { background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
 };
 
 function isoToDate(iso: string | null): string {
@@ -79,20 +80,20 @@ function fmtDateDe(iso: string | null): string {
 }
 
 function statusBadge(a: Angebot): { label: string; color: string; bg: string } {
-  if (!a.active) return { label: 'Deaktiviert', color: '#94a3b8', bg: '#33415544' };
+  if (!a.active) return { label: 'Deaktiviert', color: 'var(--admin-muted)', bg: '#33415544' };
   const now = new Date();
   const visibleFromIso = a.published_from ?? a.valid_from;
   if (visibleFromIso && new Date(visibleFromIso) > now) {
     return { label: `Geplant ab ${fmtDateDe(visibleFromIso)}`, color: '#fbbf24', bg: '#f59e0b22' };
   }
-  if (a.valid_until && new Date(a.valid_until) < now) return { label: 'Abgelaufen', color: '#ef4444', bg: '#ef444422' };
+  if (a.valid_until && new Date(a.valid_until) < now) return { label: 'Abgelaufen', color: 'var(--admin-danger)', bg: '#ef444422' };
   // Vorab-Veroeffentlichung greift: sichtbar/buchbar, Mietfenster startet aber spaeter.
   if (a.published_from && a.valid_from && new Date(a.valid_from) > now) {
-    return { label: `Vorabverkauf (Miete ab ${fmtDateDe(a.valid_from)})`, color: '#06b6d4', bg: '#06b6d422' };
+    return { label: `Vorabverkauf (Miete ab ${fmtDateDe(a.valid_from)})`, color: 'var(--admin-accent)', bg: '#06b6d422' };
   }
   return isAngebotActive(a, now)
     ? { label: 'Aktiv', color: '#10b981', bg: '#10b98122' }
-    : { label: 'Inaktiv', color: '#94a3b8', bg: '#33415544' };
+    : { label: 'Inaktiv', color: 'var(--admin-muted)', bg: '#33415544' };
 }
 
 export default function AdminAngebotePage() {
@@ -106,6 +107,7 @@ export default function AdminAngebotePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [unsplashOpen, setUnsplashOpen] = useState(false);
+  const confirm = useConfirm();
 
   const reload = useCallback(() => {
     fetch('/api/admin/angebote')
@@ -255,7 +257,8 @@ export default function AdminAngebotePage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Dieses Angebot wirklich löschen?')) return;
+    const ok = await confirm({ title: 'Angebot löschen', message: 'Dieses Angebot wirklich löschen?', confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     await fetch('/api/admin/angebote', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -297,12 +300,12 @@ export default function AdminAngebotePage() {
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
-      <style>{`.ang-price{background:#0a0f1e;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;color:#e2e8f0;font-size:13px;width:84px}`}</style>
+      <style>{`.ang-price{background:var(--admin-bg);border:1px solid var(--admin-border);border-radius:8px;padding:6px 8px;color:var(--admin-text);font-size:13px;width:84px}`}</style>
       <AdminBackLink />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>Angebote</h1>
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--admin-heading)' }}>Angebote</h1>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', marginTop: 4 }}>
             Zeitlich begrenzte Festpreis-Bündel aus Kamera + Zubehör.
           </p>
         </div>
@@ -330,7 +333,7 @@ export default function AdminAngebotePage() {
       {/* ── Editor ── */}
       {draft && (
         <div style={S.section}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-heading)', marginBottom: 16 }}>
             {draft.id ? 'Angebot bearbeiten' : 'Neues Angebot'}
           </h2>
 
@@ -359,7 +362,7 @@ export default function AdminAngebotePage() {
                   onChange={(e) => patchDraft({ validUntil: e.target.value })} />
               </div>
             </div>
-            <p style={{ fontSize: 11, color: '#64748b', marginTop: -8 }}>
+            <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: -8 }}>
               Der gewählte Mietzeitraum des Kunden muss komplett in dieses Fenster fallen.
             </p>
 
@@ -372,7 +375,7 @@ export default function AdminAngebotePage() {
                 onChange={(e) => patchDraft({ publishedFrom: e.target.value })}
                 max={draft.validFrom || undefined}
               />
-              <p style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 6 }}>
                 Wenn gesetzt: Angebot erscheint im Shop und ist buchbar ab diesem Datum.
                 Der Mietzeitraum bleibt aber auf das Mietfenster oben begrenzt.
                 Leer = Sichtbarkeit beginnt mit dem Mietfenster.
@@ -392,7 +395,7 @@ export default function AdminAngebotePage() {
                   { v: 'flat', t: 'Pauschale für feste Tagezahl' },
                   { v: 'perDay', t: 'Preis pro Tag' },
                 ] as const).map((o) => (
-                  <label key={o.v} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
+                  <label key={o.v} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--admin-text-2)', cursor: 'pointer' }}>
                     <input type="radio" name="pm" checked={draft.pricing_mode === o.v}
                       onChange={() => patchDraft({ pricing_mode: o.v })} />
                     {o.t}
@@ -411,17 +414,17 @@ export default function AdminAngebotePage() {
             {/* Kameras + Preis + Zubehör pro Kamera */}
             <div>
               <label style={S.label}>Kameras, Komplettpreis & Zubehör</label>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 8 }}>
                 Preis je Kamera = {draft.pricing_mode === 'perDay' ? 'pro Tag' : `Pauschale für ${draft.fixed_days || '?'} Tage`}, inkl. dem unten je Kamera gewählten Zubehör.
               </p>
               <div style={{ display: 'grid', gap: 8 }}>
-                {products.length === 0 && <p style={{ fontSize: 12, color: '#64748b' }}>Keine Kameras geladen.</p>}
+                {products.length === 0 && <p style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>Keine Kameras geladen.</p>}
                 {products.map((p) => {
                   const opt = draft.camera_options.find((c) => c.product_id === p.id);
                   return (
-                    <div key={p.id} style={{ background: '#0a0f1e', border: `1px solid ${opt ? '#06b6d433' : '#1e293b'}`, borderRadius: 10, padding: '10px 12px' }}>
+                    <div key={p.id} style={{ background: 'var(--admin-bg)', border: `1px solid ${opt ? '#06b6d433' : 'var(--admin-border)'}`, borderRadius: 10, padding: '10px 12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, color: '#cbd5e1', fontSize: 13, cursor: 'pointer' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, color: 'var(--admin-text-2)', fontSize: 13, cursor: 'pointer' }}>
                           <input type="checkbox" checked={!!opt} onChange={() => toggleCamera(p.id)} />
                           {p.name}
                         </label>
@@ -429,13 +432,13 @@ export default function AdminAngebotePage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <PriceInput value={opt.price} onChange={(v) => setCameraPrice(p.id, v)}
                               placeholder="0,00" min={0} className="ang-price" />
-                            <span style={{ color: '#64748b', fontSize: 13 }}>€</span>
+                            <span style={{ color: 'var(--admin-text-dim)', fontSize: 13 }}>€</span>
                           </div>
                         )}
                       </div>
                       {opt && (
-                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #1e293b' }}>
-                          <p style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--admin-border)' }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
                             Enthaltenes Zubehör für {p.name}
                           </p>
                           <select
@@ -455,7 +458,7 @@ export default function AdminAngebotePage() {
                             ))}
                           </select>
                           {opt.accessory_items.length === 0 ? (
-                            <p style={{ fontSize: 11, color: '#64748b' }}>Kein Zubehör — reines Kamera-Angebot.</p>
+                            <p style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>Kein Zubehör — reines Kamera-Angebot.</p>
                           ) : (
                             <AccessoryRows
                               items={opt.accessory_items}
@@ -495,11 +498,11 @@ export default function AdminAngebotePage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   {draft.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={draft.image_url} alt="" style={{ width: 96, height: 72, objectFit: 'contain', background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b' }} />
+                    <img src={draft.image_url} alt="" style={{ width: 96, height: 72, objectFit: 'contain', background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)' }} />
                   )}
                   <input type="file" accept="image/jpeg,image/png,image/webp"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); }}
-                    style={{ color: '#94a3b8', fontSize: 12 }} />
+                    style={{ color: 'var(--admin-muted)', fontSize: 12 }} />
                   <button
                     type="button"
                     onClick={() => { setError(''); setUnsplashOpen(true); }}
@@ -509,11 +512,11 @@ export default function AdminAngebotePage() {
                   </button>
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#64748b' }}>Bild-Upload nach dem Speichern möglich.</p>
+                <p style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>Bild-Upload nach dem Speichern möglich.</p>
               )}
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--admin-text-2)', cursor: 'pointer' }}>
               <input type="checkbox" checked={draft.active} onChange={(e) => patchDraft({ active: e.target.checked })} />
               Angebot aktiv (im Shop sichtbar, wenn im Gültigkeitsfenster)
             </label>
@@ -534,10 +537,10 @@ export default function AdminAngebotePage() {
 
       {/* ── Liste ── */}
       {loading ? (
-        <p style={{ color: '#64748b', fontSize: 14 }}>Lädt…</p>
+        <p style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Lädt…</p>
       ) : angebote.length === 0 && !draft ? (
         <div style={S.section}>
-          <p style={{ color: '#64748b', fontSize: 14 }}>Noch keine Angebote angelegt.</p>
+          <p style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Noch keine Angebote angelegt.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
@@ -551,19 +554,19 @@ export default function AdminAngebotePage() {
               <div key={a.id} style={{ ...S.section, marginBottom: 0, padding: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 {a.image_url && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.image_url} alt="" style={{ width: 64, height: 48, objectFit: 'contain', background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b' }} />
+                  <img src={a.image_url} alt="" style={{ width: 64, height: 48, objectFit: 'contain', background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)' }} />
                 )}
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 15 }}>{a.name}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--admin-heading)', fontSize: 15 }}>{a.name}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: st.color, background: st.bg, borderRadius: 999, padding: '2px 8px' }}>{st.label}</span>
                   </div>
-                  <p style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                  <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginTop: 4 }}>
                     {a.camera_options.length} Kamera{a.camera_options.length === 1 ? '' : 's'} · {accCount} Zubehör-Position{accCount === 1 ? '' : 'en'} ·{' '}
                     {min === max ? `${min.toFixed(2)} €` : `${min.toFixed(2)}–${max.toFixed(2)} €`}
                     {a.pricing_mode === 'perDay' ? ' /Tag' : ` (${a.fixed_days ?? '?'} Tage)`}
                   </p>
-                  <p style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                  <p style={{ fontSize: 11, color: 'var(--admin-muted-2)', marginTop: 2 }}>
                     {a.camera_options.map((c) => productName(c.product_id)).join(', ')}
                   </p>
                 </div>
@@ -674,8 +677,8 @@ function AccessoryRows({
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              background: '#111827',
-              border: `1px solid ${isOver ? '#06b6d4' : '#1e293b'}`,
+              background: 'var(--admin-surface)',
+              border: `1px solid ${isOver ? 'var(--admin-accent)' : 'var(--admin-border)'}`,
               borderRadius: 6,
               padding: '6px 10px',
               opacity: isDragging ? 0.4 : 1,
@@ -688,7 +691,7 @@ function AccessoryRows({
               aria-label="Ziehen zum Sortieren"
               style={{
                 cursor: 'grab',
-                color: '#475569',
+                color: 'var(--admin-muted-2)',
                 fontSize: 14,
                 userSelect: 'none',
                 flexShrink: 0,
@@ -699,7 +702,7 @@ function AccessoryRows({
             >
               ⋮⋮
             </span>
-            <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>
+            <span style={{ flex: 1, color: 'var(--admin-text-2)', fontSize: 13 }}>
               {accessoryName(it.accessory_id)}
               {acc?.internal && <span style={{ marginLeft: 6, fontSize: 10, color: '#fbbf24' }}>(intern)</span>}
             </span>
@@ -713,7 +716,7 @@ function AccessoryRows({
             <button
               type="button"
               onClick={() => onRemove(it.accessory_id)}
-              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+              style={{ background: 'none', border: 'none', color: 'var(--admin-danger)', cursor: 'pointer', fontSize: 12 }}
             >
               Entfernen
             </button>
