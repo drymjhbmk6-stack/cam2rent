@@ -35,9 +35,9 @@ interface Config {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b' };
-const cyan = '#06b6d4';
-const th: React.CSSProperties = { textAlign: 'left', padding: '12px 14px', color: '#64748b', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 };
+const card: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)' };
+const cyan = 'var(--admin-accent)';
+const th: React.CSSProperties = { textAlign: 'left', padding: '12px 14px', color: 'var(--admin-text-dim)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 };
 const td: React.CSSProperties = { padding: '12px 14px', fontSize: 13 };
 
 const KIND_BADGE: Record<ItemKind, { label: string; bg: string; color: string }> = {
@@ -157,14 +157,14 @@ export default function WiederbeschaffungsListePage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ padding: '24px 20px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <AdminBackLink />
         <AnlagenTabs pathname="/admin/anlagen/wiederbeschaffung" />
 
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Wiederbeschaffungsliste</h1>
-          <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 12 }}>
+          <h1 style={{ color: 'var(--admin-heading)', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Wiederbeschaffungsliste</h1>
+          <p style={{ color: 'var(--admin-muted)', fontSize: 14, marginBottom: 12 }}>
             Pro Inventar-Stück (Kamera / Zubehör-Exemplar / Sammel-Zubehör) der aktuelle Wiederbeschaffungswert.
             Greift im Mietvertrag und im Schadensmodul.
           </p>
@@ -186,11 +186,11 @@ export default function WiederbeschaffungsListePage() {
         {/* KPI-Karten */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Positionen (gefiltert)</div>
-            <div style={{ fontSize: 28, color: '#f1f5f9', fontWeight: 800, marginTop: 8 }}>{totals.count}</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Positionen (gefiltert)</div>
+            <div style={{ fontSize: 28, color: 'var(--admin-heading)', fontWeight: 800, marginTop: 8 }}>{totals.count}</div>
           </div>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Wiederbeschaffung (Total)</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Wiederbeschaffung (Total)</div>
             <div style={{ fontSize: 28, color: cyan, fontWeight: 800, marginTop: 8 }}>{fmtEuro(totals.sum)}</div>
           </div>
           <div
@@ -198,10 +198,10 @@ export default function WiederbeschaffungsListePage() {
             onClick={() => setFilterMissing(!filterMissing)}
             title="Klicken: nur Positionen ohne gesetzten Wert zeigen"
           >
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Werte fehlen{filterMissing ? ' · aktiv' : ''}
             </div>
-            <div style={{ fontSize: 28, color: totals.missing > 0 ? '#ef4444' : '#22c55e', fontWeight: 800, marginTop: 8 }}>{totals.missing}</div>
+            <div style={{ fontSize: 28, color: totals.missing > 0 ? 'var(--admin-danger)' : '#22c55e', fontWeight: 800, marginTop: 8 }}>{totals.missing}</div>
           </div>
         </div>
 
@@ -213,9 +213,9 @@ export default function WiederbeschaffungsListePage() {
               placeholder="Suche (Name, Seriennummer, Code)…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: '1 1 240px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}
+              style={{ flex: '1 1 240px', background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}
             />
-            <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}>
+            <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}>
               <option value="">Alle Arten</option>
               <option value="camera_unit">Kamera-Exemplare</option>
               <option value="accessory_unit">Zubehör-Exemplare</option>
@@ -227,16 +227,16 @@ export default function WiederbeschaffungsListePage() {
         {/* Liste */}
         <div style={{ ...card, overflow: 'hidden' }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Lade Inventar-Werte…</div>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>Lade Inventar-Werte…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
               Keine Treffer. Filter zurücksetzen oder Inventar unter <Link href="/admin/anlagen/nachtragen" style={{ color: cyan }}>Bestand nachtragen</Link>.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#0a0f1e' }}>
+                  <tr style={{ background: 'var(--admin-thead-bg)' }}>
                     <th style={th}>Bezeichnung</th>
                     <th style={th}>Art</th>
                     <th style={{ ...th, textAlign: 'right' }}>Menge</th>
@@ -252,18 +252,18 @@ export default function WiederbeschaffungsListePage() {
                     const src = SOURCE_HINT[it.replacement_source];
                     const total = it.replacement_value * (it.qty || 1);
                     return (
-                      <tr key={it.row_key} style={{ borderTop: '1px solid #1e293b' }}>
+                      <tr key={it.row_key} style={{ borderTop: '1px solid var(--admin-border)' }}>
                         <td style={td}>
-                          <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{it.label}</div>
-                          <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{it.sublabel}</div>
+                          <div style={{ color: 'var(--admin-text)', fontWeight: 600 }}>{it.label}</div>
+                          <div style={{ color: 'var(--admin-text-dim)', fontSize: 11, marginTop: 2 }}>{it.sublabel}</div>
                         </td>
                         <td style={td}>
                           <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: badge.bg, color: badge.color }}>
                             {badge.label}
                           </span>
                         </td>
-                        <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{it.qty}</td>
-                        <td style={{ ...td, textAlign: 'right', color: it.replacement_source === 'missing' ? '#ef4444' : '#e2e8f0', fontWeight: 600 }}
+                        <td style={{ ...td, textAlign: 'right', color: 'var(--admin-muted)' }}>{it.qty}</td>
+                        <td style={{ ...td, textAlign: 'right', color: it.replacement_source === 'missing' ? 'var(--admin-danger)' : 'var(--admin-text)', fontWeight: 600 }}
                           title={
                             it.purchase_price != null && it.replacement_pct != null
                               ? `Kaufpreis ${fmtEuro(it.purchase_price)} · aktuell ${it.replacement_pct.toFixed(0)} % · Alter ${it.age_months ?? 0} Monate`
@@ -272,7 +272,7 @@ export default function WiederbeschaffungsListePage() {
                         >
                           {it.replacement_value > 0 ? fmtEuro(it.replacement_value) : '—'}
                           {it.replacement_pct != null && it.replacement_source !== 'manual' && (
-                            <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>
+                            <span style={{ fontSize: 10, color: 'var(--admin-text-dim)', marginLeft: 6, fontWeight: 400 }}>
                               {it.replacement_pct.toFixed(0)} %
                             </span>
                           )}
@@ -287,7 +287,7 @@ export default function WiederbeschaffungsListePage() {
                           {it.editable_target ? (
                             <button
                               onClick={() => startEdit(it)}
-                              style={{ background: 'transparent', border: '1px solid #06b6d4', color: '#06b6d4', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              style={{ background: 'transparent', border: '1px solid var(--admin-accent)', color: 'var(--admin-accent)', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                             >
                               Bearbeiten
                             </button>
@@ -322,12 +322,12 @@ export default function WiederbeschaffungsListePage() {
               onClick={(e) => e.stopPropagation()}
               style={{ ...card, padding: 24, maxWidth: 480, width: '100%' }}
             >
-              <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
+              <h2 style={{ color: 'var(--admin-heading)', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
                 Wiederbeschaffungswert bearbeiten
               </h2>
-              <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>
-                <strong style={{ color: '#e2e8f0' }}>{editing.label}</strong>
-                <div style={{ fontSize: 11, marginTop: 2, color: '#64748b' }}>{editing.sublabel}</div>
+              <div style={{ color: 'var(--admin-muted)', fontSize: 13, marginBottom: 16 }}>
+                <strong style={{ color: 'var(--admin-text)' }}>{editing.label}</strong>
+                <div style={{ fontSize: 11, marginTop: 2, color: 'var(--admin-text-dim)' }}>{editing.sublabel}</div>
               </div>
 
               {editing.editable_target?.type === 'accessory' && (
@@ -340,7 +340,7 @@ export default function WiederbeschaffungsListePage() {
                 </div>
               )}
 
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Wiederbeschaffungswert (€ pro Stück)
               </label>
               <input
@@ -352,7 +352,7 @@ export default function WiederbeschaffungsListePage() {
                   if (e.key === 'Enter' && !saving) saveEdit();
                   if (e.key === 'Escape' && !saving) setEditing(null);
                 }}
-                style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 16, width: '100%' }}
+                style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 16, width: '100%' }}
                 placeholder="0,00"
               />
 
@@ -362,14 +362,14 @@ export default function WiederbeschaffungsListePage() {
                 <button
                   onClick={() => setEditing(null)}
                   disabled={saving}
-                  style={{ background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, padding: '10px 18px', borderRadius: 8, border: '1px solid #1e293b', cursor: 'pointer' }}
+                  style={{ background: 'transparent', color: 'var(--admin-muted)', fontWeight: 600, fontSize: 13, padding: '10px 18px', borderRadius: 8, border: '1px solid var(--admin-border)', cursor: 'pointer' }}
                 >
                   Abbrechen
                 </button>
                 <button
                   onClick={saveEdit}
                   disabled={saving}
-                  style={{ background: cyan, color: '#0f172a', fontWeight: 700, fontSize: 13, padding: '10px 18px', borderRadius: 8, border: 'none', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
+                  style={{ background: cyan, color: 'var(--admin-primary-text)', fontWeight: 700, fontSize: 13, padding: '10px 18px', borderRadius: 8, border: 'none', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
                 >
                   {saving ? 'Speichert…' : 'Speichern'}
                 </button>
