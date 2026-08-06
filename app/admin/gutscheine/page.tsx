@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate } from '@/lib/format-utils';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,15 +38,15 @@ type FormData = Omit<CouponRow, 'id' | 'used_count' | 'created_at'>;
 // ─── Dark-theme inline styles ────────────────────────────────────────────────
 
 const S = {
-  card: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b' } as React.CSSProperties,
-  cardEdit: { background: '#0a0f1e', borderTop: '1px solid #1e293b' } as React.CSSProperties,
-  input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
-  select: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  text: { color: '#e2e8f0' },
-  muted: { color: '#94a3b8' },
-  dim: { color: '#64748b' },
-  cyan: '#06b6d4',
+  card: { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)' } as React.CSSProperties,
+  cardEdit: { background: 'var(--admin-bg)', borderTop: '1px solid var(--admin-border)' } as React.CSSProperties,
+  input: { background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 } as React.CSSProperties,
+  select: { background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
+  label: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
+  text: { color: 'var(--admin-text)' },
+  muted: { color: 'var(--admin-muted)' },
+  dim: { color: 'var(--admin-text-dim)' },
+  cyan: 'var(--admin-accent)',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -113,14 +114,14 @@ function CustomerPicker({
       {/* Backdrop */}
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
       {/* Modal */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: 480, maxHeight: '70vh', background: '#111827', border: '1px solid #1e293b', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 480, maxHeight: '70vh', background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0' }}>Kunde auswählen</span>
-          <button onClick={onClose} style={{ color: '#64748b', fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}>{'\u2715'}</button>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--admin-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text)' }}>Kunde auswählen</span>
+          <button onClick={onClose} style={{ color: 'var(--admin-text-dim)', fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}>{'\u2715'}</button>
         </div>
         {/* Search */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e293b' }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--admin-border)' }}>
           <input
             ref={inputRef}
             type="text"
@@ -133,7 +134,7 @@ function CustomerPicker({
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '24px 20px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+            <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--admin-text-dim)', fontSize: 13 }}>
               Keine Kunden gefunden.
             </div>
           ) : (
@@ -145,13 +146,13 @@ function CustomerPicker({
                   display: 'flex', flexDirection: 'column', gap: 2,
                   width: '100%', textAlign: 'left', padding: '10px 20px',
                   background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: '#e2e8f0', fontSize: 14,
+                  color: 'var(--admin-text)', fontSize: 14,
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#1e293b'; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--admin-hover)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <span style={{ fontWeight: 600 }}>{c.full_name || 'Kein Name'}</span>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>{c.email}</span>
+                <span style={{ fontSize: 12, color: 'var(--admin-muted)' }}>{c.email}</span>
               </button>
             ))
           )}
@@ -164,6 +165,8 @@ function CustomerPicker({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function AdminGutscheinePage() {
+  const { error: toastError } = useToast();
+  const confirm = useConfirm();
   const [coupons, setCoupons] = useState<CouponRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
@@ -209,18 +212,18 @@ export default function AdminGutscheinePage() {
   }
 
   async function handleCreate() {
-    if (!newForm.code.trim()) { alert('Bitte einen Code eingeben.'); return; }
+    if (!newForm.code.trim()) { toastError('Bitte einen Code eingeben.'); return; }
     setCreating(true);
     try {
       const res = await fetch('/api/admin/coupons', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newForm),
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(`Fehler: ${d.error ?? 'Unbekannter Fehler'}`); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toastError(`Fehler: ${d.error ?? 'Unbekannter Fehler'}`); return; }
       setNewForm(emptyForm());
       setDuration((d) => ({ ...d, new: { amount: '', unit: 'days' } }));
       setShowNew(false); loadCoupons();
-    } catch (e) { alert(`Netzwerkfehler: ${e instanceof Error ? e.message : String(e)}`); }
+    } catch (e) { toastError(`Netzwerkfehler: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setCreating(false); }
   }
 
@@ -246,15 +249,16 @@ export default function AdminGutscheinePage() {
       if (!res.ok) throw new Error();
       setCoupons((prev) => prev.map((c) => c.id === id ? { ...c, ...editForm } as CouponRow : c));
       setEditId(null); setSavedId(id); setTimeout(() => setSavedId(null), 3000);
-    } catch { alert('Fehler beim Speichern.'); }
+    } catch { toastError('Fehler beim Speichern.'); }
     finally { setSavingId(null); }
   }
 
   async function handleDelete(id: string, code: string) {
-    if (!confirm(`Gutschein "${code}" wirklich löschen?`)) return;
+    const ok = await confirm({ title: 'Gutschein löschen', message: `Gutschein "${code}" wirklich löschen?`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     setDeletingId(id);
     try { await fetch(`/api/admin/coupons/${id}`, { method: 'DELETE' }); setCoupons((p) => p.filter((c) => c.id !== id)); }
-    catch { alert('Fehler beim Löschen.'); } finally { setDeletingId(null); }
+    catch { toastError('Fehler beim Löschen.'); } finally { setDeletingId(null); }
   }
 
   async function handleToggleActive(c: CouponRow) {
@@ -263,7 +267,7 @@ export default function AdminGutscheinePage() {
       const res = await fetch(`/api/admin/coupons/${c.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: v }) });
       if (!res.ok) throw new Error();
       setCoupons((p) => p.map((x) => x.id === c.id ? { ...x, active: v } : x));
-    } catch { alert('Fehler beim Umschalten.'); }
+    } catch { toastError('Fehler beim Umschalten.'); }
   }
 
   function handleCustomerSelect(c: CustomerOption) {
@@ -312,7 +316,7 @@ export default function AdminGutscheinePage() {
                 inputMode="decimal"
                 onChange={(e) => setForm((f) => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
                 style={{ ...S.input, width: '100%', paddingRight: 32 }} />
-              <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#64748b' }}>
+              <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--admin-text-dim)' }}>
                 {form.type === 'percent' ? '%' : '\u20AC'}
               </span>
             </div>
@@ -382,7 +386,7 @@ export default function AdminGutscheinePage() {
         )}
 
         {/* Personalisiert checkbox + customer picker */}
-        <div style={{ gridColumn: '1 / -1', background: '#0d1322', borderRadius: 10, padding: 14, border: '1px solid #1e293b' }}>
+        <div style={{ gridColumn: '1 / -1', background: 'var(--admin-bg)', borderRadius: 10, padding: 14, border: '1px solid var(--admin-border)' }}>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox"
               checked={isPersonalized}
@@ -401,8 +405,8 @@ export default function AdminGutscheinePage() {
               style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2, flexShrink: 0 }}
             />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Personalisiert</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Nur für einen bestimmten Kunden einlösbar.</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Personalisiert</div>
+              <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>Nur für einen bestimmten Kunden einlösbar.</div>
             </div>
           </label>
           {isPersonalized && (
@@ -420,17 +424,17 @@ export default function AdminGutscheinePage() {
                   </svg>
                 </div>
                 <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {customers.find((c) => c.email === form.target_user_email)?.full_name || form.target_user_email}
                   </div>
                   {customers.find((c) => c.email === form.target_user_email)?.full_name && (
-                    <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.target_user_email}</div>
+                    <div style={{ fontSize: 11, color: 'var(--admin-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.target_user_email}</div>
                   )}
                 </div>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, target_user_email: null })); }}
-                style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px', flexShrink: 0 }}
+                style={{ color: 'var(--admin-danger)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px', flexShrink: 0 }}
                 title="Personalisierung entfernen"
               >{'\u2715'}</button>
             </div>
@@ -471,15 +475,15 @@ export default function AdminGutscheinePage() {
             <button type="button"
               onClick={() => {
                 const amt = parseInt(duration[mode].amount, 10);
-                if (!amt || amt < 1) { alert('Bitte eine Anzahl ≥ 1 eingeben.'); return; }
+                if (!amt || amt < 1) { toastError('Bitte eine Anzahl ≥ 1 eingeben.'); return; }
                 const anchor = form.valid_from ? new Date(form.valid_from) : new Date();
                 setForm((f) => ({ ...f, valid_until: addDurationEndISO(anchor, amt, duration[mode].unit) }));
               }}
-              style={{ padding: '10px 16px', fontSize: 13, fontWeight: 600, color: '#fff', background: '#1e293b', border: '1px solid #334155', borderRadius: 10, cursor: 'pointer' }}>
+              style={{ padding: '10px 16px', fontSize: 13, fontWeight: 600, color: '#fff', background: '#1e293b', border: '1px solid var(--admin-faint)', borderRadius: 10, cursor: 'pointer' }}>
               Setzen
             </button>
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 6 }}>
             Berechnet ab {form.valid_from ? '„Gültig ab"' : 'heute'} und trägt das Enddatum oben ein.
           </div>
         </div>
@@ -499,7 +503,7 @@ export default function AdminGutscheinePage() {
               onChange={(e) => setForm((f) => ({ ...f, min_order_value: e.target.value ? parseFloat(e.target.value) : null }))}
               placeholder="Leer = kein Minimum"
               style={{ ...S.input, width: '100%', paddingRight: 32 }} />
-            <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#64748b' }}>{'\u20AC'}</span>
+            <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--admin-text-dim)' }}>{'\u20AC'}</span>
           </div>
         </div>
 
@@ -509,19 +513,19 @@ export default function AdminGutscheinePage() {
             <input type="checkbox" checked={form.once_per_customer ?? false}
               onChange={(e) => setForm((f) => ({ ...f, once_per_customer: e.target.checked }))}
               style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Einmal pro Kunde</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Einmal pro Kunde</span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.not_combinable ?? false}
               onChange={(e) => setForm((f) => ({ ...f, not_combinable: e.target.checked }))}
               style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Nicht mit anderen Rabatten kombinierbar</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Nicht mit anderen Rabatten kombinierbar</span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.active ?? true}
               onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
               style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Aktiv</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Aktiv</span>
           </label>
         </div>
       </div>
@@ -535,7 +539,7 @@ export default function AdminGutscheinePage() {
     // Target type badge
     const tt = c.target_type === 'user' ? 'all' : c.target_type;
     switch (tt) {
-      case 'all': badges.push({ label: 'Alles', detail: '', color: '#06b6d4' }); break;
+      case 'all': badges.push({ label: 'Alles', detail: '', color: 'var(--admin-accent)' }); break;
       case 'accessory': badges.push({ label: 'Zubehör', detail: c.target_name ?? '', color: '#f59e0b' }); break;
       case 'group': badges.push({ label: 'Set', detail: c.target_name ?? '', color: '#8b5cf6' }); break;
     }
@@ -566,8 +570,8 @@ export default function AdminGutscheinePage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>Gutscheine</h1>
-          <p style={{ fontSize: 13, color: '#64748b' }}>{coupons.length} Gutschein{coupons.length !== 1 ? 'e' : ''} angelegt</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 2 }}>Gutscheine</h1>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>{coupons.length} Gutschein{coupons.length !== 1 ? 'e' : ''} angelegt</p>
         </div>
         <button
           onClick={() => { setShowNew(true); setEditId(null); }}
@@ -593,24 +597,24 @@ export default function AdminGutscheinePage() {
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 20 }}>
             <div style={{ ...S.card, padding: 14 }}>
-              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Im Umlauf</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Im Umlauf</p>
               <p style={{ fontSize: 22, fontWeight: 800, color: '#10b981', margin: 0 }}>{active.length}</p>
-              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>aktiv &amp; gültig</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>aktiv &amp; gültig</p>
             </div>
             <div style={{ ...S.card, padding: 14 }}>
-              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Aus Bewertung</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Aus Bewertung</p>
               <p style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', margin: 0 }}>{activeFromSurvey.length}</p>
-              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>von {fromSurvey.length} gesamt</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>von {fromSurvey.length} gesamt</p>
             </div>
             <div style={{ ...S.card, padding: 14 }}>
-              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Eingelöst</p>
-              <p style={{ fontSize: 22, fontWeight: 800, color: '#06b6d4', margin: 0 }}>{totalUses}</p>
-              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Nutzungen gesamt</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Eingelöst</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-accent)', margin: 0 }}>{totalUses}</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>Nutzungen gesamt</p>
             </div>
             <div style={{ ...S.card, padding: 14 }}>
-              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Gesamt</p>
-              <p style={{ fontSize: 22, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>{coupons.length}</p>
-              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>angelegt</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Gesamt</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-text)', margin: 0 }}>{coupons.length}</p>
+              <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>angelegt</p>
             </div>
           </div>
         );
@@ -620,13 +624,13 @@ export default function AdminGutscheinePage() {
       {showNew && (
         <div style={{ ...S.card, padding: 24, marginBottom: 20, borderColor: S.cyan }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Neuen Gutschein anlegen</span>
-            <button onClick={() => setShowNew(false)} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>{'\u2715'}</button>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)' }}>Neuen Gutschein anlegen</span>
+            <button onClick={() => setShowNew(false)} style={{ color: 'var(--admin-text-dim)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>{'\u2715'}</button>
           </div>
           {renderFormFields(newForm, setNewForm as (fn: (prev: FormData | Partial<FormData>) => FormData | Partial<FormData>) => void, 'new')}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
             <button onClick={() => setShowNew(false)}
-              style={{ padding: '10px 18px', fontSize: 13, fontWeight: 600, color: '#94a3b8', background: 'transparent', border: '1px solid #1e293b', borderRadius: 10, cursor: 'pointer' }}>
+              style={{ padding: '10px 18px', fontSize: 13, fontWeight: 600, color: 'var(--admin-muted)', background: 'transparent', border: '1px solid var(--admin-border)', borderRadius: 10, cursor: 'pointer' }}>
               Abbrechen
             </button>
             <button onClick={handleCreate} disabled={creating}
@@ -639,9 +643,9 @@ export default function AdminGutscheinePage() {
 
       {/* List */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>Laden\u2026</div>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--admin-text-dim)' }}>Laden\u2026</div>
       ) : coupons.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--admin-text-dim)' }}>
           Noch keine Gutscheine angelegt.
         </div>
       ) : (
@@ -654,11 +658,11 @@ export default function AdminGutscheinePage() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
                     {/* Code */}
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: '#1e293b', color: '#e2e8f0' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: 'var(--admin-surface-2)', color: 'var(--admin-text)' }}>
                       {c.code}
                     </span>
                     {/* Value */}
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)' }}>
                       {valueLabel(c)}
                     </span>
                     {/* Target badges */}
@@ -671,24 +675,24 @@ export default function AdminGutscheinePage() {
                     <button onClick={() => handleToggleActive(c)}
                       title={c.active ? 'Aktiv' : 'Inaktiv'}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c.active ? '#10b981' : '#475569' }} />
+                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c.active ? '#10b981' : 'var(--admin-muted-2)' }} />
                     </button>
                     {savedId === c.id && <span style={{ fontSize: 12, color: '#10b981' }}>{'\u2713'} Gespeichert</span>}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>{validityLabel(c)}</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', margin: 0 }}>
+                      <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', margin: 0 }}>{validityLabel(c)}</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)', margin: 0 }}>
                         {c.used_count}{c.max_uses ? ` / ${c.max_uses}` : ''} Nutzungen
                       </p>
                     </div>
                     <button onClick={() => handleDelete(c.id, c.code)} disabled={deletingId === c.id}
-                      style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', opacity: deletingId === c.id ? 0.4 : 1 }}>
+                      style={{ fontSize: 12, fontWeight: 600, color: 'var(--admin-danger)', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', opacity: deletingId === c.id ? 0.4 : 1 }}>
                       {deletingId === c.id ? '\u2026' : 'Löschen'}
                     </button>
                     <button onClick={() => editId === c.id ? setEditId(null) : startEdit(c)}
-                      style={{ fontSize: 14, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}>
+                      style={{ fontSize: 14, color: 'var(--admin-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}>
                       {editId === c.id ? '\u25B2' : '\u25BC'}
                     </button>
                   </div>
@@ -700,7 +704,7 @@ export default function AdminGutscheinePage() {
                     {renderFormFields(editForm, setEditForm as (fn: (prev: FormData | Partial<FormData>) => FormData | Partial<FormData>) => void, 'edit')}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
                       <button onClick={() => setEditId(null)}
-                        style={{ padding: '10px 18px', fontSize: 13, fontWeight: 600, color: '#94a3b8', background: 'transparent', border: '1px solid #1e293b', borderRadius: 10, cursor: 'pointer' }}>
+                        style={{ padding: '10px 18px', fontSize: 13, fontWeight: 600, color: 'var(--admin-muted)', background: 'transparent', border: '1px solid var(--admin-border)', borderRadius: 10, cursor: 'pointer' }}>
                         Abbrechen
                       </button>
                       <button onClick={() => handleSave(c.id)} disabled={savingId === c.id}
