@@ -47,8 +47,8 @@ const STATUS_LABELS: Record<Asset['status'], { label: string; color: string }> =
   lost: { label: 'Verlust', color: '#ef4444' },
 };
 
-const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b' };
-const cyan = '#06b6d4';
+const card: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)' };
+const cyan = 'var(--admin-accent)';
 
 export default function AnlagenPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -115,21 +115,21 @@ export default function AnlagenPage() {
   }, [filtered]);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ padding: '24px 20px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <AdminBackLink />
         <AnlagenTabs pathname="/admin/anlagen" />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Anlagenverzeichnis</h1>
-            <p style={{ color: '#94a3b8', fontSize: 14 }}>Alle Anlagegueter mit aktuellem Zeitwert und AfA-Historie.</p>
+            <h1 style={{ color: 'var(--admin-heading)', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Anlagenverzeichnis</h1>
+            <p style={{ color: 'var(--admin-muted)', fontSize: 14 }}>Alle Anlagegueter mit aktuellem Zeitwert und AfA-Historie.</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Link href="/admin/anlagen/nachtragen" style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #334155', color: '#94a3b8', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
+            <Link href="/admin/anlagen/nachtragen" style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--admin-input-border)', color: 'var(--admin-muted)', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
               + Bestand nachtragen
             </Link>
-            <Link href="/admin/einkauf/upload" style={{ padding: '10px 16px', borderRadius: 8, background: cyan, color: '#0f172a', textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
+            <Link href="/admin/einkauf/upload" style={{ padding: '10px 16px', borderRadius: 8, background: cyan, color: 'var(--admin-primary-text)', textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
               📄 Rechnung hochladen
             </Link>
           </div>
@@ -138,19 +138,19 @@ export default function AnlagenPage() {
         {/* KPI-Karten */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Anlagen (gefiltert)</div>
-            <div style={{ fontSize: 28, color: '#f1f5f9', fontWeight: 800, marginTop: 8 }}>{filtered.length}</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Anlagen (gefiltert)</div>
+            <div style={{ fontSize: 28, color: 'var(--admin-heading)', fontWeight: 800, marginTop: 8 }}>{filtered.length}</div>
           </div>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Anschaffungswert gesamt</div>
-            <div style={{ fontSize: 28, color: '#f1f5f9', fontWeight: 800, marginTop: 8 }}>{formatCurrency(totals.purchase)}</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Anschaffungswert gesamt</div>
+            <div style={{ fontSize: 28, color: 'var(--admin-heading)', fontWeight: 800, marginTop: 8 }}>{formatCurrency(totals.purchase)}</div>
           </div>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Aktueller Zeitwert</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Aktueller Zeitwert</div>
             <div style={{ fontSize: 28, color: cyan, fontWeight: 800, marginTop: 8 }}>{formatCurrency(totals.current)}</div>
           </div>
           <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Bereits abgeschrieben</div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Bereits abgeschrieben</div>
             <div style={{ fontSize: 28, color: '#f59e0b', fontWeight: 800, marginTop: 8 }}>{formatCurrency(totals.depreciated)}</div>
           </div>
           <div
@@ -158,11 +158,11 @@ export default function AnlagenPage() {
             title="Klicken: nur GWG zeigen"
             onClick={() => setFilterMethod(filterMethod === 'immediate' ? '' : 'immediate')}
           >
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Davon GWG (sofort){filterMethod === 'immediate' ? ' · aktiv' : ''}
             </div>
             <div style={{ fontSize: 28, color: '#f59e0b', fontWeight: 800, marginTop: 8 }}>
-              {totals.gwgCount} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>· {formatCurrency(totals.gwgPurchase)}</span>
+              {totals.gwgCount} <span style={{ fontSize: 14, color: 'var(--admin-muted)', fontWeight: 600 }}>· {formatCurrency(totals.gwgPurchase)}</span>
             </div>
           </div>
         </div>
@@ -175,20 +175,20 @@ export default function AnlagenPage() {
               placeholder="Suche (Name, Seriennummer, Lieferant)…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: '1 1 240px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}
+              style={{ flex: '1 1 240px', background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}
             />
-            <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}>
+            <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}>
               <option value="">Alle Arten</option>
               {Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}>
               <option value="">Alle Status</option>
               <option value="active">Nur aktive</option>
               <option value="disposed">Ausgemustert</option>
               <option value="sold">Verkauft</option>
               <option value="lost">Verlust</option>
             </select>
-            <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}>
+            <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 }}>
               <option value="">Alle AfA-Methoden</option>
               <option value="linear">Linear (AfA)</option>
               <option value="immediate">GWG (sofort)</option>
@@ -200,16 +200,16 @@ export default function AnlagenPage() {
         {/* Liste */}
         <div style={{ ...card, overflow: 'hidden' }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Lade Anlagen…</div>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>Lade Anlagen…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
               Keine Anlagegueter gefunden. <Link href="/admin/einkauf/upload" style={{ color: cyan }}>Rechnung hochladen</Link> oder <Link href="/admin/anlagen/nachtragen" style={{ color: cyan }}>Bestand nachtragen</Link>.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 1000, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: '#0a0f1e' }}>
+                  <tr style={{ background: 'var(--admin-thead-bg)' }}>
                     <th style={th}>Name</th>
                     <th style={th}>Art</th>
                     <th style={th}>Kaufdatum</th>
@@ -224,10 +224,10 @@ export default function AnlagenPage() {
                 </thead>
                 <tbody>
                   {filtered.map((a) => (
-                    <tr key={a.id} style={{ borderTop: '1px solid #1e293b' }}>
+                    <tr key={a.id} style={{ borderTop: '1px solid var(--admin-border)' }}>
                       <td style={td}>
-                        <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{a.name}</div>
-                        {a.serial_number && <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>SN: {a.serial_number}</div>}
+                        <div style={{ color: 'var(--admin-text)', fontWeight: 600 }}>{a.name}</div>
+                        {a.serial_number && <div style={{ color: 'var(--admin-text-dim)', fontSize: 11, marginTop: 2 }}>SN: {a.serial_number}</div>}
                       </td>
                       <td style={td}>
                         <span style={{
@@ -251,9 +251,9 @@ export default function AnlagenPage() {
                         )}
                       </td>
                       <td style={td}>{fmtDate(a.purchase_date)}</td>
-                      <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>
+                      <td style={{ ...td, textAlign: 'right', color: 'var(--admin-text)' }}>{formatCurrency(a.purchase_price)}</td>
                       <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 600 }}>{formatCurrency(a.current_value)}</td>
-                      <td style={{ ...td, textAlign: 'right', color: a.replacement_value_source === 'manual' ? '#10b981' : '#22d3ee', fontWeight: 600 }}
+                      <td style={{ ...td, textAlign: 'right', color: a.replacement_value_source === 'manual' ? '#10b981' : 'var(--admin-accent-hover)', fontWeight: 600 }}
                         title={
                           a.replacement_value_source === 'manual' ? 'Manuell gesetzt'
                           : a.replacement_value_source === 'fresh' ? `Frisch gekauft — 100% vom Kaufpreis`
@@ -263,7 +263,7 @@ export default function AnlagenPage() {
                       >
                         {formatCurrency(a.replacement_value_computed ?? 0)}
                         {a.replacement_value_source && a.replacement_value_source !== 'manual' && (
-                          <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>
+                          <span style={{ fontSize: 10, color: 'var(--admin-text-dim)', marginLeft: 6, fontWeight: 400 }}>
                             {a.replacement_value_pct?.toFixed(0)}%
                           </span>
                         )}
@@ -271,7 +271,7 @@ export default function AnlagenPage() {
                       <td style={td}>
                         <span style={{ color: STATUS_LABELS[a.status].color, fontWeight: 600, fontSize: 12 }}>{STATUS_LABELS[a.status].label}</span>
                       </td>
-                      <td style={{ ...td, color: '#94a3b8' }}>{a.supplier?.name ?? '—'}</td>
+                      <td style={{ ...td, color: 'var(--admin-muted)' }}>{a.supplier?.name ?? '—'}</td>
                       <td style={td}>
                         {a.purchase?.invoice_storage_path ? (
                           <a href={`/api/admin/invoices/purchase-pdf?path=${encodeURIComponent(a.purchase.invoice_storage_path)}`} target="_blank" rel="noopener noreferrer" style={{ color: cyan, fontSize: 12 }}>
@@ -294,5 +294,5 @@ export default function AnlagenPage() {
   );
 }
 
-const th: React.CSSProperties = { padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
-const td: React.CSSProperties = { padding: '14px 16px', color: '#94a3b8', verticalAlign: 'top' };
+const th: React.CSSProperties = { padding: '12px 16px', textAlign: 'left', color: 'var(--admin-text-dim)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
+const td: React.CSSProperties = { padding: '14px 16px', color: 'var(--admin-muted)', verticalAlign: 'top' };
