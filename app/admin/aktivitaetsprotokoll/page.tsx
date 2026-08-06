@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 import { fmtDateTime } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
@@ -274,16 +274,16 @@ export default function AktivitaetsprotokollPage() {
   const entityOptions = Object.keys(ENTITY_LABELS);
 
   const cardStyle: React.CSSProperties = {
-    background: '#0f172a',
-    border: '1px solid #1e293b',
+    background: 'var(--admin-surface)',
+    border: '1px solid var(--admin-border)',
     borderRadius: 12,
   };
 
   const inputStyle: React.CSSProperties = {
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: 'var(--admin-surface-2)',
+    border: '1px solid var(--admin-input-border)',
     borderRadius: 8,
-    color: '#e2e8f0',
+    color: 'var(--admin-text)',
     padding: '8px 12px',
     fontSize: 13,
     outline: 'none',
@@ -301,8 +301,8 @@ export default function AktivitaetsprotokollPage() {
   };
 
   const btnPrimary: React.CSSProperties = {
-    background: '#06b6d4',
-    color: '#0f172a',
+    background: 'var(--admin-accent)',
+    color: 'var(--admin-primary-text)',
     border: 'none',
     borderRadius: 8,
     padding: '8px 20px',
@@ -313,8 +313,8 @@ export default function AktivitaetsprotokollPage() {
 
   const btnSecondary: React.CSSProperties = {
     background: 'transparent',
-    color: '#94a3b8',
-    border: '1px solid #334155',
+    color: 'var(--admin-muted)',
+    border: '1px solid var(--admin-faint)',
     borderRadius: 8,
     padding: '8px 16px',
     fontSize: 13,
@@ -323,23 +323,18 @@ export default function AktivitaetsprotokollPage() {
   };
 
   return (
-    <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
-      <AdminBackLink label="Zurück" />
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9', margin: 0 }}>
-          Aktivitätsprotokoll
-        </h1>
-        <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
-          Alle administrativen Aktionen im Überblick ({total} Einträge gesamt)
-        </p>
-      </div>
+    <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto', color: 'var(--admin-text)' }}>
+      <PageHeader
+        backLabel="Zurück"
+        title="Aktivitätsprotokoll"
+        subtitle={`Alle administrativen Aktionen im Überblick (${total} Einträge gesamt)`}
+      />
 
       {/* Filters */}
       <div style={{ ...cardStyle, padding: 20, marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Aktionstyp
             </label>
             <select
@@ -354,7 +349,7 @@ export default function AktivitaetsprotokollPage() {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Objekttyp
             </label>
             <select
@@ -369,7 +364,7 @@ export default function AktivitaetsprotokollPage() {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Mitarbeiter
             </label>
             <select
@@ -386,7 +381,7 @@ export default function AktivitaetsprotokollPage() {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Suche
             </label>
             <input
@@ -399,7 +394,7 @@ export default function AktivitaetsprotokollPage() {
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Datum von
             </label>
             <input
@@ -410,7 +405,7 @@ export default function AktivitaetsprotokollPage() {
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Datum bis
             </label>
             <input
@@ -432,7 +427,7 @@ export default function AktivitaetsprotokollPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e293b' }}>
+              <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                 {['Zeitstempel', 'Admin', 'Aktion', 'Objekt', 'Details'].map((h) => (
                   <th
                     key={h}
@@ -441,7 +436,7 @@ export default function AktivitaetsprotokollPage() {
                       textAlign: 'left',
                       fontSize: 11,
                       fontWeight: 700,
-                      color: '#64748b',
+                      color: 'var(--admin-text-dim)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px',
                       whiteSpace: 'nowrap',
@@ -455,13 +450,13 @@ export default function AktivitaetsprotokollPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
                     Lade Einträge...
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
                     Keine Einträge gefunden.
                   </td>
                 </tr>
@@ -474,7 +469,7 @@ export default function AktivitaetsprotokollPage() {
                       key={entry.id}
                       onClick={() => setExpandedId(isExpanded ? null : entry.id)}
                       style={{
-                        borderBottom: '1px solid #1e293b',
+                        borderBottom: '1px solid var(--admin-border)',
                         cursor: entry.details ? 'pointer' : 'default',
                         background: isExpanded ? 'rgba(6,182,212,0.05)' : 'transparent',
                         transition: 'background 0.15s',
@@ -486,10 +481,10 @@ export default function AktivitaetsprotokollPage() {
                         if (!isExpanded) (e.currentTarget as HTMLElement).style.background = 'transparent';
                       }}
                     >
-                      <td style={{ padding: '10px 16px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '10px 16px', color: 'var(--admin-muted)', whiteSpace: 'nowrap' }}>
                         {fmtDateTime(entry.created_at)}
                       </td>
-                      <td style={{ padding: '10px 16px', color: '#cbd5e1' }}>
+                      <td style={{ padding: '10px 16px', color: 'var(--admin-text-2)' }}>
                         {entry.admin_user_name || '–'}
                       </td>
                       <td style={{ padding: '10px 16px' }}>
@@ -500,20 +495,20 @@ export default function AktivitaetsprotokollPage() {
                             borderRadius: 6,
                             fontSize: 12,
                             fontWeight: 600,
-                            background: 'rgba(6,182,212,0.15)',
-                            color: '#06b6d4',
+                            background: 'var(--admin-accent-soft)',
+                            color: 'var(--admin-accent)',
                           }}
                         >
                           {humanizeAction(entry.action)}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 16px', color: '#cbd5e1' }}>
-                        <span style={{ color: '#64748b', fontSize: 11, marginRight: 4 }}>
+                      <td style={{ padding: '10px 16px', color: 'var(--admin-text-2)' }}>
+                        <span style={{ color: 'var(--admin-text-dim)', fontSize: 11, marginRight: 4 }}>
                           {ENTITY_LABELS[entry.entity_type] || entry.entity_type}
                         </span>
                         {entry.entity_label || entry.entity_id || ''}
                       </td>
-                      <td style={{ padding: '10px 16px', color: '#64748b', maxWidth: 200 }}>
+                      <td style={{ padding: '10px 16px', color: 'var(--admin-text-dim)', maxWidth: 200 }}>
                         {detailsStr ? truncate(detailsStr, 60) : '–'}
                         {isExpanded && entry.details && (
                           <div
@@ -521,12 +516,12 @@ export default function AktivitaetsprotokollPage() {
                             style={{
                               marginTop: 8,
                               padding: 12,
-                              background: '#0a0f1e',
-                              border: '1px solid #1e293b',
+                              background: 'var(--admin-input-bg)',
+                              border: '1px solid var(--admin-border)',
                               borderRadius: 8,
                               fontSize: 12,
                               fontFamily: 'monospace',
-                              color: '#94a3b8',
+                              color: 'var(--admin-muted)',
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-all',
                               maxHeight: 300,
@@ -553,10 +548,10 @@ export default function AktivitaetsprotokollPage() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '12px 16px',
-              borderTop: '1px solid #1e293b',
+              borderTop: '1px solid var(--admin-border)',
             }}
           >
-            <span style={{ fontSize: 12, color: '#64748b' }}>
+            <span style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
               Seite {page} von {totalPages} ({total} Einträge)
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
