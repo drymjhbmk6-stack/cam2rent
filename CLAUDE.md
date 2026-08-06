@@ -2097,6 +2097,23 @@ Optik → Intuitiv.
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler; `git status` = ausschließlich neue
   Dateien.
 
+#### Schritt 7 — Einheitliche DataTable-Komponente (fertig 2026-08-06)
+- **`components/admin/ui/DataTable.tsx`** — generische Tabelle mit Spalten-Config
+  (`render`/`sortValue`/`align`/`hideBelow`/`width`), **Sortierung mit `aria-sort`**
+  + Sort-Buttons im Header, **tastatur-bedienbaren Zeilen** (`tabIndex`+Enter/Space
+  bei `onRowClick`), Sticky-Header (`maxHeight`), Zebra/Hover, integriertem
+  **Lade-Skeleton** (`TableSkeleton`) + **Leer-Zustand** (`EmptyState`). Token-basiert
+  → **identisches Aussehen mit UND ohne** den Legacy-`.admin-dark`-Override (gleiche
+  Werte; der Override setzt sie per `!important`, nach dessen Entfernung greifen die
+  Inline-Token-Styles). Im Barrel exportiert.
+- **Bewusst KEINE Live-Tabellen-Migration in diesem Schritt** (Sandbox kann die App
+  nicht laufen lassen → blinde Migration einer geschäftskritischen Tabelle widerspräche
+  „nichts kaputt"). Die ~40 Tabellen werden in **Schritt 8 page-by-page** umgestellt
+  (jede ein eigener, deploy-/testbarer Commit).
+- **Keine Virtualisierung** (Listen serverseitig auf ~500 Zeilen gedeckelt → unnötig;
+  bei Bedarf später `@tanstack/react-virtual`, dann als eigene Abhängigkeit).
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler; nur neue Dateien.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

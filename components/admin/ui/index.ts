@@ -16,3 +16,4 @@ export { Field, Input, Select, Textarea } from './Field';
 export { SearchInput } from './SearchInput';
 export { Toolbar, Pill, SegmentedControl } from './Filters';
 export { Skeleton, TableSkeleton } from './Skeleton';
+export { DataTable, type DataTableColumn, type DataTableProps } from './DataTable';
