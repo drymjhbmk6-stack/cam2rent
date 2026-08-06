@@ -2141,6 +2141,20 @@ Seiten migriert sind.
   unverändert). KEINE DataTable (aufklappbare Fehler-Zeilen mit Stack-Trace-`<pre>` —
   eigenes Akkordeon-Muster, für Tabelle ungeeignet). Verifiziert: tsc 0, lint 0;
   Diff = nur Styling/Markup + confirm/alert→Feedback-System.
+- **`/admin/buchungsinteresse` (fertig):** vollständig inline-gehardcodete Dark-Seite
+  (eigener Voll-Seiten-`background:#0a0a0a` + `minHeight:100dvh`, blieb in Light dunkel)
+  → `PageHeader` (Preset-/Custom-Zeitraum-Steuerung im `actions`-Slot) + Token-Farben.
+  Eigener Seiten-Hintergrund entfernt → Seite sitzt jetzt auf der Shell-`--admin-bg`
+  (wie warteliste/client-errors); Wrapper trägt nur noch `color:var(--admin-text)` fürs
+  Erben in `RankTable`/`BarRow`. `RankTable`-Balken + Total-Zahl → `--admin-accent`,
+  Karten/Ränder/Muted → Tokens, `colorScheme:'dark'` an den Datumsfeldern entfernt (folgt
+  jetzt dem Token-Bg, analog client-errors). **Bewusst 3 Literale behalten** (Dark-Pixel-
+  Identität, kein passendes Token): `#0891b2` (BarRow-Verteilungsbalken-Teal) + `#10b981`/
+  `#0a0a0a` (grüner „Anwenden"-Button — deutliche Erfolgs-Affordance, dunkler Text liest
+  auf beiden Themes). Read-only-Report → **keine** confirm/alert/Mutation. Logik 1:1
+  (`load` mit `reqIdRef`-Stale-Guard, `getCached`/`setCached`, `usePersistentState`,
+  `applyPreset`/`applyCustom`, alle Memos/Handler unverändert — Diff = nur Styling +
+  Re-Nesting in den `actions`-Slot). Verifiziert: tsc 0, lint 0.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
