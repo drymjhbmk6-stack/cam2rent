@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { PageHeader } from '@/components/admin/ui';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 
 interface UnavailableItem {
   accessory_id: string;
@@ -60,6 +61,7 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function VerfuegbarkeitAlertsPage() {
+  const { error: toastError } = useToast();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [showResolved, setShowResolved] = useState(false);
@@ -91,7 +93,7 @@ export default function VerfuegbarkeitAlertsPage() {
         body: JSON.stringify({ id, action: 'resolve', note: note || undefined }),
       });
       if (res.ok) await load();
-      else alert('Fehler beim Markieren als erledigt.');
+      else toastError('Fehler beim Markieren als erledigt.');
     } finally {
       setBusy(null);
     }
@@ -106,42 +108,40 @@ export default function VerfuegbarkeitAlertsPage() {
         body: JSON.stringify({ id, action: 'reopen' }),
       });
       if (res.ok) await load();
-      else alert('Fehler beim Wiedereröffnen.');
+      else toastError('Fehler beim Wiedereröffnen.');
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e2e8f0', padding: '20px 16px' }}>
+    <div style={{ padding: '20px 16px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <AdminBackLink />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Verfügbarkeits-Alerts</h1>
-            <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, marginBottom: 0 }}>
-              Buchungen, die wegen ausgebuchter Sets/Zubehör oder fehlender Basis-Sets nicht abgeschlossen werden konnten.
-            </p>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showResolved}
-              onChange={(e) => setShowResolved(e.target.checked)}
-              style={{ accentColor: '#06b6d4' }}
-            />
-            Auch erledigte anzeigen
-          </label>
-        </div>
+        <PageHeader
+          backLabel="Zurück"
+          title="Verfügbarkeits-Alerts"
+          subtitle="Buchungen, die wegen ausgebuchter Sets/Zubehör oder fehlender Basis-Sets nicht abgeschlossen werden konnten."
+          actions={
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--admin-text-2)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showResolved}
+                onChange={(e) => setShowResolved(e.target.checked)}
+                style={{ accentColor: 'var(--admin-accent)' }}
+              />
+              Auch erledigte anzeigen
+            </label>
+          }
+        />
 
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Lädt…</p>
+          <p style={{ color: 'var(--admin-muted)' }}>Lädt…</p>
         ) : alerts.length === 0 ? (
-          <div style={{ background: '#111827', borderRadius: 12, padding: 32, textAlign: 'center', border: '1px solid #1e293b' }}>
+          <div style={{ background: 'var(--admin-surface)', borderRadius: 12, padding: 32, textAlign: 'center', border: '1px solid var(--admin-border)' }}>
             <p style={{ color: '#10b981', fontSize: 18, fontWeight: 700, margin: 0 }}>
               ✓ Keine offenen Verfügbarkeits-Alerts
             </p>
-            <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+            <p style={{ color: 'var(--admin-text-dim)', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
               Alle Sets und das Zubehör sind aktuell für alle Buchungen verfügbar.
             </p>
           </div>
@@ -156,10 +156,10 @@ export default function VerfuegbarkeitAlertsPage() {
                 <div
                   key={a.id}
                   style={{
-                    background: '#111827',
+                    background: 'var(--admin-surface)',
                     borderRadius: 12,
                     padding: 16,
-                    border: `1px solid ${isResolved ? '#1e293b' : '#7f1d1d'}`,
+                    border: `1px solid ${isResolved ? 'var(--admin-border)' : '#7f1d1d'}`,
                     opacity: isResolved ? 0.65 : 1,
                   }}
                 >
@@ -190,22 +190,22 @@ export default function VerfuegbarkeitAlertsPage() {
                       <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
                         {a.product_name ?? a.set_name ?? a.accessory_name ?? '—'}
                       </p>
-                      <div style={{ marginTop: 6, fontSize: 13, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ marginTop: 6, fontSize: 13, color: 'var(--admin-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {a.set_name && a.product_name && <span>Set: {a.set_name}</span>}
                         {a.accessory_name && (a.product_name || a.set_name) && <span>Zubehör: {a.accessory_name}</span>}
                         {period && <span>Zeitraum: {period}</span>}
                         {a.customer_email && <span>Kunde: {a.customer_email}</span>}
-                        <span style={{ color: '#64748b' }}>Erstmals: {fmtDateTime(a.first_seen_at)} · Zuletzt: {fmtDateTime(a.last_seen_at)}</span>
+                        <span style={{ color: 'var(--admin-text-dim)' }}>Erstmals: {fmtDateTime(a.first_seen_at)} · Zuletzt: {fmtDateTime(a.last_seen_at)}</span>
                       </div>
                       {a.alert_type === 'basic_set_unavailable' && a.details?.unavailable_items && a.details.unavailable_items.length > 0 ? (
-                        <div style={{ marginTop: 10, padding: '10px 12px', background: '#1f2937', border: '1px solid #7f1d1d', borderRadius: 8 }}>
+                        <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--admin-surface-2)', border: '1px solid #7f1d1d', borderRadius: 8 }}>
                           <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fca5a5' }}>
                             Diese Bestandteile fehlen:
                           </p>
-                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#fecaca' }}>
+                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#fca5a5' }}>
                             {a.details.unavailable_items.map((it) => (
                               <li key={it.accessory_id} style={{ marginBottom: 2 }}>
-                                <span style={{ color: '#fff', fontWeight: 600 }}>{it.name}</span>
+                                <span style={{ color: 'var(--admin-text)', fontWeight: 600 }}>{it.name}</span>
                                 {' — '}
                                 <span>benötigt {it.needed}, frei {it.remaining}</span>
                               </li>
