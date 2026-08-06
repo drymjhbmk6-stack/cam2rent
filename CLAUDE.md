@@ -2155,6 +2155,30 @@ Seiten migriert sind.
   (`load` mit `reqIdRef`-Stale-Guard, `getCached`/`setCached`, `usePersistentState`,
   `applyPreset`/`applyCustom`, alle Memos/Handler unverändert — Diff = nur Styling +
   Re-Nesting in den `actions`-Slot). Verifiziert: tsc 0, lint 0.
+- **20er-Batch (fertig, je eigener Commit):** 20 mittelgroße Admin-Seiten auf die
+  `admin`-Tokens umgestellt — bewusst OHNE die kritischen Mega-/Finanz-/Flow-Seiten
+  (Dashboard, Buchungen+Detail, Retouren, Kunden-Detail, Verfügbarkeit, Nachrichten,
+  Schäden, Buchhaltung/*, Analytics, Einkauf, Sets, mein/*, Mitarbeiter — kommen
+  einzeln mit Live-Check). Migriert: `blog/kommentare`, `blog/mediathek`,
+  `blog/artikel`, `blog/themen`, `blog` (Dashboard), `verfuegbarkeit-alerts`,
+  `anlagen`, `anlagen/[id]`, `anlagen/wiederbeschaffung`, `anlagen/nachtragen`,
+  `bewertungen`, `beta-feedback`, `legal/[slug]`, `sendungen`, `emails/vorlagen`,
+  `aktivitaetsprotokoll`, `social/reels/zeitplan`, `rabatte`, `angebote`,
+  `gutscheine`. Muster durchgängig: Voll-Seiten-`background`/`minHeight:100dvh`
+  entfernt (Seite sitzt auf Shell-`--admin-bg` → flippt Light/Dark), Inline-Hex →
+  `var(--admin-*)`, `PageHeader` wo risikofrei, `colorScheme:'dark'` an Datumsfeldern
+  raus, `confirm()`→`useConfirm` / `alert()`→`useToast` (wo vorhanden; `prompt` bleibt).
+  **Dark bleibt pixel-identisch** (alle Token-Dark-Werte = alte Hex). Semantische
+  Signalfarben (Status-Badges, Grün/Amber/Rot/Teal, Dunkelrot-Fehler-Tints) +
+  Weiß-auf-Akzent-Buttontext (`#fff`) bewusst literal; nur `#fff`-Text auf im Light
+  hellen Flächen → `--admin-text`. **Bewusst dunkle Rest-Inseln (Folge-Change,
+  nicht kaputt, nur nicht voll-Light):** `blog/artikel`-Artikelliste
+  (Tailwind `bg-slate-9xx`, nicht vom Override erfasst) + `social/reels/zeitplan`
+  Kalender-Grid/Job-Banner (color-computed) bleiben dunkel; `emails/vorlagen`
+  `confirm/alert` in Modul-Level-Sub-Components bleiben nativ (Hooks dort nicht
+  nutzbar); `reels/zeitplan` behält sein natives `confirm()`. Jede Seite:
+  Logik/Fetch/State/Handler 1:1 (Diff = nur Styling + Feedback-Migration), tsc 0,
+  lint 0, per-Datei-Logik-Diff geprüft.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
