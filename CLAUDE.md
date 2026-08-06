@@ -1936,6 +1936,48 @@ neuen Status als belegend zählen. `assign_free_accessory_units` nutzt einen
 Negations-Filter (`NOT IN cancelled,completed,returned`) und ist automatisch
 korrekt — keine Migration nötig.
 
+### Admin-Modernisierung — 10-Schritte-Umbau (läuft, Stand 2026-08-06)
+Aggressiver, in 10 Schritte gestaffelter Umbau des Adminbereichs auf ein
+einheitliches, token-basiertes Design-System mit Light/Dark-Umschalter, mehr
+Tempo (Skeletons/Prefetch/optimistische Updates), Command-Palette/globale Suche
+und sauberer, barrierearmer Bedienung. **Oberste Regel: keine Funktion darf
+kaputtgehen — rein additiv, Dark-Modus bleibt pixel-identisch, jeder Schritt
+einzeln commit- & rückrollbar.** Reihenfolge: Fundament → Performance → Smart →
+Optik → Intuitiv.
+
+#### Schritt 1 — Design-Tokens + Light/Dark-Theme-Engine (fertig 2026-08-06)
+- **Token-Layer** in `app/globals.css`: CSS-Custom-Properties auf `.admin-shell`
+  (Dark = Default, exakt die bisherigen Hex-Werte → Dark unverändert) +
+  `.admin-shell[data-admin-theme='light']` (helle Werte). Tokens: `--admin-bg`,
+  `--admin-sidebar-bg`, `--admin-surface`, `--admin-surface-2`, `--admin-border`,
+  `--admin-heading`, `--admin-text`, `--admin-text-2`, `--admin-text-dim`,
+  `--admin-muted`, `--admin-muted-2`, `--admin-faint`, `--admin-accent`,
+  `--admin-accent-hover`, `--admin-accent-soft`, `--admin-danger`,
+  `--admin-input-bg/-border`, `--admin-thead-bg`, `--admin-zebra`,
+  `--admin-subtle`, `--admin-hover`, `--admin-primary-bg/-text/-hover`,
+  `--admin-secondary-bg`, `--admin-modal-bg`, `--admin-shadow`,
+  `--admin-logo-text`, `--admin-shimmer-a/-b`.
+- **`.admin-dark`-Override-Block** (der Legacy-Layer, der helle `brand-*`/
+  Tailwind-Klassen der noch nicht migrierten Seiten umfärbt) liest jetzt diese
+  Tokens statt fixer Hex → folgt automatisch dem Theme. `animate-shimmer` ist
+  im Admin jetzt theme-aware (`.admin-dark .animate-shimmer`).
+- **Tailwind-Tokens** in `tailwind.config.ts`: neue `admin`-Farbfamilie
+  (`bg-admin-surface`, `text-admin-text`, `text-admin-accent`, …) → `var(--admin-*)`.
+  Neue Seiten/Komponenten nutzen diese statt Hex/`brand-*`.
+- **Umschalter** in `AdminLayoutClient.tsx`: `theme`-State (localStorage
+  `admin_theme`, Default `dark`, per Gerät wie alle Admin-Prefs; Mount-Effekt →
+  kein Hydration-Mismatch), `data-admin-theme` + Klasse `admin-shell` auf dem
+  Root-Wrapper, `ThemeToggle` (Sonne/Mond) in Sidebar-Footer + Mobile-Header.
+  Alle hartkodierten Hex der Shell (Root/Main/Sidebar/Header/Nav-Items/Hover)
+  auf `var(--admin-*)` umgestellt (jede Farbe hatte genau eine Bedeutung →
+  saubere 1:1-Ersetzung, Dark identisch).
+- **Bewusst noch dunkel im Light-Mode** (kommt in Schritt 6/8): voll
+  inline-gehardcodete Seiten (Dashboard, `buchhaltung/*`) + Sub-Komponenten
+  (`NotificationDropdown`, `EnvModeBadge`) tragen noch eigene Hex → bleiben
+  vorerst dunkel. Token-/`brand-*`-basierte Seiten flippen bereits sauber.
+  Der Umschalter ist funktionsfähig; volle Light-Politur landet mit der
+  Seiten-Migration.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

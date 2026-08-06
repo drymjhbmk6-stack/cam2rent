@@ -31,6 +31,24 @@ const config: Config = {
           success: '#22c55e',
           error: '#ef4444',
         },
+        // Admin-Design-Tokens (Light/Dark via CSS-Variablen, definiert in
+        // app/globals.css unter .admin-shell[data-admin-theme]). Neue
+        // Admin-Seiten/Komponenten nutzen diese statt Hex/brand-*.
+        admin: {
+          bg: 'var(--admin-bg)',
+          surface: 'var(--admin-surface)',
+          'surface-2': 'var(--admin-surface-2)',
+          border: 'var(--admin-border)',
+          heading: 'var(--admin-heading)',
+          text: 'var(--admin-text)',
+          'text-2': 'var(--admin-text-2)',
+          muted: 'var(--admin-muted)',
+          'muted-2': 'var(--admin-muted-2)',
+          accent: 'var(--admin-accent)',
+          'accent-hover': 'var(--admin-accent-hover)',
+          'accent-soft': 'var(--admin-accent-soft)',
+          danger: 'var(--admin-danger)',
+        },
       },
       fontFamily: {
         heading: ['var(--font-sora)', 'sans-serif'],

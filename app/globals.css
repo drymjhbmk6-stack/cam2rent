@@ -24,9 +24,12 @@
     color: #1a1a1a;
   }
 
-  .dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6,
-  .admin-dark h1, .admin-dark h2, .admin-dark h3, .admin-dark h4, .admin-dark h5, .admin-dark h6 {
+  .dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
     color: #f3f4f6;
+  }
+
+  .admin-dark h1, .admin-dark h2, .admin-dark h3, .admin-dark h4, .admin-dark h5, .admin-dark h6 {
+    color: var(--admin-heading);
   }
 }
 
@@ -156,10 +159,92 @@
   animation: pulseDot 2s ease-in-out infinite;
 }
 
-/* ── Admin Dark Theme Override ──────────────────────────────────────────────
-   Alle hellen Tailwind-Klassen innerhalb .admin-dark werden auf dunkel gesetzt.
-   So müssen die einzelnen Admin-Seiten nicht umgeschrieben werden.
+/* ── Admin Design-Tokens (Light/Dark) ───────────────────────────────────────
+   Eine Wahrheitsquelle fuer alle Admin-Farben. Die Dark-Werte sind exakt die
+   bisher hartkodierten Hex-Werte → Dark-Modus bleibt pixel-identisch. Der
+   Umschalter (data-admin-theme="light") aktiviert die hellen Werte. Neue
+   Seiten/Komponenten nutzen die `admin`-Tailwind-Tokens bzw. var(--admin-*),
+   damit der Theme-Wechsel automatisch greift.
    ────────────────────────────────────────────────────────────────────────── */
+.admin-shell {
+  --admin-bg: #0a0f1e;
+  --admin-sidebar-bg: #0f172a;
+  --admin-surface: #111827;
+  --admin-surface-2: #1e293b;
+  --admin-border: #1e293b;
+  --admin-heading: #f3f4f6;
+  --admin-text: #e2e8f0;
+  --admin-text-2: #cbd5e1;
+  --admin-text-dim: #64748b;
+  --admin-muted: #94a3b8;
+  --admin-muted-2: #475569;
+  --admin-faint: #334155;
+  --admin-accent: #06b6d4;
+  --admin-accent-hover: #22d3ee;
+  --admin-accent-soft: rgba(6,182,212,0.15);
+  --admin-danger: #ef4444;
+  --admin-input-bg: #0f172a;
+  --admin-input-border: #475569;
+  --admin-thead-bg: #0f172a;
+  --admin-zebra: rgba(255,255,255,0.025);
+  --admin-subtle: rgba(30,41,59,0.5);
+  --admin-hover: #1e293b;
+  --admin-primary-bg: #06b6d4;
+  --admin-primary-text: #0f172a;
+  --admin-primary-hover: #22d3ee;
+  --admin-secondary-bg: #1e293b;
+  --admin-modal-bg: #1e293b;
+  --admin-shadow: none;
+  --admin-logo-text: #ffffff;
+  --admin-shimmer-a: #1e293b;
+  --admin-shimmer-b: #334155;
+}
+
+.admin-shell[data-admin-theme='light'] {
+  --admin-bg: #f1f5f9;
+  --admin-sidebar-bg: #ffffff;
+  --admin-surface: #ffffff;
+  --admin-surface-2: #f8fafc;
+  --admin-border: #e2e8f0;
+  --admin-heading: #0f172a;
+  --admin-text: #1e293b;
+  --admin-text-2: #475569;
+  --admin-text-dim: #64748b;
+  --admin-muted: #64748b;
+  --admin-muted-2: #94a3b8;
+  --admin-faint: #94a3b8;
+  --admin-accent: #0891b2;
+  --admin-accent-hover: #06b6d4;
+  --admin-accent-soft: rgba(8,145,178,0.12);
+  --admin-danger: #dc2626;
+  --admin-input-bg: #ffffff;
+  --admin-input-border: #cbd5e1;
+  --admin-thead-bg: #f8fafc;
+  --admin-zebra: rgba(15,23,42,0.025);
+  --admin-subtle: rgba(226,232,240,0.6);
+  --admin-hover: #f1f5f9;
+  --admin-primary-bg: #0f172a;
+  --admin-primary-text: #ffffff;
+  --admin-primary-hover: #1e293b;
+  --admin-secondary-bg: #ffffff;
+  --admin-modal-bg: #ffffff;
+  --admin-shadow: 0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px -1px rgba(0,0,0,0.07);
+  --admin-logo-text: #0f172a;
+  --admin-shimmer-a: #e2e8f0;
+  --admin-shimmer-b: #f1f5f9;
+}
+
+/* ── Admin Theme Override ────────────────────────────────────────────────────
+   Alle hellen Tailwind-Klassen innerhalb .admin-dark werden auf die Tokens
+   gemappt. So müssen die einzelnen Admin-Seiten nicht umgeschrieben werden und
+   folgen automatisch dem gewählten Theme.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Skeleton-Shimmer folgt dem Theme */
+.admin-dark .animate-shimmer {
+  background: linear-gradient(90deg, var(--admin-shimmer-a) 25%, var(--admin-shimmer-b) 50%, var(--admin-shimmer-a) 75%);
+  background-size: 200% 100%;
+}
 
 /* Seitenhintergrund neutralisieren */
 .admin-dark .min-h-screen { min-height: unset !important; }
@@ -167,39 +252,39 @@
 .admin-dark .bg-gray-50   { background-color: transparent !important; }
 
 /* Karten & Panels */
-.admin-dark .bg-white               { background-color: #111827 !important; }
-.admin-dark .shadow-card            { box-shadow: none !important; }
-.admin-dark .border-brand-border    { border-color: #1e293b !important; }
-.admin-dark .divide-brand-border > * + * { border-color: #1e293b !important; }
+.admin-dark .bg-white               { background-color: var(--admin-surface) !important; }
+.admin-dark .shadow-card            { box-shadow: var(--admin-shadow) !important; }
+.admin-dark .border-brand-border    { border-color: var(--admin-border) !important; }
+.admin-dark .divide-brand-border > * + * { border-color: var(--admin-border) !important; }
 
 /* Texte */
-.admin-dark .text-brand-black  { color: #e2e8f0 !important; }
-.admin-dark .text-brand-dark   { color: #e2e8f0 !important; }
-.admin-dark .text-brand-text   { color: #cbd5e1 !important; }
-.admin-dark .text-brand-steel  { color: #94a3b8 !important; }
-.admin-dark .text-brand-muted  { color: #64748b !important; }
+.admin-dark .text-brand-black  { color: var(--admin-text) !important; }
+.admin-dark .text-brand-dark   { color: var(--admin-text) !important; }
+.admin-dark .text-brand-text   { color: var(--admin-text-2) !important; }
+.admin-dark .text-brand-steel  { color: var(--admin-muted) !important; }
+.admin-dark .text-brand-muted  { color: var(--admin-text-dim) !important; }
 
 /* Tabellen */
-.admin-dark table               { border-color: #1e293b; }
-.admin-dark thead tr            { background-color: #0f172a !important; border-color: #1e293b !important; }
+.admin-dark table               { border-color: var(--admin-border); }
+.admin-dark thead tr            { background-color: var(--admin-thead-bg) !important; border-color: var(--admin-border) !important; }
 .admin-dark thead th            {
   font-size: 13px !important;
-  color: #06b6d4 !important;
+  color: var(--admin-accent) !important;
   letter-spacing: 0.06em !important;
   font-weight: 700 !important;
   padding-top: 14px !important;
   padding-bottom: 14px !important;
 }
-.admin-dark tbody tr            { border-color: #1e293b !important; }
+.admin-dark tbody tr            { border-color: var(--admin-border) !important; }
 /* Zebra-Stripe: jede zweite Zeile dezent abgesetzt. Group-Header und
    Edit-Rows haben eigene bg-brand-bg/50 mit !important und überschreiben. */
-.admin-dark tbody tr:nth-child(even) { background-color: rgba(255,255,255,0.025); }
-.admin-dark .bg-brand-bg\/50   { background-color: rgba(30,41,59,0.5) !important; }
+.admin-dark tbody tr:nth-child(even) { background-color: var(--admin-zebra); }
+.admin-dark .bg-brand-bg\/50   { background-color: var(--admin-subtle) !important; }
 
 /* Hover-States */
-.admin-dark .hover\:bg-brand-bg:hover     { background-color: #1e293b !important; }
-.admin-dark .hover\:bg-brand-bg\/50:hover { background-color: rgba(30,41,59,0.5) !important; }
-.admin-dark .hover\:border-brand-black:hover { border-color: #06b6d4 !important; }
+.admin-dark .hover\:bg-brand-bg:hover     { background-color: var(--admin-hover) !important; }
+.admin-dark .hover\:bg-brand-bg\/50:hover { background-color: var(--admin-subtle) !important; }
+.admin-dark .hover\:border-brand-black:hover { border-color: var(--admin-accent) !important; }
 
 /* Formular-Elemente — höhere Spezifität um .border-brand-border und .bg-white zu überschreiben */
 .admin-dark input:not([type="checkbox"]):not([type="radio"]).bg-white,
@@ -211,10 +296,10 @@
 .admin-dark textarea.bg-white,
 .admin-dark textarea.border-brand-border,
 .admin-dark textarea {
-  background-color: #0f172a !important;
-  border: 1px solid #475569 !important;
+  background-color: var(--admin-input-bg) !important;
+  border: 1px solid var(--admin-input-border) !important;
   border-radius: 10px !important;
-  color: #e2e8f0 !important;
+  color: var(--admin-text) !important;
 }
 .admin-dark select.bg-white,
 .admin-dark select.border-brand-border,
@@ -228,23 +313,23 @@
   cursor: pointer;
 }
 .admin-dark input::placeholder,
-.admin-dark textarea::placeholder { color: #475569 !important; }
+.admin-dark textarea::placeholder { color: var(--admin-muted-2) !important; }
 .admin-dark input:focus,
 .admin-dark select:focus,
-.admin-dark textarea:focus { border-color: #06b6d4 !important; }
+.admin-dark textarea:focus { border-color: var(--admin-accent) !important; }
 
 /* Buttons sekundär (weiß/grau → dunkel) */
 .admin-dark .border-brand-border.bg-white,
 .admin-dark .bg-white.border-brand-border {
-  background-color: #1e293b !important;
-  color: #e2e8f0 !important;
+  background-color: var(--admin-secondary-bg) !important;
+  color: var(--admin-text) !important;
 }
 
 /* Primärer Button (bg-brand-black) auf Admin-Dark sichtbar machen — sonst
    ist er fast schwarz auf fast-schwarzem Hintergrund. */
-.admin-dark .bg-brand-black { background-color: #06b6d4 !important; color: #0f172a !important; }
+.admin-dark .bg-brand-black { background-color: var(--admin-primary-bg) !important; color: var(--admin-primary-text) !important; }
 .admin-dark .bg-brand-black:hover,
-.admin-dark .hover\:bg-brand-dark:hover { background-color: #22d3ee !important; }
+.admin-dark .hover\:bg-brand-dark:hover { background-color: var(--admin-primary-hover) !important; }
 
 /* Status-Badges: Farben beibehalten, nur Hintergrund aufhellen */
 .admin-dark .bg-green-100  { background-color: rgba(16,185,129,0.15) !important; }
@@ -262,11 +347,11 @@
 
 /* Modals / Overlays */
 .admin-dark .bg-white.rounded-2xl,
-.admin-dark .bg-white.rounded-xl { background-color: #1e293b !important; }
+.admin-dark .bg-white.rounded-xl { background-color: var(--admin-modal-bg) !important; }
 
 /* Trennlinien */
-.admin-dark .border-b { border-color: #1e293b; }
-.admin-dark .border-t { border-color: #1e293b; }
+.admin-dark .border-b { border-color: var(--admin-border); }
+.admin-dark .border-t { border-color: var(--admin-border); }
 
 
 

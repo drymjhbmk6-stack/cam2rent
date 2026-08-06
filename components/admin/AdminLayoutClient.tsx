@@ -253,13 +253,13 @@ function NavLinkItem({ item, pathname, onNavClick }: { item: NavItem; pathname: 
       onClick={onNavClick}
       className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1"
       style={active
-        ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }
-        : { color: '#94a3b8' }
+        ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }
+        : { color: 'var(--admin-muted)' }
       }
-      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
     >
-      <span style={active ? { color: '#06b6d4' } : { color: '#475569' }}>{item.icon}</span>
+      <span style={active ? { color: 'var(--admin-accent)' } : { color: 'var(--admin-muted-2)' }}>{item.icon}</span>
       {item.label}
     </Link>
   );
@@ -270,7 +270,7 @@ function NavSection({ label, items, pathname, onNavClick, me }: { label: string;
   if (visible.length === 0) return null;
   return (
     <div className="mb-1">
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--admin-faint)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
         {label}
       </div>
       {visible.map((item) => (
@@ -328,15 +328,15 @@ function NavGroupCollapse({
         type="button"
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isActivePath ? '#06b6d4' : '#94a3b8', background: isActivePath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-        onMouseLeave={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+        style={{ color: isActivePath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isActivePath ? 'var(--admin-accent-soft)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
       >
-        <span style={{ color: isActivePath ? '#06b6d4' : '#475569' }}>{icon}</span>
+        <span style={{ color: isActivePath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{icon}</span>
         <span className="flex-1">{label}</span>
         <span
           style={{
-            color: isActivePath ? '#06b6d4' : '#475569',
+            color: isActivePath ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 0.15s ease',
           }}
@@ -345,7 +345,7 @@ function NavGroupCollapse({
         </span>
       </button>
       {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
           {visibleItems?.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
@@ -393,15 +393,15 @@ function ReelsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCl
         type="button"
         onClick={toggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isReelsPath ? '#06b6d4' : '#94a3b8', background: isReelsPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-        onMouseLeave={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+        style={{ color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isReelsPath ? 'var(--admin-accent-soft)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
       >
-        <span style={{ color: isReelsPath ? '#06b6d4' : '#475569' }}>{iconFilm}</span>
+        <span style={{ color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconFilm}</span>
         <span className="flex-1">Reels</span>
         <span
           style={{
-            color: isReelsPath ? '#06b6d4' : '#475569',
+            color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 0.15s ease',
           }}
@@ -410,7 +410,7 @@ function ReelsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCl
         </span>
       </button>
       {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
           {visibleItems.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
@@ -453,18 +453,18 @@ function PostsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCl
         type="button"
         onClick={toggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isPostsPath ? '#06b6d4' : '#94a3b8', background: isPostsPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-        onMouseLeave={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+        style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isPostsPath ? 'var(--admin-accent-soft)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
       >
-        <span style={{ color: isPostsPath ? '#06b6d4' : '#475569' }}>{iconSocial}</span>
+        <span style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconSocial}</span>
         <span className="flex-1">Posts</span>
-        <span style={{ color: isPostsPath ? '#06b6d4' : '#475569', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
+        <span style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
           {iconChevron}
         </span>
       </button>
       {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
           {visibleItems.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
@@ -515,15 +515,15 @@ function BlogCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCli
         type="button"
         onClick={toggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isBlogPath ? '#06b6d4' : '#94a3b8', background: isBlogPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-        onMouseLeave={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+        style={{ color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isBlogPath ? 'var(--admin-accent-soft)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
       >
-        <span style={{ color: isBlogPath ? '#06b6d4' : '#475569' }}>{iconBlog}</span>
+        <span style={{ color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconBlog}</span>
         <span className="flex-1">Blog</span>
         <span
           style={{
-            color: isBlogPath ? '#06b6d4' : '#475569',
+            color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 0.15s ease',
           }}
@@ -532,7 +532,7 @@ function BlogCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCli
         </span>
       </button>
       {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
           {visibleItems.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
@@ -542,12 +542,14 @@ function BlogCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCli
   );
 }
 
-function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }: {
+function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, theme, onToggleTheme }: {
   pathname: string;
   isDashboard: boolean;
   onNavClick?: () => void;
   handleLogout: () => void;
   me: MeInfo | null;
+  theme: AdminTheme;
+  onToggleTheme: () => void;
 }) {
   const blogVisible = BLOG_ITEMS.some((i) => canSee(me, i));
   const postsVisible = POSTS_ITEMS.some((i) => canSee(me, i));
@@ -612,13 +614,13 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   return (
     <>
       {/* Logo */}
-      <Link href="/admin" onClick={onNavClick} className="flex items-center gap-2.5 px-5 py-5" style={{ borderBottom: '1px solid #1e293b', textDecoration: 'none' }}>
+      <Link href="/admin" onClick={onNavClick} className="flex items-center gap-2.5 px-5 py-5" style={{ borderBottom: '1px solid var(--admin-border)', textDecoration: 'none' }}>
         <img src="/logo/mark.svg" alt="" aria-hidden="true" width={40} height={27} style={{ height: 28, width: 'auto', flexShrink: 0 }} />
         <div className="flex flex-col leading-tight">
-          <span className="font-heading font-black text-lg tracking-tight" style={{ color: 'white' }}>
-            cam<span style={{ color: '#06b6d4' }}>2</span>rent
+          <span className="font-heading font-black text-lg tracking-tight" style={{ color: 'var(--admin-logo-text)' }}>
+            cam<span style={{ color: 'var(--admin-accent)' }}>2</span>rent
           </span>
-          <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
+          <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: 'var(--admin-muted-2)' }}>
             Admin
           </span>
         </div>
@@ -634,19 +636,19 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
           onClick={onNavClick}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1"
           style={isDashboard
-            ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }
-            : { color: '#94a3b8' }
+            ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }
+            : { color: 'var(--admin-muted)' }
           }
-          onMouseEnter={(e) => { if (!isDashboard) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-          onMouseLeave={(e) => { if (!isDashboard) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+          onMouseEnter={(e) => { if (!isDashboard) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+          onMouseLeave={(e) => { if (!isDashboard) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
         >
-          <span style={isDashboard ? { color: '#06b6d4' } : { color: '#475569' }}>{iconDashboard}</span>
+          <span style={isDashboard ? { color: 'var(--admin-accent)' } : { color: 'var(--admin-muted-2)' }}>{iconDashboard}</span>
           Dashboard
         </Link>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: '#1e293b', margin: '4px 12px' }} />
+      <div style={{ height: 1, background: 'var(--admin-border)', margin: '4px 12px' }} />
 
       {/* Navigation groups — Accordion: es ist immer nur eine Gruppe offen */}
       <nav className="flex-1 py-2 overflow-y-auto">
@@ -764,23 +766,29 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
           open={openGroup === 'berichte'}
           onToggle={() => toggleGroup('berichte')}
         />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
+        <div style={{ height: 1, background: 'var(--admin-border)', margin: '6px 12px' }} />
         <NavSection label="System" items={SYSTEM_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
       </nav>
 
       {/* Footer */}
-      <div className="px-3 py-4 space-y-0.5" style={{ borderTop: '1px solid #1e293b' }}>
+      <div className="px-3 py-4 space-y-0.5" style={{ borderTop: '1px solid var(--admin-border)' }}>
         <div className="flex items-center gap-2 px-3 py-2">
           <NotificationDropdown position="sidebar" />
-          <span style={{ color: '#475569', fontSize: 12, fontWeight: 500 }}>Benachrichtigungen</span>
+          <span style={{ color: 'var(--admin-muted-2)', fontSize: 12, fontWeight: 500 }}>Benachrichtigungen</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2">
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          <span style={{ color: 'var(--admin-muted-2)', fontSize: 12, fontWeight: 500 }}>
+            {theme === 'dark' ? 'Helles Design' : 'Dunkles Design'}
+          </span>
         </div>
         <Link
           href="/"
           onClick={onNavClick}
           className="flex items-center gap-2 px-3 py-2 text-xs font-body rounded-lg transition-colors"
-          style={{ color: '#475569' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#475569'; }}
+          style={{ color: 'var(--admin-muted-2)' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted-2)'; }}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -790,9 +798,9 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
         <button
           onClick={() => { onNavClick?.(); handleLogout(); }}
           className="w-full flex items-center gap-2 px-3 py-2 text-xs font-body rounded-lg transition-colors text-left"
-          style={{ color: '#475569' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#475569'; }}
+          style={{ color: 'var(--admin-muted-2)' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--admin-danger)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted-2)'; }}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -801,6 +809,31 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
         </button>
       </div>
     </>
+  );
+}
+
+const iconSun = (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+);
+const iconMoon = (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+);
+
+type AdminTheme = 'dark' | 'light';
+
+function ThemeToggle({ theme, onToggle }: { theme: AdminTheme; onToggle: () => void }) {
+  const label = theme === 'dark' ? 'Zu hellem Design wechseln' : 'Zu dunklem Design wechseln';
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="p-2 rounded-lg transition-colors shrink-0"
+      style={{ color: 'var(--admin-accent)' }}
+      aria-label={label}
+      title={label}
+    >
+      {theme === 'dark' ? iconSun : iconMoon}
+    </button>
   );
 }
 
@@ -813,7 +846,7 @@ function PageRefreshButton() {
         window.location.reload();
       }}
       className="p-2 rounded-lg transition-colors shrink-0"
-      style={{ color: '#06b6d4' }}
+      style={{ color: 'var(--admin-accent)' }}
       aria-label="Seite aktualisieren"
       title="Seite aktualisieren"
     >
@@ -834,6 +867,25 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [me, setMe] = useState<MeInfo | null>(null);
+
+  // Admin-Theme (Light/Dark). Default 'dark' (= bisheriges Verhalten). Nach dem
+  // Mount aus localStorage laden — vermeidet Hydration-Mismatch (SSR rendert
+  // immer 'dark'). Persistenz pro Geraet, konsistent zu allen anderen
+  // Admin-UI-Praeferenzen (Sidebar-Gruppen, Ansichtsmodi).
+  const [theme, setTheme] = useState<AdminTheme>('dark');
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('admin_theme');
+      if (stored === 'light' || stored === 'dark') setTheme(stored);
+    } catch { /* empty */ }
+  }, []);
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next: AdminTheme = prev === 'dark' ? 'light' : 'dark';
+      try { window.localStorage.setItem('admin_theme', next); } catch { /* empty */ }
+      return next;
+    });
+  }, []);
 
   const handleLogout = useCallback(async () => {
     await fetch('/api/admin/logout', { method: 'POST' });
@@ -876,13 +928,13 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
   return (
     <NotificationsProvider>
-    <div className="min-h-screen flex" style={{ background: '#0a0f1e' }}>
+    <div className="admin-shell min-h-screen flex" data-admin-theme={theme} style={{ background: 'var(--admin-bg)' }}>
       {/* Mobile header with hamburger — respektiert iOS Safe-Area-Top */}
       <div
         className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center h-14 px-4"
         style={{
-          background: '#0f172a',
-          borderBottom: '1px solid #1e293b',
+          background: 'var(--admin-sidebar-bg)',
+          borderBottom: '1px solid var(--admin-border)',
           paddingTop: 'env(safe-area-inset-top)',
           height: 'calc(3.5rem + env(safe-area-inset-top))',
         }}
@@ -890,7 +942,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
         <button
           onClick={() => setSidebarOpen(true)}
           className="p-2 rounded-lg transition-colors shrink-0"
-          style={{ color: '#06b6d4' }}
+          style={{ color: 'var(--admin-accent)' }}
           aria-label="Menü öffnen"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,15 +951,16 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
         </button>
         <Link href="/admin" className="ml-3 flex-1 min-w-0 flex items-center gap-2" style={{ textDecoration: 'none' }}>
           <img src="/logo/mark.svg" alt="" aria-hidden="true" width={32} height={22} style={{ height: 22, width: 'auto', flexShrink: 0 }} />
-          <span className="font-heading font-black text-base tracking-tight" style={{ color: 'white' }}>
-            cam<span style={{ color: '#06b6d4' }}>2</span>rent
+          <span className="font-heading font-black text-base tracking-tight" style={{ color: 'var(--admin-logo-text)' }}>
+            cam<span style={{ color: 'var(--admin-accent)' }}>2</span>rent
           </span>
-          <span className="hidden sm:inline text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
+          <span className="hidden sm:inline text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: 'var(--admin-muted-2)' }}>
             Admin
           </span>
         </Link>
         <div className="ml-auto shrink-0 flex items-center gap-1.5">
           <EnvModeBadge />
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <PageRefreshButton />
           <NotificationDropdown position="mobile" />
         </div>
@@ -931,14 +984,14 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           lg:relative lg:translate-x-0 lg:shrink-0
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
-        style={{ background: '#0f172a', borderRight: '1px solid #1e293b' }}
+        style={{ background: 'var(--admin-sidebar-bg)', borderRight: '1px solid var(--admin-border)' }}
       >
         {/* Mobile close button */}
         <div className="lg:hidden absolute top-3 right-3 z-10">
           <button
             onClick={closeSidebar}
             className="p-1.5 rounded-lg transition-colors"
-            style={{ color: '#475569' }}
+            style={{ color: 'var(--admin-muted-2)' }}
             aria-label="Menü schließen"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -953,6 +1006,8 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           onNavClick={closeSidebar}
           handleLogout={handleLogout}
           me={me}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       </aside>
 
@@ -961,7 +1016,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           berücksichtigt Safe-Area (Notch). */}
       <main
         className="admin-dark flex-1 min-w-0 overflow-y-auto overflow-x-hidden pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0"
-        style={{ background: '#0a0f1e', color: '#e2e8f0' }}
+        style={{ background: 'var(--admin-bg)', color: 'var(--admin-text)' }}
       >
         {children}
       </main>
