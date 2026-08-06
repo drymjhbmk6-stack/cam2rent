@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 import { fmtDate } from '@/lib/format-utils';
 
 interface Unit {
@@ -42,10 +42,10 @@ interface PurchaseOption {
   total_amount: number | null;
 }
 
-const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20 };
-const input: React.CSSProperties = { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, width: '100%' };
-const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
-const cyan = '#06b6d4';
+const card: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 20 };
+const input: React.CSSProperties = { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '8px 10px', color: 'var(--admin-text)', fontSize: 13, width: '100%' };
+const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
+const cyan = 'var(--admin-accent)';
 
 type Draft = {
   name: string;
@@ -321,35 +321,30 @@ export default function NachtragenPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ padding: '24px 20px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-        <AdminBackLink href="/admin/anlagen" label="Zurück zum Anlagenverzeichnis" />
-
-        <div style={{ marginTop: 16, marginBottom: 24 }}>
-          <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Bestand nachtragen</h1>
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>
-            Fuer Kameras + Zubehoer aus dem Altbestand (die noch keinen Asset-Eintrag haben) kannst du hier
-            Kaufdatum, Kaufpreis und AfA-Methode nachtragen. Bei GWG wird der Aufwand sofort in der EÜR
-            verbucht. Wiederbeschaffungswert sinkt linear ueber 36 Monate auf 40 % Floor (kann im Detail
-            ueberschrieben werden).
-          </p>
-        </div>
+        <PageHeader
+          backHref="/admin/anlagen"
+          backLabel="Zurück zum Anlagenverzeichnis"
+          title="Bestand nachtragen"
+          subtitle="Fuer Kameras + Zubehoer aus dem Altbestand (die noch keinen Asset-Eintrag haben) kannst du hier Kaufdatum, Kaufpreis und AfA-Methode nachtragen. Bei GWG wird der Aufwand sofort in der EÜR verbucht. Wiederbeschaffungswert sinkt linear ueber 36 Monate auf 40 % Floor (kann im Detail ueberschrieben werden)."
+        />
 
         {msg && (
-          <div style={{ ...card, marginBottom: 20, borderColor: cyan, background: 'rgba(6,182,212,0.1)' }}>
+          <div style={{ ...card, marginBottom: 20, borderColor: cyan, background: 'var(--admin-accent-soft)' }}>
             <p style={{ color: cyan }}>{msg}</p>
           </div>
         )}
 
         {/* Section: Kameras */}
-        <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginTop: 8, marginBottom: 12 }}>
+        <h2 style={{ color: 'var(--admin-heading)', fontSize: 18, fontWeight: 700, marginTop: 8, marginBottom: 12 }}>
           Kameras ({openUnits.length} offen)
         </h2>
 
         {loading ? (
-          <div style={{ ...card, textAlign: 'center', color: '#64748b' }}>Lade Einheiten…</div>
+          <div style={{ ...card, textAlign: 'center', color: 'var(--admin-text-dim)' }}>Lade Einheiten…</div>
         ) : openUnits.length === 0 ? (
-          <div style={{ ...card, textAlign: 'center', color: '#64748b', marginBottom: 24 }}>
+          <div style={{ ...card, textAlign: 'center', color: 'var(--admin-text-dim)', marginBottom: 24 }}>
             Alle Kameras haben bereits einen Asset-Eintrag. 🎉
           </div>
         ) : (
@@ -362,8 +357,8 @@ export default function NachtragenPage() {
               <div key={unit.id} style={{ ...card, marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div>
-                    <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 16 }}>{unit.label ?? getProductLabel(unit.product_id)}</div>
-                    <div style={{ color: '#64748b', fontSize: 12 }}>
+                    <div style={{ color: 'var(--admin-text)', fontWeight: 700, fontSize: 16 }}>{unit.label ?? getProductLabel(unit.product_id)}</div>
+                    <div style={{ color: 'var(--admin-text-dim)', fontSize: 12 }}>
                       Produkt: {getProductLabel(unit.product_id)} · SN: {unit.serial_number} · Status: {unit.status}
                       {unit.purchased_at && ` · Eingekauft am ${fmtDate(unit.purchased_at)}`}
                     </div>
@@ -417,7 +412,7 @@ export default function NachtragenPage() {
                     <button
                       onClick={() => saveCamera(unit)}
                       disabled={saving === draftKey}
-                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
+                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: 'var(--admin-primary-text)', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
                     >
                       {saving === draftKey ? 'Speichere…' : isExpense ? 'Als Ausgabe verbuchen' : 'Asset anlegen'}
                     </button>
@@ -445,14 +440,14 @@ export default function NachtragenPage() {
         )}
 
         {/* Section: Zubehoer */}
-        <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginTop: 32, marginBottom: 12 }}>
+        <h2 style={{ color: 'var(--admin-heading)', fontSize: 18, fontWeight: 700, marginTop: 32, marginBottom: 12 }}>
           Zubehör ({openAccUnits.length} offen)
         </h2>
 
         {loading ? (
-          <div style={{ ...card, textAlign: 'center', color: '#64748b' }}>Lade Zubehör-Exemplare…</div>
+          <div style={{ ...card, textAlign: 'center', color: 'var(--admin-text-dim)' }}>Lade Zubehör-Exemplare…</div>
         ) : openAccUnits.length === 0 ? (
-          <div style={{ ...card, textAlign: 'center', color: '#64748b' }}>
+          <div style={{ ...card, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
             Alle Zubehör-Exemplare haben bereits einen Asset-Eintrag. 🎉
           </div>
         ) : (
@@ -465,8 +460,8 @@ export default function NachtragenPage() {
               <div key={unit.id} style={{ ...card, marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div>
-                    <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 16 }}>{unit.exemplar_code}</div>
-                    <div style={{ color: '#64748b', fontSize: 12 }}>
+                    <div style={{ color: 'var(--admin-text)', fontWeight: 700, fontSize: 16 }}>{unit.exemplar_code}</div>
+                    <div style={{ color: 'var(--admin-text-dim)', fontSize: 12 }}>
                       Zubehör: {getAccessoryLabel(unit.accessory_id)}
                       {unit.serial_number && ` · Hersteller-SN: ${unit.serial_number}`}
                       {' · Status: '}{unit.status}
@@ -522,7 +517,7 @@ export default function NachtragenPage() {
                     <button
                       onClick={() => saveAccessory(unit)}
                       disabled={saving === draftKey}
-                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
+                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: 'var(--admin-primary-text)', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
                     >
                       {saving === draftKey ? 'Speichere…' : isExpense ? 'Als Ausgabe verbuchen' : 'Asset anlegen'}
                     </button>
