@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Comment {
   id: string; author_name: string; author_email: string; content: string;
@@ -17,6 +18,7 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }
 };
 
 export default function BlogKommentarePage() {
+  const confirm = useConfirm();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = usePersistentState('admin:blog-kommentare:filter', 'pending');
@@ -46,16 +48,15 @@ export default function BlogKommentarePage() {
   }
 
   async function deleteComment(id: string) {
-    if (!confirm('Kommentar wirklich löschen?')) return;
+    const ok = await confirm({ title: 'Kommentar löschen', message: 'Kommentar wirklich löschen?', confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     await fetch(`/api/admin/blog/comments?id=${id}`, { method: 'DELETE' });
     loadComments();
   }
 
   return (
     <div className="p-8 max-w-4xl">
-      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
-      <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: 'white' }}>Kommentare</h1>
-      <p className="text-sm mb-6" style={{ color: '#64748b' }}>Blog-Kommentare moderieren</p>
+      <PageHeader backHref="/admin/blog" backLabel="Zurück zum Blog" title="Kommentare" subtitle="Blog-Kommentare moderieren" />
 
       {/* Filter */}
       <div className="flex gap-1 mb-6">
@@ -64,7 +65,7 @@ export default function BlogKommentarePage() {
             key={s}
             onClick={() => setFilter(s)}
             className="px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
-            style={filter === s ? { background: '#06b6d4', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}
+            style={filter === s ? { background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}
           >
             {s === 'all' ? 'Alle' : STATUS_LABELS[s]?.label ?? s}
           </button>
@@ -72,27 +73,27 @@ export default function BlogKommentarePage() {
       </div>
 
       {loading ? (
-        <p style={{ color: '#64748b' }} className="text-sm">Laden...</p>
+        <p style={{ color: 'var(--admin-text-dim)' }} className="text-sm">Laden...</p>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-center py-16" style={{ color: '#475569' }}>Keine Kommentare in dieser Ansicht.</p>
+        <p className="text-sm text-center py-16" style={{ color: 'var(--admin-muted-2)' }}>Keine Kommentare in dieser Ansicht.</p>
       ) : (
         <div className="space-y-3">
           {comments.map((c) => {
             const s = STATUS_LABELS[c.status] ?? STATUS_LABELS.pending;
             return (
-              <div key={c.id} className="rounded-xl p-4" style={{ background: '#1e293b' }}>
+              <div key={c.id} className="rounded-xl p-4" style={{ background: 'var(--admin-surface-2)' }}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{c.author_name}</span>
-                      <span className="text-xs" style={{ color: '#475569' }}>{c.author_email}</span>
+                      <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-text)' }}>{c.author_name}</span>
+                      <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>{c.author_email}</span>
                       <span className="px-2 py-0.5 rounded text-xs font-heading" style={{ background: s.bg, color: s.color }}>{s.label}</span>
                     </div>
                     {c.blog_posts && (
-                      <p className="text-xs mb-2" style={{ color: '#06b6d4' }}>zu: {c.blog_posts.title}</p>
+                      <p className="text-xs mb-2" style={{ color: 'var(--admin-accent)' }}>zu: {c.blog_posts.title}</p>
                     )}
-                    <p className="text-sm" style={{ color: '#cbd5e1' }}>{c.content}</p>
-                    <p className="text-xs mt-2" style={{ color: '#475569' }}>{new Date(c.created_at).toLocaleString('de-DE')}</p>
+                    <p className="text-sm" style={{ color: 'var(--admin-text-2)' }}>{c.content}</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--admin-muted-2)' }}>{new Date(c.created_at).toLocaleString('de-DE')}</p>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
                     {c.status !== 'approved' && (
