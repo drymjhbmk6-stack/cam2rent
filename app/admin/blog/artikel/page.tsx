@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 interface Post {
@@ -20,6 +21,7 @@ const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }
 };
 
 export default function BlogArtikelPage() {
+  const confirm = useConfirm();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = usePersistentState('admin:blog-artikel:filter', 'all');
@@ -38,7 +40,8 @@ export default function BlogArtikelPage() {
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
   async function deletePost(id: string) {
-    if (!confirm('Artikel wirklich löschen?')) return;
+    const ok = await confirm({ title: 'Artikel löschen', message: 'Artikel wirklich löschen?', confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     await fetch(`/api/admin/blog/posts/${id}`, { method: 'DELETE' });
     loadPosts();
   }
@@ -106,21 +109,21 @@ export default function BlogArtikelPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-4xl mx-auto">
-      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
-
-      <div className="flex items-center justify-between mt-4 mb-6">
-        <div>
-          <h1 className="font-heading font-bold text-2xl text-white">Artikel</h1>
-          <p className="text-sm text-slate-500">{filtered.length} von {posts.length} Artikeln</p>
-        </div>
-        <Link
-          href="/admin/blog/artikel/neu"
-          className="px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: '#06b6d4', color: 'white' }}
-        >
-          + Neuer Artikel
-        </Link>
-      </div>
+      <PageHeader
+        backHref="/admin/blog"
+        backLabel="Zurück zum Blog"
+        title="Artikel"
+        subtitle={`${filtered.length} von ${posts.length} Artikeln`}
+        actions={
+          <Link
+            href="/admin/blog/artikel/neu"
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ background: 'var(--admin-accent)', color: 'white' }}
+          >
+            + Neuer Artikel
+          </Link>
+        }
+      />
 
       {/* Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -137,8 +140,8 @@ export default function BlogArtikelPage() {
               onClick={() => setFilter(s)}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors"
               style={filter === s
-                ? { background: '#06b6d4', color: 'white' }
-                : { background: '#1e293b', color: '#94a3b8' }}
+                ? { background: 'var(--admin-accent)', color: 'white' }
+                : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}
             >
               {s === 'all' ? 'Alle' : STATUS_LABELS[s]?.label}
               {counts[s] !== undefined && (
@@ -155,7 +158,7 @@ export default function BlogArtikelPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-sm text-slate-500 mb-4">Keine Artikel gefunden.</p>
-          <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
+          <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: 'var(--admin-accent)', color: 'white' }}>
             Ersten Artikel erstellen
           </Link>
         </div>
