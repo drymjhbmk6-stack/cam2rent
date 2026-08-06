@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import MarkdownContent from '@/components/MarkdownContent';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDateTime } from '@/lib/format-utils';
 
 interface Version {
@@ -33,6 +34,7 @@ const fmtDate = fmtDateTime;
 export default function AdminLegalEditPage() {
   const params = useParams();
   const slug = params.slug as string;
+  const { error: toastError } = useToast();
 
   const [doc, setDoc] = useState<LegalDoc | null>(null);
   const [currentVersion, setCurrentVersion] = useState<Version | null>(null);
@@ -99,7 +101,7 @@ export default function AdminLegalEditPage() {
       setTimeout(() => setPublished(false), 3000);
       await fetchData();
     } catch {
-      alert('Fehler beim Veröffentlichen.');
+      toastError('Fehler beim Veröffentlichen.');
     } finally {
       setPublishing(false);
     }
@@ -123,7 +125,7 @@ export default function AdminLegalEditPage() {
       setViewVersion(null);
       await fetchData();
     } catch {
-      alert('Fehler beim Wiederherstellen.');
+      toastError('Fehler beim Wiederherstellen.');
     } finally {
       setRestoring(null);
     }
@@ -131,7 +133,7 @@ export default function AdminLegalEditPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0f1e' }}>
+      <div className="min-h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -139,7 +141,7 @@ export default function AdminLegalEditPage() {
 
   if (!doc) {
     return (
-      <div className="min-h-screen" style={{ background: '#0a0f1e' }}>
+      <div className="min-h-screen">
         <div className="max-w-4xl mx-auto px-6 py-8">
           <AdminBackLink href="/admin/legal" label="Zurück zu Rechtliches" />
           <p className="text-gray-400 mt-8">Dokument nicht gefunden.</p>
@@ -149,14 +151,14 @@ export default function AdminLegalEditPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#0a0f1e' }}>
+    <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <AdminBackLink href="/admin/legal" label="Zurück zu Rechtliches" />
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-heading font-bold text-xl text-white">{doc.title}</h1>
+            <h1 className="font-heading font-bold text-xl" style={{ color: 'var(--admin-heading)' }}>{doc.title}</h1>
             <p className="text-xs font-body text-gray-500 mt-1">
               /{doc.slug}
               {currentVersion && (
@@ -170,7 +172,7 @@ export default function AdminLegalEditPage() {
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
-              style={{ background: '#1e293b', color: '#94a3b8' }}
+              style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}
               title="Aktuelle Version als PDF"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,8 +185,8 @@ export default function AdminLegalEditPage() {
             onClick={() => setShowHistory(!showHistory)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
             style={{
-              background: showHistory ? 'rgba(6,182,212,0.15)' : '#1e293b',
-              color: showHistory ? '#06b6d4' : '#94a3b8',
+              background: showHistory ? 'var(--admin-accent-soft)' : 'var(--admin-surface-2)',
+              color: showHistory ? 'var(--admin-accent)' : 'var(--admin-muted)',
             }}
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,8 +208,8 @@ export default function AdminLegalEditPage() {
                   onClick={() => setTab(t)}
                   className="px-4 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
                   style={{
-                    background: tab === t ? 'rgba(6,182,212,0.15)' : 'transparent',
-                    color: tab === t ? '#06b6d4' : '#64748b',
+                    background: tab === t ? 'var(--admin-accent-soft)' : 'transparent',
+                    color: tab === t ? 'var(--admin-accent)' : 'var(--admin-text-dim)',
                   }}
                 >
                   {t === 'editor' ? 'Bearbeiten' : 'Vorschau'}
@@ -222,7 +224,7 @@ export default function AdminLegalEditPage() {
 
             {/* Editor */}
             {tab === 'editor' ? (
-              <div className="rounded-2xl border overflow-hidden" style={{ background: '#111827', borderColor: '#1e293b' }}>
+              <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--admin-surface)', borderColor: 'var(--admin-border)' }}>
                 <div className="p-4">
                   <MarkdownEditor
                     value={content}
@@ -233,7 +235,7 @@ export default function AdminLegalEditPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border p-6 overflow-auto" style={{ background: '#111827', borderColor: '#1e293b', maxHeight: '70vh' }}>
+              <div className="rounded-2xl border p-6 overflow-auto" style={{ background: 'var(--admin-surface)', borderColor: 'var(--admin-border)', maxHeight: '70vh' }}>
                 <div className="prose prose-sm max-w-none prose-headings:text-white prose-p:text-gray-300 prose-li:text-gray-300 prose-strong:text-white prose-a:text-cyan-400">
                   <MarkdownContent>{content || '*Kein Inhalt*'}</MarkdownContent>
                 </div>
@@ -241,7 +243,7 @@ export default function AdminLegalEditPage() {
             )}
 
             {/* Veröffentlichen */}
-            <div className="mt-4 rounded-2xl border p-4" style={{ background: '#111827', borderColor: '#1e293b' }}>
+            <div className="mt-4 rounded-2xl border p-4" style={{ background: 'var(--admin-surface)', borderColor: 'var(--admin-border)' }}>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <label className="block text-xs font-heading font-semibold text-gray-400 mb-1.5">
@@ -253,7 +255,7 @@ export default function AdminLegalEditPage() {
                     onChange={(e) => setChangeNote(e.target.value)}
                     placeholder="z.B. Lieferzeiten aktualisiert"
                     className="w-full px-3 py-2.5 rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    style={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0' }}
+                    style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-input-border)', color: 'var(--admin-text)' }}
                   />
                 </div>
                 <button
@@ -261,7 +263,7 @@ export default function AdminLegalEditPage() {
                   disabled={publishing || !hasChanges}
                   className="px-6 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
-                    background: published ? '#22c55e' : '#06b6d4',
+                    background: published ? '#22c55e' : 'var(--admin-accent)',
                     color: '#ffffff',
                   }}
                 >
@@ -274,8 +276,8 @@ export default function AdminLegalEditPage() {
           {/* Versionshistorie (Sidebar) */}
           {showHistory && (
             <div className="w-80 flex-shrink-0">
-              <div className="rounded-2xl border overflow-hidden sticky top-8" style={{ background: '#111827', borderColor: '#1e293b', maxHeight: '80vh' }}>
-                <div className="px-4 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
+              <div className="rounded-2xl border overflow-hidden sticky top-8" style={{ background: 'var(--admin-surface)', borderColor: 'var(--admin-border)', maxHeight: '80vh' }}>
+                <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   <p className="text-xs font-heading font-semibold text-gray-400 uppercase tracking-wider">
                     Versionshistorie
                   </p>
@@ -286,15 +288,15 @@ export default function AdminLegalEditPage() {
                       key={v.id}
                       className="px-4 py-3 transition-colors"
                       style={{
-                        borderBottom: '1px solid #1e293b',
+                        borderBottom: '1px solid var(--admin-border)',
                         background: v.is_current ? 'rgba(6,182,212,0.05)' : 'transparent',
                       }}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-heading font-semibold text-white">
+                        <span className="text-xs font-heading font-semibold" style={{ color: 'var(--admin-text)' }}>
                           Version {v.version_number}
                           {v.is_current && (
-                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }}>
                               aktuell
                             </span>
                           )}
@@ -312,7 +314,7 @@ export default function AdminLegalEditPage() {
                         <button
                           onClick={() => setViewVersion(v)}
                           className="text-[11px] font-heading font-semibold transition-colors"
-                          style={{ color: '#06b6d4' }}
+                          style={{ color: 'var(--admin-accent)' }}
                         >
                           Anzeigen
                         </button>
@@ -321,7 +323,7 @@ export default function AdminLegalEditPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[11px] font-heading font-semibold transition-colors"
-                          style={{ color: '#94a3b8' }}
+                          style={{ color: 'var(--admin-muted)' }}
                         >
                           PDF
                         </a>
@@ -347,14 +349,14 @@ export default function AdminLegalEditPage() {
         {/* Version-Anzeige-Modal */}
         {viewVersion && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-            <div className="w-full max-w-3xl max-h-[85vh] rounded-2xl border overflow-hidden flex flex-col" style={{ background: '#111827', borderColor: '#1e293b' }}>
+            <div className="w-full max-w-3xl max-h-[85vh] rounded-2xl border overflow-hidden flex flex-col" style={{ background: 'var(--admin-surface)', borderColor: 'var(--admin-border)' }}>
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #1e293b' }}>
+              <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--admin-border)' }}>
                 <div>
-                  <h3 className="font-heading font-bold text-sm text-white">
+                  <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>
                     Version {viewVersion.version_number}
                     {viewVersion.is_current && (
-                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }}>
                         aktuell
                       </span>
                     )}
@@ -378,7 +380,7 @@ export default function AdminLegalEditPage() {
                   <button
                     onClick={() => setViewVersion(null)}
                     className="p-1.5 rounded-lg transition-colors"
-                    style={{ color: '#64748b' }}
+                    style={{ color: 'var(--admin-text-dim)' }}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
