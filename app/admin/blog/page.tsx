@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Stats {
   total: number; published: number; draft: number; scheduled: number;
@@ -36,6 +37,8 @@ interface ScheduleEntry {
 }
 
 export default function BlogDashboardPage() {
+  const { error: toastError } = useToast();
+  const confirm = useConfirm();
   const [stats, setStats] = useState<Stats>({ total: 0, published: 0, draft: 0, scheduled: 0, pendingComments: 0, totalViews: 0 });
   const [recent, setRecent] = useState<RecentPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,52 +185,57 @@ export default function BlogDashboardPage() {
   }
 
   async function handleResetGeneration() {
-    if (!confirm('Generator-Status zurücksetzen? Der nächste Cron-Lauf startet eine neue Generierung.')) return;
+    const ok = await confirm({
+      title: 'Generator zurücksetzen',
+      message: 'Generator-Status zurücksetzen? Der nächste Cron-Lauf startet eine neue Generierung.',
+      confirmLabel: 'Zurücksetzen',
+    });
+    if (!ok) return;
     try {
       const res = await fetch('/api/admin/blog/reset-generation-status', { method: 'POST' });
       if (!res.ok) throw new Error('Reset fehlgeschlagen');
       await loadStatus();
     } catch {
-      alert('Reset fehlgeschlagen. Bitte erneut versuchen.');
+      toastError('Reset fehlgeschlagen. Bitte erneut versuchen.');
     }
   }
 
   const statCards = [
-    { label: 'Gesamt', value: stats.total, color: '#e2e8f0' },
+    { label: 'Gesamt', value: stats.total, color: 'var(--admin-text)' },
     { label: 'Live', value: stats.published, color: '#22c55e' },
     { label: 'Entwürfe', value: stats.draft, color: '#f59e0b' },
-    { label: 'Geplant', value: stats.scheduled, color: '#06b6d4' },
-    { label: 'Kommentare', value: stats.pendingComments, color: '#ef4444' },
+    { label: 'Geplant', value: stats.scheduled, color: 'var(--admin-accent)' },
+    { label: 'Kommentare', value: stats.pendingComments, color: 'var(--admin-danger)' },
     { label: 'Views', value: stats.totalViews, color: '#a78bfa' },
   ];
 
   return (
     <div className="p-4 sm:p-8">
-      <AdminBackLink label="Zurück" />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
-        <div>
-          <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Blog-Dashboard</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>Übersicht über alle Blog-Aktivitäten</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleRunNow}
-            disabled={manualRunning}
-            className="px-4 py-2 rounded-lg text-sm font-heading font-semibold inline-flex items-center gap-2 disabled:opacity-60"
-            style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}
-            title="Startet die KI-Generierung sofort (umgeht den stündlichen Cron) und zeigt das Ergebnis bzw. den Fehler an."
-          >
-            {manualRunning && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-            {manualRunning ? 'Generiert…' : 'Jetzt generieren'}
-          </button>
-          <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
-            + Neuer Artikel
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        backLabel="Zurück"
+        title="Blog-Dashboard"
+        subtitle="Übersicht über alle Blog-Aktivitäten"
+        actions={
+          <>
+            <button
+              onClick={handleRunNow}
+              disabled={manualRunning}
+              className="px-4 py-2 rounded-lg text-sm font-heading font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+              style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)' }}
+              title="Startet die KI-Generierung sofort (umgeht den stündlichen Cron) und zeigt das Ergebnis bzw. den Fehler an."
+            >
+              {manualRunning && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              {manualRunning ? 'Generiert…' : 'Jetzt generieren'}
+            </button>
+            <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-heading font-semibold" style={{ background: 'var(--admin-accent)', color: 'white' }}>
+              + Neuer Artikel
+            </Link>
+          </>
+        }
+      />
 
       {/* Live-Ampel */}
-      <div className="rounded-xl p-4 sm:p-5 mb-6" style={{ background: isGenerating ? '#22c55e10' : '#1e293b', border: `1px solid ${isGenerating ? '#22c55e30' : '#1e293b'}` }}>
+      <div className="rounded-xl p-4 sm:p-5 mb-6" style={{ background: isGenerating ? '#22c55e10' : 'var(--admin-surface-2)', border: `1px solid ${isGenerating ? '#22c55e30' : 'var(--admin-border)'}` }}>
         <div className="flex items-center gap-4">
           {/* Ampel-Dot */}
           <div className="relative shrink-0">
@@ -245,21 +253,21 @@ export default function BlogDashboardPage() {
             {isStuck ? (
               <>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-heading font-semibold text-sm" style={{ color: '#ef4444' }}>
+                  <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-danger)' }}>
                     Generierung hängt fest
                   </span>
                   <button
                     onClick={handleResetGeneration}
                     className="text-xs px-2 py-1 rounded-md font-heading font-semibold transition-colors"
-                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                    style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--admin-danger)' }}
                   >
                     Zurücksetzen
                   </button>
                 </div>
                 {genStatus.topic && (
-                  <p className="text-xs mt-0.5 truncate" style={{ color: '#94a3b8' }}>Thema: {genStatus.topic}</p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--admin-muted)' }}>Thema: {genStatus.topic}</p>
                 )}
-                <p className="text-[11px] mt-0.5" style={{ color: '#475569' }}>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--admin-muted-2)' }}>
                   Läuft seit {Math.floor(elapsedSeconds / 60)} Min. — vermutlich Cron-Timeout, Status wurde nie auf idle gesetzt.
                 </p>
               </>
@@ -270,10 +278,10 @@ export default function BlogDashboardPage() {
                   <span className="w-4 h-4 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin" />
                 </div>
                 {genStatus.topic && (
-                  <p className="text-xs mt-0.5 truncate" style={{ color: '#94a3b8' }}>Thema: {genStatus.topic}</p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--admin-muted)' }}>Thema: {genStatus.topic}</p>
                 )}
                 {elapsedSeconds > 0 && (
-                  <p className="text-[11px] mt-0.5" style={{ color: '#475569' }}>Läuft seit {elapsedSeconds} Sekunden</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--admin-muted-2)' }}>Läuft seit {elapsedSeconds} Sekunden</p>
                 )}
               </>
             ) : autoEnabled ? (
@@ -284,7 +292,7 @@ export default function BlogDashboardPage() {
                     <button
                       onClick={handleResetGeneration}
                       className="text-xs px-2 py-1 rounded-md font-heading font-semibold transition-colors"
-                      style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                      style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--admin-danger)' }}
                       title="Einträge hängen im Status „Wird generiert“ fest und werden vom Cron übersprungen. Zurücksetzen gibt sie wieder frei."
                     >
                       {orphanedCount} hängende{orphanedCount === 1 ? 'r' : ''} Eintrag zurücksetzen
@@ -292,9 +300,9 @@ export default function BlogDashboardPage() {
                   )}
                 </div>
                 <div className="flex gap-3 mt-0.5">
-                  <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} Artikel im Zeitplan</span>
+                  <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>{plannedSchedule} Artikel im Zeitplan</span>
                   {genStatus.finished_at && (
-                    <span className="text-xs" style={{ color: '#475569' }}>
+                    <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>
                       Letzter Lauf: {new Date(genStatus.finished_at).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                     </span>
                   )}
@@ -364,7 +372,7 @@ export default function BlogDashboardPage() {
                       {bestEntry && bestSlot && (() => {
                         const title = bestEntry!.topic.length > 40 ? bestEntry!.topic.slice(0, 38) + '…' : bestEntry!.topic;
                         return (
-                          <p className="text-xs" style={{ color: '#06b6d4' }}>
+                          <p className="text-xs" style={{ color: 'var(--admin-accent)' }}>
                             <span className="font-semibold">Generieren:</span> {dateFmt(bestSlot!)} — {title}
                           </p>
                         );
@@ -373,7 +381,7 @@ export default function BlogDashboardPage() {
                         const pubDate = new Date(`${nextToPub.scheduled_date}T${(nextToPub.scheduled_time || '09:00').slice(0, 5)}:00`);
                         const title = nextToPub.topic.length > 40 ? nextToPub.topic.slice(0, 38) + '…' : nextToPub.topic;
                         return (
-                          <p className="text-xs" style={{ color: '#94a3b8' }}>
+                          <p className="text-xs" style={{ color: 'var(--admin-muted)' }}>
                             <span className="font-semibold">Veröffentlichen:</span> {dateFmt(pubDate)} — {title}
                           </p>
                         );
@@ -384,9 +392,9 @@ export default function BlogDashboardPage() {
               </>
             ) : (
               <>
-                <span className="font-heading font-semibold text-sm" style={{ color: '#ef4444' }}>Auto-Generierung deaktiviert</span>
-                <p className="text-xs mt-0.5" style={{ color: '#475569' }}>
-                  Aktiviere sie unter <Link href="/admin/blog/einstellungen" className="underline" style={{ color: '#06b6d4' }}>Einstellungen</Link>
+                <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-danger)' }}>Auto-Generierung deaktiviert</span>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--admin-muted-2)' }}>
+                  Aktiviere sie unter <Link href="/admin/blog/einstellungen" className="underline" style={{ color: 'var(--admin-accent)' }}>Einstellungen</Link>
                 </p>
               </>
             )}
@@ -409,48 +417,48 @@ export default function BlogDashboardPage() {
       )}
 
       {loading ? (
-        <p style={{ color: '#64748b' }} className="text-sm">Laden...</p>
+        <p style={{ color: 'var(--admin-text-dim)' }} className="text-sm">Laden...</p>
       ) : (
         <>
           {/* Statistik-Karten */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
             {statCards.map((card) => (
-              <div key={card.label} className="rounded-xl p-4" style={{ background: '#1e293b' }}>
-                <p className="text-[11px] font-heading font-semibold uppercase mb-1" style={{ color: '#94a3b8' }}>{card.label}</p>
+              <div key={card.label} className="rounded-xl p-4" style={{ background: 'var(--admin-surface-2)' }}>
+                <p className="text-[11px] font-heading font-semibold uppercase mb-1" style={{ color: 'var(--admin-muted)' }}>{card.label}</p>
                 <p className="text-2xl font-heading font-bold" style={{ color: card.color }}>{card.value}</p>
               </div>
             ))}
           </div>
 
           {/* KI-Bot Übersicht */}
-          <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
+          <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>KI-Bot Status</h2>
-              <Link href="/admin/blog/einstellungen" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Einstellungen</Link>
+              <h2 className="font-heading font-semibold" style={{ color: 'var(--admin-text)' }}>KI-Bot Status</h2>
+              <Link href="/admin/blog/einstellungen" className="text-xs font-heading" style={{ color: 'var(--admin-accent)' }}>Einstellungen</Link>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Modus</p>
+              <div className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--admin-text-dim)' }}>Modus</p>
                 <p className="text-sm font-bold" style={{ color: autoMode === 'voll' ? '#22c55e' : '#f59e0b' }}>
                   {autoMode === 'voll' ? 'Vollautomatisch' : 'Halb-Automatisch'}
                 </p>
               </div>
-              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Aktive Tage</p>
-                <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
+              <div className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--admin-text-dim)' }}>Aktive Tage</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--admin-text)' }}>
                   {autoInterval === 'daily' ? 'Jeden Tag' : autoWeekdays.length > 0 ? autoWeekdays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ') : 'Keine'}
                 </p>
               </div>
-              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Zeitfenster</p>
-                <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
+              <div className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--admin-text-dim)' }}>Zeitfenster</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--admin-text)' }}>
                   {autoTimeFrom && autoTimeTo ? `${autoTimeFrom}–${autoTimeTo}` : 'Nicht gesetzt'}
                 </p>
               </div>
-              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Warteschlange</p>
-                <p className="text-sm font-bold" style={{ color: plannedSchedule > 0 ? '#22c55e' : '#ef4444' }}>
+              <div className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--admin-text-dim)' }}>Warteschlange</p>
+                <p className="text-sm font-bold" style={{ color: plannedSchedule > 0 ? '#22c55e' : 'var(--admin-danger)' }}>
                   {plannedSchedule} geplant
                 </p>
               </div>
@@ -458,13 +466,13 @@ export default function BlogDashboardPage() {
 
             {/* Letzte KI-Artikel */}
             {recentAiPosts.length > 0 && (
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
-                <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: '#64748b' }}>Zuletzt von KI generiert</p>
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--admin-faint)' }}>
+                <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: 'var(--admin-text-dim)' }}>Zuletzt von KI generiert</p>
                 <div className="space-y-1.5">
                   {recentAiPosts.slice(0, 3).map((p) => (
                     <div key={p.id} className="flex items-center justify-between">
-                      <span className="text-xs truncate" style={{ color: '#94a3b8' }}>{p.title}</span>
-                      <span className="text-[10px] shrink-0 ml-2" style={{ color: '#475569' }}>
+                      <span className="text-xs truncate" style={{ color: 'var(--admin-muted)' }}>{p.title}</span>
+                      <span className="text-[10px] shrink-0 ml-2" style={{ color: 'var(--admin-muted-2)' }}>
                         {new Date(p.created_at).toLocaleDateString('de-DE')}
                       </span>
                     </div>
@@ -476,18 +484,18 @@ export default function BlogDashboardPage() {
 
           {/* Nächste geplante Artikel */}
           {schedule.length > 0 && (
-            <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
+            <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>Nächste Artikel im Zeitplan</h2>
-                <Link href="/admin/blog/zeitplan" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Redaktionsplan</Link>
+                <h2 className="font-heading font-semibold" style={{ color: 'var(--admin-text)' }}>Nächste Artikel im Zeitplan</h2>
+                <Link href="/admin/blog/zeitplan" className="text-xs font-heading" style={{ color: 'var(--admin-accent)' }}>Redaktionsplan</Link>
               </div>
               <div className="space-y-2">
                 {schedule.map((entry, i) => {
                   const isNext = i === 0;
                   const statusColors: Record<string, { bg: string; text: string; label: string }> = {
-                    planned: { bg: '#64748b20', text: '#94a3b8', label: 'Geplant' },
+                    planned: { bg: '#64748b20', text: 'var(--admin-muted)', label: 'Geplant' },
                     generating: { bg: '#22c55e20', text: '#22c55e', label: 'Wird generiert' },
-                    generated: { bg: '#06b6d420', text: '#06b6d4', label: 'Generiert' },
+                    generated: { bg: '#06b6d420', text: 'var(--admin-accent)', label: 'Generiert' },
                     reviewed: { bg: '#8b5cf620', text: '#8b5cf6', label: 'Geprüft' },
                   };
                   const sc = statusColors[entry.status] || statusColors.planned;
@@ -499,18 +507,18 @@ export default function BlogDashboardPage() {
                       key={entry.id}
                       className="flex items-start gap-3 rounded-lg px-3 py-2.5"
                       style={{
-                        background: isNext ? '#06b6d410' : '#0f172a',
+                        background: isNext ? '#06b6d410' : 'var(--admin-input-bg)',
                         border: isNext ? '1px solid #06b6d430' : '1px solid transparent',
                       }}
                     >
                       {/* Nummer / Nächster */}
                       <div className="shrink-0 mt-0.5">
                         {isNext ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: '#06b6d4', color: 'white' }}>
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: 'var(--admin-accent)', color: 'white' }}>
                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: '#1e293b', color: '#475569' }}>
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted-2)' }}>
                             {i + 1}
                           </span>
                         )}
@@ -518,14 +526,14 @@ export default function BlogDashboardPage() {
 
                       {/* Inhalt */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: isNext ? '#e2e8f0' : '#94a3b8' }}>
+                        <p className="text-sm font-semibold truncate" style={{ color: isNext ? 'var(--admin-text)' : 'var(--admin-muted)' }}>
                           {entry.topic}
                         </p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold" style={{ background: sc.bg, color: sc.text }}>
                             {sc.label}
                           </span>
-                          <span className="text-[10px]" style={{ color: '#475569' }}>
+                          <span className="text-[10px]" style={{ color: 'var(--admin-muted-2)' }}>
                             {dateStr} {entry.scheduled_time?.slice(0, 5) || ''}
                           </span>
                           {isToday && (
@@ -534,12 +542,12 @@ export default function BlogDashboardPage() {
                             </span>
                           )}
                           {isNext && (
-                            <span className="text-[10px] font-semibold" style={{ color: '#06b6d4' }}>
+                            <span className="text-[10px] font-semibold" style={{ color: 'var(--admin-accent)' }}>
                               Nächster Artikel
                             </span>
                           )}
                           {entry.category?.name && (
-                            <span className="text-[10px]" style={{ color: entry.category.color || '#475569' }}>
+                            <span className="text-[10px]" style={{ color: entry.category.color || 'var(--admin-muted-2)' }}>
                               {entry.category.name}
                             </span>
                           )}
@@ -553,23 +561,23 @@ export default function BlogDashboardPage() {
           )}
 
           {/* Letzte Artikel */}
-          <div className="rounded-xl p-4 sm:p-6" style={{ background: '#1e293b' }}>
+          <div className="rounded-xl p-4 sm:p-6" style={{ background: 'var(--admin-surface-2)' }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>Letzte Artikel</h2>
-              <Link href="/admin/blog/artikel" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Alle anzeigen</Link>
+              <h2 className="font-heading font-semibold" style={{ color: 'var(--admin-text)' }}>Letzte Artikel</h2>
+              <Link href="/admin/blog/artikel" className="text-xs font-heading" style={{ color: 'var(--admin-accent)' }}>Alle anzeigen</Link>
             </div>
             {recent.length === 0 ? (
-              <p className="text-sm" style={{ color: '#475569' }}>Noch keine Artikel.</p>
+              <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Artikel.</p>
             ) : (
               <div className="space-y-2">
                 {recent.map((post) => (
                   <Link key={post.id} href={`/admin/blog/artikel/${post.id}`} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
-                    <span className="font-heading text-sm truncate" style={{ color: '#e2e8f0' }}>{post.title}</span>
+                    <span className="font-heading text-sm truncate" style={{ color: 'var(--admin-text)' }}>{post.title}</span>
                     <div className="flex items-center gap-3 shrink-0 ml-4">
-                      <span className="text-xs" style={{ color: '#475569' }} title="Menschen · Bots">
+                      <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }} title="Menschen · Bots">
                         👤 {Math.max(0, (post.view_count ?? 0) - (post.bot_view_count ?? 0))} · 🤖 {post.bot_view_count ?? 0}
                       </span>
-                      <span className="text-xs" style={{ color: '#475569' }}>{new Date(post.created_at).toLocaleDateString('de-DE')}</span>
+                      <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>{new Date(post.created_at).toLocaleDateString('de-DE')}</span>
                     </div>
                   </Link>
                 ))}
