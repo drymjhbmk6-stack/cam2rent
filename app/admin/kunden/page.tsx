@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
-import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const kundenCacheKey = (filter: string) => `admin:kunden:${filter}`;
@@ -144,6 +144,9 @@ export default function KundenPage() {
       }
       // Aus der Inaktiv-Liste entfernen (bzw. neu laden).
       setCustomers((prev) => prev.filter((x) => x.id !== c.id));
+      // Konto wechselt zwischen Filtern (inaktiv → aktiv) → alle Kunden-Caches
+      // verwerfen, damit jeder Filter-Wiederbesuch frisch lädt.
+      invalidateCachedFetchPrefix('admin:kunden:');
     } finally {
       setResettingId(null);
     }
@@ -171,6 +174,7 @@ export default function KundenPage() {
         alert(data?.error || 'Zurücksetzen fehlgeschlagen.');
         return;
       }
+      invalidateCachedFetchPrefix('admin:kunden:');
       await fetchCustomers();
     } catch {
       alert('Netzwerkfehler beim Zurücksetzen.');
@@ -199,6 +203,7 @@ export default function KundenPage() {
         return;
       }
       alert(`E-Mail freigegeben. Es kann jetzt eine Neuregistrierung mit „${email.trim()}" erfolgen.`);
+      invalidateCachedFetchPrefix('admin:kunden:');
       await fetchCustomers();
     } catch {
       alert('Netzwerkfehler beim Freigeben.');

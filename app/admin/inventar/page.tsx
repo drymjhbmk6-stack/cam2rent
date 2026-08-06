@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
-import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const invKey = (typ: string, status: string, belegStatus: string, q: string, produktId: string) =>
@@ -122,6 +122,9 @@ export default function InventarPage() {
         return;
       }
       setUnits((prev) => prev.filter((u) => u.id !== id));
+      // Löschen betrifft alle Filter-Kombis → alle Inventar-Caches verwerfen,
+      // damit jeder Filter-Wiederbesuch frisch lädt.
+      invalidateCachedFetchPrefix('admin:inventar:');
     } catch (err) {
       alert(`Netzwerk-Fehler: ${(err as Error).message}`);
     } finally {

@@ -28,6 +28,18 @@ export function invalidateCachedFetch(key: string): void {
 }
 
 /**
+ * Alle Cache-Einträge verwerfen, deren Key mit `prefix` beginnt. Nötig für
+ * Seiten mit filter-abhängigen Composite-Keys (z.B. `admin:inventar:…|…|…` oder
+ * `admin:kunden:<filter>`): nach einer Mutation sind potenziell mehrere
+ * Filter-Varianten stale, nicht nur die aktuell sichtbare.
+ */
+export function invalidateCachedFetchPrefix(prefix: string): void {
+  for (const key of Array.from(cache.keys())) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
+/**
  * Rohzugriff auf den Cache — für Seiten, die ihren State SELBST verwalten
  * (z.B. optimistische Updates via `setState(prev => ...)`). Muster:
  *   const [rows, setRows] = useState(() => getCached<Row[]>(KEY) ?? []);

@@ -1978,6 +1978,34 @@ Optik → Intuitiv.
   Der Umschalter ist funktionsfähig; volle Light-Politur landet mit der
   Seiten-Migration.
 
+#### Schritt 2 — Performance: DB-Index-Lücken + Cache-Frische (fertig 2026-08-06)
+- **2a) Additive Index-Migration `supabase/supabase-admin-perf-indizes.sql`**
+  (idempotent, DO-Block-Muster mit Tabellen-Guard, `CREATE INDEX IF NOT EXISTS`
+  ohne CONCURRENTLY = Projektkonvention). Schließt NUR verifizierte Lücken (keine
+  Duplikate): `idx_bookings_is_test_created (is_test, created_at DESC)`,
+  `idx_bookings_is_test_status (is_test, status)` — die bestehenden is_test-Indizes
+  sind **partiell** (`WHERE is_test=TRUE`) und bedienen den Live-Modus nicht;
+  `idx_profiles_created_at (created_at DESC)` (Kundenliste-Sortierung, bisher kein
+  Index); `idx_audit_log_action (action)`. **Go-Live TODO:** in Supabase ausführen
+  (siehe „Noch offen"). Ohne Ausführung läuft alles unverändert, nur ohne Speed-up.
+- **2b) Cache-Frische nach Mutationen** — neuer additiver Export
+  `invalidateCachedFetchPrefix(prefix)` in `lib/use-cached-fetch.ts` (löscht alle
+  Keys mit Prefix; nötig für filter-abhängige Composite-Keys `admin:kunden:<filter>`
+  / `admin:inventar:…|…`). Eingehängt **zusätzlich** zu den bestehenden
+  optimistischen `setBookings/setCustomers/setUnits`-Updates (nichts ersetzt):
+  `buchungen` (`handleStatusChange`, `handleReleaseDeposit` →
+  `invalidateCachedFetch('admin:alle-buchungen')`), `kunden` (`handleReactivate`,
+  `handleResetTester`, `handleFreeEmail` → Prefix `admin:kunden:`), `inventar`
+  (`handleDelete` → Prefix `admin:inventar:`). Effekt: aktuelle Ansicht sofort
+  korrekt (optimistisch), Wiederbesuch lädt frisch statt veraltet. Die
+  Wartungs-Tools auf `/admin/inventar` (backfill-mirrors/resync-qty/… in
+  Sub-Komponenten) wurden bewusst NICHT angefasst — sie aktualisieren die Liste
+  ohnehin nicht (zeigen nur ein Ergebnis), Cache-Invalidierung brächte dort nichts.
+- **Bewusst NICHT** (Begründung): Prefetch (Next-15-`<Link>` prefetcht bereits) +
+  Server-Pagination (würde die client-seitige Filter/Sortier-Logik über den vollen
+  500-Zeilen-Satz umbauen → kommt kontrolliert mit der DataTable in Schritt 7).
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler; Diff = rein additive `invalidate*`-Aufrufe.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
@@ -6467,6 +6495,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Admin-Performance-Indizes — Migration auszuführen:**
+  `supabase/supabase-admin-perf-indizes.sql` (idempotent, additiv, 4 Indizes:
+  `bookings(is_test, created_at DESC)`, `bookings(is_test, status)`,
+  `profiles(created_at DESC)`, `admin_audit_log(action)`). Rein additiv, null
+  Risiko. Ohne Ausführung läuft der Adminbereich unverändert, nur ohne den
+  Query-Speed-up für Dashboard/Buchungsliste/Kundenliste/Aktivitätsprotokoll.
+  Siehe „Admin-Modernisierung Schritt 2". Empfohlen ASAP ausführen.
 - **Gespeicherte Zahlungsmittel — Migration auszuführen:**
   `supabase/supabase-profiles-stripe-customer.sql` (idempotent, additiv:
   `profiles.stripe_customer_id` + `stripe_customer_id_test`, service-role-only).

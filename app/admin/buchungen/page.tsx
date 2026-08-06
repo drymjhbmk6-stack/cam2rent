@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
-import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { getCached, setCached, invalidateCachedFetch } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const BOOKINGS_CACHE_KEY = 'admin:alle-buchungen';
@@ -151,6 +151,8 @@ export default function AdminBuchungenPage() {
       setBookings((prev) =>
         prev.map((b) => (b.id === booking.id ? { ...b, status: newStatus } : b))
       );
+      // Modul-Cache verwerfen → Wiederbesuch lädt frisch statt veraltet.
+      invalidateCachedFetch(BOOKINGS_CACHE_KEY);
     } catch {
       alert('Netzwerkfehler. Bitte erneut versuchen.');
     } finally {
@@ -174,6 +176,7 @@ export default function AdminBuchungenPage() {
       setBookings((prev) =>
         prev.map((b) => (b.id === bookingId ? { ...b, deposit_status: 'released' } : b))
       );
+      invalidateCachedFetch(BOOKINGS_CACHE_KEY);
     } catch {
       alert('Netzwerkfehler. Bitte erneut versuchen.');
     }
