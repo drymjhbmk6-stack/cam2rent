@@ -1,25 +1,26 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const reviewsCacheKey = (filter: string) => `admin:reviews:${filter}`;
 
 const C = {
-  bg: '#0a0f1e',
-  card: '#111827',
-  border: '#1e293b',
-  cyan: '#06b6d4',
-  cyanLight: '#22d3ee',
+  bg: 'var(--admin-input-bg)',
+  card: 'var(--admin-surface)',
+  border: 'var(--admin-border)',
+  cyan: 'var(--admin-accent)',
+  cyanLight: 'var(--admin-accent-hover)',
   green: '#10b981',
   yellow: '#f59e0b',
   red: '#ef4444',
   purple: '#8b5cf6',
-  text: '#e2e8f0',
-  textMuted: '#94a3b8',
-  textDim: '#64748b',
+  text: 'var(--admin-text)',
+  textMuted: 'var(--admin-muted)',
+  textDim: 'var(--admin-text-dim)',
 } as const;
 
 interface Review {
@@ -42,7 +43,7 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span className="inline-flex gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
-        <svg key={i} width={14} height={14} viewBox="0 0 20 20" fill={i <= rating ? '#f59e0b' : '#334155'}>
+        <svg key={i} width={14} height={14} viewBox="0 0 20 20" fill={i <= rating ? '#f59e0b' : 'var(--admin-faint)'}>
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
       ))}
@@ -57,6 +58,7 @@ export default function AdminBewertungenPage() {
   const [replyId, setReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   // Stale-Response-Guard: nur die jeweils letzte Anfrage darf State setzen.
   const reqIdRef = useRef(0);
@@ -114,13 +116,11 @@ export default function AdminBewertungenPage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 1000 }}>
-      <AdminBackLink label="Zurück" />
-      <h1 className="font-heading font-bold text-xl mb-1" style={{ color: C.text }}>
-        Bewertungen
-      </h1>
-      <p className="text-sm mb-6" style={{ color: C.textDim }}>
-        Kundenbewertungen prüfen, genehmigen und beantworten
-      </p>
+      <PageHeader
+        backLabel="Zurück"
+        title="Bewertungen"
+        subtitle="Kundenbewertungen prüfen, genehmigen und beantworten"
+      />
 
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6">
@@ -230,10 +230,9 @@ export default function AdminBewertungenPage() {
                     Antworten
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm('Bewertung wirklich löschen?')) {
-                        handleAction(review.id, 'reject');
-                      }
+                    onClick={async () => {
+                      const ok = await confirm({ title: 'Bewertung löschen', message: 'Bewertung wirklich löschen?', confirmLabel: 'Löschen', danger: true });
+                      if (ok) handleAction(review.id, 'reject');
                     }}
                     disabled={actionLoading === review.id}
                     className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
@@ -278,7 +277,7 @@ export default function AdminBewertungenPage() {
                     placeholder="Deine Antwort..."
                     className="w-full text-sm rounded-lg resize-none"
                     style={{
-                      background: '#0a0f1e',
+                      background: 'var(--admin-input-bg)',
                       border: `1px solid ${C.border}`,
                       padding: '10px 12px',
                       color: C.text,
