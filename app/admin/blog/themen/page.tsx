@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const inputStyle: React.CSSProperties = {
-  background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
+  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', color: 'var(--admin-text)',
   borderRadius: 8, padding: '8px 12px', fontSize: 14, width: '100%',
 };
-const labelStyle: React.CSSProperties = { color: '#94a3b8', fontSize: 12, fontWeight: 600, textTransform: 'uppercase' as const, marginBottom: 4 };
-const sectionStyle: React.CSSProperties = { background: '#1e293b', borderRadius: 12, padding: 20, marginBottom: 20 };
-const btnStyle: React.CSSProperties = { background: '#06b6d4', color: 'white', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600 };
+const labelStyle: React.CSSProperties = { color: 'var(--admin-muted)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase' as const, marginBottom: 4 };
+const sectionStyle: React.CSSProperties = { background: 'var(--admin-surface-2)', borderRadius: 12, padding: 20, marginBottom: 20 };
+const btnStyle: React.CSSProperties = { background: 'var(--admin-accent)', color: 'white', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600 };
 const btnDanger: React.CSSProperties = { background: '#ef4444', color: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600 };
 
 interface Category { id: string; name: string; slug: string; description: string; color: string; sort_order: number; }
@@ -23,6 +24,7 @@ function toSlug(text: string): string {
 }
 
 export default function BlogThemenPage() {
+  const confirm = useConfirm();
   const [tab, setTab] = usePersistentState<'categories' | 'topics' | 'series'>('admin:blog-themen:tab', 'categories');
   const [categories, setCategories] = useState<Category[]>([]);
   const [topics, setTopics] = useState<AutoTopic[]>([]);
@@ -106,7 +108,7 @@ export default function BlogThemenPage() {
     if (res.ok) { setSeriesTitle(''); setSeriesDesc(''); setSeriesParts([{ topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }]); loadAll(); flash('Serie erstellt!'); }
     else { const d = await res.json(); flash(d.error || 'Fehler'); }
   }
-  async function deleteSeries(id: string) { if (!confirm('Serie wirklich löschen?')) return; await fetch(`/api/admin/blog/series/${id}`, { method: 'DELETE' }); loadAll(); }
+  async function deleteSeries(id: string) { const ok = await confirm({ title: 'Serie löschen', message: 'Serie wirklich löschen?', confirmLabel: 'Löschen', danger: true }); if (!ok) return; await fetch(`/api/admin/blog/series/${id}`, { method: 'DELETE' }); loadAll(); }
 
   function updateSeriesPart(i: number, key: 'topic' | 'prompt' | 'keywords', value: string) {
     setSeriesParts((prev) => prev.map((p, j) => j === i ? { ...p, [key]: value } : p));
@@ -114,15 +116,18 @@ export default function BlogThemenPage() {
   function addSeriesPartRow() { setSeriesParts((prev) => [...prev, { topic: '', prompt: '', keywords: '' }]); }
   function removeSeriesPartRow(i: number) { setSeriesParts((prev) => prev.filter((_, j) => j !== i)); }
 
-  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: '#64748b' }}>Laden...</p></div>;
+  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: 'var(--admin-text-dim)' }}>Laden...</p></div>;
 
   return (
     <div className="p-4 sm:p-8 max-w-4xl">
-      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
-      <h1 className="font-heading font-bold text-xl sm:text-2xl mb-1" style={{ color: 'white' }}>Themen</h1>
-      <p className="text-sm mb-6" style={{ color: '#64748b' }}>Kategorien, Einzelthemen und Artikelserien verwalten</p>
+      <PageHeader
+        backHref="/admin/blog"
+        backLabel="Zurück zum Blog"
+        title="Themen"
+        subtitle="Kategorien, Einzelthemen und Artikelserien verwalten"
+      />
 
-      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: '#22c55e' }}>{msg}</div>}
+      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: 'var(--admin-input-bg)', color: '#22c55e' }}>{msg}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 overflow-x-auto">
@@ -133,7 +138,7 @@ export default function BlogThemenPage() {
         ] as const).map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold whitespace-nowrap transition-colors"
-            style={tab === t.key ? { background: '#06b6d4', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}>
+            style={tab === t.key ? { background: 'var(--admin-accent)', color: 'white' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
             {t.label}
           </button>
         ))}
@@ -143,7 +148,7 @@ export default function BlogThemenPage() {
       {tab === 'categories' && (
         <>
           <div style={sectionStyle}>
-            <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: '#e2e8f0' }}>Neue Kategorie</h3>
+            <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--admin-text)' }}>Neue Kategorie</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <div>
                 <label style={labelStyle} className="block">Name</label>
@@ -169,12 +174,12 @@ export default function BlogThemenPage() {
           </div>
           <div className="space-y-2">
             {categories.map((cat) => (
-              <div key={cat.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: '#1e293b' }}>
-                <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ background: cat.color }} /><span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{cat.name}</span><span className="text-xs" style={{ color: '#475569' }}>/{cat.slug}</span></div>
+              <div key={cat.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: 'var(--admin-surface-2)' }}>
+                <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ background: cat.color }} /><span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-text)' }}>{cat.name}</span><span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>/{cat.slug}</span></div>
                 <button onClick={() => deleteCategory(cat.id)} style={btnDanger} className="font-heading">Löschen</button>
               </div>
             ))}
-            {categories.length === 0 && <p className="text-sm text-center py-8" style={{ color: '#475569' }}>Noch keine Kategorien.</p>}
+            {categories.length === 0 && <p className="text-sm text-center py-8" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Kategorien.</p>}
           </div>
         </>
       )}
@@ -183,7 +188,7 @@ export default function BlogThemenPage() {
       {tab === 'topics' && (
         <>
           <div style={sectionStyle}>
-            <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: '#e2e8f0' }}>Neues Einzelthema</h3>
+            <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--admin-text)' }}>Neues Einzelthema</h3>
             <div className="space-y-3">
               <div>
                 <label style={labelStyle} className="block">Thema / Artikelidee</label>
@@ -219,17 +224,17 @@ export default function BlogThemenPage() {
           </div>
           <div className="space-y-2">
             {topics.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: '#1e293b' }}>
+              <div key={t.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: 'var(--admin-surface-2)' }}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-heading font-semibold text-sm truncate" style={{ color: '#e2e8f0' }}>{t.topic}</span>
-                    <span className="px-2 py-0.5 rounded text-xs font-heading shrink-0" style={t.used ? { background: '#22c55e20', color: '#22c55e' } : { background: '#06b6d420', color: '#06b6d4' }}>{t.used ? 'Verwendet' : 'Offen'}</span>
+                    <span className="font-heading font-semibold text-sm truncate" style={{ color: 'var(--admin-text)' }}>{t.topic}</span>
+                    <span className="px-2 py-0.5 rounded text-xs font-heading shrink-0" style={t.used ? { background: '#22c55e20', color: '#22c55e' } : { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }}>{t.used ? 'Verwendet' : 'Offen'}</span>
                   </div>
                 </div>
                 <button onClick={() => deleteTopic(t.id)} style={btnDanger} className="font-heading ml-3 shrink-0">Löschen</button>
               </div>
             ))}
-            {topics.length === 0 && <p className="text-sm text-center py-8" style={{ color: '#475569' }}>Noch keine Einzelthemen.</p>}
+            {topics.length === 0 && <p className="text-sm text-center py-8" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Einzelthemen.</p>}
           </div>
         </>
       )}
@@ -238,8 +243,8 @@ export default function BlogThemenPage() {
       {tab === 'series' && (
         <>
           <div style={sectionStyle}>
-            <h3 className="font-heading font-semibold text-sm mb-1" style={{ color: '#e2e8f0' }}>Neue Artikelserie</h3>
-            <p className="text-xs mb-4" style={{ color: '#475569' }}>Eine Serie besteht aus mehreren zusammenhängenden Artikeln, die nacheinander generiert werden.</p>
+            <h3 className="font-heading font-semibold text-sm mb-1" style={{ color: 'var(--admin-text)' }}>Neue Artikelserie</h3>
+            <p className="text-xs mb-4" style={{ color: 'var(--admin-muted-2)' }}>Eine Serie besteht aus mehreren zusammenhängenden Artikeln, die nacheinander generiert werden.</p>
             <div className="space-y-3">
               <div>
                 <label style={labelStyle} className="block">Serientitel</label>
@@ -276,9 +281,9 @@ export default function BlogThemenPage() {
                 <label style={labelStyle} className="block">Teile der Serie</label>
                 <div className="space-y-2 mt-1">
                   {seriesParts.map((part, i) => (
-                    <div key={i} className="rounded-lg p-3" style={{ background: '#0f172a', border: '1px solid #334155' }}>
+                    <div key={i} className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)' }}>
                       <div className="flex gap-2 items-start mb-2">
-                        <span className="shrink-0 w-7 h-9 flex items-center justify-center rounded text-xs font-heading font-bold" style={{ background: '#1e293b', color: '#06b6d4' }}>{i + 1}</span>
+                        <span className="shrink-0 w-7 h-9 flex items-center justify-center rounded text-xs font-heading font-bold" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-accent)' }}>{i + 1}</span>
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input style={inputStyle} value={part.topic} onChange={(e) => updateSeriesPart(i, 'topic', e.target.value)} placeholder={`Teil ${i + 1}: Titel / Thema`} />
                           <input style={inputStyle} value={part.keywords} onChange={(e) => updateSeriesPart(i, 'keywords', e.target.value)} placeholder="Keywords (kommagetrennt)" />
@@ -294,7 +299,7 @@ export default function BlogThemenPage() {
                     </div>
                   ))}
                 </div>
-                <button onClick={addSeriesPartRow} className="mt-2 text-xs font-heading font-semibold px-3 py-1.5 rounded" style={{ color: '#06b6d4', background: '#06b6d410' }}>
+                <button onClick={addSeriesPartRow} className="mt-2 text-xs font-heading font-semibold px-3 py-1.5 rounded" style={{ color: 'var(--admin-accent)', background: 'var(--admin-accent-soft)' }}>
                   + Weiteren Teil hinzufügen
                 </button>
               </div>
@@ -307,32 +312,32 @@ export default function BlogThemenPage() {
             {seriesList.map((s) => {
               const progress = s.total_parts > 0 ? (s.generated_parts / s.total_parts) * 100 : 0;
               const statusColors: Record<string, { bg: string; color: string; label: string }> = {
-                active: { bg: '#06b6d420', color: '#06b6d4', label: 'Aktiv' },
+                active: { bg: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', label: 'Aktiv' },
                 paused: { bg: '#f59e0b20', color: '#f59e0b', label: 'Pausiert' },
                 completed: { bg: '#22c55e20', color: '#22c55e', label: 'Abgeschlossen' },
               };
               const sc = statusColors[s.status] ?? statusColors.active;
 
               return (
-                <div key={s.id} className="rounded-xl p-4" style={{ background: '#1e293b' }}>
+                <div key={s.id} className="rounded-xl p-4" style={{ background: 'var(--admin-surface-2)' }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{s.title}</span>
+                        <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-text)' }}>{s.title}</span>
                         <span className="px-2 py-0.5 rounded text-xs font-heading" style={{ background: sc.bg, color: sc.color }}>{sc.label}</span>
                       </div>
-                      {s.description && <p className="text-xs mb-2" style={{ color: '#475569' }}>{s.description}</p>}
+                      {s.description && <p className="text-xs mb-2" style={{ color: 'var(--admin-muted-2)' }}>{s.description}</p>}
                       {/* Fortschritt */}
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1 h-1.5 rounded-full" style={{ background: '#0f172a' }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: '#06b6d4' }} />
+                        <div className="flex-1 h-1.5 rounded-full" style={{ background: 'var(--admin-input-bg)' }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: 'var(--admin-accent)' }} />
                         </div>
-                        <span className="text-xs font-heading shrink-0" style={{ color: '#94a3b8' }}>{s.generated_parts}/{s.total_parts}</span>
+                        <span className="text-xs font-heading shrink-0" style={{ color: 'var(--admin-muted)' }}>{s.generated_parts}/{s.total_parts}</span>
                       </div>
                       {/* Teile */}
                       <div className="flex flex-wrap gap-1">
                         {s.blog_series_parts?.sort((a, b) => a.part_number - b.part_number).map((p) => (
-                          <span key={p.id} className="text-[11px] px-2 py-0.5 rounded" style={p.used ? { background: '#22c55e15', color: '#22c55e' } : { background: '#0f172a', color: '#64748b' }}>
+                          <span key={p.id} className="text-[11px] px-2 py-0.5 rounded" style={p.used ? { background: '#22c55e15', color: '#22c55e' } : { background: 'var(--admin-input-bg)', color: 'var(--admin-text-dim)' }}>
                             Teil {p.part_number}: {p.topic.slice(0, 30)}{p.topic.length > 30 ? '...' : ''}
                           </span>
                         ))}
@@ -343,7 +348,7 @@ export default function BlogThemenPage() {
                 </div>
               );
             })}
-            {seriesList.length === 0 && <p className="text-sm text-center py-8" style={{ color: '#475569' }}>Noch keine Serien erstellt.</p>}
+            {seriesList.length === 0 && <p className="text-sm text-center py-8" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Serien erstellt.</p>}
           </div>
         </>
       )}
