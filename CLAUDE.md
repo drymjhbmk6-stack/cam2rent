@@ -2114,6 +2114,21 @@ Optik → Intuitiv.
   bei Bedarf später `@tanstack/react-virtual`, dann als eigene Abhängigkeit).
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler; nur neue Dateien.
 
+#### Schritt 8 — Seiten-Migration auf das Design-System (läuft, ab 2026-08-06)
+Alle ~89 Admin-Seiten werden von Inline-Hex / roher Tailwind-Palette / `brand-*`
+auf die `admin`-Tokens (Schritt 1) + Primitive (Schritt 6/7) umgestellt →
+sauberes Light/Dark. **Kadenz (wegen „nichts kaputt" + keiner Sandbox-Laufzeit):**
+pro Seite ein eigener Commit, reiner Optik-Diff (kein Handler/State/Fetch), jeweils
+`tsc`+`lint` grün, dazwischen vom User live gegengeprüft. Der `.admin-dark`-
+`!important`-Layer (globals.css) wird **erst ganz zuletzt** entfernt, wenn alle
+Seiten migriert sind.
+- **`/admin/warteliste` (Muster-Seite, fertig):** hartkodierte Slate-Palette (flippte
+  bisher NICHT in Light) → `PageHeader`/`Card`/`Button`/`EmptyState`/`TableSkeleton` +
+  `DataTable` (sortierbar, a11y) + Token-Farben. Logik 1:1 (load/DELETE/Gruppierung/
+  State unverändert); zusätzlich `alert()`/`confirm()` → `useToast`/`useConfirm`
+  (Konsistenz zu Schritt 5). Erste echte `DataTable`-Nutzung. Verifiziert: tsc 0,
+  lint 0; Diff = nur Styling/Markup + confirm→Dialog.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
