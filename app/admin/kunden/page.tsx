@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
+import { TableSkeleton } from '@/components/admin/ui/Skeleton';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const kundenCacheKey = (filter: string) => `admin:kunden:${filter}`;
@@ -389,7 +390,7 @@ export default function KundenPage() {
       {/* Tabelle */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Laden...</div>
+          <TableSkeleton rows={10} bare />
         ) : filtered.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
             {!search.trim() && !letter ? 'Buchstaben wählen, um Kunden anzuzeigen.' : 'Keine Kunden gefunden.'}

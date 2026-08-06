@@ -2006,6 +2006,25 @@ Optik → Intuitiv.
   500-Zeilen-Satz umbauen → kommt kontrolliert mit der DataTable in Schritt 7).
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler; Diff = rein additive `invalidate*`-Aufrufe.
 
+#### Schritt 3 — Skeleton-Ladezustände (teilweise, fertig 2026-08-06)
+- Neue geteilte Primitive `components/admin/ui/Skeleton.tsx`: `Skeleton` (Shimmer-
+  Block) + `TableSkeleton({ rows, bare })`. Theme-aware über die in Schritt 1
+  token-gemachte `.animate-shimmer`-Klasse; `bare`-Variante rendert ohne eigene
+  Karte (für Einsatz INNERHALB einer bereits vorhandenen Karte, z.B. inline-
+  gestyltes `/admin/kunden`). A11y: `role="status"` + `aria-busy` + `sr-only`.
+- Eingesetzt statt „Lädt…"/„Laden…"-Text im Haupt-Lade-Zweig von
+  `/admin/buchungen`, `/admin/kunden` (bare) und `/admin/inventar`. Rein
+  präsentational — nur der Loading-Platzhalter wurde getauscht, kein Handler/
+  State/Fetch berührt. Greift beim Erstaufruf (ohne Cache); Wiederbesuche zeigen
+  dank Client-Cache ohnehin sofort Daten.
+- **Bewusst offen (kommt nach Schritt 5):** der „optimistische Updates +
+  **Undo**"-Teil von Schritt 3 hängt am globalen Toast-System (Schritt 5) und
+  wird danach nachgezogen. Die Maintenance-Modals auf `/admin/inventar`
+  („Lade Drift…") wurden nicht angefasst (eigener lokaler Loading-State, geringe
+  Frequenz). Dashboard behält vorerst sein eigenes Loading (inline, Schritt 8/9).
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler; Diff = nur getauschte Loading-
+  Platzhalter + Imports.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

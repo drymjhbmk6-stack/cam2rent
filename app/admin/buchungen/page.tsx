@@ -7,6 +7,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { getCached, setCached, invalidateCachedFetch } from '@/lib/use-cached-fetch';
+import { TableSkeleton } from '@/components/admin/ui/Skeleton';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const BOOKINGS_CACHE_KEY = 'admin:alle-buchungen';
@@ -410,7 +411,7 @@ export default function AdminBuchungenPage() {
 
         {/* Content */}
         {loading ? (
-          <div className="text-center py-16 text-brand-muted font-body">Lädt...</div>
+          <TableSkeleton rows={8} />
         ) : error ? (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-body">
             {error}

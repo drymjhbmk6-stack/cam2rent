@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
+import { TableSkeleton } from '@/components/admin/ui/Skeleton';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const invKey = (typ: string, status: string, belegStatus: string, q: string, produktId: string) =>
@@ -231,7 +232,7 @@ export default function InventarPage() {
         </div>
 
         {loading ? (
-          <p className="text-slate-400">Lädt…</p>
+          <TableSkeleton rows={8} />
         ) : units.length === 0 ? (
           <p className="text-slate-400">Keine Einheiten gefunden.</p>
         ) : (
