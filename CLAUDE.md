@@ -2025,6 +2025,35 @@ Optik → Intuitiv.
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler; Diff = nur getauschte Loading-
   Platzhalter + Imports.
 
+#### Schritt 4 — Command-Palette (Cmd+K) + globale Suche (fertig 2026-08-06)
+- **`components/admin/AdminCommandPalette.tsx`** — Overlay, geöffnet per **Cmd/
+  Ctrl+K** ODER per sichtbarem Such-Button (Custom-Event `admin:command-palette`).
+  Zwei Ebenen: (1) **Navigation/Schnell-Aktionen** aus `lib/admin-nav-index.ts`
+  (permission-gefiltert wie die Sidebar, Fuzzy-Match auf Label/Keywords/Gruppe),
+  (2) **globale Suche** (Buchungen/Kunden/Inventar) via `/api/admin/search`.
+  Tastatur: ↑↓ + Enter + ESC. Token-basiert → folgt Light/Dark. Rein additiv,
+  self-managed (nur `me`-Prop), mountet im Shell (nicht auf Login/Blog-Standalone).
+- **`lib/admin-nav-index.ts`** — flache Navigations-Liste (reine Daten, kein JSX →
+  kein Zirkular-Import). Spiegelt die Sidebar-Ziele. ⚠️ Bei neuen Admin-Seiten
+  HIER **und** in der Sidebar ergänzen; wird in Schritt 9 mit der Sidebar zu einer
+  Quelle zusammengeführt.
+- **`app/api/admin/search/route.ts`** (GET `?q=`, rein lesend, `force-dynamic`):
+  bewusst KEIN Eintrag in `API_PATH_PERMISSIONS` → erreichbar für jeden
+  eingeloggten Admin (wie `/dashboard-data`); die Autorisierung passiert **pro
+  Entitätstyp** über `hasPermission(me, …)` (tagesgeschaeft→Buchungen,
+  kunden→Kunden, katalog→Inventar; Owner alles). `sanitizeSearchInput` gegen
+  `.or()`-Injection, `isTestMode()`-Isolation bei Buchungen, `Promise.allSettled`
+  (eine kaputte Teilsuche blockiert die anderen nicht), je max 6 Treffer.
+- **Shell** (`AdminLayoutClient.tsx`, rein additiv — Diff entfernt nichts):
+  Palette gemountet + sichtbarer „Suchen… ⌘K"-Button in Sidebar-Footer-Bereich
+  (über Dashboard) + Such-Icon im Mobile-Header (Touch, wo es kein Cmd+K gibt).
+- **Bewusst NICHT (noch):** `g b`/`g k`-Tastenkürzel-Sequenzen (Konflikt-Risiko mit
+  Feldeingaben — später mit Cheat-Sheet), Rechnungs-Suche (kein sauberer Detail-
+  Pfad; Finanzen findet über Buchhaltung). Kunden-Suche vorerst nur Name/Telefon
+  (E-Mail liegt in `auth.users`, nicht in `profiles`).
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler (nur pre-existing img-Warnings);
+  Shell-Diff rein additiv.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

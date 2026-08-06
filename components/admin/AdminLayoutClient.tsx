@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import EnvModeBadge from '@/components/admin/EnvModeBadge';
 import GlobalErrorToast from '@/components/admin/GlobalErrorToast';
+import AdminCommandPalette from '@/components/admin/AdminCommandPalette';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import { NotificationsProvider } from '@/contexts/NotificationsContext';
 
@@ -629,6 +630,21 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
         </div>
       </Link>
 
+      {/* Schnellsuche (öffnet Command-Palette) */}
+      <div style={{ padding: '10px 12px 2px' }}>
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-body"
+          style={{ background: 'var(--admin-hover)', color: 'var(--admin-muted)', border: '1px solid var(--admin-border)' }}
+          aria-label="Schnellsuche öffnen"
+        >
+          <span style={{ color: 'var(--admin-muted)' }}>{iconSearch}</span>
+          <span className="flex-1 text-left">Suchen…</span>
+          <kbd style={{ fontSize: 10, color: 'var(--admin-muted-2)', border: '1px solid var(--admin-border)', borderRadius: 5, padding: '1px 5px' }}>⌘K</kbd>
+        </button>
+      </div>
+
       {/* Dashboard (standalone) */}
       <div style={{ padding: '10px 4px 6px' }}>
         <Link
@@ -818,6 +834,14 @@ const iconSun = (
 const iconMoon = (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
 );
+const iconSearch = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" /></svg>
+);
+
+/** Öffnet die Command-Palette (Custom-Event; die Palette lauscht darauf). */
+function openCommandPalette() {
+  window.dispatchEvent(new Event('admin:command-palette'));
+}
 
 type AdminTheme = 'dark' | 'light';
 
@@ -959,6 +983,16 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           </span>
         </Link>
         <div className="ml-auto shrink-0 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="p-2 rounded-lg transition-colors shrink-0"
+            style={{ color: 'var(--admin-accent)' }}
+            aria-label="Schnellsuche öffnen"
+            title="Suchen"
+          >
+            {iconSearch}
+          </button>
           <EnvModeBadge />
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <PageRefreshButton />
@@ -1022,6 +1056,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       </main>
 
       <GlobalErrorToast />
+      <AdminCommandPalette me={me} />
     </div>
     </NotificationsProvider>
   );
