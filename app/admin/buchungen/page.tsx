@@ -8,6 +8,7 @@ import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { getCached, setCached, invalidateCachedFetch } from '@/lib/use-cached-fetch';
 import { TableSkeleton } from '@/components/admin/ui/Skeleton';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const BOOKINGS_CACHE_KEY = 'admin:alle-buchungen';
@@ -87,6 +88,8 @@ function startOfMonth(d: Date) {
 
 export default function AdminBuchungenPage() {
   const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const confirm = useConfirm();
   const [bookings, setBookings] = useState<Booking[]>(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<Booking[]>(BOOKINGS_CACHE_KEY) === undefined);
   const [error, setError] = useState('');
@@ -146,7 +149,7 @@ export default function AdminBuchungenPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error ?? 'Fehler beim Aktualisieren.');
+        toastError(d.error ?? 'Fehler beim Aktualisieren.');
         return;
       }
       setBookings((prev) =>
@@ -154,15 +157,22 @@ export default function AdminBuchungenPage() {
       );
       // Modul-Cache verwerfen → Wiederbesuch lädt frisch statt veraltet.
       invalidateCachedFetch(BOOKINGS_CACHE_KEY);
+      success('Status aktualisiert.');
     } catch {
-      alert('Netzwerkfehler. Bitte erneut versuchen.');
+      toastError('Netzwerkfehler. Bitte erneut versuchen.');
     } finally {
       setUpdatingId(null);
     }
   }
 
   async function handleReleaseDeposit(bookingId: string) {
-    if (!confirm('Kaution wirklich freigeben? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+    const ok = await confirm({
+      title: 'Kaution freigeben',
+      message: 'Kaution wirklich freigeben? Diese Aktion kann nicht rückgängig gemacht werden.',
+      confirmLabel: 'Freigeben',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch('/api/admin/deposit/release', {
         method: 'POST',
@@ -171,15 +181,16 @@ export default function AdminBuchungenPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error ?? 'Fehler beim Freigeben der Kaution.');
+        toastError(d.error ?? 'Fehler beim Freigeben der Kaution.');
         return;
       }
       setBookings((prev) =>
         prev.map((b) => (b.id === bookingId ? { ...b, deposit_status: 'released' } : b))
       );
       invalidateCachedFetch(BOOKINGS_CACHE_KEY);
+      success('Kaution freigegeben.');
     } catch {
-      alert('Netzwerkfehler. Bitte erneut versuchen.');
+      toastError('Netzwerkfehler. Bitte erneut versuchen.');
     }
   }
 

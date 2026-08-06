@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
 import { TableSkeleton } from '@/components/admin/ui/Skeleton';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const kundenCacheKey = (filter: string) => `admin:kunden:${filter}`;
@@ -89,6 +90,8 @@ const FILTERS = [
 
 export default function KundenPage() {
   const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const confirm = useConfirm();
   // Startwert aus dem Cache seeden (Initial-Filter '') → Wiederbesuch ohne Spinner.
   const [customers, setCustomers] = useState<Customer[]>(() => getCached<Customer[]>(kundenCacheKey('')) ?? []);
   const [loading, setLoading] = useState(() => getCached<Customer[]>(kundenCacheKey('')) === undefined);
@@ -130,7 +133,12 @@ export default function KundenPage() {
 
   // Inaktives Konto wieder aktivieren (leert deactivated_at).
   const handleReactivate = useCallback(async (c: Customer) => {
-    if (!confirm(`Konto von ${c.full_name || c.email} wieder aktivieren?`)) return;
+    const ok = await confirm({
+      title: 'Konto reaktivieren',
+      message: `Konto von ${c.full_name || c.email} wieder aktivieren?`,
+      confirmLabel: 'Reaktivieren',
+    });
+    if (!ok) return;
     setResettingId(c.id);
     try {
       const res = await fetch('/api/admin/kunden/reactivate', {
@@ -140,7 +148,7 @@ export default function KundenPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || 'Reaktivierung fehlgeschlagen.');
+        toastError(data.error || 'Reaktivierung fehlgeschlagen.');
         return;
       }
       // Aus der Inaktiv-Liste entfernen (bzw. neu laden).
@@ -148,20 +156,25 @@ export default function KundenPage() {
       // Konto wechselt zwischen Filtern (inaktiv → aktiv) → alle Kunden-Caches
       // verwerfen, damit jeder Filter-Wiederbesuch frisch lädt.
       invalidateCachedFetchPrefix('admin:kunden:');
+      success('Konto reaktiviert.');
     } finally {
       setResettingId(null);
     }
-  }, []);
+  }, [confirm, toastError, success]);
 
   // Tester-Konto zuruecksetzen → E-Mail freigeben + Profil/Ausweis-Fotos
   // loeschen, damit man sich mit derselben E-Mail neu registrieren kann.
   const handleResetTester = useCallback(async (c: Customer) => {
-    const ok = window.confirm(
-      `Test-Konto „${c.full_name || c.email}" zurücksetzen?\n\n` +
-      `Das Konto wird gelöscht und die E-Mail ${c.email} wieder freigegeben — ` +
-      `man kann sich damit danach neu registrieren.\n\n` +
-      `Buchungen bleiben in der Datenbank, tauchen unter dem neuen Konto aber nicht mehr auf.`,
-    );
+    const ok = await confirm({
+      title: 'Test-Konto zurücksetzen',
+      message:
+        `Test-Konto „${c.full_name || c.email}" zurücksetzen?\n\n` +
+        `Das Konto wird gelöscht und die E-Mail ${c.email} wieder freigegeben — ` +
+        `man kann sich damit danach neu registrieren.\n\n` +
+        `Buchungen bleiben in der Datenbank, tauchen unter dem neuen Konto aber nicht mehr auf.`,
+      confirmLabel: 'Zurücksetzen',
+      danger: true,
+    });
     if (!ok) return;
     setResettingId(c.id);
     try {
@@ -172,17 +185,18 @@ export default function KundenPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data?.error || 'Zurücksetzen fehlgeschlagen.');
+        toastError(data?.error || 'Zurücksetzen fehlgeschlagen.');
         return;
       }
       invalidateCachedFetchPrefix('admin:kunden:');
       await fetchCustomers();
+      success('Test-Konto zurückgesetzt.');
     } catch {
-      alert('Netzwerkfehler beim Zurücksetzen.');
+      toastError('Netzwerkfehler beim Zurücksetzen.');
     } finally {
       setResettingId(null);
     }
-  }, [fetchCustomers]);
+  }, [fetchCustomers, confirm, toastError, success]);
 
   // Recovery: eine bereits halb-gelöschte Test-E-Mail per Adresse freigeben
   // (Profil schon weg, Auth-User hängt noch) → erscheint nicht mehr in der Liste.
@@ -200,16 +214,16 @@ export default function KundenPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data?.error || 'Freigeben fehlgeschlagen.');
+        toastError(data?.error || 'Freigeben fehlgeschlagen.');
         return;
       }
-      alert(`E-Mail freigegeben. Es kann jetzt eine Neuregistrierung mit „${email.trim()}" erfolgen.`);
       invalidateCachedFetchPrefix('admin:kunden:');
       await fetchCustomers();
+      success(`E-Mail freigegeben. Neuregistrierung mit „${email.trim()}" ist jetzt möglich.`);
     } catch {
-      alert('Netzwerkfehler beim Freigeben.');
+      toastError('Netzwerkfehler beim Freigeben.');
     }
-  }, [fetchCustomers]);
+  }, [fetchCustomers, toastError, success]);
 
   useEffect(() => {
     fetchCustomers();

@@ -2054,6 +2054,32 @@ Optik → Intuitiv.
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler (nur pre-existing img-Warnings);
   Shell-Diff rein additiv.
 
+#### Schritt 5 — Globales Toast- & Bestätigungs-System (fertig 2026-08-06)
+- **`components/admin/ui/FeedbackProvider.tsx`** — ein Mount, zwei Hooks:
+  `useToast()` (`success`/`error`/`info`/`warning` + `toast({kind,message,action})`
+  mit optionaler Aktion für künftiges **Undo**, `aria-live`, Auto-Dismiss,
+  memoisierte stabile Referenzen → sicher in useCallback-Deps) und `useConfirm()`
+  (`confirm(opts): Promise<boolean>` als gestylter Dialog mit **Fokus-Trap**, ESC,
+  Fokus-Restore, `danger`-Variante). Token-basiert (Light/Dark), `whitespace:pre-line`.
+- **Mount** in `AdminLayoutClient.tsx`: `<FeedbackProvider>` wrappt den gesamten
+  Shell-Inhalt **innerhalb** von `.admin-shell` (Tokens lösen auf) + innerhalb
+  `NotificationsProvider`. Rein additiv (Diff entfernt nichts). Der bestehende
+  `GlobalErrorToast` (uncaught-Fehler) bleibt separat (z-9999 über den Action-
+  Toasts z-9990).
+- **Erste Adopter migriert** (buchungen/kunden/inventar): `alert()` → `toastError`,
+  natives `confirm()` → `await confirm({…})` (Kunden-Reset/Kaution-Freigabe/
+  Inventar-Löschen als `danger`), plus neue **Erfolgs-Toasts**. ⚠️ Der Hook heißt
+  `confirm` — ist aber **komponenten-scoped** (nur in der jeweiligen Page-Funktion);
+  die nativen `confirm()` der Inventar-Wartungs-Sub-Komponenten (module-level) sind
+  NICHT betroffen (verifiziert). Verhalten bleibt: Aktion nur bei Bestätigung.
+- **Bewusst offen:** Undo-Verdrahtung in konkrete Mutationen (Toast-`action` ist da,
+  wird beim Seiten-Rollout in Schritt 8 pro Aktion nachgezogen); Migration der
+  restlichen ~86 Seiten von `alert()`/`confirm()` läuft mit Schritt 8. `window.prompt`
+  (Text-Eingabe, z.B. Kunden-E-Mail-Freigabe) bleibt vorerst (kein Eingabe-Dialog
+  im Scope).
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler (nur pre-existing img-Warnings);
+  Diff = alert/confirm-Ersatz + additive Toast-Aufrufe.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

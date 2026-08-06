@@ -7,6 +7,7 @@ import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import EnvModeBadge from '@/components/admin/EnvModeBadge';
 import GlobalErrorToast from '@/components/admin/GlobalErrorToast';
 import AdminCommandPalette from '@/components/admin/AdminCommandPalette';
+import { FeedbackProvider } from '@/components/admin/ui/FeedbackProvider';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import { NotificationsProvider } from '@/contexts/NotificationsContext';
 
@@ -953,6 +954,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   return (
     <NotificationsProvider>
     <div className="admin-shell min-h-screen flex" data-admin-theme={theme} style={{ background: 'var(--admin-bg)' }}>
+    <FeedbackProvider>
       {/* Mobile header with hamburger — respektiert iOS Safe-Area-Top */}
       <div
         className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center h-14 px-4"
@@ -1057,6 +1059,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
       <GlobalErrorToast />
       <AdminCommandPalette me={me} />
+    </FeedbackProvider>
     </div>
     </NotificationsProvider>
   );

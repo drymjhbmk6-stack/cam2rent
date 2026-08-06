@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached, invalidateCachedFetchPrefix } from '@/lib/use-cached-fetch';
 import { TableSkeleton } from '@/components/admin/ui/Skeleton';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
 const invKey = (typ: string, status: string, belegStatus: string, q: string, produktId: string) =>
@@ -89,6 +90,8 @@ function displayFields(u: Unit): { bezeichnung: string; code: string; sn: string
 
 export default function InventarPage() {
   const searchParams = useSearchParams();
+  const { success, error: toastError } = useToast();
+  const confirm = useConfirm();
   const produktId = searchParams.get('produkt_id') ?? '';
   // Startwert aus dem Cache (Initial-Filter) → Wiederbesuch ohne Spinner.
   const [units, setUnits] = useState<Unit[]>(
@@ -106,18 +109,23 @@ export default function InventarPage() {
   const reqIdRef = useRef(0);
 
   async function handleDelete(id: string, label: string) {
-    if (!confirm(
-      `"${label}" endgültig aus dem Inventar löschen?\n\n` +
-      `Vermietete Stücke können nicht gelöscht werden. ` +
-      `Der gespiegelte Eintrag in der alten Welt (product_units/accessory_units) ` +
-      `wird mit entfernt.`,
-    )) return;
+    const ok = await confirm({
+      title: 'Inventar-Stück löschen',
+      message:
+        `"${label}" endgültig aus dem Inventar löschen?\n\n` +
+        `Vermietete Stücke können nicht gelöscht werden. ` +
+        `Der gespiegelte Eintrag in der alten Welt (product_units/accessory_units) ` +
+        `wird mit entfernt.`,
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!ok) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/admin/inventar/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(res.status === 409
+        toastError(res.status === 409
           ? (data.error ?? 'Stück ist vermietet — kann nicht gelöscht werden.')
           : `Löschen fehlgeschlagen: ${data.error ?? 'Status ' + res.status}`);
         return;
@@ -126,8 +134,9 @@ export default function InventarPage() {
       // Löschen betrifft alle Filter-Kombis → alle Inventar-Caches verwerfen,
       // damit jeder Filter-Wiederbesuch frisch lädt.
       invalidateCachedFetchPrefix('admin:inventar:');
+      success('Inventar-Stück gelöscht.');
     } catch (err) {
-      alert(`Netzwerk-Fehler: ${(err as Error).message}`);
+      toastError(`Netzwerk-Fehler: ${(err as Error).message}`);
     } finally {
       setDeletingId(null);
     }
