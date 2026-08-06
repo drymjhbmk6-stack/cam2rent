@@ -2128,6 +2128,19 @@ Seiten migriert sind.
   State unverändert); zusätzlich `alert()`/`confirm()` → `useToast`/`useConfirm`
   (Konsistenz zu Schritt 5). Erste echte `DataTable`-Nutzung. Verifiziert: tsc 0,
   lint 0; Diff = nur Styling/Markup + confirm→Dialog.
+- **`/admin/client-errors` (fertig):** komplett inline-gehardcodete Slate-/Hex-Seite
+  (blieb im Light-Mode dunkel) → `PageHeader` + tokenisierte Style-Konstanten
+  (`cardStyle`/`inputStyle`/`btnPrimary`/`btnSecondary`/`btnDanger`/`labelStyle` auf
+  `var(--admin-*)`), alle Inline-Hex → Tokens (`#64748b`→`--admin-text-dim`,
+  `#94a3b8`→`--admin-muted`, `#e2e8f0`→`--admin-text`, `#cbd5e1`→`--admin-text-2`,
+  Eingabe-/Pre-Flächen → `--admin-input-bg`/`-border`; Badges ADMIN/TEST + Migrations-
+  Banner behalten ihre farbigen Tints bewusst als Status-Signal). Native `confirm()`
+  (2×) → `useConfirm` (danger), `alert()` → `success`-Toast, Löschen bekommt zusätzlich
+  Erfolgs-/Fehler-Toast; `prompt` (Tage-Eingabe) bleibt. Logik 1:1 (fetchEntries mit
+  `reqIdRef`-Stale-Guard, Pagination, Filter, `usePersistentState`, alle Handler
+  unverändert). KEINE DataTable (aufklappbare Fehler-Zeilen mit Stack-Trace-`<pre>` —
+  eigenes Akkordeon-Muster, für Tabelle ungeeignet). Verifiziert: tsc 0, lint 0;
+  Diff = nur Styling/Markup + confirm/alert→Feedback-System.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { PageHeader } from '@/components/admin/ui';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface ClientError {
   id: string;
@@ -21,16 +23,16 @@ interface ClientError {
 }
 
 const cardStyle: React.CSSProperties = {
-  background: '#0f172a',
-  border: '1px solid #1e293b',
+  background: 'var(--admin-surface)',
+  border: '1px solid var(--admin-border)',
   borderRadius: 12,
 };
 
 const inputStyle: React.CSSProperties = {
-  background: '#1e293b',
-  border: '1px solid #334155',
+  background: 'var(--admin-input-bg)',
+  border: '1px solid var(--admin-input-border)',
   borderRadius: 8,
-  color: '#e2e8f0',
+  color: 'var(--admin-text)',
   padding: '8px 12px',
   fontSize: 13,
   outline: 'none',
@@ -38,8 +40,8 @@ const inputStyle: React.CSSProperties = {
 };
 
 const btnPrimary: React.CSSProperties = {
-  background: '#06b6d4',
-  color: '#0f172a',
+  background: 'var(--admin-accent)',
+  color: '#fff',
   border: 'none',
   borderRadius: 8,
   padding: '8px 20px',
@@ -50,8 +52,8 @@ const btnPrimary: React.CSSProperties = {
 
 const btnSecondary: React.CSSProperties = {
   background: 'transparent',
-  color: '#94a3b8',
-  border: '1px solid #334155',
+  color: 'var(--admin-muted)',
+  border: '1px solid var(--admin-border)',
   borderRadius: 8,
   padding: '8px 16px',
   fontSize: 13,
@@ -61,8 +63,17 @@ const btnSecondary: React.CSSProperties = {
 
 const btnDanger: React.CSSProperties = {
   ...btnSecondary,
-  color: '#f87171',
-  borderColor: '#7f1d1d',
+  color: 'var(--admin-danger)',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  color: 'var(--admin-text-dim)',
+  marginBottom: 4,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
 };
 
 function shortenUrl(url: string | null): string {
@@ -76,6 +87,8 @@ function shortenUrl(url: string | null): string {
 }
 
 export default function ClientErrorsPage() {
+  const { success, error: toastError } = useToast();
+  const confirm = useConfirm();
   const [entries, setEntries] = useState<ClientError[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -141,9 +154,15 @@ export default function ClientErrorsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Diesen Eintrag löschen?')) return;
+    const ok = await confirm({ title: 'Eintrag löschen', message: 'Diesen Eintrag löschen?', confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     const res = await fetch(`/api/admin/client-errors?id=${id}`, { method: 'DELETE' });
-    if (res.ok) fetchEntries();
+    if (res.ok) {
+      fetchEntries();
+      success('Eintrag gelöscht.');
+    } else {
+      toastError('Löschen fehlgeschlagen.');
+    }
   }
 
   async function handleDeleteOld() {
@@ -151,11 +170,12 @@ export default function ClientErrorsPage() {
     if (!days) return;
     const n = parseInt(days, 10);
     if (!n || n < 1) return;
-    if (!confirm(`Alle Einträge älter als ${n} Tage endgültig löschen?`)) return;
+    const ok = await confirm({ title: 'Alte Einträge löschen', message: `Alle Einträge älter als ${n} Tage endgültig löschen?`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     const res = await fetch(`/api/admin/client-errors?olderThanDays=${n}`, { method: 'DELETE' });
     if (res.ok) {
       const data = await res.json();
-      alert(`${data.deleted} Einträge gelöscht.`);
+      success(`${data.deleted} Einträge gelöscht.`);
       fetchEntries();
     }
   }
@@ -163,21 +183,17 @@ export default function ClientErrorsPage() {
   return (
     <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
       <AdminBackLink label="Zurück" />
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9', margin: 0 }}>
-          Frontend-Fehlerprotokoll
-        </h1>
-        <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
-          JavaScript-Fehler aus dem Browser des Kunden ({total} Einträge gesamt)
-        </p>
-      </div>
+      <PageHeader
+        title="Frontend-Fehlerprotokoll"
+        subtitle={`JavaScript-Fehler aus dem Browser des Kunden (${total} Einträge gesamt)`}
+      />
 
       {migrationPending && (
-        <div style={{ ...cardStyle, padding: 16, marginBottom: 20, borderColor: '#854d0e', background: '#451a03' }}>
-          <div style={{ color: '#fbbf24', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+        <div style={{ ...cardStyle, padding: 16, marginBottom: 20, borderColor: 'rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.12)' }}>
+          <div style={{ color: '#f59e0b', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
             Migration ausstehend
           </div>
-          <div style={{ color: '#fde68a', fontSize: 12 }}>
+          <div style={{ color: 'var(--admin-text-2)', fontSize: 12 }}>
             Die Tabelle <code style={{ fontFamily: 'monospace' }}>client_errors</code> existiert noch nicht.
             Bitte SQL-Migration <code style={{ fontFamily: 'monospace' }}>supabase/supabase-client-errors.sql</code> ausführen.
           </div>
@@ -187,9 +203,7 @@ export default function ClientErrorsPage() {
       <div style={{ ...cardStyle, padding: 20, marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Suche
-            </label>
+            <label style={labelStyle}>Suche</label>
             <input
               type="text"
               value={searchInput}
@@ -200,19 +214,15 @@ export default function ClientErrorsPage() {
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Von
-            </label>
+            <label style={labelStyle}>Von</label>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Bis
-            </label>
+            <label style={labelStyle}>Bis</label>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={inputStyle} />
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13, cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--admin-text-2)', fontSize: 13, cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={onlyAdmin}
@@ -233,9 +243,9 @@ export default function ClientErrorsPage() {
 
       <div style={{ ...cardStyle, overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Laden…</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-muted)' }}>Laden…</div>
         ) : entries.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-muted)' }}>
             {migrationPending ? 'Tabelle existiert noch nicht.' : 'Keine Einträge gefunden.'}
           </div>
         ) : (
@@ -243,7 +253,7 @@ export default function ClientErrorsPage() {
             {entries.map((e) => {
               const expanded = expandedId === e.id;
               return (
-                <div key={e.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                <div key={e.id} style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   <div
                     onClick={() => setExpandedId(expanded ? null : e.id)}
                     style={{
@@ -255,29 +265,29 @@ export default function ClientErrorsPage() {
                       alignItems: 'center',
                     }}
                   >
-                    <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>
+                    <div style={{ fontSize: 12, color: 'var(--admin-muted)', fontFamily: 'monospace' }}>
                       {fmtDateTime(e.created_at)}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, color: 'var(--admin-text)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {e.message || '(ohne Nachricht)'}
                       </div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {shortenUrl(e.url)}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       {e.is_admin && (
-                        <span style={{ fontSize: 10, padding: '2px 6px', background: '#1e3a8a', color: '#bfdbfe', borderRadius: 4, fontWeight: 600 }}>
+                        <span style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: 4, fontWeight: 600 }}>
                           ADMIN
                         </span>
                       )}
                       {e.is_test && (
-                        <span style={{ fontSize: 10, padding: '2px 6px', background: '#831843', color: '#fbcfe8', borderRadius: 4, fontWeight: 600 }}>
+                        <span style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(236,72,153,0.15)', color: '#ec4899', borderRadius: 4, fontWeight: 600 }}>
                           TEST
                         </span>
                       )}
-                      <span style={{ fontSize: 14, color: '#64748b' }}>{expanded ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: 14, color: 'var(--admin-text-dim)' }}>{expanded ? '▾' : '▸'}</span>
                     </div>
                   </div>
 
@@ -288,17 +298,17 @@ export default function ClientErrorsPage() {
                       <DetailRow label="Nachricht" value={e.message} mono />
                       {e.stack && (
                         <div>
-                          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                          <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
                             Stack-Trace
                           </div>
                           <pre style={{
                             margin: 0,
                             padding: 12,
-                            background: '#020617',
-                            border: '1px solid #1e293b',
+                            background: 'var(--admin-input-bg)',
+                            border: '1px solid var(--admin-border)',
                             borderRadius: 6,
                             fontSize: 11,
-                            color: '#cbd5e1',
+                            color: 'var(--admin-text-2)',
                             fontFamily: 'monospace',
                             overflow: 'auto',
                             maxHeight: 320,
@@ -332,7 +342,7 @@ export default function ClientErrorsPage() {
           <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={btnSecondary}>
             ← Zurück
           </button>
-          <span style={{ color: '#94a3b8', fontSize: 13 }}>
+          <span style={{ color: 'var(--admin-muted)', fontSize: 13 }}>
             Seite {page} von {totalPages}
           </span>
           <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={btnSecondary}>
@@ -348,12 +358,12 @@ function DetailRow({ label, value, mono }: { label: string; value: string | null
   if (!value) return null;
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+      <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
         {label}
       </div>
       <div style={{
         fontSize: 12,
-        color: '#cbd5e1',
+        color: 'var(--admin-text-2)',
         fontFamily: mono ? 'monospace' : undefined,
         wordBreak: 'break-all',
       }}>
