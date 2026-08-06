@@ -5,7 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
-  background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
+  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', color: 'var(--admin-text)',
   borderRadius: 8, padding: '8px 12px', fontSize: 14, width: '100%',
 };
 
@@ -339,9 +339,9 @@ export default function ReelsZeitplanPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0a', color: '#e2e8f0', fontFamily: 'DM Sans, sans-serif' }}>
+    <div style={{ color: 'var(--admin-text)', fontFamily: 'DM Sans, sans-serif' }}>
       {/* header */}
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ borderBottom: '1px solid var(--admin-border)', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <AdminBackLink href="/admin/social/reels" label="Zurück zu Reels" />
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>📅 Reels-Redaktionsplan</h1>
       </div>
@@ -349,7 +349,7 @@ export default function ReelsZeitplanPage() {
       <div style={{ padding: '20px 16px', maxWidth: 1600, margin: '0 auto' }}>
 
         {/* ── KI-Plan-Generator ──────────────────────────────────────────── */}
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600, fontSize: 15 }}>🤖 KI-Reel-Planung</span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -433,8 +433,8 @@ export default function ReelsZeitplanPage() {
         )}
 
         {/* ── Manual Add Form ────────────────────────────────────────────── */}
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, color: '#94a3b8' }}>+ Manuell hinzufügen</div>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, color: 'var(--admin-muted)' }}>+ Manuell hinzufügen</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ flex: '2 1 200px' }}>
               <input placeholder="Reel-Thema *" value={newTopic} onChange={e => setNewTopic(e.target.value)}
@@ -471,7 +471,7 @@ export default function ReelsZeitplanPage() {
 
         {/* ── Calendar ───────────────────────────────────────────────────── */}
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Lade…</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>Lade…</div>
         ) : (
           <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid #1e293b' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 900, background: '#0f172a' }}>
@@ -563,7 +563,7 @@ export default function ReelsZeitplanPage() {
           {(['planned','generating','generated','failed'] as const).map(s => (
             <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: chipColor(s) }} />
-              <span style={{ color: '#64748b' }}>{statusLabel(s)}</span>
+              <span style={{ color: 'var(--admin-text-dim)' }}>{statusLabel(s)}</span>
             </div>
           ))}
         </div>
@@ -575,9 +575,9 @@ export default function ReelsZeitplanPage() {
               const cnt = entries.filter(e => e.status === s).length;
               if (cnt === 0) return null;
               return (
-                <div key={s} style={{ background: '#111827', border: `1px solid ${chipColor(s)}40`, borderRadius: 8, padding: '8px 16px', fontSize: 13 }}>
+                <div key={s} style={{ background: 'var(--admin-surface)', border: `1px solid ${chipColor(s)}40`, borderRadius: 8, padding: '8px 16px', fontSize: 13 }}>
                   <span style={{ color: chipColor(s), fontWeight: 700 }}>{cnt}</span>
-                  <span style={{ color: '#94a3b8', marginLeft: 6 }}>{statusLabel(s)}</span>
+                  <span style={{ color: 'var(--admin-muted)', marginLeft: 6 }}>{statusLabel(s)}</span>
                 </div>
               );
             })}
@@ -590,12 +590,12 @@ export default function ReelsZeitplanPage() {
       {editEntry && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={closeEdit}>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 14, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}
+          <div style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <span style={{ fontWeight: 700, fontSize: 16 }}>Reel bearbeiten</span>
-              <button onClick={closeEdit} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer' }}>×</button>
+              <button onClick={closeEdit} style={{ background: 'none', border: 'none', color: 'var(--admin-muted)', fontSize: 20, cursor: 'pointer' }}>×</button>
             </div>
 
             {/* status badge */}
@@ -610,14 +610,14 @@ export default function ReelsZeitplanPage() {
 
             {/* topic */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Thema</label>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Thema</label>
               <input value={editTopic} onChange={e => setEditTopic(e.target.value)} style={inputStyle} />
             </div>
 
             {/* template */}
             {templates.length > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Vorlage</label>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Vorlage</label>
                 <select value={editTemplate} onChange={e => setEditTemplate(e.target.value)} style={inputStyle}>
                   <option value="">Keine Vorlage</option>
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -627,13 +627,13 @@ export default function ReelsZeitplanPage() {
 
             {/* keywords */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Keywords (Komma-getrennt)</label>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Keywords (Komma-getrennt)</label>
               <input value={editKeywords} onChange={e => setEditKeywords(e.target.value)} style={inputStyle} placeholder="z.B. GoPro, Berge, Abenteuer" />
             </div>
 
             {/* platforms */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Plattformen</label>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 6 }}>Plattformen</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['instagram','facebook'] as const).map(p => (
                   <button key={p}
@@ -648,11 +648,11 @@ export default function ReelsZeitplanPage() {
             {/* date + time */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Datum</label>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Datum</label>
                 <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} style={inputStyle} />
               </div>
               <div style={{ flex: '0 1 110px' }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Uhrzeit</label>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Uhrzeit</label>
                 <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} style={inputStyle} />
               </div>
             </div>
