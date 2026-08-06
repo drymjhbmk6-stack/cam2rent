@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Feedback {
   id: string;
@@ -86,10 +87,10 @@ function renderAnswer(value: unknown, type: 'stars' | 'nps' | 'text' | 'choice')
   }
 
   if (type === 'text' && typeof value === 'string') {
-    return <p className="text-sm text-slate-200 whitespace-pre-wrap">{value}</p>;
+    return <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--admin-text)' }}>{value}</p>;
   }
 
-  return <span className="text-sm text-slate-300">{String(value)}</span>;
+  return <span className="text-sm" style={{ color: 'var(--admin-text-2)' }}>{String(value)}</span>;
 }
 
 export default function BetaFeedbackAdmin() {
@@ -97,9 +98,12 @@ export default function BetaFeedbackAdmin() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const { error: toastError } = useToast();
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Feedback von ${name} wirklich löschen?`)) return;
+    const ok = await confirm({ title: 'Feedback löschen', message: `Feedback von ${name} wirklich löschen?`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/beta-feedback?id=${id}`, { method: 'DELETE' });
@@ -107,7 +111,7 @@ export default function BetaFeedbackAdmin() {
       setFeedbacks((prev) => prev.filter((f) => f.id !== id));
       if (expandedId === id) setExpandedId(null);
     } catch {
-      alert('Fehler beim Löschen.');
+      toastError('Fehler beim Löschen.');
     } finally {
       setDeletingId(null);
     }
@@ -161,9 +165,11 @@ export default function BetaFeedbackAdmin() {
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto">
-      <AdminBackLink label="Zurück" />
-      <h1 className="font-heading font-bold text-2xl text-white mb-2">Beta-Feedback Auswertung</h1>
-      <p className="text-sm text-slate-400 mb-8">{feedbacks.length} Feedback{feedbacks.length !== 1 ? 's' : ''} erhalten</p>
+      <PageHeader
+        backLabel="Zurück"
+        title="Beta-Feedback Auswertung"
+        subtitle={`${feedbacks.length} Feedback${feedbacks.length !== 1 ? 's' : ''} erhalten`}
+      />
 
       {feedbacks.length === 0 ? (
         <div className="text-center py-16 text-slate-500">Noch kein Feedback erhalten.</div>
@@ -171,28 +177,28 @@ export default function BetaFeedbackAdmin() {
         <>
           {/* Übersicht */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+            <div className="rounded-xl p-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
               <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Feedbacks</p>
-              <p className="text-2xl font-heading font-bold text-white">{feedbacks.length}</p>
+              <p className="text-2xl font-heading font-bold" style={{ color: 'var(--admin-heading)' }}>{feedbacks.length}</p>
             </div>
-            <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+            <div className="rounded-xl p-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
               <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">NPS Score</p>
               <p className={`text-2xl font-heading font-bold ${nps.score >= 50 ? 'text-green-400' : nps.score >= 0 ? 'text-amber-400' : 'text-red-400'}`}>{nps.score}</p>
             </div>
-            <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+            <div className="rounded-xl p-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
               <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Gutschein gewünscht</p>
               <p className="text-2xl font-heading font-bold text-cyan-400">{feedbacks.filter((f) => f.wants_gutschein).length}</p>
             </div>
-            <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+            <div className="rounded-xl p-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
               <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Durchschn. Design</p>
-              <p className="text-2xl font-heading font-bold text-white">{avgStar('q_design')} ★</p>
+              <p className="text-2xl font-heading font-bold" style={{ color: 'var(--admin-heading)' }}>{avgStar('q_design')} ★</p>
             </div>
           </div>
 
           {/* Sterne-Durchschnitte */}
-          <div className="rounded-xl overflow-hidden mb-8" style={{ background: '#111827', border: '1px solid #1e293b' }}>
-            <div className="px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
-              <h2 className="font-heading font-bold text-sm text-white">Bewertungen (Durchschnitt)</h2>
+          <div className="rounded-xl overflow-hidden mb-8" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
+            <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
+              <h2 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>Bewertungen (Durchschnitt)</h2>
             </div>
             <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-4">
               {STAR_QUESTIONS.map((q) => {
@@ -201,7 +207,7 @@ export default function BetaFeedbackAdmin() {
                   <div key={q.id}>
                     <p className="text-xs text-slate-400 mb-1">{q.label}</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-heading font-bold text-white">{avg}</span>
+                      <span className="text-lg font-heading font-bold" style={{ color: 'var(--admin-heading)' }}>{avg}</span>
                       <span className="text-amber-400">{'★'.repeat(Math.round(avg))}{'☆'.repeat(5 - Math.round(avg))}</span>
                     </div>
                   </div>
@@ -211,22 +217,22 @@ export default function BetaFeedbackAdmin() {
           </div>
 
           {/* NPS Aufschlüsselung */}
-          <div className="rounded-xl overflow-hidden mb-8" style={{ background: '#111827', border: '1px solid #1e293b' }}>
-            <div className="px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
-              <h2 className="font-heading font-bold text-sm text-white">NPS — Net Promoter Score</h2>
+          <div className="rounded-xl overflow-hidden mb-8" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
+            <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
+              <h2 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>NPS — Net Promoter Score</h2>
             </div>
             <div className="p-5 flex gap-6">
               <div className="text-center">
                 <p className="text-xs text-green-400 mb-1">Promoter (9-10)</p>
-                <p className="text-xl font-bold text-white">{nps.promoters}</p>
+                <p className="text-xl font-bold" style={{ color: 'var(--admin-heading)' }}>{nps.promoters}</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-amber-400 mb-1">Passiv (7-8)</p>
-                <p className="text-xl font-bold text-white">{nps.passives}</p>
+                <p className="text-xl font-bold" style={{ color: 'var(--admin-heading)' }}>{nps.passives}</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-red-400 mb-1">Kritiker (0-6)</p>
-                <p className="text-xl font-bold text-white">{nps.detractors}</p>
+                <p className="text-xl font-bold" style={{ color: 'var(--admin-heading)' }}>{nps.detractors}</p>
               </div>
             </div>
           </div>
@@ -241,13 +247,13 @@ export default function BetaFeedbackAdmin() {
             ].map((q) => {
               const stats = choiceStats(q.id);
               return (
-                <div key={q.id} className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+                <div key={q.id} className="rounded-xl p-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
                   <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-3">{q.label}</p>
                   <div className="space-y-2">
                     {stats.map((s) => (
                       <div key={s.option}>
                         <div className="flex justify-between text-xs mb-0.5">
-                          <span className="text-slate-300 truncate">{s.option}</span>
+                          <span className="truncate" style={{ color: 'var(--admin-text-2)' }}>{s.option}</span>
                           <span className="text-slate-500">{s.pct}%</span>
                         </div>
                         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -262,9 +268,9 @@ export default function BetaFeedbackAdmin() {
           </div>
 
           {/* Einzelne Feedbacks */}
-          <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid #1e293b' }}>
-            <div className="px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
-              <h2 className="font-heading font-bold text-sm text-white">Alle Feedbacks</h2>
+          <div className="rounded-xl overflow-hidden" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
+            <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
+              <h2 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>Alle Feedbacks</h2>
             </div>
             <div className="divide-y divide-[#1e293b]">
               {feedbacks.map((f) => (
@@ -272,7 +278,7 @@ export default function BetaFeedbackAdmin() {
                   <div className="w-full px-5 py-3 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors">
                     <button onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
                       className="flex-1 flex items-center gap-3 text-left min-w-0">
-                      <span className="text-sm font-heading font-semibold text-white truncate">{f.tester_name || 'Anonym'}</span>
+                      <span className="text-sm font-heading font-semibold truncate" style={{ color: 'var(--admin-heading)' }}>{f.tester_name || 'Anonym'}</span>
                       {f.tester_email && <span className="text-xs text-slate-500 truncate hidden sm:inline">{f.tester_email}</span>}
                       {f.wants_gutschein && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-900/50 text-cyan-400 flex-shrink-0">Gutschein</span>}
                     </button>
@@ -294,7 +300,7 @@ export default function BetaFeedbackAdmin() {
                         const val = f.answers?.[q.id];
                         const hasAnswer = val !== null && val !== undefined && val !== '' && !(Array.isArray(val) && val.length === 0);
                         return (
-                          <div key={q.id} className="rounded-lg p-3" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+                          <div key={q.id} className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)' }}>
                             <p className="text-xs font-heading font-semibold text-slate-400 mb-1.5">{q.label}</p>
                             <div>
                               {hasAnswer ? renderAnswer(val, q.type) : <span className="text-slate-600 italic text-xs">— keine Antwort —</span>}
@@ -304,7 +310,7 @@ export default function BetaFeedbackAdmin() {
                       })}
                       {/* Zusätzliche Felder aus answers die nicht in ALL_QUESTIONS stehen */}
                       {Object.keys(f.answers ?? {}).filter(k => !ALL_QUESTIONS.find(q => q.id === k)).length > 0 && (
-                        <details className="rounded-lg p-3" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+                        <details className="rounded-lg p-3" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)' }}>
                           <summary className="text-xs text-slate-500 cursor-pointer">Weitere Daten (Rohformat)</summary>
                           <pre className="text-xs text-slate-400 mt-2 overflow-auto">
                             {JSON.stringify(
