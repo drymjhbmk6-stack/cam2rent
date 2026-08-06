@@ -2080,6 +2080,23 @@ Optik → Intuitiv.
 - Verifiziert: tsc 0 Fehler, next lint 0 Fehler (nur pre-existing img-Warnings);
   Diff = alert/confirm-Ersatz + additive Toast-Aufrufe.
 
+#### Schritt 6 — Geteilte UI-Primitiven-Bibliothek (fertig 2026-08-06)
+- Neuer Baukasten unter **`components/admin/ui/`** (alle token-basiert, theme-aware,
+  barrierearm, rein additiv — **nichts** Bestehendes importiert sie bisher, null
+  Regressionsrisiko): `Button` (primary/secondary/danger/ghost + Lade-Spinner),
+  `Card`, `PageHeader` (Titel/Untertitel/Aktions-Slot + optional `AdminBackLink`),
+  `Modal` (`role=dialog`+`aria-modal`, **Fokus-Trap**, ESC, Backdrop, Fokus-Restore),
+  `EmptyState`, `Badge` + `BookingStatusBadge` (liest `BOOKING_STATUS_CONFIG`),
+  `Field`/`Input`/`Select`/`Textarea` (einheitlich, `fontSize:16` gegen iOS-Zoom,
+  `forwardRef`), `SearchInput` (mit Lupe), `Toolbar`/`Pill`/`SegmentedControl`.
+  Barrel `components/admin/ui/index.ts` für bequeme Importe (Feedback-Hooks bleiben
+  unter eigenem Pfad).
+- Bestehende `BulkBar`/`DateRangePicker` (in `app/admin/buchhaltung/components/shared/`)
+  bleiben vorerst dort; die Bulk-Auswahl wird mit der DataTable in Schritt 7
+  vereinheitlicht.
+- Verifiziert: tsc 0 Fehler, next lint 0 Fehler; `git status` = ausschließlich neue
+  Dateien.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
