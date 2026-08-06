@@ -53,13 +53,13 @@ export default function EmailVorlagenPage() {
   const editingOverride = editId ? overrides[editId] ?? null : null;
 
   return (
-    <div className="min-h-screen" style={{ background: '#0a0f1e' }}>
+    <div>
       <div className="max-w-5xl mx-auto px-6 py-8">
         <AdminBackLink label="Zurück zum Dashboard" href="/admin" />
 
         <div className="flex items-center gap-3 mb-2 flex-wrap">
-          <h1 className="font-heading font-bold text-xl text-white">E-Mail-Vorlagen</h1>
-          <span className="text-xs font-body px-2 py-0.5 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+          <h1 className="font-heading font-bold text-xl" style={{ color: 'var(--admin-heading)' }}>E-Mail-Vorlagen</h1>
+          <span className="text-xs font-body px-2 py-0.5 rounded-full" style={{ background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }}>
             {templates.length}
           </span>
           {customizedCount > 0 && (
@@ -98,7 +98,7 @@ export default function EmailVorlagenPage() {
 
         <div className="mt-8 p-4 rounded-xl" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
           <p className="text-xs font-body text-gray-400 leading-relaxed">
-            <strong style={{ color: '#e2e8f0' }}>Hinweis:</strong> Betreff und ein Einleitungstext lassen sich pro Vorlage anpassen.
+            <strong style={{ color: 'var(--admin-text)' }}>Hinweis:</strong> Betreff und ein Einleitungstext lassen sich pro Vorlage anpassen.
             Die Anpassungen werden in <code className="text-cyan-400">admin_settings.email_template_overrides</code> gespeichert
             und greifen sofort — bei echten Versendungen, manuellem Versand aus Buchungsdetails und in dieser Vorschau.
             Tieferreichende Änderungen (komplettes Layout, Tabellen, Anhänge) werden weiterhin im Code gepflegt
@@ -141,10 +141,10 @@ function TemplateCard({
   return (
     <div
       className="rounded-2xl border p-5"
-      style={{ background: '#111827', borderColor: hasOverride ? 'rgba(245,158,11,0.45)' : '#1e293b' }}
+      style={{ background: 'var(--admin-surface)', borderColor: hasOverride ? 'rgba(245,158,11,0.45)' : 'var(--admin-border)' }}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
-        <h2 className="font-heading font-semibold text-sm text-white leading-tight">
+        <h2 className="font-heading font-semibold text-sm leading-tight" style={{ color: 'var(--admin-heading)' }}>
           {template.name}
         </h2>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -160,8 +160,8 @@ function TemplateCard({
           <span
             className="text-[10px] font-heading font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
             style={{
-              background: isCustomer ? 'rgba(6,182,212,0.15)' : 'rgba(245,158,11,0.15)',
-              color: isCustomer ? '#06b6d4' : '#f59e0b',
+              background: isCustomer ? 'var(--admin-accent-soft)' : 'rgba(245,158,11,0.15)',
+              color: isCustomer ? 'var(--admin-accent)' : '#f59e0b',
             }}
           >
             {isCustomer ? 'Kunde' : 'Admin'}
@@ -175,7 +175,7 @@ function TemplateCard({
         <button
           onClick={onPreview}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors"
-          style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+          style={{ background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', border: '1px solid rgba(6,182,212,0.3)' }}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -198,7 +198,7 @@ function TemplateCard({
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors"
-          style={{ color: '#94a3b8', border: '1px solid #1e293b' }}
+          style={{ color: 'var(--admin-muted)', border: '1px solid var(--admin-border)' }}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -220,18 +220,18 @@ function PreviewModal({ id, onClose }: { id: string; onClose: () => void }) {
     >
       <div
         className="w-full max-w-4xl h-[85vh] rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: '#111827', border: '1px solid #1e293b' }}
+        style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
+        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
           <div>
-            <h3 className="font-heading font-bold text-sm text-white">E-Mail-Vorschau</h3>
+            <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>E-Mail-Vorschau</h3>
             <code className="text-[11px] text-gray-500">{id}</code>
           </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg transition-colors"
-            style={{ color: '#94a3b8' }}
+            style={{ color: 'var(--admin-muted)' }}
             aria-label="Schließen"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -330,18 +330,18 @@ function EditModal({
     >
       <div
         className="w-full max-w-5xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: '#111827', border: '1px solid #1e293b' }}
+        style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
+        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--admin-border)' }}>
           <div>
-            <h3 className="font-heading font-bold text-sm text-white">{template.name} · bearbeiten</h3>
+            <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--admin-heading)' }}>{template.name} · bearbeiten</h3>
             <code className="text-[11px] text-gray-500">{template.id}</code>
           </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg transition-colors"
-            style={{ color: '#94a3b8' }}
+            style={{ color: 'var(--admin-muted)' }}
             aria-label="Schließen"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -367,8 +367,8 @@ function EditModal({
               onChange={(e) => setSubject(e.target.value)}
               maxLength={250}
               placeholder="z. B. Willkommen bei cam2rent — deine Buchung"
-              className="w-full rounded-lg px-3 py-2 text-base text-white"
-              style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}
+              className="w-full rounded-lg px-3 py-2 text-base"
+              style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', color: 'var(--admin-text)' }}
             />
             <p className="mt-1 text-[11px] text-gray-500">
               Maximal 250 Zeichen. Wenn leer, wird der Standard-Betreff aus dem Code verwendet.
@@ -384,8 +384,8 @@ function EditModal({
               onChange={(e) => setIntroHtml(e.target.value)}
               rows={6}
               placeholder={'Wird direkt nach der Hauptüberschrift eingefügt.\nErlaubte Tags: <b>, <i>, <p>, <br>, <a href="...">, <ul>, <li>'}
-              className="w-full rounded-lg px-3 py-2 text-base text-white font-mono"
-              style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}
+              className="w-full rounded-lg px-3 py-2 text-base font-mono"
+              style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', color: 'var(--admin-text)' }}
             />
             <p className="mt-1 text-[11px] text-gray-500">
               Erlaubt einen begrenzten HTML-Subset (<code>b, i, p, br, a, ul, ol, li, h2, h3, span</code>).
@@ -401,7 +401,7 @@ function EditModal({
                 refreshPreview();
               }}
               className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold"
-              style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+              style={{ background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', border: '1px solid rgba(6,182,212,0.3)' }}
             >
               {showLivePreview ? 'Vorschau ausblenden' : 'Vorschau anzeigen'}
             </button>
@@ -410,7 +410,7 @@ function EditModal({
                 type="button"
                 onClick={refreshPreview}
                 className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold"
-                style={{ color: '#94a3b8', border: '1px solid #1e293b' }}
+                style={{ color: 'var(--admin-muted)', border: '1px solid var(--admin-border)' }}
               >
                 Vorschau aktualisieren
               </button>
@@ -425,14 +425,14 @@ function EditModal({
               key={previewBust}
               src={`/api/admin/email-templates/preview?id=${encodeURIComponent(template.id)}&_=${previewBust}`}
               className="w-full bg-white rounded-xl"
-              style={{ border: '1px solid #1e293b', height: '60vh' }}
+              style={{ border: '1px solid var(--admin-border)', height: '60vh' }}
               title="Live-Vorschau"
               sandbox=""
             />
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 px-5 py-3" style={{ borderTop: '1px solid #1e293b' }}>
+        <div className="flex items-center justify-between gap-3 px-5 py-3" style={{ borderTop: '1px solid var(--admin-border)' }}>
           <button
             type="button"
             onClick={handleReset}
@@ -447,7 +447,7 @@ function EditModal({
               type="button"
               onClick={onClose}
               className="px-3 py-2 rounded-lg text-xs font-heading font-semibold"
-              style={{ color: '#94a3b8', border: '1px solid #1e293b' }}
+              style={{ color: 'var(--admin-muted)', border: '1px solid var(--admin-border)' }}
             >
               Abbrechen
             </button>
@@ -456,7 +456,7 @@ function EditModal({
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 rounded-lg text-xs font-heading font-semibold disabled:opacity-50"
-              style={{ background: '#06b6d4', color: '#0a0f1e' }}
+              style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' }}
             >
               {saving ? 'Speichere…' : 'Speichern'}
             </button>
