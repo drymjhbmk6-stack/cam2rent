@@ -9,12 +9,12 @@ interface AccessoryOption { id: string; name: string; category?: string; }
 interface SetOption { id: string; name: string; productIds: string[]; }
 
 const S = {
-  input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
-  select: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  row: { background: '#0a0f1e', borderRadius: 8, padding: '10px 12px', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } as React.CSSProperties,
-  section: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 } as React.CSSProperties,
-  cyan: '#06b6d4',
+  input: { background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14 } as React.CSSProperties,
+  select: { background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14, appearance: 'none' as const, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
+  label: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
+  row: { background: 'var(--admin-bg)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--admin-border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } as React.CSSProperties,
+  section: { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 24, marginBottom: 24 } as React.CSSProperties,
+  cyan: 'var(--admin-accent)',
 };
 
 function toDateInput(iso: string | null): string {
@@ -36,13 +36,13 @@ function dayEndIso(dateStr: string): string | null {
 
 function getDiscountStatus(d: ProductDiscount): { label: string; color: string; bg: string } {
   const now = new Date();
-  if (!d.active) return { label: 'Deaktiviert', color: '#94a3b8', bg: '#33415544' };
+  if (!d.active) return { label: 'Deaktiviert', color: 'var(--admin-muted)', bg: '#33415544' };
   if (d.valid_from && new Date(d.valid_from) > now) {
     const days = Math.ceil((new Date(d.valid_from).getTime() - now.getTime()) / 86400000);
     return { label: days > 0 ? `Startet in ${days} Tag${days === 1 ? '' : 'en'}` : 'Wartet auf Start', color: '#fbbf24', bg: '#f59e0b22' };
   }
   if (d.valid_until && new Date(d.valid_until) < now) {
-    return { label: 'Abgelaufen', color: '#ef4444', bg: '#ef444422' };
+    return { label: 'Abgelaufen', color: 'var(--admin-danger)', bg: '#ef444422' };
   }
   return { label: 'Aktiv jetzt', color: '#10b981', bg: '#10b98122' };
 }
@@ -58,7 +58,7 @@ function PillButton({
   label: string;
   tone?: 'cyan' | 'violet' | 'amber';
 }) {
-  const accent = tone === 'violet' ? '#a855f7' : tone === 'amber' ? '#f59e0b' : '#06b6d4';
+  const accent = tone === 'violet' ? '#a855f7' : tone === 'amber' ? '#f59e0b' : 'var(--admin-accent)';
   return (
     <button
       type="button"
@@ -66,9 +66,9 @@ function PillButton({
       style={{
         fontSize: 12,
         fontWeight: 600,
-        color: active ? 'white' : '#94a3b8',
+        color: active ? 'white' : 'var(--admin-muted)',
         background: active ? accent : 'transparent',
-        border: `1px solid ${active ? accent : '#334155'}`,
+        border: `1px solid ${active ? accent : 'var(--admin-faint)'}`,
         borderRadius: 999,
         padding: '6px 12px',
         cursor: 'pointer',
@@ -255,22 +255,22 @@ export default function AdminRabattePage() {
   return (
     <div style={{ padding: '20px 16px', maxWidth: 750, margin: '0 auto' }}>
       <AdminBackLink label="Zurück" />
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>Rabatte</h1>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 28 }}>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 2 }}>Rabatte</h1>
+      <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', marginBottom: 28 }}>
         Automatische Kunden- und Produktrabatte konfigurieren
       </p>
 
       {/* ━━━ BEREICH 1: KUNDENRABATTE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div style={{ marginBottom: 36 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#06b6d414', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="16" height="16" fill="none" stroke="#06b6d4" viewBox="0 0 24 24">
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--admin-accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="16" height="16" fill="none" stroke="var(--admin-accent)" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
           <div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Kundenrabatte</h2>
-            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Automatisch basierend auf Mietdauer, Treue und Empfehlungen</p>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Kundenrabatte</h2>
+            <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', margin: 0 }}>Automatisch basierend auf Mietdauer, Treue und Empfehlungen</p>
           </div>
         </div>
 
@@ -280,27 +280,27 @@ export default function AdminRabattePage() {
             <svg width="18" height="18" fill="none" stroke="#f59e0b" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Mengenrabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Bei längerer Mietdauer</span>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Mengenrabatte</h3>
+            <span style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>Bei längerer Mietdauer</span>
           </div>
-          {durationLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+          {durationLoading ? <div style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {durationDiscounts.map((d, i) => (
                 <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_days}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], min_days: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Tagen</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>Tagen</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setDurationDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...durationDiscounts]; a[i] = { ...a[i], label: e.target.value }; setDurationDiscounts(a); }}
                     style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setDurationDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                    style={{ color: 'var(--admin-danger)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
               ))}
               <button onClick={() => setDurationDiscounts((p) => [...p, { min_days: p.length ? Math.max(...p.map((d) => d.min_days)) + 5 : 5, discount_percent: 5, label: 'Neuer Mengenrabatt' }])}
@@ -324,27 +324,27 @@ export default function AdminRabattePage() {
             <svg width="18" height="18" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
             </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Treuerabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Nach Anzahl Buchungen</span>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Treuerabatte</h3>
+            <span style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>Nach Anzahl Buchungen</span>
           </div>
-          {loyaltyLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+          {loyaltyLoading ? <div style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {loyaltyDiscounts.map((d, i) => (
                 <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_bookings}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], min_bookings: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Buchungen</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>Buchungen</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setLoyaltyDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...loyaltyDiscounts]; a[i] = { ...a[i], label: e.target.value }; setLoyaltyDiscounts(a); }}
                     style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setLoyaltyDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                    style={{ color: 'var(--admin-danger)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
               ))}
               <button onClick={() => setLoyaltyDiscounts((p) => [...p, { min_bookings: p.length ? Math.max(...p.map((d) => d.min_bookings)) + 5 : 3, discount_percent: 5, label: 'Neuer Treuerabatt' }])}
@@ -368,27 +368,27 @@ export default function AdminRabattePage() {
             <svg width="18" height="18" fill="none" stroke="#10b981" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Frühbucherrabatte</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Bei Vorlauf vor Mietbeginn</span>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Frühbucherrabatte</h3>
+            <span style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>Bei Vorlauf vor Mietbeginn</span>
           </div>
-          {earlyBirdLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+          {earlyBirdLoading ? <div style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {earlyBirdDiscounts.map((d, i) => (
                 <div key={i} style={S.row}>
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>ab</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>ab</span>
                   <input type="number" min="1" value={d.min_weeks}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], min_weeks: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>Wochen voraus</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>Wochen voraus</span>
                   <input type="number" min="0" max="100" value={d.discount_percent}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setEarlyBirdDiscounts(a); }}
                     style={{ ...S.input, width: 60, textAlign: 'center', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }}>%</span>
+                  <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', flexShrink: 0 }}>%</span>
                   <input type="text" value={d.label}
                     onChange={(e) => { const a = [...earlyBirdDiscounts]; a[i] = { ...a[i], label: e.target.value }; setEarlyBirdDiscounts(a); }}
                     style={{ ...S.input, flex: '1 1 160px', minWidth: 140 }} />
                   <button onClick={() => setEarlyBirdDiscounts((p) => p.filter((_, j) => j !== i))}
-                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                    style={{ color: 'var(--admin-danger)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
               ))}
               <button onClick={() => setEarlyBirdDiscounts((p) => [...p, { min_weeks: p.length ? Math.max(...p.map((d) => d.min_weeks)) + 2 : 2, discount_percent: 5, label: 'Neuer Frühbucherrabatt' }])}
@@ -412,17 +412,17 @@ export default function AdminRabattePage() {
             <svg width="18" height="18" fill="none" stroke="#10b981" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Empfehlungsbonus</h3>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Gutscheinwert pro erfolgreicher Empfehlung</span>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Empfehlungsbonus</h3>
+            <span style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>Gutscheinwert pro erfolgreicher Empfehlung</span>
           </div>
-          {rewardLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+          {rewardLoading ? <div style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={S.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>Gutscheinwert</span>
+                <span style={{ fontSize: 13, color: 'var(--admin-muted)' }}>Gutscheinwert</span>
                 <input type="number" min="0" step="1" value={rewardValue}
                   onChange={(e) => setRewardValue(parseInt(e.target.value) || 0)}
                   style={{ ...S.input, width: 80, textAlign: 'center' }} />
-                <span style={{ fontSize: 12, color: '#64748b' }}>EUR</span>
+                <span style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>EUR</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                 <button onClick={() => saveConfig('referral_reward_value', rewardValue, setRewardSaving, setRewardSuccess)} disabled={rewardSaving}
@@ -445,26 +445,26 @@ export default function AdminRabattePage() {
             </svg>
           </div>
           <div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Produktrabatte</h2>
-            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Aktionen auf Mietpreise (z.B. Black Friday, Sommer-Sale)</p>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Produktrabatte</h2>
+            <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', margin: 0 }}>Aktionen auf Mietpreise (z.B. Black Friday, Sommer-Sale)</p>
           </div>
         </div>
 
         <div style={S.section}>
-          {productLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
+          {productLoading ? <div style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {productDiscounts.map((d, i) => {
                 const isOpen = openDiscountIdx === i;
                 const status = getDiscountStatus(d);
                 return (
-                <div key={d.id} style={{ background: '#0a0f1e', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
+                <div key={d.id} style={{ background: 'var(--admin-bg)', borderRadius: 10, border: '1px solid var(--admin-border)', padding: 16 }}>
                   {/* Header-Zeile: Aktiv-Toggle + Status + Toggle + Entfernen */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: isOpen ? 14 : 0, paddingBottom: isOpen ? 10 : 0, borderBottom: isOpen ? '1px solid #1e293b' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: isOpen ? 14 : 0, paddingBottom: isOpen ? 10 : 0, borderBottom: isOpen ? '1px solid var(--admin-border)' : 'none' }}>
                     <button type="button"
                       onClick={() => setOpenDiscountIdx(isOpen ? null : i)}
                       style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, padding: 0, textAlign: 'left' }}>
-                      <span style={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 13, color: 'var(--admin-muted)', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--admin-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {d.name || 'Unbenannte Aktion'}
                       </span>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: status.bg, color: status.color, flexShrink: 0 }}>
@@ -475,7 +475,7 @@ export default function AdminRabattePage() {
                       <input type="checkbox" checked={d.active}
                         onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], active: e.target.checked }; setProductDiscounts(a); }}
                         style={{ width: 16, height: 16, accentColor: S.cyan }} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: d.active ? '#10b981' : 'var(--admin-text-dim)' }}>
                         {d.active ? 'Aktiv' : 'Inaktiv'}
                       </span>
                     </label>
@@ -484,7 +484,7 @@ export default function AdminRabattePage() {
                   {isOpen && (<>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                     <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
-                      style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+                      style={{ fontSize: 12, fontWeight: 600, color: 'var(--admin-danger)', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
                       Entfernen
                     </button>
                   </div>
@@ -511,8 +511,8 @@ export default function AdminRabattePage() {
                               style={{
                                 fontSize: 13, fontWeight: 600, padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
                                 background: cur === t ? S.cyan : 'transparent',
-                                color: cur === t ? 'white' : '#94a3b8',
-                                border: `1px solid ${cur === t ? S.cyan : '#334155'}`,
+                                color: cur === t ? 'white' : 'var(--admin-muted)',
+                                border: `1px solid ${cur === t ? S.cyan : 'var(--admin-faint)'}`,
                                 minWidth: 48,
                               }}>
                               {labels[t]}
@@ -526,7 +526,7 @@ export default function AdminRabattePage() {
                             inputMode="decimal"
                             onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setProductDiscounts(a); }}
                             style={{ ...S.input, width: 90, textAlign: 'center' }} />
-                          <span style={{ fontSize: 13, color: '#94a3b8' }}>%</span>
+                          <span style={{ fontSize: 13, color: 'var(--admin-muted)' }}>%</span>
                         </div>
                       )}
                       {d.discount_type === 'fixed' && (
@@ -536,7 +536,7 @@ export default function AdminRabattePage() {
                             onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_amount: parseFloat(e.target.value) || 0 }; setProductDiscounts(a); }}
                             style={{ ...S.input, width: 110, textAlign: 'center' }}
                             placeholder="0,00" />
-                          <span style={{ fontSize: 13, color: '#94a3b8' }}>€</span>
+                          <span style={{ fontSize: 13, color: 'var(--admin-muted)' }}>€</span>
                         </div>
                       )}
                       {d.discount_type === 'free' && (
@@ -581,7 +581,7 @@ export default function AdminRabattePage() {
                     </div>
                     {accessories.length > 0 && (
                       <>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           Zubehör (Mehrfach möglich)
                         </p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -599,7 +599,7 @@ export default function AdminRabattePage() {
                     )}
                     {sets.length > 0 && (
                       <>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           Sets (Mehrfach möglich)
                         </p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -620,14 +620,14 @@ export default function AdminRabattePage() {
                         </div>
                       </>
                     )}
-                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 10 }}>
+                    <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 10 }}>
                       Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile/Sets.
                       Mehrere Aktionen können gleichzeitig aktiv sein und stacken (höchste pro Kategorie gewinnt).
                     </p>
                   </div>
 
                   {/* Cart-Level Toggle */}
-                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
+                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)' }}>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
                       <input type="checkbox" checked={!!d.applies_to_cart}
                         onChange={(e) => {
@@ -637,8 +637,8 @@ export default function AdminRabattePage() {
                         }}
                         style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
                       <div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Auf Warenkorb-Gesamt anwenden</span>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Auf Warenkorb-Gesamt anwenden</span>
+                        <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', margin: '2px 0 0 0' }}>
                           Wenn aktiviert, gilt der Rabatt auf den Gesamtbetrag (Mietpreis + Zubehör) der Buchung — unabhängig von den Targets oben.
                         </p>
                       </div>
@@ -646,7 +646,7 @@ export default function AdminRabattePage() {
                   </div>
 
                   {/* Not-combinable Toggle */}
-                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
+                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)' }}>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
                       <input type="checkbox" checked={!!d.not_combinable}
                         onChange={(e) => {
@@ -656,8 +656,8 @@ export default function AdminRabattePage() {
                         }}
                         style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
                       <div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar</span>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar</span>
+                        <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', margin: '2px 0 0 0' }}>
                           Wenn aktiviert, deaktiviert diese Aktion automatisch den Mietdauer- und Stammkunden-Rabatt — z.B. damit eine „50 %-Aktion&ldquo; exakt 50 % bedeutet und nicht durch andere Rabatte zusätzlich vergünstigt wird.
                         </p>
                       </div>
@@ -702,7 +702,7 @@ export default function AdminRabattePage() {
               </div>
 
               {productDiscounts.length === 0 && (
-                <div style={{ padding: '12px 16px', borderRadius: 8, background: '#f59e0b08', border: '1px solid #f59e0b20', color: '#94a3b8', fontSize: 12 }}>
+                <div style={{ padding: '12px 16px', borderRadius: 8, background: '#f59e0b08', border: '1px solid #f59e0b20', color: 'var(--admin-muted)', fontSize: 12 }}>
                   <strong style={{ color: '#fbbf24' }}>Tipp:</strong> Erstelle z.B. eine Black-Friday-Aktion mit 25% auf alle Kameras
                   und setze ein Start-/Enddatum. Der Rabatt wird automatisch auf den Mietpreis im Checkout angezeigt.
                 </div>
