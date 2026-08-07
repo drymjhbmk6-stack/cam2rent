@@ -99,10 +99,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Sonstiges',
 };
 
-const cyan = '#06b6d4';
-const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20 };
-const input: React.CSSProperties = { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, width: '100%' };
-const label: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' };
+const cyan = 'var(--admin-accent)';
+const card: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 20 };
+const input: React.CSSProperties = { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 8, padding: '8px 10px', color: 'var(--admin-text)', fontSize: 13, width: '100%' };
+const label: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' };
 
 export default function RechnungUploadPage() {
   const [stage, setStage] = useState<'upload' | 'processing' | 'classify' | 'done'>('upload');
@@ -297,20 +297,20 @@ export default function RechnungUploadPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ padding: '24px 20px', color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <AdminBackLink href="/admin/einkauf" label="Zurueck zu Einkauf" />
 
-        <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginTop: 16, marginBottom: 6 }}>
+        <h1 style={{ color: 'var(--admin-heading)', fontSize: 28, fontWeight: 800, marginTop: 16, marginBottom: 6 }}>
           Rechnung hochladen
         </h1>
-        <p style={{ color: '#94a3b8', marginBottom: 24, fontSize: 14 }}>
+        <p style={{ color: 'var(--admin-muted)', marginBottom: 24, fontSize: 14 }}>
           Lade eine PDF-Rechnung oder ein Foto hoch. Claude analysiert Lieferant, Positionen und Summen.
           Klassifiziere anschliessend jede Position als Anlagegut (mit AfA) oder Betriebsausgabe.
         </p>
 
         {error && (
-          <div style={{ ...card, borderColor: '#ef4444', background: 'rgba(239,68,68,0.1)', marginBottom: 20 }}>
+          <div style={{ ...card, borderColor: 'var(--admin-danger)', background: 'rgba(239,68,68,0.1)', marginBottom: 20 }}>
             <p style={{ color: '#fca5a5', fontWeight: 600 }}>{error}</p>
           </div>
         )}
@@ -322,15 +322,15 @@ export default function RechnungUploadPage() {
               onDrop={(e) => { e.preventDefault(); addPickedFiles(e.dataTransfer.files); }}
               onClick={() => fileRef.current?.click()}
               style={{
-                border: '2px dashed #334155', borderRadius: 12, padding: 48, textAlign: 'center',
-                cursor: 'pointer', background: '#0a0f1e',
+                border: '2px dashed var(--admin-faint)', borderRadius: 12, padding: 48, textAlign: 'center',
+                cursor: 'pointer', background: 'var(--admin-input-bg)',
               }}
             >
               <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
-              <p style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              <p style={{ color: 'var(--admin-text)', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
                 Rechnungen / Quittungen hierher ziehen oder klicken
               </p>
-              <p style={{ color: '#64748b', fontSize: 13 }}>
+              <p style={{ color: 'var(--admin-text-dim)', fontSize: 13 }}>
                 PDF, JPG, PNG oder WebP — max. 20 MB pro Datei, bis zu 10 Dateien
               </p>
               <input
@@ -350,10 +350,10 @@ export default function RechnungUploadPage() {
                   {pickedFiles.map((pf, i) => (
                     <li key={i} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
-                      background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+                      background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '8px 10px',
                     }}>
                       <span style={{ fontSize: 16 }}>{i === 0 ? '🤖' : '📎'}</span>
-                      <span style={{ flex: 1, color: '#e2e8f0', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ flex: 1, color: 'var(--admin-text)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {pf.file.name}
                         {i === 0 && <span style={{ color: cyan, fontSize: 11, marginLeft: 8 }}>(KI-Analyse)</span>}
                       </span>
@@ -367,7 +367,7 @@ export default function RechnungUploadPage() {
                         disabled={i === 0}
                         title={i === 0 ? 'Hauptrechnung wird immer als "Rechnung" gespeichert' : 'Belegtyp wählen'}
                         style={{
-                          background: '#111827', color: '#e2e8f0', border: '1px solid #1e293b',
+                          background: 'var(--admin-surface)', color: 'var(--admin-text)', border: '1px solid var(--admin-border)',
                           borderRadius: 6, padding: '4px 8px', fontSize: 12, opacity: i === 0 ? 0.6 : 1,
                         }}
                       >
@@ -379,7 +379,7 @@ export default function RechnungUploadPage() {
                         onClick={(e) => { e.stopPropagation(); setPickedFiles(pickedFiles.filter((_, j) => j !== i)); }}
                         style={{
                           background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
-                          color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                          color: 'var(--admin-danger)', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
                         }}
                         title="Entfernen"
                       >
@@ -392,7 +392,7 @@ export default function RechnungUploadPage() {
                   <button
                     onClick={processPickedFiles}
                     style={{
-                      padding: '12px 24px', borderRadius: 10, background: cyan, color: '#0f172a',
+                      padding: '12px 24px', borderRadius: 10, background: cyan, color: 'var(--admin-primary-text)',
                       border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer',
                     }}
                   >
@@ -400,7 +400,7 @@ export default function RechnungUploadPage() {
                   </button>
                   <button
                     onClick={() => setPickedFiles([])}
-                    style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid #1e293b', color: '#94a3b8', background: 'transparent', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                    style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid var(--admin-border)', color: 'var(--admin-muted)', background: 'transparent', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                   >
                     Liste leeren
                   </button>
@@ -408,7 +408,7 @@ export default function RechnungUploadPage() {
               </div>
             )}
 
-            <p style={{ color: '#64748b', fontSize: 12, marginTop: 16, lineHeight: 1.5 }}>
+            <p style={{ color: 'var(--admin-text-dim)', fontSize: 12, marginTop: 16, lineHeight: 1.5 }}>
               Hinweis: Die KI analysiert nur die <strong>erste</strong> Datei (Hauptrechnung). Weitere Dateien werden ohne KI als Belege angehängt — perfekt für Quittungen, Lieferscheine oder Folgeseiten.
               Kosten: ~0,01-0,03 € pro KI-Analyse.
             </p>
@@ -419,7 +419,7 @@ export default function RechnungUploadPage() {
           <div style={card}>
             <div style={{ textAlign: 'center', padding: 32 }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-              <p style={{ color: '#e2e8f0', fontSize: 16 }}>{progress}</p>
+              <p style={{ color: 'var(--admin-text)', fontSize: 16 }}>{progress}</p>
             </div>
           </div>
         )}
@@ -436,21 +436,21 @@ export default function RechnungUploadPage() {
               </div>
             )}
             <div style={{ ...card, marginBottom: 20 }}>
-              <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
+              <h2 style={{ color: 'var(--admin-heading)', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
                 Rechnungs-Metadaten (von KI extrahiert)
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
                 <div>
                   <span style={label}>Lieferant</span>
-                  <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{supplierName}</div>
+                  <div style={{ color: 'var(--admin-text)', fontWeight: 600 }}>{supplierName}</div>
                 </div>
                 <div>
                   <span style={label}>Rechnungsnummer</span>
-                  <div style={{ color: '#e2e8f0' }}>{invoiceNumber || '—'}</div>
+                  <div style={{ color: 'var(--admin-text)' }}>{invoiceNumber || '—'}</div>
                 </div>
                 <div>
                   <span style={label}>Datum</span>
-                  <div style={{ color: '#e2e8f0' }}>{invoiceDate || '—'}</div>
+                  <div style={{ color: 'var(--admin-text)' }}>{invoiceDate || '—'}</div>
                 </div>
                 <div>
                   <span style={label}>Summe (brutto)</span>
@@ -460,19 +460,19 @@ export default function RechnungUploadPage() {
             </div>
 
             <div style={{ ...card, marginBottom: 20 }}>
-              <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+              <h2 style={{ color: 'var(--admin-heading)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
                 Positionen klassifizieren
               </h2>
-              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
+              <p style={{ color: 'var(--admin-text-dim)', fontSize: 13, marginBottom: 20 }}>
                 Claude hat fuer jede Position einen Vorschlag gemacht. Pruefe und korrigiere.
               </p>
 
               {items.map((row) => (
-                <div key={row.id} style={{ borderTop: '1px solid #1e293b', padding: '16px 0' }}>
+                <div key={row.id} style={{ borderTop: '1px solid var(--admin-border)', padding: '16px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, gap: 16 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>{row.product_name}</div>
-                      <div style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
+                      <div style={{ color: 'var(--admin-text)', fontWeight: 600, fontSize: 14 }}>{row.product_name}</div>
+                      <div style={{ color: 'var(--admin-text-dim)', fontSize: 12, marginTop: 4 }}>
                         {row.quantity}x · Netto {formatCurrency(row.net_price ?? 0)} · {row.tax_rate ?? 19}% USt
                       </div>
                     </div>
@@ -490,9 +490,9 @@ export default function RechnungUploadPage() {
                             onClick={() => updateDraft(row.id, { classification: c })}
                             title={c === 'gwg' ? 'Geringwertiges Wirtschaftsgut: sofort als Aufwand verbucht (EÜR) UND ins Anlagenverzeichnis (GWG-Pflicht ab 250 €).' : undefined}
                             style={{
-                              padding: '6px 12px', borderRadius: 6, border: '1px solid #334155',
+                              padding: '6px 12px', borderRadius: 6, border: '1px solid var(--admin-faint)',
                               background: active ? activeColor : 'transparent',
-                              color: active ? '#0f172a' : '#94a3b8',
+                              color: active ? 'var(--admin-primary-text)' : 'var(--admin-muted)',
                               fontWeight: 600, fontSize: 12, cursor: 'pointer',
                             }}
                           >
@@ -504,8 +504,8 @@ export default function RechnungUploadPage() {
                   </div>
 
                   {row.ai_suggestion?.suggested_classification && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                      KI-Vorschlag: <strong style={{ color: '#94a3b8' }}>{
+                    <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 8 }}>
+                      KI-Vorschlag: <strong style={{ color: 'var(--admin-muted)' }}>{
                         row.ai_suggestion.suggested_classification === 'asset' ? 'Anlagegut' :
                         row.ai_suggestion.suggested_classification === 'gwg' ? 'GWG (sofort)' : 'Ausgabe'
                       }</strong>
@@ -531,7 +531,7 @@ export default function RechnungUploadPage() {
                           </option>
                         ))}
                       </select>
-                      <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>
+                      <span style={{ fontSize: 10, color: 'var(--admin-text-dim)', display: 'block' }}>
                         {row.draft?.link_to_asset_id
                           ? '✓ Diese Position wird der gewählten Anlage als Beleg zugeordnet. Wenn die Anlage noch keinen Kaufpreis hat, wird er aus dieser Position übernommen.'
                           : 'Wenn leer: neue Anlage wird automatisch angelegt mit den Feldern unten.'}
@@ -558,7 +558,7 @@ export default function RechnungUploadPage() {
                       <div>
                         <span style={label}>Restwert (€)</span>
                         <input style={input} type="number" inputMode="decimal" step="0.01" min={0} value={row.draft.residual_value ?? 0} onChange={(e) => updateDraft(row.id, { residual_value: Number(e.target.value) })} />
-                        <span style={{ fontSize: 10, color: '#64748b', marginTop: 2, display: 'block' }}>Default 30 % vom Kaufpreis — Zeitwert fällt nicht darunter</span>
+                        <span style={{ fontSize: 10, color: 'var(--admin-text-dim)', marginTop: 2, display: 'block' }}>Default 30 % vom Kaufpreis — Zeitwert fällt nicht darunter</span>
                       </div>
                       <div>
                         <span style={label}>Seriennummer</span>
@@ -590,7 +590,7 @@ export default function RechnungUploadPage() {
                             return <span style={{ display: 'block', marginTop: 4, color: '#fca5a5' }}>⚠ Nettobetrag {formatCurrency(netto)} liegt über 800 € — eigentlich Pflicht zu linearer AfA. GWG nur auswählen, wenn du die Konsequenzen kennst.</span>;
                           }
                           if (netto < GWG_NETTO_MIN && netto > 0) {
-                            return <span style={{ display: 'block', marginTop: 4, color: '#94a3b8' }}>Hinweis: Unter 250 € netto reicht eigentlich &bdquo;Ausgabe&ldquo; — kein Verzeichnis-Eintrag nötig.</span>;
+                            return <span style={{ display: 'block', marginTop: 4, color: 'var(--admin-muted)' }}>Hinweis: Unter 250 € netto reicht eigentlich &bdquo;Ausgabe&ldquo; — kein Verzeichnis-Eintrag nötig.</span>;
                           }
                           return null;
                         })()}
@@ -652,7 +652,7 @@ export default function RechnungUploadPage() {
                             </option>
                           ))}
                         </select>
-                        <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: 'var(--admin-text-dim)', display: 'block', marginTop: 4 }}>
                           Verkn&uuml;pft die Ausgabe mit einer Anlage (z.B. SD-Karte f&uuml;r &bdquo;GoPro Hero13&ldquo;) &mdash; taucht sp&auml;ter unter der Anlage als Folgekosten auf. Buchhaltungs-relevant ist die Verkn&uuml;pfung nicht.
                         </span>
                       </div>
@@ -663,14 +663,14 @@ export default function RechnungUploadPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <a href="/admin/einkauf" style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid #1e293b', color: '#94a3b8', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
+              <a href="/admin/einkauf" style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid var(--admin-border)', color: 'var(--admin-muted)', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
                 Abbrechen
               </a>
               <button
                 onClick={saveAll}
                 disabled={saving}
                 style={{
-                  padding: '12px 24px', borderRadius: 10, background: cyan, color: '#0f172a',
+                  padding: '12px 24px', borderRadius: 10, background: cyan, color: 'var(--admin-primary-text)',
                   border: 'none', fontWeight: 700, fontSize: 13, cursor: saving ? 'wait' : 'pointer',
                   opacity: saving ? 0.7 : 1,
                 }}
@@ -685,15 +685,15 @@ export default function RechnungUploadPage() {
           <div style={card}>
             <div style={{ textAlign: 'center', padding: 40 }}>
               <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-              <h2 style={{ color: '#f1f5f9', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Rechnung verbucht</h2>
-              <p style={{ color: '#94a3b8', marginBottom: 24 }}>
+              <h2 style={{ color: 'var(--admin-heading)', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Rechnung verbucht</h2>
+              <p style={{ color: 'var(--admin-muted)', marginBottom: 24 }}>
                 Alle Positionen wurden als Anlagegut oder Ausgabe erfasst.
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                <a href="/admin/einkauf" style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #1e293b', color: '#94a3b8', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
+                <a href="/admin/einkauf" style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--admin-border)', color: 'var(--admin-muted)', textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>
                   Zu Einkaeufe
                 </a>
-                <Link href="/admin/anlagen" style={{ padding: '10px 20px', borderRadius: 8, background: cyan, color: '#0f172a', textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
+                <Link href="/admin/anlagen" style={{ padding: '10px 20px', borderRadius: 8, background: cyan, color: 'var(--admin-primary-text)', textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
                   Zum Anlagenverzeichnis
                 </Link>
                 <button
@@ -704,7 +704,7 @@ export default function RechnungUploadPage() {
                     setPickedFiles([]);
                     setExtraUploadStatus('');
                   }}
-                  style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e2e8f0', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--admin-faint)', background: 'transparent', color: 'var(--admin-text)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                 >
                   Weitere Rechnung
                 </button>
