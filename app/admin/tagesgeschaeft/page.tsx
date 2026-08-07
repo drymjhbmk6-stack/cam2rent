@@ -4,14 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WidgetRenderer } from '@/components/admin/DashboardWidgets';
 import { getWidgetDef } from '@/lib/admin-widgets';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 
 const C = {
-  text: '#e2e8f0',
-  textDim: '#64748b',
-  cyan: '#06b6d4',
-  card: '#111827',
-  border: '#1e293b',
+  text: 'var(--admin-text)',
+  textDim: 'var(--admin-text-dim)',
+  cyan: 'var(--admin-accent)',
+  card: 'var(--admin-surface)',
+  border: 'var(--admin-border)',
 } as const;
 
 // Feste Widget-Auswahl fuer Tagesgeschaeft-Bereich. Haupt-Dashboard ist
@@ -62,16 +62,12 @@ export default function TagesgeschaeftDashboardPage() {
 
   return (
     <div style={{ padding: '28px 24px', maxWidth: 1200, margin: '0 auto' }}>
-      <AdminBackLink href="/admin" label="Zum Hauptdashboard" />
-
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>
-          Tagesgeschäft
-        </h1>
-        <p style={{ fontSize: 13, color: C.textDim, margin: '4px 0 0' }}>
-          Alles im Blick für den laufenden Betrieb — Buchungen, Versand, Rückgaben.
-        </p>
-      </div>
+      <PageHeader
+        backHref="/admin"
+        backLabel="Zum Hauptdashboard"
+        title="Tagesgeschäft"
+        subtitle="Alles im Blick für den laufenden Betrieb — Buchungen, Versand, Rückgaben."
+      />
 
       {/* Quick Links */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
