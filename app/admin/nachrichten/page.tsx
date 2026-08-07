@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Conversation {
   id: string;
@@ -60,6 +61,8 @@ export default function AdminNachrichtenPage() {
   const [sending, setSending] = useState(false);
   const [filter, setFilter] = usePersistentState<FilterType>('admin:nachrichten:filter', 'all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   // Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen): zeigt, wie die
   // Antwort mit komplettem Cam2Rent-Layout beim Kunden ankommt.
@@ -189,11 +192,11 @@ export default function AdminNachrichtenPage() {
 
   const handleDeleteSingle = async () => {
     if (!selectedId) return;
-    if (!window.confirm('Diese Konversation endgültig aus der Inbox entfernen?')) return;
+    if (!(await confirm({ message: 'Diese Konversation endgültig aus der Inbox entfernen?', danger: true }))) return;
     const id = selectedId;
     const res = await fetch(`/api/admin/nachrichten/${id}`, { method: 'DELETE' });
     if (!res.ok) {
-      window.alert('Löschen fehlgeschlagen.');
+      toast.error('Löschen fehlgeschlagen.');
       return;
     }
     setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -225,7 +228,7 @@ export default function AdminNachrichtenPage() {
 
   const handleBulkDelete = async () => {
     if (selection.size === 0 || bulkBusy) return;
-    if (!window.confirm(`${selection.size} Konversation${selection.size !== 1 ? 'en' : ''} endgültig löschen?`)) return;
+    if (!(await confirm({ message: `${selection.size} Konversation${selection.size !== 1 ? 'en' : ''} endgültig löschen?`, danger: true }))) return;
     setBulkBusy(true);
     try {
       const ids = Array.from(selection);
@@ -235,7 +238,7 @@ export default function AdminNachrichtenPage() {
         body: JSON.stringify({ action: 'delete', ids }),
       });
       if (!res.ok) {
-        window.alert('Bulk-Löschen fehlgeschlagen.');
+        toast.error('Bulk-Löschen fehlgeschlagen.');
         return;
       }
       const deletedSet = new Set(ids);
@@ -259,8 +262,8 @@ export default function AdminNachrichtenPage() {
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
 
-  const cardStyle: React.CSSProperties = { background: '#111827', border: '1px solid #1e293b', borderRadius: 12 };
-  const inputStyle: React.CSSProperties = { background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#e2e8f0', padding: '10px 16px', fontSize: 14, outline: 'none', width: '100%' };
+  const cardStyle: React.CSSProperties = { background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12 };
+  const inputStyle: React.CSSProperties = { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10, color: 'var(--admin-text)', padding: '10px 16px', fontSize: 14, outline: 'none', width: '100%' };
 
   return (
     <div style={{ padding: '24px 20px' }}>
@@ -268,8 +271,8 @@ export default function AdminNachrichtenPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>Nachrichten</h1>
-          <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Nachrichten</h1>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', margin: '4px 0 0' }}>
             {totalUnread > 0 ? `${totalUnread} ungelesene Nachricht${totalUnread !== 1 ? 'en' : ''}` : 'Alle Kundennachrichten'}
           </p>
         </div>
@@ -282,22 +285,22 @@ export default function AdminNachrichtenPage() {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: 700, background: '#06b6d4', color: '#fff',
+              fontSize: 13, fontWeight: 700, background: 'var(--admin-accent)', color: '#fff',
             }}
           >
             ✏️ Neue Nachricht
           </button>
 
           {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 4, background: '#0f172a', borderRadius: 10, padding: 3 }}>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--admin-input-bg)', borderRadius: 10, padding: 3 }}>
             {(['all', 'unread', 'closed'] as FilterType[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
                   padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  background: filter === f ? '#1e293b' : 'transparent',
-                  color: filter === f ? '#22d3ee' : '#64748b',
+                  background: filter === f ? 'var(--admin-surface-2)' : 'transparent',
+                  color: filter === f ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
                 }}
               >
                 {f === 'all' ? 'Alle' : f === 'unread' ? 'Ungelesen' : 'Geschlossen'}
@@ -314,14 +317,14 @@ export default function AdminNachrichtenPage() {
             position: 'sticky', top: 0, zIndex: 20,
             background: 'rgba(15, 23, 42, 0.95)',
             backdropFilter: 'blur(8px)',
-            border: '1px solid #334155',
+            border: '1px solid var(--admin-faint)',
             borderRadius: 10,
             padding: '10px 14px',
             marginBottom: 12,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
           }}
         >
-          <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>
+          <span style={{ fontSize: 13, color: 'var(--admin-text)', fontWeight: 600 }}>
             {selection.size} ausgewählt
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -342,8 +345,8 @@ export default function AdminNachrichtenPage() {
               onClick={clearSelection}
               disabled={bulkBusy}
               style={{
-                padding: '6px 12px', background: 'transparent', color: '#cbd5e1',
-                border: '1px solid #334155', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                padding: '6px 12px', background: 'transparent', color: 'var(--admin-text-2)',
+                border: '1px solid var(--admin-faint)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}
             >
               Auswahl aufheben
@@ -359,7 +362,7 @@ export default function AdminNachrichtenPage() {
           style={{
             width: isMobile ? '100%' : 320,
             flexShrink: 0,
-            borderRight: isMobile ? 'none' : '1px solid #1e293b',
+            borderRight: isMobile ? 'none' : '1px solid var(--admin-border)',
             overflowY: 'auto',
             maxHeight: isMobile ? 'none' : 580,
             // Auf Mobile: Liste nur sichtbar, solange keine Konversation geoeffnet ist.
@@ -372,8 +375,8 @@ export default function AdminNachrichtenPage() {
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                 padding: '8px 14px',
-                borderBottom: '1px solid #1e293b',
-                fontSize: 11, color: '#64748b',
+                borderBottom: '1px solid var(--admin-border)',
+                fontSize: 11, color: 'var(--admin-text-dim)',
               }}
             >
               <span>{filtered.length} Konversation{filtered.length !== 1 ? 'en' : ''}</span>
@@ -386,7 +389,7 @@ export default function AdminNachrichtenPage() {
                   else selectAllVisible(allIds);
                 }}
                 style={{
-                  background: 'transparent', border: 'none', color: '#06b6d4',
+                  background: 'transparent', border: 'none', color: 'var(--admin-accent)',
                   fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0,
                 }}
               >
@@ -396,10 +399,10 @@ export default function AdminNachrichtenPage() {
           )}
           {loading ? (
             <div style={{ padding: 32, textAlign: 'center' }}>
-              <div style={{ width: 20, height: 20, border: '2px solid #06b6d4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+              <div style={{ width: 20, height: 20, border: '2px solid var(--admin-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)', fontSize: 13 }}>
               Keine Nachrichten.
             </div>
           ) : (
@@ -409,8 +412,8 @@ export default function AdminNachrichtenPage() {
                 style={{
                   position: 'relative',
                   display: 'flex', alignItems: 'flex-start',
-                  borderBottom: '1px solid #1e293b',
-                  borderLeft: selectedId === conv.id ? '3px solid #06b6d4' : '3px solid transparent',
+                  borderBottom: '1px solid var(--admin-border)',
+                  borderLeft: selectedId === conv.id ? '3px solid var(--admin-accent)' : '3px solid transparent',
                   background: selectedId === conv.id ? 'rgba(6,182,212,0.08)' : 'transparent',
                   transition: 'background 0.15s',
                 }}
@@ -428,7 +431,7 @@ export default function AdminNachrichtenPage() {
                     type="checkbox"
                     checked={selection.has(conv.id)}
                     onChange={(e) => { e.stopPropagation(); toggleSelection(conv.id); }}
-                    style={{ width: 16, height: 16, accentColor: '#06b6d4', cursor: 'pointer' }}
+                    style={{ width: 16, height: 16, accentColor: 'var(--admin-accent)', cursor: 'pointer' }}
                   />
                 </label>
                 <button
@@ -453,31 +456,31 @@ export default function AdminNachrichtenPage() {
                       }}>
                         {conv.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
                       </span>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--admin-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {conv.customer.full_name}
                       </p>
                     </div>
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--admin-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {conv.subject}
                     </p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                    <span style={{ fontSize: 10, color: '#475569' }}>{timeAgo(conv.last_message_at)}</span>
+                    <span style={{ fontSize: 10, color: 'var(--admin-muted-2)' }}>{timeAgo(conv.last_message_at)}</span>
                     {conv.unread_count > 0 && (
-                      <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#06b6d4', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--admin-accent)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {conv.unread_count}
                       </span>
                     )}
                   </div>
                 </div>
                 {conv.last_message && (
-                  <p style={{ margin: '6px 0 0', fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--admin-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {conv.last_message.sender_type === 'admin' ? 'Du: ' : ''}
                     {conv.last_message.body}
                   </p>
                 )}
                 {conv.closed && (
-                  <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, color: '#64748b', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>
+                  <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, color: 'var(--admin-text-dim)', background: 'var(--admin-surface-2)', padding: '2px 6px', borderRadius: 4 }}>
                     Geschlossen
                   </span>
                 )}
@@ -497,7 +500,7 @@ export default function AdminNachrichtenPage() {
           {selectedId && convInfo ? (
             <>
               {/* Chat header */}
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--admin-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0, flex: 1 }}>
                   {/* Mobile: Zurueck-Pfeil schliesst die Detail-Ansicht und zeigt die Liste wieder. */}
                   {isMobile && (
@@ -506,7 +509,7 @@ export default function AdminNachrichtenPage() {
                       onClick={() => { setSelectedId(null); setMessages([]); setConvInfo(null); }}
                       aria-label="Zurück zur Liste"
                       style={{
-                        background: 'transparent', border: 'none', color: '#06b6d4',
+                        background: 'transparent', border: 'none', color: 'var(--admin-accent)',
                         cursor: 'pointer', padding: '4px 2px', fontSize: 22, lineHeight: 1, flexShrink: 0,
                       }}
                     >
@@ -523,9 +526,9 @@ export default function AdminNachrichtenPage() {
                       }}>
                         {convInfo.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
                       </span>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{convInfo.subject}</p>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>{convInfo.subject}</p>
                     </div>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--admin-text-dim)' }}>
                       {convInfo.customer.full_name}
                       {convInfo.customer.email ? ` · ${convInfo.customer.email}` : ''}
                       {convInfo.inbox_address ? ` · an: ${convInfo.inbox_address}` : ''}
@@ -537,7 +540,7 @@ export default function AdminNachrichtenPage() {
                     type="button"
                     onClick={handleToggleClose}
                     style={{
-                      padding: '6px 12px', borderRadius: 6, border: '1px solid #334155', cursor: 'pointer',
+                      padding: '6px 12px', borderRadius: 6, border: '1px solid var(--admin-faint)', cursor: 'pointer',
                       background: 'transparent', color: convInfo.closed ? '#10b981' : '#f59e0b', fontSize: 11, fontWeight: 600,
                     }}
                   >
@@ -561,7 +564,7 @@ export default function AdminNachrichtenPage() {
               <div style={{ flex: 1, overflowY: 'auto', padding: 20, maxHeight: 380 }}>
                 {msgLoading ? (
                   <div style={{ textAlign: 'center', padding: 32 }}>
-                    <div style={{ width: 20, height: 20, border: '2px solid #06b6d4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+                    <div style={{ width: 20, height: 20, border: '2px solid var(--admin-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -570,8 +573,8 @@ export default function AdminNachrichtenPage() {
                         <div style={{
                           maxWidth: '75%', padding: '10px 14px', borderRadius: 16, fontSize: 13,
                           ...(msg.sender_type === 'admin'
-                            ? { background: '#06b6d4', color: '#fff', borderBottomRightRadius: 4 }
-                            : { background: '#1e293b', color: '#e2e8f0', borderBottomLeftRadius: 4 }
+                            ? { background: 'var(--admin-accent)', color: '#fff', borderBottomRightRadius: 4 }
+                            : { background: 'var(--admin-surface-2)', color: 'var(--admin-text)', borderBottomLeftRadius: 4 }
                           ),
                         }}>
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.body}</p>
@@ -641,17 +644,17 @@ export default function AdminNachrichtenPage() {
 
               {/* Reply input */}
               {!convInfo.closed && (
-                <div style={{ borderTop: '1px solid #1e293b' }}>
+                <div style={{ borderTop: '1px solid var(--admin-border)' }}>
                   {/* Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen) */}
                   {convInfo.source === 'email' && showPreview && (
                     <div style={{ padding: '12px 20px 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                        <span style={{ fontSize: 11, color: 'var(--admin-muted)' }}>
                           👁 So kommt die E-Mail beim Kunden an{previewLoading ? ' · aktualisiere…' : ''}
                         </span>
                         <button
                           onClick={() => setShowPreview(false)}
-                          style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                          style={{ fontSize: 11, color: 'var(--admin-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                         >
                           Vorschau ausblenden
                         </button>
@@ -660,7 +663,7 @@ export default function AdminNachrichtenPage() {
                         title="E-Mail-Vorschau"
                         sandbox=""
                         srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#94a3b8;padding:16px;">Vorschau wird geladen…</p>'}
-                        style={{ width: '100%', height: 320, border: '1px solid #1e293b', borderRadius: 10, background: '#fff' }}
+                        style={{ width: '100%', height: 320, border: '1px solid var(--admin-border)', borderRadius: 10, background: '#fff' }}
                       />
                     </div>
                   )}
@@ -670,8 +673,8 @@ export default function AdminNachrichtenPage() {
                         onClick={() => setShowPreview((v) => !v)}
                         title="Live-Vorschau der echten E-Mail an-/ausschalten"
                         style={{
-                          padding: '10px', background: showPreview ? '#0e7490' : '#1e293b',
-                          color: showPreview ? '#fff' : '#94a3b8', border: 'none', borderRadius: 10,
+                          padding: '10px', background: showPreview ? '#0e7490' : 'var(--admin-surface-2)',
+                          color: showPreview ? '#fff' : 'var(--admin-muted)', border: 'none', borderRadius: 10,
                           cursor: 'pointer', flexShrink: 0, lineHeight: 0,
                         }}
                       >
@@ -694,7 +697,7 @@ export default function AdminNachrichtenPage() {
                       onClick={handleReply}
                       disabled={!replyText.trim() || sending}
                       style={{
-                        padding: '10px 16px', background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 10,
+                        padding: '10px 16px', background: 'var(--admin-accent)', color: '#fff', border: 'none', borderRadius: 10,
                         cursor: replyText.trim() && !sending ? 'pointer' : 'not-allowed',
                         opacity: replyText.trim() && !sending ? 1 : 0.4, flexShrink: 0,
                       }}
@@ -708,7 +711,7 @@ export default function AdminNachrichtenPage() {
               )}
             </>
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 13 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--admin-muted-2)', fontSize: 13 }}>
               Wähle eine Konversation aus der Liste.
             </div>
           )}
@@ -812,10 +815,10 @@ function ComposeModal({
   };
 
   const inputStyle: React.CSSProperties = {
-    background: '#0f172a', border: '1px solid #334155', borderRadius: 10,
-    color: '#e2e8f0', padding: '10px 14px', fontSize: 14, outline: 'none', width: '100%',
+    background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10,
+    color: 'var(--admin-text)', padding: '10px 14px', fontSize: 14, outline: 'none', width: '100%',
   };
-  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6, display: 'block' };
+  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--admin-muted)', marginBottom: 6, display: 'block' };
 
   return (
     <div
@@ -829,16 +832,16 @@ function ComposeModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 520, background: '#111827', border: '1px solid #1e293b',
+          width: '100%', maxWidth: 520, background: 'var(--admin-surface)', border: '1px solid var(--admin-border)',
           borderRadius: 14, padding: 24,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#e2e8f0' }}>Neue Nachricht</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--admin-text)' }}>Neue Nachricht</h2>
           <button
             type="button"
             onClick={onClose}
-            style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--admin-text-dim)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}
           >
             ×
           </button>
@@ -850,18 +853,18 @@ function ComposeModal({
           {selected ? (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '10px 14px',
+              background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10, padding: '10px 14px',
             }}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--admin-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selected.full_name || selected.email}
                 </p>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{selected.email}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--admin-text-dim)' }}>{selected.email}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                style={{ background: 'transparent', border: '1px solid #334155', color: '#cbd5e1', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '4px 10px', cursor: 'pointer', flexShrink: 0 }}
+                style={{ background: 'transparent', border: '1px solid var(--admin-faint)', color: 'var(--admin-text-2)', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '4px 10px', cursor: 'pointer', flexShrink: 0 }}
               >
                 Ändern
               </button>
@@ -878,12 +881,12 @@ function ComposeModal({
               />
               <div style={{
                 marginTop: 8, maxHeight: 200, overflowY: 'auto',
-                border: '1px solid #1e293b', borderRadius: 10,
+                border: '1px solid var(--admin-border)', borderRadius: 10,
               }}>
                 {custLoading ? (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Lädt…</div>
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--admin-text-dim)', fontSize: 13 }}>Lädt…</div>
                 ) : filtered.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--admin-text-dim)', fontSize: 13 }}>
                     {search.trim() ? 'Kein Treffer.' : 'Keine Kunden gefunden.'}
                   </div>
                 ) : (
@@ -894,21 +897,21 @@ function ComposeModal({
                       onClick={() => { setSelected(c); setManualEmail(''); setManualName(''); }}
                       style={{
                         display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
-                        background: 'transparent', border: 'none', borderBottom: '1px solid #1e293b',
-                        cursor: 'pointer', color: '#e2e8f0',
+                        background: 'transparent', border: 'none', borderBottom: '1px solid var(--admin-border)',
+                        cursor: 'pointer', color: 'var(--admin-text)',
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
                       <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{c.full_name || c.email}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>{c.email}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--admin-text-dim)' }}>{c.email}</span>
                     </button>
                   ))
                 )}
               </div>
 
               {/* Gast / freie E-Mail */}
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #1e293b' }}>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--admin-border)' }}>
                 <label style={labelStyle}>…oder E-Mail-Adresse eingeben (Gast)</label>
                 <input
                   type="email"
@@ -961,7 +964,7 @@ function ComposeModal({
           <button
             type="button"
             onClick={onClose}
-            style={{ padding: '10px 16px', background: 'transparent', color: '#cbd5e1', border: '1px solid #334155', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '10px 16px', background: 'transparent', color: 'var(--admin-text-2)', border: '1px solid var(--admin-faint)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
           >
             Abbrechen
           </button>
@@ -970,7 +973,7 @@ function ComposeModal({
             onClick={handleSend}
             disabled={!canSend}
             style={{
-              padding: '10px 18px', background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 10,
+              padding: '10px 18px', background: 'var(--admin-accent)', color: '#fff', border: 'none', borderRadius: 10,
               fontSize: 13, fontWeight: 700, cursor: canSend ? 'pointer' : 'not-allowed', opacity: canSend ? 1 : 0.45,
             }}
           >
