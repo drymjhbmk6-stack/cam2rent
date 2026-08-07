@@ -8,6 +8,7 @@ import InventarVerknuepfModal from '@/components/admin/InventarVerknuepfModal';
 import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 import { formatCurrency } from '@/lib/format-utils';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
@@ -118,6 +119,7 @@ function fmtDate(s: string | null) {
 export default function BelegDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const confirm = useConfirm();
   const belegId = String(params?.id ?? '');
 
   const [beleg, setBeleg] = useState<Beleg | null>(null);
@@ -333,19 +335,20 @@ export default function BelegDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm('Beleg wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Beleg wirklich löschen?', danger: true }))) return;
     const res = await fetch(`/api/admin/belege/${belegId}`, { method: 'DELETE' });
     if (res.ok) router.push('/admin/buchhaltung/belege');
     else setError((await res.json()).error);
   }
 
   async function handleAufheben() {
-    const confirmed = confirm(
-      'Festschreibung aufheben?\n\n' +
-      'Der Beleg wird wieder editierbar. Falls beim Festschreiben automatisch eine Anlage (AfA/GWG) erzeugt wurde, ' +
-      'wird diese mit gelöscht — solange der monatliche AfA-Cron noch nichts weitergeschrieben hat. ' +
-      'Inventar-Verknüpfungen bleiben bestehen.\n\nFortfahren?',
-    );
+    const confirmed = await confirm({
+      title: 'Festschreibung aufheben?',
+      message:
+        'Der Beleg wird wieder editierbar. Falls beim Festschreiben automatisch eine Anlage (AfA/GWG) erzeugt wurde, ' +
+        'wird diese mit gelöscht — solange der monatliche AfA-Cron noch nichts weitergeschrieben hat. ' +
+        'Inventar-Verknüpfungen bleiben bestehen.\n\nFortfahren?',
+    });
     if (!confirmed) return;
     setBusy(true);
     setError(null);
@@ -390,7 +393,7 @@ export default function BelegDetailPage() {
   }
 
   async function handleDismissDuplicate() {
-    if (!confirm('Wirklich kein Duplikat? Der Beleg kann danach festgeschrieben werden.')) return;
+    if (!(await confirm({ message: 'Wirklich kein Duplikat? Der Beleg kann danach festgeschrieben werden.' }))) return;
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/admin/belege/${belegId}/dismiss-duplicate`, { method: 'POST' });
@@ -438,7 +441,7 @@ export default function BelegDetailPage() {
     setBusy(false);
   }
 
-  if (loading) return <div className="p-6 text-slate-400">Lädt…</div>;
+  if (loading) return <div className="p-6 text-admin-muted">Lädt…</div>;
   if (!beleg) return <div className="p-6 text-rose-400">{error ?? 'Nicht gefunden'}</div>;
 
   const isLocked = beleg.status === 'festgeschrieben';
@@ -452,7 +455,7 @@ export default function BelegDetailPage() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung/belege" />
       <div className="max-w-5xl mx-auto mt-4 space-y-6">
         {/* Header */}
@@ -460,18 +463,18 @@ export default function BelegDetailPage() {
           <div>
             <h1 className="text-2xl font-heading">{beleg.beleg_nr}</h1>
             {beleg.interne_beleg_no && beleg.interne_beleg_no !== beleg.beleg_nr && (
-              <p className="text-xs text-slate-400 font-mono">Intern: {beleg.interne_beleg_no}</p>
+              <p className="text-xs text-admin-muted font-mono">Intern: {beleg.interne_beleg_no}</p>
             )}
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-admin-muted">
               {fmtDate(beleg.beleg_datum)}
               {beleg.lieferant && ` · ${beleg.lieferant.name}`}
               {beleg.rechnungsnummer_lieferant && ` · Rg-Nr ${beleg.rechnungsnummer_lieferant}`}
             </p>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-400">Brutto-Summe</div>
+            <div className="text-xs text-admin-muted">Brutto-Summe</div>
             <div className="text-2xl font-mono">{fmtEuro(Number(beleg.summe_brutto))}</div>
-            <div className="text-xs text-slate-400">netto {fmtEuro(Number(beleg.summe_netto))}</div>
+            <div className="text-xs text-admin-muted">netto {fmtEuro(Number(beleg.summe_netto))}</div>
           </div>
         </div>
 
@@ -496,14 +499,14 @@ export default function BelegDetailPage() {
               <button
                 onClick={handleDelete}
                 disabled={busy}
-                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold"
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded text-sm font-semibold"
               >
                 🗑 Diesen Beleg löschen
               </button>
               <button
                 onClick={handleDismissDuplicate}
                 disabled={busy}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-sm"
+                className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-50 text-admin-text rounded text-sm"
               >
                 Kein Duplikat — fortfahren
               </button>
@@ -514,7 +517,7 @@ export default function BelegDetailPage() {
           </div>
         )}
         {beleg.verdacht_duplikat_beleg_id && beleg.verdacht_duplikat_dismissed_at && (
-          <div className="p-2 bg-slate-700/30 border border-slate-600 text-slate-400 rounded text-xs">
+          <div className="p-2 bg-slate-700/30 border border-[var(--admin-muted-2)] text-admin-muted rounded text-xs">
             Duplikat-Verdacht wurde bestätigt aufgehoben.
             {beleg.verdacht_duplikat_existing && (
               <> Vergleich:{' '}
@@ -573,13 +576,13 @@ export default function BelegDetailPage() {
                 onChange={(e) => setRateInput(e.target.value)}
                 inputMode="decimal"
                 placeholder={beleg.wechselkurs ? beleg.wechselkurs.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) : '0,00'}
-                className="w-28 bg-[#111827] border border-amber-600/50 rounded px-2 py-1 text-sm text-right font-mono focus:outline-none focus:border-amber-400"
+                className="w-28 bg-admin-surface border border-amber-600/50 rounded px-2 py-1 text-sm text-right font-mono focus:outline-none focus:border-amber-400"
               />
               <span className="text-xs text-amber-200/90">€</span>
               <button
                 onClick={handleSetRate}
                 disabled={busy || !rateInput.trim()}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-[var(--admin-faint)] disabled:text-[var(--admin-text-dim)] text-slate-900 rounded text-sm font-semibold"
               >
                 {busy ? 'Rechne um…' : 'Kurs anwenden'}
               </button>
@@ -587,7 +590,7 @@ export default function BelegDetailPage() {
                 <button
                   onClick={handleDismissWaehrung}
                   disabled={busy}
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-sm"
+                  className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-50 text-admin-text rounded text-sm"
                 >
                   Passt so
                 </button>
@@ -596,7 +599,7 @@ export default function BelegDetailPage() {
           </div>
         )}
         {isForeignCurrency && (beleg.waehrung_hinweis_dismissed_at || isLocked) && (
-          <div className="p-2 bg-slate-700/30 border border-slate-600 text-slate-400 rounded text-xs">
+          <div className="p-2 bg-slate-700/30 border border-[var(--admin-muted-2)] text-admin-muted rounded text-xs">
             💱 In {beleg.fremdwaehrung} ausgestellt
             {beleg.wechselkurs
               ? <> · umgerechnet mit Kurs 1&nbsp;{beleg.fremdwaehrung} = <span className="font-mono">{beleg.wechselkurs.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</span>&nbsp;€{kursDatumFmt && ` (Stand ${kursDatumFmt})`}</>
@@ -622,14 +625,14 @@ export default function BelegDetailPage() {
               <button
                 onClick={handleRetryOcr}
                 disabled={busy}
-                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold"
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded text-sm font-semibold"
               >
                 {busy ? 'Läuft…' : '🔄 OCR neu starten'}
               </button>
               <button
                 onClick={handleDismissOcrError}
                 disabled={busy}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-slate-100 rounded text-sm font-semibold"
+                className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:bg-admin-surface-2 text-slate-100 rounded text-sm font-semibold"
                 title="Hinweis ausblenden — nutze das, wenn du die Belegdaten manuell erfasst hast."
               >
                 {busy ? 'Läuft…' : '✓ Hinweis ausblenden (manuell erfasst)'}
@@ -651,7 +654,7 @@ export default function BelegDetailPage() {
             <button
               onClick={handleAufheben}
               disabled={busy}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
               title="Macht die Festschreibung rückgängig — z.B. um eine falsche Klassifikation zu korrigieren."
             >
               {busy ? 'Wird aufgehoben…' : '↺ Aufheben'}
@@ -668,7 +671,7 @@ export default function BelegDetailPage() {
               <button
                 onClick={handleRegenerateAssets}
                 disabled={busy}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
               >
                 {busy ? 'Erzeuge…' : '↻ Anlagen jetzt erzeugen'}
               </button>
@@ -682,7 +685,7 @@ export default function BelegDetailPage() {
                     w.document.body.innerText = JSON.stringify(data, null, 2);
                   }
                 }}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm whitespace-nowrap"
+                className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm whitespace-nowrap"
                 title="Zeigt was wirklich in den Tabellen assets / assets_neu liegt"
               >
                 🔍 Debug
@@ -716,18 +719,18 @@ export default function BelegDetailPage() {
         {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
 
         {/* Beleg-Daten — gleiches Layout wie der Anlege-Wizard, read-only */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4 space-y-4">
+        <section className="bg-admin-surface border border-admin-border rounded p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm mb-1 text-slate-400">Lieferant</label>
+              <label className="block text-sm mb-1 text-admin-muted">Lieferant</label>
               <input
                 type="text"
                 value={beleg.lieferant?.name ?? '—'}
                 disabled
-                className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base disabled:opacity-90"
+                className="w-full bg-admin-surface border border-[var(--admin-faint)] rounded px-3 py-2 text-base disabled:opacity-90"
               />
               {beleg.lieferant && (beleg.lieferant.adresse || beleg.lieferant.email || beleg.lieferant.ust_id) && (
-                <div className="text-xs text-slate-500 mt-1.5 space-y-0.5">
+                <div className="text-xs text-[var(--admin-text-dim)] mt-1.5 space-y-0.5">
                   {beleg.lieferant.adresse && <div className="whitespace-pre-line">{beleg.lieferant.adresse}</div>}
                   {beleg.lieferant.email && <div><a href={`mailto:${beleg.lieferant.email}`} className="text-cyan-400 hover:text-cyan-300">{beleg.lieferant.email}</a></div>}
                   {beleg.lieferant.ust_id && <div>USt-ID: <span className="font-mono">{beleg.lieferant.ust_id}</span></div>}
@@ -735,67 +738,67 @@ export default function BelegDetailPage() {
               )}
             </div>
             <div>
-              <label className="block text-sm mb-1 text-slate-400">Beleg-Datum *</label>
+              <label className="block text-sm mb-1 text-admin-muted">Beleg-Datum *</label>
               <input
                 type="text"
                 value={fmtDate(beleg.beleg_datum)}
                 disabled
-                className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base disabled:opacity-90"
+                className="w-full bg-admin-surface border border-[var(--admin-faint)] rounded px-3 py-2 text-base disabled:opacity-90"
               />
             </div>
             <div>
-              <label className="block text-sm mb-1 text-slate-400">Bezahl-Datum</label>
+              <label className="block text-sm mb-1 text-admin-muted">Bezahl-Datum</label>
               <input
                 type="text"
                 value={beleg.bezahl_datum ? fmtDate(beleg.bezahl_datum) : 'TT.mm.jjjj'}
                 disabled
-                className={`w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base disabled:opacity-90 ${!beleg.bezahl_datum ? 'text-slate-500 italic' : ''}`}
+                className={`w-full bg-admin-surface border border-[var(--admin-faint)] rounded px-3 py-2 text-base disabled:opacity-90 ${!beleg.bezahl_datum ? 'text-[var(--admin-text-dim)] italic' : ''}`}
               />
             </div>
             <div>
-              <label className="block text-sm mb-1 text-slate-400">Rechnungsnummer Lieferant</label>
+              <label className="block text-sm mb-1 text-admin-muted">Rechnungsnummer Lieferant</label>
               <input
                 type="text"
                 value={beleg.rechnungsnummer_lieferant ?? ''}
                 disabled
-                className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base disabled:opacity-90"
+                className="w-full bg-admin-surface border border-[var(--admin-faint)] rounded px-3 py-2 text-base disabled:opacity-90"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <input type="checkbox" checked={beleg.ist_eigenbeleg} disabled />
-            <label className="text-sm text-slate-300">Eigenbeleg (kein offizielles Dokument)</label>
+            <label className="text-sm text-admin-text-2">Eigenbeleg (kein offizielles Dokument)</label>
           </div>
           {beleg.ist_eigenbeleg && beleg.eigenbeleg_grund && (
             <input
               type="text"
               value={beleg.eigenbeleg_grund}
               disabled
-              className="w-full bg-[#111827] border border-amber-700 rounded px-3 py-2 text-base text-amber-200 disabled:opacity-90"
+              className="w-full bg-admin-surface border border-amber-700 rounded px-3 py-2 text-base text-amber-200 disabled:opacity-90"
             />
           )}
 
           {beleg.notizen && (
             <div>
-              <label className="block text-sm mb-1 text-slate-400">Notizen</label>
+              <label className="block text-sm mb-1 text-admin-muted">Notizen</label>
               <textarea
                 value={beleg.notizen}
                 disabled
                 rows={Math.max(2, beleg.notizen.split('\n').length)}
-                className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-sm disabled:opacity-90 resize-none"
+                className="w-full bg-admin-surface border border-[var(--admin-faint)] rounded px-3 py-2 text-sm disabled:opacity-90 resize-none"
               />
             </div>
           )}
 
           {/* Meta-Footer: Status, Quelle, Zeitstempel */}
-          <div className="pt-3 mt-2 border-t border-slate-800 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-            <div>Status: <span className="text-slate-300 capitalize">{beleg.status}</span>{beleg.is_test && <span className="text-pink-400 ml-1">· TEST</span>}</div>
-            <div>Quelle: <span className="text-slate-300">{QUELLE_LABEL[beleg.quelle] ?? beleg.quelle}</span></div>
-            {beleg.interne_beleg_no && <div>Intern: <span className="text-slate-300 font-mono">{beleg.interne_beleg_no}</span></div>}
-            <div>Angelegt: <span className="text-slate-300">{fmtDateTime(beleg.created_at)}</span></div>
+          <div className="pt-3 mt-2 border-t border-admin-border flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--admin-text-dim)]">
+            <div>Status: <span className="text-admin-text-2 capitalize">{beleg.status}</span>{beleg.is_test && <span className="text-pink-400 ml-1">· TEST</span>}</div>
+            <div>Quelle: <span className="text-admin-text-2">{QUELLE_LABEL[beleg.quelle] ?? beleg.quelle}</span></div>
+            {beleg.interne_beleg_no && <div>Intern: <span className="text-admin-text-2 font-mono">{beleg.interne_beleg_no}</span></div>}
+            <div>Angelegt: <span className="text-admin-text-2">{fmtDateTime(beleg.created_at)}</span></div>
             {beleg.updated_at && beleg.updated_at !== beleg.created_at && (
-              <div>Geändert: <span className="text-slate-300">{fmtDateTime(beleg.updated_at)}</span></div>
+              <div>Geändert: <span className="text-admin-text-2">{fmtDateTime(beleg.updated_at)}</span></div>
             )}
             {beleg.festgeschrieben_at && (
               <div>Festgeschrieben: <span className="text-emerald-300">{fmtDateTime(beleg.festgeschrieben_at)}</span></div>
@@ -804,7 +807,7 @@ export default function BelegDetailPage() {
         </section>
 
         {/* Anhaenge */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+        <section className="bg-admin-surface border border-admin-border rounded p-4">
           <h2 className="font-semibold mb-3">Anhänge ({anhaenge.length})</h2>
           {anhaenge.length === 0 && !isLocked && (
             <p className="text-sm text-amber-400 mb-2">⚠ Kein Anhang. Bei Festschreibung muss entweder ein Anhang hochgeladen oder Eigenbeleg-Begründung gesetzt sein.</p>
@@ -815,7 +818,7 @@ export default function BelegDetailPage() {
                 <button onClick={() => openAnhang(a)} className="text-cyan-400 hover:text-cyan-300 text-sm flex-1 text-left truncate">
                   📎 {a.dateiname}
                 </button>
-                <span className="text-xs text-slate-500 shrink-0">
+                <span className="text-xs text-[var(--admin-text-dim)] shrink-0">
                   {a.typ}
                   {a.size_bytes != null && ` · ${fmtBytes(a.size_bytes)}`}
                   {a.mime_type && ` · ${a.mime_type}`}
@@ -830,15 +833,15 @@ export default function BelegDetailPage() {
             </label>
           )}
           {anhaenge.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-800">
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Vorschau</div>
+            <div className="mt-3 pt-3 border-t border-admin-border">
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">Vorschau</div>
               <BelegDokumentVorschau belegId={belegId} anhaenge={anhaenge} />
             </div>
           )}
         </section>
 
         {/* Positionen — Tabellen-Layout analog Wizard */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+        <section className="bg-admin-surface border border-admin-border rounded p-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Positionen ({positionen.length})</h2>
             {!isLocked && (
@@ -860,7 +863,7 @@ export default function BelegDetailPage() {
           </div>
 
           {/* Spaltenkopf nur auf Desktop — Mobile stacked Card-Layout */}
-          <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+          <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] font-semibold">
             <div className="col-span-4">Bezeichnung</div>
             <div className="col-span-1 text-center">Menge</div>
             <div className="col-span-2 text-right">Einzel netto</div>
@@ -879,7 +882,7 @@ export default function BelegDetailPage() {
               const einzelBrutto = (Number.isFinite(draftNetto) ? draftNetto : 0) * (1 + (Number.isFinite(draftMwst) ? draftMwst : 0) / 100);
               const hasDetails = (p.kategorie || ki || p.notizen || links.length > 0 || p.folgekosten_asset_id);
               return (
-              <div key={p.id} className="rounded border border-slate-800 bg-slate-900/40">
+              <div key={p.id} className="rounded border border-admin-border bg-slate-900/40">
                 {/* Hauptzeile — Mobile: Stack mit Bezeichnung voll oben, Zahlen drunter; Desktop: 12-Grid */}
                 <div className="p-2 space-y-2 md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0">
                   {/* Bezeichnung: volle Breite auf Mobile, 4/12 auf Desktop */}
@@ -888,21 +891,21 @@ export default function BelegDetailPage() {
                     disabled={!isEditing}
                     onChange={(e) => setEditDraft((d) => ({ ...d, bezeichnung: e.target.value }))}
                     aria-label="Bezeichnung"
-                    className={`w-full md:col-span-4 bg-[#111827] border rounded px-2 py-1.5 text-sm disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
+                    className={`w-full md:col-span-4 bg-admin-surface border rounded px-2 py-1.5 text-sm disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-[var(--admin-faint)]'}`}
                   />
                   {/* Mobile: Mini-Labels uebers Feld; md:contents loest den Wrapper im Grid auf */}
                   <div className="grid grid-cols-4 gap-2 md:contents">
-                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1">Menge</label>
-                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Netto</label>
-                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Brutto</label>
-                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-center">MwSt</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1">Menge</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-right">Netto</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-right">Brutto</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-center">MwSt</label>
                     <input
                       value={isEditing ? editDraft.menge : p.menge}
                       disabled={!isEditing}
                       onChange={(e) => setEditDraft((d) => ({ ...d, menge: e.target.value }))}
                       inputMode="numeric"
                       aria-label="Menge"
-                      className={`col-span-1 md:col-span-1 bg-[#111827] border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
+                      className={`col-span-1 md:col-span-1 bg-admin-surface border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-[var(--admin-faint)]'}`}
                     />
                     <input
                       value={isEditing ? editDraft.einzelpreis_netto : Number(p.einzelpreis_netto).toFixed(2)}
@@ -910,14 +913,14 @@ export default function BelegDetailPage() {
                       onChange={(e) => setEditDraft((d) => ({ ...d, einzelpreis_netto: e.target.value }))}
                       inputMode="decimal"
                       aria-label="Einzelpreis netto"
-                      className={`col-span-1 md:col-span-2 bg-[#111827] border rounded px-2 py-1.5 text-sm text-right disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
+                      className={`col-span-1 md:col-span-2 bg-admin-surface border rounded px-2 py-1.5 text-sm text-right disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-[var(--admin-faint)]'}`}
                     />
                     <input
                       value={einzelBrutto.toFixed(2)}
                       disabled
                       aria-label="Einzelpreis brutto"
                       title={isEditing ? 'Wird automatisch aus Netto × MwSt berechnet' : undefined}
-                      className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
+                      className="col-span-1 md:col-span-2 bg-admin-surface border border-[var(--admin-faint)] rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
                     />
                     <input
                       value={isEditing ? editDraft.mwst_satz : p.mwst_satz}
@@ -925,7 +928,7 @@ export default function BelegDetailPage() {
                       onChange={(e) => setEditDraft((d) => ({ ...d, mwst_satz: e.target.value }))}
                       inputMode="decimal"
                       aria-label="MwSt-Satz"
-                      className={`col-span-1 md:col-span-1 bg-[#111827] border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
+                      className={`col-span-1 md:col-span-1 bg-admin-surface border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-[var(--admin-faint)]'}`}
                     />
                   </div>
                   <div className="flex justify-end md:col-span-2">
@@ -935,7 +938,7 @@ export default function BelegDetailPage() {
                       p.klassifizierung === 'gwg' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                       p.klassifizierung === 'verbrauch' ? 'bg-violet-500/10 text-violet-300 border-violet-500/30' :
                       p.klassifizierung === 'ausgabe' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
-                      'bg-slate-700/30 text-slate-400 border-slate-700'
+                      'bg-slate-700/30 text-admin-muted border-[var(--admin-faint)]'
                     }`}>
                       {KLASS_LABEL[p.klassifizierung]}
                     </span>
@@ -944,10 +947,10 @@ export default function BelegDetailPage() {
 
                 {/* Sub-Zeile: Summen + Bearbeiten */}
                 <div className="px-3 pb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs text-slate-500 flex flex-wrap gap-x-4">
-                    <span>Gesamt netto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_netto))}</span></span>
-                    <span>Gesamt brutto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_brutto))}</span></span>
-                    {p.kategorie && <span>Kategorie: <span className="text-slate-300">{p.kategorie}</span></span>}
+                  <div className="text-xs text-[var(--admin-text-dim)] flex flex-wrap gap-x-4">
+                    <span>Gesamt netto: <span className="text-admin-text-2 font-mono">{fmtEuro(Number(p.gesamt_netto))}</span></span>
+                    <span>Gesamt brutto: <span className="text-admin-text-2 font-mono">{fmtEuro(Number(p.gesamt_brutto))}</span></span>
+                    {p.kategorie && <span>Kategorie: <span className="text-admin-text-2">{p.kategorie}</span></span>}
                   </div>
                   <div className="flex gap-2 items-center">
                     {['afa', 'gwg', 'verbrauch'].includes(p.klassifizierung) && !isEditing && (
@@ -959,7 +962,7 @@ export default function BelegDetailPage() {
                           linked: links.length,
                         })}
                         title="Mehrere Inventar-Stücke auf einmal mit dieser Position verknüpfen — optional mit Wiederbeschaffungswert pro Stück."
-                        className="px-3 py-1 border border-slate-700 hover:border-cyan-600 hover:text-cyan-300 text-slate-400 rounded text-xs"
+                        className="px-3 py-1 border border-[var(--admin-faint)] hover:border-cyan-600 hover:text-cyan-300 text-admin-muted rounded text-xs"
                       >
                         🔗 Inventar verknüpfen
                       </button>
@@ -970,14 +973,14 @@ export default function BelegDetailPage() {
                           <button
                             onClick={() => saveEditPos(p.id)}
                             disabled={savingPos}
-                            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-900 rounded text-xs font-semibold"
+                            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded text-xs font-semibold"
                           >
                             {savingPos ? 'Speichert…' : 'Speichern'}
                           </button>
                           <button
                             onClick={cancelEditPos}
                             disabled={savingPos}
-                            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-xs"
+                            className="px-3 py-1 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-50 text-admin-text rounded text-xs"
                           >
                             Abbrechen
                           </button>
@@ -985,7 +988,7 @@ export default function BelegDetailPage() {
                       ) : (
                         <button
                           onClick={() => startEditPos(p)}
-                          className="px-3 py-1 border border-slate-700 hover:border-cyan-600 hover:text-cyan-300 text-slate-400 rounded text-xs"
+                          className="px-3 py-1 border border-[var(--admin-faint)] hover:border-cyan-600 hover:text-cyan-300 text-admin-muted rounded text-xs"
                         >
                           ✏ Bearbeiten
                         </button>
@@ -1010,37 +1013,37 @@ export default function BelegDetailPage() {
                             </button>
                           )}
                         </div>
-                        <div className="text-slate-300 mt-0.5">
+                        <div className="text-admin-text-2 mt-0.5">
                           {ki.klassifizierung && <span>Klassifizierung: <span className="text-cyan-300">{kiKlassLabel(ki.klassifizierung)}</span></span>}
                           {typeof ki.confidence === 'number' && <span> · Sicherheit {Math.round(ki.confidence * 100)}%</span>}
                         </div>
-                        {ki.art && <div className="text-slate-400">Art: {artLabel(ki.art)}</div>}
-                        {ki.kategorie && <div className="text-slate-400">Kategorie: {kategorieLabel(ki.kategorie)}</div>}
+                        {ki.art && <div className="text-admin-muted">Art: {artLabel(ki.art)}</div>}
+                        {ki.kategorie && <div className="text-admin-muted">Kategorie: {kategorieLabel(ki.kategorie)}</div>}
                         {typeof ki.nutzungsdauer_monate === 'number' && (
-                          <div className="text-slate-400">Nutzungsdauer: {ki.nutzungsdauer_monate} Monate</div>
+                          <div className="text-admin-muted">Nutzungsdauer: {ki.nutzungsdauer_monate} Monate</div>
                         )}
-                        {ki.begruendung && <div className="text-slate-400 italic mt-0.5">{ki.begruendung}</div>}
+                        {ki.begruendung && <div className="text-admin-muted italic mt-0.5">{ki.begruendung}</div>}
                       </div>
                     )}
                     {p.notizen && (
-                      <div className="text-xs text-slate-400 italic">📝 {p.notizen}</div>
+                      <div className="text-xs text-admin-muted italic">📝 {p.notizen}</div>
                     )}
                     {links.length > 0 && (
-                      <div className="text-xs p-2 bg-slate-800/40 border border-slate-700 rounded">
-                        <div className="text-slate-300 font-semibold mb-1">🔗 Verknüpfte Inventar-Stücke ({links.length})</div>
+                      <div className="text-xs p-2 bg-slate-800/40 border border-[var(--admin-faint)] rounded">
+                        <div className="text-admin-text-2 font-semibold mb-1">🔗 Verknüpfte Inventar-Stücke ({links.length})</div>
                         <ul className="space-y-1">
                           {links.map((l) => (
                             <li key={l.id} className="flex justify-between gap-2">
                               {l.inventar_unit ? (
                                 <Link href={`/admin/inventar/${l.inventar_unit.id}`} className="text-cyan-400 hover:text-cyan-300 truncate">
                                   {l.inventar_unit.bezeichnung}
-                                  {l.inventar_unit.inventar_code && <span className="text-slate-500 font-mono ml-1">({l.inventar_unit.inventar_code})</span>}
-                                  {l.inventar_unit.seriennummer && <span className="text-slate-500 ml-1">· SN {l.inventar_unit.seriennummer}</span>}
+                                  {l.inventar_unit.inventar_code && <span className="text-[var(--admin-text-dim)] font-mono ml-1">({l.inventar_unit.inventar_code})</span>}
+                                  {l.inventar_unit.seriennummer && <span className="text-[var(--admin-text-dim)] ml-1">· SN {l.inventar_unit.seriennummer}</span>}
                                 </Link>
                               ) : (
-                                <span className="text-slate-500 italic">— gelöscht —</span>
+                                <span className="text-[var(--admin-text-dim)] italic">— gelöscht —</span>
                               )}
-                              {l.stueck_anteil !== 1 && <span className="text-slate-400 shrink-0">Anteil {l.stueck_anteil}</span>}
+                              {l.stueck_anteil !== 1 && <span className="text-admin-muted shrink-0">Anteil {l.stueck_anteil}</span>}
                             </li>
                           ))}
                         </ul>
@@ -1064,21 +1067,21 @@ export default function BelegDetailPage() {
                           onClick={() => setKlassifizierung(p.id, k)}
                           title={KLASS_HINT[k]}
                           className={`px-2 py-0.5 text-xs rounded border ${
-                            p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
+                            p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-admin-surface-2 hover:bg-[var(--admin-faint)] border-[var(--admin-faint)]'
                           }`}
                         >
                           {KLASS_LABEL[k]}
                         </button>
                       ))}
-                      <span className="text-xs text-slate-500" title="Hover über die Buttons für Erklärungen">ⓘ Hover für Details</span>
+                      <span className="text-xs text-[var(--admin-text-dim)]" title="Hover über die Buttons für Erklärungen">ⓘ Hover für Details</span>
                     </div>
                     {p.klassifizierung === 'ausgabe' && (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400 shrink-0">Kategorie:</span>
+                        <span className="text-xs text-admin-muted shrink-0">Kategorie:</span>
                         <select
                           value={p.kategorie ?? ''}
                           onChange={(e) => setKategorie(p.id, e.target.value)}
-                          className="bg-[#111827] border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
+                          className="bg-admin-surface border border-[var(--admin-faint)] rounded px-2 py-1 text-sm text-admin-text focus:outline-none focus:border-cyan-500"
                         >
                           <option value="">— wählen —</option>
                           {AUSGABE_KATEGORIEN.map((k) => (
@@ -1095,10 +1098,10 @@ export default function BelegDetailPage() {
           </div>
 
           {/* Summen-Footer wie im Wizard */}
-          <div className="mt-3 text-right text-sm text-slate-400">
-            Netto: <span className="font-mono text-slate-200">{fmtEuro(Number(beleg.summe_netto))}</span>
+          <div className="mt-3 text-right text-sm text-admin-muted">
+            Netto: <span className="font-mono text-admin-text">{fmtEuro(Number(beleg.summe_netto))}</span>
             {' · '}
-            MwSt: <span className="font-mono text-slate-300">{fmtEuro(Number(beleg.summe_brutto) - Number(beleg.summe_netto))}</span>
+            MwSt: <span className="font-mono text-admin-text-2">{fmtEuro(Number(beleg.summe_brutto) - Number(beleg.summe_netto))}</span>
             {' · '}
             Brutto: <span className="font-mono text-cyan-300">{fmtEuro(Number(beleg.summe_brutto))}</span>
           </div>
@@ -1110,7 +1113,7 @@ export default function BelegDetailPage() {
             <button
               onClick={handleFestschreiben}
               disabled={busy || !allClassified}
-              className="px-4 py-2 bg-emerald-500 disabled:bg-slate-700 hover:bg-emerald-400 disabled:text-slate-500 text-slate-900 rounded font-semibold"
+              className="px-4 py-2 bg-emerald-500 disabled:bg-[var(--admin-faint)] hover:bg-emerald-400 disabled:text-[var(--admin-text-dim)] text-slate-900 rounded font-semibold"
             >
               {busy ? 'Wird festgeschrieben…' : '🔒 Festschreiben'}
             </button>
