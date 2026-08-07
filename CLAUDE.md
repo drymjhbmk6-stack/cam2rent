@@ -2196,6 +2196,27 @@ Seiten migriert sind.
   unkritisch, Dark pixel-identisch. **Standalone bleibt ausgeschlossen**
   (login/scan/qr — dort löst `.admin-shell` + Tokens nicht auf). Jede Seite:
   tsc 0, lint 0, Logik unverändert.
+- **Abschluss-Welle (fertig 2026-08-07):** letzte übersehene Seite
+  `app/admin/inventar` (Liste) migriert — Voll-Bg `bg-[#0a0f1e]` entfernt,
+  slate-Palette + inline `#111827` (Panels → `--admin-surface`, Felder →
+  `--admin-input-bg`) auf Tokens, cyan-Accent-Buttons → `bg-admin-accent`
+  (60/60 Optik-Diff). **Damit sind ALLE ~89 Admin-Seiten (außer den bewusst
+  ausgeschlossenen Standalone-Seiten login/scan/qr + `pdf-viewer`) auf
+  Design-Tokens umgestellt** — der Light/Dark-Umschalter greift jetzt
+  seitenweit auf jedem Wrapper. Verbleibende dunkle Stellen sind
+  ausschließlich die dokumentierten **Inseln** (translucente Card-Flächen
+  `bg-slate-900/50` in `social/*`, `schaeden` Detail-Modal, `blog/artikel`-
+  Artikelliste, `mein/*` data-colored Karten, `buchungen/[id]`/`emails`
+  `bg-white dark:bg-slate-900`-Brand-Muster) + die **noch aktive
+  `.admin-dark`-`!important`-Brücke** (globals.css), die die nicht-tokenisierten
+  `brand-*`/`bg-white`/Table-Klassen in BEIDEN Themes dunkel hält.
+- **Letzter, separater Schritt (offen, braucht ausdrückliche Freigabe):** das
+  `.admin-dark`-`!important`-Layer aus `app/globals.css` (~237-303) **entfernen**
+  — erst danach werden die o.g. Brand-Muster-Inseln im Light-Mode hell. Das ist
+  der einzige riskante Pixel-Diff-Schritt (betrifft alle noch nicht voll
+  tokenisierten Flächen gleichzeitig) und wird bewusst NICHT eigenmächtig
+  ausgeführt; er sollte einzeln + mit Live-Gegencheck in Light UND Dark
+  erfolgen.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
