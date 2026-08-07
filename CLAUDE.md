@@ -2131,13 +2131,19 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   `active`/`hideWhenEmpty`) ersetzt. Reiner Refactor (−108 Zeilen) —
   Collapse-State, localStorage-Keys (`admin_{blog,posts,reels}_collapsed`),
   Auto-Expand, Optik/Hover/Chevron 1:1 erhalten. tsc 0, lint 0.
-- **Bewusst NICHT gebaut (deferred, braucht Live-Check):** Favoriten/Pins in
-  der Sidebar (stateful, cross-Instanz-Sync desktop+mobile, Stern-Buttons pro
-  Nav-Item im höchst-blast-radius Shell) + Dashboard-2.0 (KPI-Trend-Delta,
-  Sparklines, „Heute zu erledigen"-Lane). Beides ist visuell/interaktiv und in
-  der Sandbox nicht smoke-testbar → gemäß „nichts kaputt / im Zweifel stehen
-  lassen" nicht blind in die Navigation eingebaut. Nachziehbar, sobald live
-  gegengeprüft werden kann.
+- **Sidebar-Favoriten/Pins (fertig 2026-08-07):** Nav-Items per Stern anpinnen;
+  gepinnte erscheinen oben in einer „★ Favoriten"-Sektion. Ein Modul-Store
+  (`useSyncExternalStore`, Key `admin_pinned_nav`) hält Desktop- + Mobile-Sidebar
+  synchron ohne Prop-Threading; der Stern ist ein Sibling des `<Link>`
+  (`preventDefault`/`stopPropagation` → navigiert nicht), unpinned nur bei
+  Hover/Fokus sichtbar (`group/nav`), permission-gefiltert über `ALL_NAV_ITEMS`.
+  Additiv — bestehende Nav-Logik/Handler unverändert, tsc 0/lint 0.
+- **Bewusst NICHT gebaut (deferred, braucht Live-Check + neue Hot-Path-Daten):**
+  Dashboard-2.0 (KPI-Trend-Delta/Sparklines/„Heute zu erledigen"-Lane). Das
+  Dashboard ist ein konfigurierbares Widget-System ohne Vorperioden-/Serien-Daten
+  in `dashboard-data`; Deltas/Sparklines bräuchten neue DB-Queries auf dem
+  meistgeladenen Admin-Endpoint + nicht smoke-testbare Dataviz → nicht blind
+  bolzen. Nachziehbar mit Live-Umgebung.
 
 #### Schritt 10 — A11y-Feinschliff (teilweise, fertig 2026-08-07)
 - **Sichtbarer Tastatur-Fokus + reduced-motion (globals.css, additiv, auf
@@ -2146,11 +2152,18 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   `[tabindex]`/Felder/`summary`; `@media (prefers-reduced-motion: reduce)`
   schaltet Animationen/Transitions/Shimmer im Admin praktisch ab. Kein JS,
   Maus-Fokus + Storefront unberührt. tsc 0.
-- **Bewusst NICHT gebaut (deferred, braucht Live-Check):** responsives
-  Karten-Fallback für die ~40 Tabellen unter 768px (statt Spalten-Ausblenden),
+- **DataTable-Karten-Fallback (fertig 2026-08-07):** die geteilte
+  `components/admin/ui/DataTable.tsx` rendert unter 640px jede Zeile als
+  Label:Wert-Karte (Label = Spalten-Header, inkl. der sonst per `hideBelow`
+  ausgeblendeten Spalten), Klick/Tastatur wie in der Tabelle; hydration-sicher
+  (`useIsNarrow`: erster Render false, dann `matchMedia`), `disableCards` als
+  Escape-Hatch. Additiv — bestehende Consumer (z. B. `warteliste`) bekommen die
+  Karten automatisch, Desktop unverändert. tsc 0/lint 0.
+- **Bewusst NICHT gebaut (deferred, braucht Live-/Device-Check):** Retrofit der
+  ~40 hand-gebauten Legacy-Tabellen (die nutzen weiter `hidden md:table-cell`-
+  Spalten-Ausblenden — funktioniert, nur kein Karten-Layout) auf die DataTable,
   Master-Detail-Split-View-Verallgemeinerung, Kontrast-Audit beider Themes am
-  echten Gerät. Alles visuell/mobil und nicht in der Sandbox verifizierbar →
-  nachziehbar mit Live-/Device-Test.
+  echten Gerät. Alles visuell/mobil und in der Sandbox nicht verifizierbar.
 - **`/admin/warteliste` (Muster-Seite, fertig):** hartkodierte Slate-Palette (flippte
   bisher NICHT in Light) → `PageHeader`/`Card`/`Button`/`EmptyState`/`TableSkeleton` +
   `DataTable` (sortierbar, a11y) + Token-Farben. Logik 1:1 (load/DELETE/Gruppierung/
