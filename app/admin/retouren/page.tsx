@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 
 const RETOUREN_BOOKINGS_KEY = 'admin:retouren-bookings';
 
@@ -147,6 +148,7 @@ function daysUntil(due: Date): number {
 type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'abgeschlossen';
 
 export default function AdminVersandRueckgabePage() {
+  const toast = useToast();
   const [bookings, setBookings] = useState<FulfillmentBooking[]>(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) === undefined);
   const [tab, setTab] = usePersistentState<Tab>('admin:retouren:tab', 'versenden');
@@ -293,13 +295,13 @@ export default function AdminVersandRueckgabePage() {
         }),
       });
       const d = await res.json();
-      if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
+      if (!res.ok) { toast.error(`Fehler: ${d.error}`); return; }
       setLabelResult({ labelUrl: d.labelUrl, returnLabelUrl: null });
       setBookings((prev) => prev.map((b) => b.id === labelModal.id
         ? { ...b, tracking_number: d.trackingNumber ?? b.tracking_number, label_url: d.labelUrl }
         : b
       ));
-    } catch { alert('Netzwerkfehler.'); }
+    } catch { toast.error('Netzwerkfehler.'); }
     finally { setLabelCreating(false); }
   }
 
@@ -384,10 +386,10 @@ export default function AdminVersandRueckgabePage() {
       <AdminBackLink label="Zurück" />
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
+        <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--admin-heading)' }}>
           Versand & Rückgabe
         </h1>
-        <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>
+        <p className="text-sm font-body mt-1" style={{ color: 'var(--admin-text-dim)' }}>
           Pakete vorbereiten, Tracking verfolgen und Rückgaben abschließen
         </p>
       </div>
@@ -400,15 +402,15 @@ export default function AdminVersandRueckgabePage() {
           { label: 'Rückgabe prüfen', value: rueckgabe.length, color: rueckgabe.length > 0 ? '#ef4444' : '#64748b' },
           { label: 'Abgeschlossen', value: abgeschlossen.length, color: '#64748b' },
         ].map((stat) => (
-          <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
-            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{stat.label}</p>
+          <div key={stat.label} style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '16px 20px' }}>
+            <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 4 }}>{stat.label}</p>
             <p style={{ fontSize: 28, fontWeight: 700, letterSpacing: -1, color: stat.color }}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 flex-wrap" style={{ background: '#111827', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
+      <div className="flex gap-1 mb-6 flex-wrap" style={{ background: 'var(--admin-surface)', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
         {([
           { value: 'versenden' as const, label: `Zu versenden (${versenden.length})` },
           { value: 'unterwegs' as const, label: `Unterwegs (${unterwegs.length})` },
@@ -421,8 +423,8 @@ export default function AdminVersandRueckgabePage() {
             style={{
               padding: '10px 16px', borderRadius: 10, fontSize: 13,
               fontWeight: tab === t.value ? 600 : 400,
-              background: tab === t.value ? '#1e293b' : 'transparent',
-              color: tab === t.value ? '#22d3ee' : '#64748b',
+              background: tab === t.value ? 'var(--admin-surface-2)' : 'transparent',
+              color: tab === t.value ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
               border: 'none', cursor: 'pointer',
             }}
           >
@@ -433,19 +435,19 @@ export default function AdminVersandRueckgabePage() {
 
       {/* Tabelle */}
       {loading ? (
-        <div className="text-center py-16" style={{ color: '#64748b' }}>Lädt…</div>
+        <div className="text-center py-16" style={{ color: 'var(--admin-text-dim)' }}>Lädt…</div>
       ) : displayed.length === 0 ? (
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
-          <p style={{ color: '#64748b', fontSize: 14 }}>{emptyText(tab)}</p>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>{emptyText(tab)}</p>
         </div>
       ) : (
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   {['Buchung', 'Kamera', 'Kunde', dateColLabel, tab === 'abgeschlossen' ? 'Zustand' : 'Status', ''].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       {h}
                     </th>
                   ))}
@@ -536,21 +538,21 @@ function BookingRow({
   const statusColor = STATUS_COLOR[booking.status] ?? '#64748b';
 
   return (
-    <tr style={{ borderBottom: last ? 'none' : '1px solid #1e293b' }}>
+    <tr style={{ borderBottom: last ? 'none' : '1px solid var(--admin-border)' }}>
       <td style={{ padding: '14px 16px' }}>
         <Link
           href={`/admin/buchungen/${booking.id}`}
-          style={{ fontSize: 13, fontWeight: 600, color: '#22d3ee', fontFamily: 'monospace', textDecoration: 'none' }}
+          style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-accent-hover)', fontFamily: 'monospace', textDecoration: 'none' }}
         >
           {booking.id}
         </Link>
-        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
+        <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
       </td>
       <td style={{ padding: '14px 16px' }}>
-        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.product_name}</p>
+        <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{booking.product_name}</p>
       </td>
       <td style={{ padding: '14px 16px' }}>
-        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.customer_name || '–'}</p>
+        <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{booking.customer_name || '–'}</p>
       </td>
       <td style={{ padding: '14px 16px', minWidth: 200 }}>
         {tab === 'versenden' && <ShipDateCell booking={booking} buf={buf} />}
@@ -558,8 +560,8 @@ function BookingRow({
         {tab === 'rueckgabe' && <ReturnDueCell booking={booking} buf={buf} onSaved={onSaved} />}
         {tab === 'abgeschlossen' && booking.returned_at && (
           <>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{fmtDate(booking.returned_at)}</p>
-            <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Miete bis {fmtDate(booking.rental_to)}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>{fmtDate(booking.returned_at)}</p>
+            <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>Miete bis {fmtDate(booking.rental_to)}</p>
           </>
         )}
       </td>
@@ -599,7 +601,7 @@ function ShipDateCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buff
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: overdue || dl === 0 ? '#ef4444' : '#e2e8f0' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: overdue || dl === 0 ? '#ef4444' : 'var(--admin-text)' }}>
           {fmtDate(sd.toISOString())}
         </p>
         {isOverridden && (
@@ -608,7 +610,7 @@ function ShipDateCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buff
           </span>
         )}
       </div>
-      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+      <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
         Mietbeginn {fmtDate(booking.rental_from)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
       </p>
       <span
@@ -634,12 +636,12 @@ function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buf
 
   return (
     <div>
-      <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{fmtDate(due.toISOString())}</p>
-      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>{fmtDate(due.toISOString())}</p>
+      <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
         Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
       </p>
       {booking.tracking_number && (
-        <p style={{ fontSize: 11, color: '#22d3ee', marginTop: 2, fontFamily: 'monospace' }}>
+        <p style={{ fontSize: 11, color: 'var(--admin-accent-hover)', marginTop: 2, fontFamily: 'monospace' }}>
           📦 {booking.tracking_number}
         </p>
       )}
@@ -742,7 +744,7 @@ function ActionButton({
             {returnBtn}
           </div>
           {printBtn}
-          <Link href={`/admin/versand/${booking.id}/packen`} style={{ ...base, background: '#06b6d4', color: 'white' }}>
+          <Link href={`/admin/versand/${booking.id}/packen`} style={{ ...base, background: 'var(--admin-accent)', color: 'white' }}>
             📦 Packen
           </Link>
         </div>
@@ -757,7 +759,7 @@ function ActionButton({
 
   if (tab === 'unterwegs') {
     return (
-      <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #334155' }}>
+      <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }}>
         Details
       </Link>
     );
@@ -773,7 +775,7 @@ function ActionButton({
 
   // abgeschlossen
   return (
-    <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #334155' }}>
+    <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }}>
       Details
     </Link>
   );
@@ -856,8 +858,8 @@ function ReturnDueCell({
           onChange={(e) => setValue(e.target.value)}
           autoFocus
           style={{
-            padding: '6px 8px', borderRadius: 6, border: '1px solid #334155',
-            background: '#0f172a', color: '#e2e8f0', fontSize: 13, width: 150,
+            padding: '6px 8px', borderRadius: 6, border: '1px solid var(--admin-faint)',
+            background: 'var(--admin-input-bg)', color: 'var(--admin-text)', fontSize: 13, width: 150,
           }}
         />
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -865,7 +867,7 @@ function ReturnDueCell({
             type="button"
             onClick={save}
             disabled={saving}
-            style={{ padding: '4px 10px', borderRadius: 6, background: '#06b6d4', color: 'white', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+            style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--admin-accent)', color: 'white', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
           >
             {saving ? '…' : 'Speichern'}
           </button>
@@ -873,7 +875,7 @@ function ReturnDueCell({
             type="button"
             onClick={() => { setEditing(false); setErr(''); setValue(booking.return_due_date_override?.slice(0, 10) ?? defaultDateISO); }}
             disabled={saving}
-            style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: '#64748b', border: '1px solid #334155', fontSize: 11, cursor: 'pointer' }}
+            style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: 'var(--admin-text-dim)', border: '1px solid var(--admin-faint)', fontSize: 11, cursor: 'pointer' }}
           >
             Abbrechen
           </button>
@@ -882,7 +884,7 @@ function ReturnDueCell({
               type="button"
               onClick={reset}
               disabled={saving}
-              style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 11, cursor: 'pointer' }}
+              style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', fontSize: 11, cursor: 'pointer' }}
               title="Auf Standard-Puffer zurücksetzen"
             >
               ↺ Standard
@@ -908,7 +910,7 @@ function ReturnDueCell({
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: overdue ? '#ef4444' : '#e2e8f0' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: overdue ? '#ef4444' : 'var(--admin-text)' }}>
           {fmtDate(dueDate.toISOString())}
         </p>
         {isOverridden && (
@@ -920,12 +922,12 @@ function ReturnDueCell({
           type="button"
           onClick={() => setEditing(true)}
           title="Rückgabe-Datum ändern"
-          style={{ marginLeft: 4, padding: '0 4px', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12 }}
+          style={{ marginLeft: 4, padding: '0 4px', background: 'transparent', border: 'none', color: 'var(--admin-text-dim)', cursor: 'pointer', fontSize: 12 }}
         >
           ✏
         </button>
       </div>
-      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+      <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
         Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
       </p>
       <span
@@ -959,20 +961,20 @@ function LabelModal({
   onClose: () => void;
 }) {
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155',
-    background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none',
+    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--admin-faint)',
+    background: 'var(--admin-input-bg)', color: 'var(--admin-text)', fontSize: 14, outline: 'none',
   };
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8',
+    display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--admin-muted)',
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
   };
   const btnPrimary: React.CSSProperties = {
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-    background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+    background: 'var(--admin-accent)', color: 'white', border: 'none', cursor: 'pointer',
   };
   const btnSecondary: React.CSSProperties = {
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-    background: 'transparent', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+    background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', cursor: 'pointer',
   };
   const disabled = creating || !form.name.trim() || !form.address.trim() || !form.postalCode.trim() || !form.city.trim() || !form.methodId;
 
@@ -985,11 +987,11 @@ function LabelModal({
         zIndex: 100, padding: 16,
       }}
     >
-      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>
+      <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 4 }}>
           Sendcloud-Etikett erstellen
         </h2>
-        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>Buchung {booking.id}</p>
+        <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 16 }}>Buchung {booking.id}</p>
 
         {result ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1050,7 +1052,7 @@ function LabelModal({
               <div>
                 <label style={labelStyle}>Versandmethode *</label>
                 {methodsLoading ? (
-                  <div style={{ ...inputStyle, color: '#64748b' }}>Lädt…</div>
+                  <div style={{ ...inputStyle, color: 'var(--admin-text-dim)' }}>Lädt…</div>
                 ) : (
                   <select value={form.methodId}
                     onChange={(e) => setForm((f) => ({ ...f, methodId: Number(e.target.value) }))}
@@ -1103,11 +1105,11 @@ function ReturnUploadModal({
   const isPdf = file?.type === 'application/pdf';
   const btnPrimary: React.CSSProperties = {
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-    background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+    background: 'var(--admin-accent)', color: 'white', border: 'none', cursor: 'pointer',
   };
   const btnSecondary: React.CSSProperties = {
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-    background: 'transparent', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+    background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', cursor: 'pointer',
   };
   const disabled = uploading || !file;
 
@@ -1125,15 +1127,15 @@ function ReturnUploadModal({
         zIndex: 100, padding: 16,
       }}
     >
-      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>
+      <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 4 }}>
           Retourlabel hochladen
         </h2>
-        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+        <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 16 }}>
           Buchung {booking.id} · Bild oder PDF wird auf A5 Hochformat konvertiert
         </p>
 
-        <div style={{ padding: 12, background: '#0f172a', border: '1px solid #334155', borderRadius: 10, fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>
+        <div style={{ padding: 12, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10, fontSize: 12, color: 'var(--admin-muted)', marginBottom: 14 }}>
           Lade hier das Retoure-Versandetikett (von DHL Online-Frankierung, DHL-
           Geschäftskundenportal o.ä.) als JPG, PNG oder PDF hoch. Wir wandeln es
           serverseitig in ein A5-Hochformat-PDF um und können es zusammen mit dem
@@ -1143,10 +1145,10 @@ function ReturnUploadModal({
         <label
           htmlFor="return-label-file"
           style={{
-            display: 'block', padding: 20, border: '2px dashed #334155',
+            display: 'block', padding: 20, border: '2px dashed var(--admin-faint)',
             borderRadius: 10, textAlign: 'center', cursor: 'pointer',
-            background: file ? '#06b6d411' : '#0f172a',
-            color: file ? '#22d3ee' : '#94a3b8',
+            background: file ? '#06b6d411' : 'var(--admin-input-bg)',
+            color: file ? 'var(--admin-accent-hover)' : 'var(--admin-muted)',
             fontSize: 13, marginBottom: 14,
           }}
         >
@@ -1154,10 +1156,10 @@ function ReturnUploadModal({
             <>
               <div style={{ fontSize: 22, marginBottom: 4 }}>📄</div>
               <div style={{ fontWeight: 600 }}>{file.name}</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>
                 {Math.round(file.size / 1024)} KB · {file.type || 'unbekannter Typ'}
               </div>
-              <div style={{ fontSize: 11, color: '#06b6d4', marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--admin-accent)', marginTop: 6 }}>
                 Klick zum Wechseln
               </div>
             </>
@@ -1165,7 +1167,7 @@ function ReturnUploadModal({
             <>
               <div style={{ fontSize: 22, marginBottom: 4 }}>⬆</div>
               <div>Datei wählen oder hierher ziehen</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>
                 JPG, PNG oder PDF · max. 10 MB
               </div>
             </>
@@ -1188,13 +1190,13 @@ function ReturnUploadModal({
         {isPdf && (
           <div
             style={{
-              padding: 12, background: '#0f172a', border: '1px solid #334155',
+              padding: 12, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)',
               borderRadius: 10, marginBottom: 14,
               display: 'flex', flexDirection: 'column', gap: 12,
             }}
           >
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--admin-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
                 Bereich verwenden
               </label>
               <select
@@ -1203,8 +1205,8 @@ function ReturnUploadModal({
                 disabled={uploading}
                 style={{
                   width: '100%', padding: '10px 12px', borderRadius: 8,
-                  border: '1px solid #334155', background: '#111827',
-                  color: '#e2e8f0', fontSize: 13, outline: 'none',
+                  border: '1px solid var(--admin-faint)', background: 'var(--admin-surface)',
+                  color: 'var(--admin-text)', fontSize: 13, outline: 'none',
                   cursor: uploading ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -1216,7 +1218,7 @@ function ReturnUploadModal({
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--admin-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
                 Drehung
               </label>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -1228,9 +1230,9 @@ function ReturnUploadModal({
                     disabled={uploading}
                     style={{
                       flex: 1, padding: '8px 4px', borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: rotate === deg ? '#06b6d4' : '#111827',
-                      color: rotate === deg ? '#fff' : '#94a3b8',
+                      border: '1px solid var(--admin-faint)',
+                      background: rotate === deg ? 'var(--admin-accent)' : 'var(--admin-surface)',
+                      color: rotate === deg ? '#fff' : 'var(--admin-muted)',
                       fontSize: 12, fontWeight: 600,
                       cursor: uploading ? 'not-allowed' : 'pointer',
                     }}
@@ -1240,7 +1242,7 @@ function ReturnUploadModal({
                 ))}
               </div>
             </div>
-            <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--admin-muted)', lineHeight: 1.5 }}>
               DHL-Retoure-Etiketten haben je nach Quelle unterschiedliche
               Layouts. Falls das Ergebnis im Viewer nicht passt, einfach
               die Datei nochmal hochladen mit anderer Auswahl.
