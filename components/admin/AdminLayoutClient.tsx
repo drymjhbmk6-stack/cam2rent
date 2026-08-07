@@ -149,14 +149,21 @@ const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/tagesgeschaeft', label: 'Übersicht', exact: true, icon: iconDashboard, perm: 'tagesgeschaeft' },
   { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen, perm: 'tagesgeschaeft' },
   { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus, perm: 'tagesgeschaeft' },
-  { href: '/admin/reservierungen', label: 'Reservierungen (48h)', icon: iconCalendar, perm: 'tagesgeschaeft' },
-  { href: '/admin/preisrechner', label: 'Preisrechner', icon: iconPlus, perm: 'tagesgeschaeft' },
-  { href: '/admin/verkauf', label: 'Verkäufe', icon: iconCart, perm: 'tagesgeschaeft' },
-  { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
-  { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/retouren', label: 'Versand & Rückgabe', icon: iconTruck, perm: 'tagesgeschaeft' },
   { href: '/admin/sendungen', label: 'Paketverfolgung', icon: iconTruck, perm: 'tagesgeschaeft' },
+  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'tagesgeschaeft' },
+];
+
+const KALENDER_ITEMS: NavItem[] = [
+  { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
+  { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit-alerts', label: 'Verfügbarkeits-Alerts', icon: iconWarning, perm: 'tagesgeschaeft' },
+];
+
+const VERKAUF_ITEMS: NavItem[] = [
+  { href: '/admin/preisrechner', label: 'Preisrechner', icon: iconPlus, perm: 'tagesgeschaeft' },
+  { href: '/admin/reservierungen', label: 'Reservierungen (48h)', icon: iconCalendar, perm: 'tagesgeschaeft' },
+  { href: '/admin/verkauf', label: 'Verkäufe', icon: iconCart, perm: 'tagesgeschaeft' },
 ];
 
 const KUNDEN_ITEMS: NavItem[] = [
@@ -166,7 +173,6 @@ const KUNDEN_ITEMS: NavItem[] = [
   { href: '/admin/warteliste', label: 'Warteliste', icon: iconBell, perm: 'kunden' },
   { href: '/admin/kunden-material', label: 'Kundenmaterial', icon: iconGallery, perm: 'kunden' },
   { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar, perm: 'kunden' },
-  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'tagesgeschaeft' },
 ];
 
 const KATALOG_ITEMS: NavItem[] = [
@@ -186,7 +192,10 @@ const PREISE_ITEMS: NavItem[] = [
   { href: '/admin/newsletter', label: 'Newsletter', icon: iconMail, perm: 'preise' },
 ];
 
-const WEBSEITE_ITEMS: NavItem[] = [
+// Content-Kopf-Einträge (Startseite + Rechtstexte) — direkt in der Content-Gruppe
+// über den Blog/Posts/Reels-Sub-Collapses. Die frühere eigene Gruppe „Webseite"
+// (2 Einträge) ist hier aufgegangen.
+const CONTENT_TOP_ITEMS: NavItem[] = [
   { href: '/admin/startseite', label: 'Startseite', icon: iconHome, perm: 'content' },
   { href: '/admin/legal', label: 'Rechtstexte', icon: iconLegal, perm: 'system' },
 ];
@@ -224,6 +233,7 @@ const FINANZEN_ITEMS: NavItem[] = [
   { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance, perm: 'finanzen' },
   { href: '/admin/buchhaltung/belege', label: 'Belege', icon: iconCart, perm: 'finanzen' },
   { href: '/admin/buchhaltung/anlagen', label: 'Anlagen', icon: iconCamera, perm: 'finanzen' },
+  { href: '/admin/einkauf', label: 'Einkauf', icon: iconClipboard, perm: 'finanzen' },
 ];
 
 const BERICHTE_ITEMS: NavItem[] = [
@@ -244,8 +254,9 @@ const SYSTEM_ITEMS: NavItem[] = [
 // Flache Liste aller Nav-Items — nur zum Auflösen gepinnter Favoriten-Hrefs
 // (href → Item mit Icon/Label/Permission). Reihenfolge egal.
 const ALL_NAV_ITEMS: NavItem[] = [
-  ...MEIN_BEREICH_ITEMS, ...TAGESGESCHAEFT_ITEMS, ...KUNDEN_ITEMS, ...KATALOG_ITEMS,
-  ...PREISE_ITEMS, ...WEBSEITE_ITEMS, ...BLOG_ITEMS, ...POSTS_ITEMS, ...REELS_ITEMS,
+  ...MEIN_BEREICH_ITEMS, ...TAGESGESCHAEFT_ITEMS, ...KALENDER_ITEMS, ...VERKAUF_ITEMS,
+  ...KUNDEN_ITEMS, ...KATALOG_ITEMS, ...PREISE_ITEMS, ...CONTENT_TOP_ITEMS,
+  ...BLOG_ITEMS, ...POSTS_ITEMS, ...REELS_ITEMS,
   ...FINANZEN_ITEMS, ...BERICHTE_ITEMS, ...SYSTEM_ITEMS,
 ];
 
@@ -537,13 +548,14 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
   // schliesst die bisherige.
   const GROUP_MATCH: Record<string, string[]> = {
     mein: ['/admin/mein'],
-    tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/sendungen', '/admin/verfuegbarkeit-alerts'],
-    kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
+    tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/versand', '/admin/retouren', '/admin/sendungen', '/admin/schaeden'],
+    kalender: ['/admin/verfuegbarkeit', '/admin/auftragskalender', '/admin/verfuegbarkeit-alerts'],
+    verkauf: ['/admin/preisrechner', '/admin/reservierungen', '/admin/verkauf'],
+    kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen'],
     katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/verbrauch', '/admin/firmware'],
-    preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
-    content: ['/admin/blog', '/admin/social', '/admin/content'],
-    webseite: ['/admin/startseite', '/admin/legal'],
-    finanzen: ['/admin/buchhaltung'],
+    preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/angebote', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
+    content: ['/admin/blog', '/admin/social', '/admin/content', '/admin/startseite', '/admin/legal'],
+    finanzen: ['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen'],
     berichte: ['/admin/analytics', '/admin/buchungsinteresse', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll', '/admin/client-errors'],
   };
 
@@ -672,6 +684,30 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
           onToggle={() => toggleGroup('tagesgeschaeft')}
         />
         <NavGroupCollapse
+          label="Kalender & Verfügbarkeit"
+          icon={iconCalendar}
+          items={KALENDER_ITEMS}
+          matchPaths={GROUP_MATCH.kalender}
+          storageKey="kalender"
+          pathname={pathname}
+          onNavClick={onNavClick}
+          me={me}
+          open={openGroup === 'kalender'}
+          onToggle={() => toggleGroup('kalender')}
+        />
+        <NavGroupCollapse
+          label="Verkauf & Reservierung"
+          icon={iconCart}
+          items={VERKAUF_ITEMS}
+          matchPaths={GROUP_MATCH.verkauf}
+          storageKey="verkauf"
+          pathname={pathname}
+          onNavClick={onNavClick}
+          me={me}
+          open={openGroup === 'verkauf'}
+          onToggle={() => toggleGroup('verkauf')}
+        />
+        <NavGroupCollapse
           label="Kunden & Kommunikation"
           icon={iconUsers}
           items={KUNDEN_ITEMS}
@@ -710,6 +746,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
         <NavGroupCollapse
           label="Content"
           icon={iconBlog}
+          items={CONTENT_TOP_ITEMS}
           matchPaths={GROUP_MATCH.content}
           storageKey="content"
           pathname={pathname}
@@ -723,18 +760,6 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
           <SubNavCollapse label="Posts" icon={iconSocial} items={POSTS_ITEMS} storageKey="admin_posts_collapsed" active={pathname.startsWith('/admin/social') && !pathname.startsWith('/admin/social/reels')} pathname={pathname} onNavClick={onNavClick} me={me} hideWhenEmpty />
           <SubNavCollapse label="Reels" icon={iconFilm} items={REELS_ITEMS} storageKey="admin_reels_collapsed" active={pathname.startsWith('/admin/social/reels')} pathname={pathname} onNavClick={onNavClick} me={me} hideWhenEmpty />
         </NavGroupCollapse>
-        <NavGroupCollapse
-          label="Webseite"
-          icon={iconHome}
-          items={WEBSEITE_ITEMS}
-          matchPaths={GROUP_MATCH.webseite}
-          storageKey="webseite"
-          pathname={pathname}
-          onNavClick={onNavClick}
-          me={me}
-          open={openGroup === 'webseite'}
-          onToggle={() => toggleGroup('webseite')}
-        />
         <NavGroupCollapse
           label="Finanzen"
           icon={iconFinance}
