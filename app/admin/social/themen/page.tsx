@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Topic {
   id: string;
@@ -44,9 +45,9 @@ export default function ThemenPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <AdminBackLink />
-      <h1 className="text-2xl font-bold text-white mt-4 mb-4">Themen & Serien</h1>
+      <h1 className="text-2xl font-bold text-admin-heading mt-4 mb-4">Themen & Serien</h1>
 
-      <div className="flex gap-2 mb-6 border-b border-slate-800">
+      <div className="flex gap-2 mb-6 border-b border-admin-border">
         <TabButton active={tab === 'topics'} onClick={() => setTab('topics')}>Einzelthemen</TabButton>
         <TabButton active={tab === 'series'} onClick={() => setTab('series')}>Serien</TabButton>
       </div>
@@ -63,7 +64,7 @@ function TabButton({ active, children, onClick }: { active: boolean; children: R
       type="button"
       onClick={onClick}
       className="px-4 py-2 font-medium text-sm transition-colors"
-      style={active ? { color: '#06b6d4', borderBottom: '2px solid #06b6d4', marginBottom: '-2px' } : { color: '#94a3b8' }}
+      style={active ? { color: 'var(--admin-accent)', borderBottom: '2px solid var(--admin-accent)', marginBottom: '-2px' } : { color: 'var(--admin-muted)' }}
     >
       {children}
     </button>
@@ -71,6 +72,7 @@ function TabButton({ active, children, onClick }: { active: boolean; children: R
 }
 
 function TopicsTab() {
+  const confirm = useConfirm();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -110,7 +112,7 @@ function TopicsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Thema löschen?')) return;
+    if (!(await confirm({ message: 'Thema löschen?', danger: true }))) return;
     await fetch(`/api/admin/social/topics/${id}`, { method: 'DELETE' });
     load();
   }
@@ -121,7 +123,7 @@ function TopicsTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-slate-400">Sammle Post-Ideen im Pool. Du kannst sie dann in den Redaktionsplan übernehmen.</p>
+        <p className="text-sm text-admin-muted">Sammle Post-Ideen im Pool. Du kannst sie dann in den Redaktionsplan übernehmen.</p>
         <button
           type="button"
           onClick={() => setCreating(true)}
@@ -132,22 +134,22 @@ function TopicsTab() {
       </div>
 
       {creating && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5 mb-4">
-          <h3 className="font-semibold text-white mb-3">Neues Thema</h3>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Thema / Titel</label>
+        <div className="rounded-xl bg-slate-900/50 border border-admin-border p-5 mb-4">
+          <h3 className="font-semibold text-admin-heading mb-3">Neues Thema</h3>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Thema / Titel</label>
           <input type="text" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })}
             placeholder="z.B. Die 5 besten Kameras fuer Ski-Urlaub"
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
 
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Kernaussage</label>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Kernaussage</label>
           <textarea value={form.angle} onChange={(e) => setForm({ ...form, angle: e.target.value })}
             placeholder="Was genau soll der Post vermitteln? (1-2 Sätze)"
             rows={2}
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
 
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Kategorie</label>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Kategorie</label>
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm">
             <option value="produkt">Produkt-Spotlight</option>
             <option value="tipp">Nutzer-Tipp</option>
             <option value="inspiration">Inspiration / Anwendung</option>
@@ -157,23 +159,23 @@ function TopicsTab() {
             <option value="ankuendigung">Ankündigung</option>
           </select>
 
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Keywords (Leerzeichen/Komma getrennt)</label>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Keywords (Leerzeichen/Komma getrennt)</label>
           <input type="text" value={form.keywords} onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             placeholder="ski snowboard gopro wintersport"
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
 
           <div className="flex gap-3 mb-4 text-sm">
-            <label className="flex items-center gap-2 text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2 text-admin-text cursor-pointer">
               <input type="checkbox" checked={form.platforms.includes('facebook')}
                 onChange={() => setForm({ ...form, platforms: form.platforms.includes('facebook') ? form.platforms.filter((p) => p !== 'facebook') : [...form.platforms, 'facebook'] })} />
               Facebook
             </label>
-            <label className="flex items-center gap-2 text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2 text-admin-text cursor-pointer">
               <input type="checkbox" checked={form.platforms.includes('instagram')}
                 onChange={() => setForm({ ...form, platforms: form.platforms.includes('instagram') ? form.platforms.filter((p) => p !== 'instagram') : [...form.platforms, 'instagram'] })} />
               Instagram
             </label>
-            <label className="flex items-center gap-2 text-slate-200 cursor-pointer ml-4">
+            <label className="flex items-center gap-2 text-admin-text cursor-pointer ml-4">
               <input type="checkbox" checked={form.with_image} onChange={(e) => setForm({ ...form, with_image: e.target.checked })} />
               Mit Bild (DALL-E)
             </label>
@@ -183,20 +185,20 @@ function TopicsTab() {
             <button type="button" onClick={handleCreate} disabled={!form.topic}
               className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50">Speichern</button>
             <button type="button" onClick={() => setCreating(false)}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 font-semibold text-sm hover:bg-slate-600">Abbrechen</button>
+              className="px-4 py-2 rounded-lg bg-[var(--admin-faint)] text-admin-text font-semibold text-sm hover:bg-[var(--admin-muted-2)]">Abbrechen</button>
           </div>
         </div>
       )}
 
-      {loading && <p className="text-slate-400">Lade…</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
 
       {!loading && open.length === 0 && used.length === 0 && (
-        <p className="text-slate-400">Noch keine Themen. Leg welche an oder lass KI welche generieren (unter KI-Plan).</p>
+        <p className="text-admin-muted">Noch keine Themen. Leg welche an oder lass KI welche generieren (unter KI-Plan).</p>
       )}
 
       {!loading && open.length > 0 && (
         <section className="mb-6">
-          <h3 className="font-semibold text-white mb-2">Offene Themen ({open.length})</h3>
+          <h3 className="font-semibold text-admin-heading mb-2">Offene Themen ({open.length})</h3>
           <div className="space-y-2">
             {open.map((t) => <TopicRow key={t.id} topic={t} onDelete={handleDelete} />)}
           </div>
@@ -205,7 +207,7 @@ function TopicsTab() {
 
       {!loading && used.length > 0 && (
         <section>
-          <h3 className="font-semibold text-slate-500 mb-2 text-sm">Bereits verwendet ({used.length})</h3>
+          <h3 className="font-semibold text-[var(--admin-text-dim)] mb-2 text-sm">Bereits verwendet ({used.length})</h3>
           <div className="space-y-2 opacity-60">
             {used.map((t) => <TopicRow key={t.id} topic={t} onDelete={handleDelete} />)}
           </div>
