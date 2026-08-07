@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface ScheduledPost {
   id: string;
@@ -42,6 +43,7 @@ export default function KiPlanPage() {
   const [withImages, setWithImages] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const confirm = useConfirm();
 
   async function loadPosts() {
     const res = await fetch('/api/admin/social/posts?status=scheduled&limit=200');
@@ -99,13 +101,14 @@ export default function KiPlanPage() {
     const imgTime = withImages ? totalEstimated * 20 : 0;
     const captionTime = totalEstimated * 5;
     const estimatedMinutes = Math.ceil((imgTime + captionTime) / 60);
-    if (!confirm(
-      `Jetzt ${totalEstimated} Posts im Hintergrund generieren?\n\n` +
-      `Dauer: ca. ${estimatedMinutes} Minuten — du kannst die Seite verlassen.\n` +
-      `Plattformen: ${platforms.join(', ') || 'keine'}\n` +
-      `Bilder: ${withImages ? 'ja (DALL-E)' : 'nein, nur Text'}\n\n` +
-      `Kosten: ~0,10 € Claude${withImages ? ` + ~${(totalEstimated * 0.04).toFixed(2)} € DALL-E` : ''}`
-    )) return;
+    if (!(await confirm({
+      message:
+        `Jetzt ${totalEstimated} Posts im Hintergrund generieren?\n\n` +
+        `Dauer: ca. ${estimatedMinutes} Minuten — du kannst die Seite verlassen.\n` +
+        `Plattformen: ${platforms.join(', ') || 'keine'}\n` +
+        `Bilder: ${withImages ? 'ja (DALL-E)' : 'nein, nur Text'}\n\n` +
+        `Kosten: ~0,10 € Claude${withImages ? ` + ~${(totalEstimated * 0.04).toFixed(2)} € DALL-E` : ''}`,
+    }))) return;
 
     setError(null);
 
@@ -133,20 +136,20 @@ export default function KiPlanPage() {
   }
 
   async function handleCancel() {
-    if (!confirm('Laufenden Plan-Job abbrechen? Bereits erstellte Posts bleiben erhalten.')) return;
+    if (!(await confirm({ message: 'Laufenden Plan-Job abbrechen? Bereits erstellte Posts bleiben erhalten.', danger: true }))) return;
     await fetch('/api/admin/social/generate-plan', { method: 'DELETE' });
     loadJobStatus();
   }
 
   async function handleReset() {
-    if (!confirm('Job-Status zurücksetzen? Bereits erstellte Posts bleiben erhalten — nur die Statusanzeige wird gelöscht, damit du einen neuen Plan starten kannst.')) return;
+    if (!(await confirm({ message: 'Job-Status zurücksetzen? Bereits erstellte Posts bleiben erhalten — nur die Statusanzeige wird gelöscht, damit du einen neuen Plan starten kannst.' }))) return;
     await fetch('/api/admin/social/generate-plan?reset=1', { method: 'DELETE' });
     setError(null);
     loadJobStatus();
   }
 
   async function handleClearAll() {
-    if (!confirm(`Wirklich ALLE ${scheduled.length} geplanten Posts löschen?`)) return;
+    if (!(await confirm({ message: `Wirklich ALLE ${scheduled.length} geplanten Posts löschen?`, danger: true }))) return;
     for (const p of scheduled) {
       await fetch(`/api/admin/social/posts/${p.id}`, { method: 'DELETE' });
     }
@@ -159,8 +162,8 @@ export default function KiPlanPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <AdminBackLink />
-      <h1 className="text-2xl font-bold text-white mb-1 mt-4">KI-Plan</h1>
-      <p className="text-sm text-slate-400 mb-6">
+      <h1 className="text-2xl font-bold text-admin-heading mb-1 mt-4">KI-Plan</h1>
+      <p className="text-sm text-admin-muted mb-6">
         Generiere automatisch einen mehrwöchigen Post-Plan für Facebook + Instagram.
         Claude erstellt Themen-Ideen, Captions und Hashtags. Bilder optional via DALL-E.
       </p>
