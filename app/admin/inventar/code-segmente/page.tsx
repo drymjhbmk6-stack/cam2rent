@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Segment {
   id: string;
@@ -12,6 +13,7 @@ interface Segment {
 }
 
 export default function CodeSegmentePage() {
+  const confirm = useConfirm();
   const [segmente, setSegmente] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +98,8 @@ export default function CodeSegmentePage() {
   }
 
   async function handleDelete(s: Segment) {
-    if (!confirm(`Segment "${s.code}" (${s.label}) wirklich loeschen?\n\nAchtung: existierende Inventar-Codes bleiben erhalten — der Admin verliert nur den Vorschlag im Dropdown.`)) return;
+    const ok = await confirm({ title: 'Segment löschen', message: `Segment "${s.code}" (${s.label}) wirklich löschen?\n\nAchtung: existierende Inventar-Codes bleiben erhalten — der Admin verliert nur den Vorschlag im Dropdown.`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/inventar/code-segmente?id=${s.id}`, { method: 'DELETE' });
@@ -115,12 +118,12 @@ export default function CodeSegmentePage() {
   const hersteller = segmente.filter((s) => s.typ === 'hersteller');
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/inventar" />
       <div className="max-w-4xl mx-auto mt-4 space-y-6">
         <div>
           <h1 className="text-2xl font-heading">Inventar-Code-Segmente</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-admin-muted mt-1">
             Stammdaten für den strukturierten Inventar-Code-Builder. Format:
             <span className="font-mono mx-1">[Kategorie]-[Hersteller]-[Name]-[NN]</span>
             (z.B. <span className="font-mono">STO-SAN-128-01</span>).
@@ -134,7 +137,7 @@ export default function CodeSegmentePage() {
         )}
 
         {loading ? (
-          <p className="text-slate-400">Lädt…</p>
+          <p className="text-admin-muted">Lädt…</p>
         ) : (
           <>
             <SegmentSection
@@ -197,37 +200,37 @@ interface SectionProps {
 function SegmentSection(props: SectionProps) {
   const { title, hint, segmente, newForm, setNewForm, onAdd, editId, editForm, setEditForm, startEdit, cancelEdit, saveEdit, onDelete, busy } = props;
   return (
-    <section className="bg-[#111827] border border-slate-800 rounded p-4">
+    <section className="bg-admin-surface border border-admin-border rounded p-4">
       <div className="mb-3">
         <h2 className="font-semibold text-lg">{title}</h2>
-        <p className="text-xs text-slate-400 mt-1">{hint}</p>
+        <p className="text-xs text-admin-muted mt-1">{hint}</p>
       </div>
 
       {/* Anlege-Zeile */}
       <div className="flex gap-2 mb-4 items-end">
         <div className="w-24">
-          <label className="block text-xs text-slate-400 mb-1">Code</label>
+          <label className="block text-xs text-admin-muted mb-1">Code</label>
           <input
             value={newForm.code}
             onChange={(e) => setNewForm({ ...newForm, code: e.target.value.toUpperCase() })}
             placeholder="z.B. STO"
             maxLength={5}
-            className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1.5 text-sm font-mono"
+            className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm font-mono"
           />
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-slate-400 mb-1">Label</label>
+          <label className="block text-xs text-admin-muted mb-1">Label</label>
           <input
             value={newForm.label}
             onChange={(e) => setNewForm({ ...newForm, label: e.target.value })}
             placeholder="z.B. Speichermedien"
-            className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1.5 text-sm"
+            className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm"
           />
         </div>
         <button
           onClick={onAdd}
           disabled={busy || !newForm.code.trim() || !newForm.label.trim()}
-          className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+          className="px-3 py-1.5 bg-admin-accent hover:bg-admin-accent-hover disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] text-slate-900 rounded text-sm font-semibold"
         >
           + Hinzufuegen
         </button>
@@ -235,11 +238,11 @@ function SegmentSection(props: SectionProps) {
 
       {/* Liste */}
       {segmente.length === 0 ? (
-        <p className="text-sm text-slate-500 italic">Noch nichts angelegt.</p>
+        <p className="text-sm text-[var(--admin-text-dim)] italic">Noch nichts angelegt.</p>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+            <tr className="text-left text-xs text-[var(--admin-text-dim)] border-b border-admin-border">
               <th className="py-2 px-2">Code</th>
               <th className="py-2 px-2">Label</th>
               <th className="py-2 px-2 text-right">Aktion</th>
@@ -247,7 +250,7 @@ function SegmentSection(props: SectionProps) {
           </thead>
           <tbody>
             {segmente.map((s) => (
-              <tr key={s.id} className="border-b border-slate-800/60">
+              <tr key={s.id} className="border-b border-admin-border">
                 {editId === s.id ? (
                   <>
                     <td className="py-1.5 px-2">
@@ -255,21 +258,21 @@ function SegmentSection(props: SectionProps) {
                         value={editForm.code}
                         onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase() })}
                         maxLength={5}
-                        className="w-24 bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm font-mono"
+                        className="w-24 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1 text-sm font-mono"
                       />
                     </td>
                     <td className="py-1.5 px-2">
                       <input
                         value={editForm.label}
                         onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                        className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm"
+                        className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1 text-sm"
                       />
                     </td>
                     <td className="py-1.5 px-2 text-right whitespace-nowrap">
                       <button onClick={saveEdit} disabled={busy} className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold mr-3">
                         Speichern
                       </button>
-                      <button onClick={cancelEdit} className="text-slate-400 hover:text-slate-300 text-xs">
+                      <button onClick={cancelEdit} className="text-admin-muted hover:text-admin-text-2 text-xs">
                         Abbrechen
                       </button>
                     </td>
