@@ -2286,7 +2286,54 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   Token-Umstellung ihre **Dark-Pixel-Identität** brechen würde (translucent →
   opak); ein eigenes `--admin-card-translucent`-Token wäre Scope-Creep.
 
+### Adminbereich-Aufräumen — Navigation + überladene Seiten (Stand 2026-08-07)
+Aufräum-Durchgang gegen „Menü/Übersicht unstrukturiert, viele Bereiche
+überladen". Rein verhaltenserhaltend (keine Route entfernt, keine Berechtigung/
+kein Handler geändert), pro Schritt eigener Commit.
+- **Sidebar neu gruppiert** (`components/admin/AdminLayoutClient.tsx`): „Tagesgeschäft"
+  von 11 auf 6 Einträge entschlackt (Übersicht, Buchungen, Manuelle Buchung,
+  Versand & Rückgabe, Paketverfolgung, **Schadensmeldungen** — von „Kunden"
+  hierher, passt zur Berechtigung `tagesgeschaeft`). Zwei neue Gruppen:
+  **„Kalender & Verfügbarkeit"** (Kalender, Auftragskalender, Verfügbarkeits-Alerts)
+  + **„Verkauf & Reservierung"** (Preisrechner, Reservierungen 48h, Verkäufe). Die
+  Mini-Gruppe „Webseite" (2 Einträge) ist in **„Content"** aufgegangen (Startseite +
+  Rechtstexte als Kopf-Einträge über Blog/Posts/Reels). „Rabatte & Aktionen" →
+  **„Marketing & Aktionen"**. Bisher verwaistes **Einkauf** in **„Finanzen"**
+  aufgenommen. `GROUP_MATCH` konsistent (u.a. `/admin/angebote`, `/admin/einkauf`,
+  `/admin/anlagen`, neue Gruppen-Keys). Accordion/Pins/Favoriten/Mobile-Drawer 1:1.
+- **Command-Palette (⌘K) vervollständigt** (`lib/admin-nav-index.ts`): listete nur
+  ~die Hälfte der Seiten; `ADMIN_NAV_INDEX` spiegelt jetzt die Sidebar 1:1 (beide
+  Übersichten, alle Blog-/Posts-/Reels-Unterpunkte, Einkauf, Content-Einstellungen
+  …) + Suchbegriffe. **Weiterhin zwei Nav-Quellen** (Sidebar-Arrays + `admin-nav-index`)
+  — bewusst NICHT zu einem Modul zusammengeführt (Icon-Kopplung = Risiko); bei neuen
+  Admin-Seiten **beide** pflegen.
+- **Doppelnavigation entschlackt:** Buchhaltungs-Cockpit-„Neue Welt:"-Linkleiste
+  (`app/admin/buchhaltung/page.tsx`) zeigte Belege/Anlagen/Inventar doppelt zur
+  Sidebar → auf die zwei Werkzeuge ohne Sidebar-Heimat reduziert (Ausgaben
+  vereinheitlicht, WBW-Berechnung; sonst wären die verwaist). Tagesgeschäft-Übersicht-
+  Quicklinks (`app/admin/tagesgeschaeft/page.tsx`) „Versand"+„Retouren" (redundant)
+  → „Versand & Rückgabe" + „Paketverfolgung".
+- **Einstellungen/„Allgemein" entzerrt** (`components/admin/EinstellungenAllgemein.tsx`):
+  ~15 gestapelte Karten → **5 innere Reiter** (Betrieb · Sicherheit & Team · Steuer &
+  Kaution · Push & Gerät · Weiteres). Rein per `display` umgeschaltet, alle Sektionen
+  bleiben gemountet (kein Unmount → kein State-/Effekt-Reset). Reiter-State lokal
+  (`subTab`, kein Persist).
+- **Dashboard-Standard** (`lib/admin-widgets.ts` `DEFAULT_LAYOUT`): 11 → 8 sichtbare
+  Metrik-Kacheln (Umsatz Woche, Kunden gesamt, Neukunden Woche standardmäßig
+  ausgeblendet, per „+ Widget" wieder einblendbar). Nur der Default; Geräte mit
+  eigener localStorage-Anpassung unberührt.
+- **Bewusst NICHT angefasst (keine Dubletten-Redirects — würden Funktionen kappen):**
+  `/admin/versand` (alte Listen-Seite mit eigenem Pack-/Lieferschein-/„Als versendet"-
+  Workflow, aktiv aus Pack-Flow/Dashboard/Buchungen verlinkt), top-level `/admin/anlagen`
+  (Anlagenverzeichnis/WBW, verlinkt aus Einkauf/Scan/Klassifizierung — parallel zu
+  `/admin/buchhaltung/anlagen` = Steuersicht), `/admin/social/redaktionsplan`
+  (wiederkehrende Zeitpläne, eigenes Tool ≠ `/admin/social/zeitplan` Kalender). Alle
+  drei sind eigenständige, live verlinkte Seiten → nicht in der Sidebar, aber erreichbar.
+  Offene Entscheidung für den Owner, ob eine davon konsolidiert werden soll.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
+> ⚠️ **Teilweise überholt** durch das Aufräumen 2026-08-07 (siehe Abschnitt
+> darüber) — die Gruppen heißen/enthalten heute anderes.
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
 - **Dashboard** (standalone) → `/admin`
