@@ -49,7 +49,7 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Lädt…</div>;
+  if (loading) return <div className="p-8 text-center text-admin-muted">Lädt…</div>;
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
 
   const today = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
