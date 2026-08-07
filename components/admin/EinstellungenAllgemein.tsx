@@ -17,7 +17,20 @@ type DepositMode = 'kaution' | 'haftung';
  * Allgemeine Einstellungen — wird in der Tab-Seite /admin/einstellungen
  * als Default-Tab geladen. Frueher die komplette einstellungen-Seite.
  */
+type AllgSubTab = 'betrieb' | 'sicherheit' | 'steuer' | 'push' | 'weiteres';
+const ALLG_SUBTABS: { key: AllgSubTab; label: string }[] = [
+  { key: 'betrieb', label: 'Betrieb' },
+  { key: 'sicherheit', label: 'Sicherheit & Team' },
+  { key: 'steuer', label: 'Steuer & Kaution' },
+  { key: 'push', label: 'Push & Gerät' },
+  { key: 'weiteres', label: 'Weiteres' },
+];
+
 export default function EinstellungenAllgemein() {
+  // Innere Reiter — rein optische Gruppierung. Alle Sektionen bleiben gemountet;
+  // es wird nur per display umgeschaltet (kein Unmount → kein State-/Effekt-Reset).
+  const [subTab, setSubTab] = useState<AllgSubTab>('betrieb');
+
   // 2FA State
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [twoFALoading, setTwoFALoading] = useState(true);
@@ -195,12 +208,37 @@ export default function EinstellungenAllgemein() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 700 }}>
+      {/* Innere Reiter-Navigation */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+        {ALLG_SUBTABS.map((t) => {
+          const active = subTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setSubTab(t.key)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+              style={active
+                ? { background: '#06b6d4', color: '#0a0f1e' }
+                : { background: '#111827', color: '#94a3b8', border: '1px solid #1e293b' }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Betrieb ─────────────────────────────────────────────── */}
+      <div style={{ display: subTab === 'betrieb' ? undefined : 'none' }}>
       {/* Sektion 0: Test-/Live-Modus (Env-Toggle) */}
       <EnvModeSection />
 
       {/* Sektion 0b: Checkout-Verhalten */}
       <CheckoutConfigSection />
+      </div>
 
+      {/* ── Sicherheit & Team ───────────────────────────────────── */}
+      <div style={{ display: subTab === 'sicherheit' ? undefined : 'none' }}>
       {/* Sektion: Mitarbeiter-Verwaltung (Link auf Unterseite) */}
       <a
         href="/admin/einstellungen/mitarbeiter"
@@ -379,7 +417,10 @@ export default function EinstellungenAllgemein() {
           <p className="mt-3 text-sm" style={{ color: '#10b981' }}>{twoFASuccess}</p>
         )}
       </div>
+      </div>
 
+      {/* ── Steuer & Kaution ────────────────────────────────────── */}
+      <div style={{ display: subTab === 'steuer' ? undefined : 'none' }}>
       {/* Sektion 2: Kaution & Haftungsschutz */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24 }}>
         <div className="flex items-center gap-3 mb-4">
@@ -586,7 +627,10 @@ export default function EinstellungenAllgemein() {
           </div>
         )}
       </div>
+      </div>
 
+      {/* ── Weiteres ────────────────────────────────────────────── */}
+      <div style={{ display: subTab === 'weiteres' ? undefined : 'none' }}>
       {/* Sektion 4: Technische Daten Definitionen */}
       <div className="rounded-2xl p-6" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
         <div className="flex items-center gap-3 mb-4">
@@ -600,14 +644,19 @@ export default function EinstellungenAllgemein() {
         </div>
         <SpecDefinitionsManager />
       </div>
+      </div>
 
-
+      {/* ── Betrieb (Fortsetzung) ───────────────────────────────── */}
+      <div style={{ display: subTab === 'betrieb' ? undefined : 'none' }}>
       {/* Sektion 6: Geschaeftsdaten */}
       <BusinessDataSection />
 
       {/* Sektion 6b: Übergabe-/Abhol-Adressen */}
       <HandoverAddressesSection />
+      </div>
 
+      {/* ── Push & Gerät ────────────────────────────────────────── */}
+      <div style={{ display: subTab === 'push' ? undefined : 'none' }}>
       {/* Sektion 7: Admin-App installieren */}
       <AdminInstallSection />
 
@@ -622,9 +671,13 @@ export default function EinstellungenAllgemein() {
 
       {/* Sektion 9b: Quartals-Firmware-Check */}
       <FirmwareCheckSection />
+      </div>
 
+      {/* ── Weiteres (Fortsetzung) ──────────────────────────────── */}
+      <div style={{ display: subTab === 'weiteres' ? undefined : 'none' }}>
       {/* Sektion 10: Eigene Besuche aus Analytics ausschließen */}
       <AnalyticsOptOutSection />
+      </div>
     </div>
   );
 }
