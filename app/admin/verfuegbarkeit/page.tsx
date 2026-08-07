@@ -651,15 +651,15 @@ export default function AdminVerfuegbarkeitPage() {
   return (
     <div className="p-6 sm:p-8 max-w-full">
       <AdminBackLink label="Zurück" />
-      <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: 'white' }}>
+      <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: 'var(--admin-heading)' }}>
         Verfügbarkeit
       </h1>
-      <p className="text-sm font-body mb-6" style={{ color: '#64748b' }}>
+      <p className="text-sm font-body mb-6" style={{ color: 'var(--admin-text-dim)' }}>
         Einzelkamera-Tracking mit Gantt-Kalender
       </p>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 p-1 rounded-xl max-w-md" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
+      <div className="flex gap-1 mb-6 p-1 rounded-xl max-w-md" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -667,7 +667,7 @@ export default function AdminVerfuegbarkeitPage() {
             className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-heading font-semibold transition-all ${
               tab === t.key ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
             }`}
-            style={tab === t.key ? { background: '#1e293b' } : {}}
+            style={tab === t.key ? { background: 'var(--admin-surface-2)' } : {}}
           >
             {t.label}
             <span className="ml-1.5 text-xs opacity-60">({t.count})</span>
@@ -704,7 +704,7 @@ export default function AdminVerfuegbarkeitPage() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={searchPlaceholder}
                   className="px-3 py-1.5 rounded-lg text-sm font-body"
-                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', minWidth: '240px' }}
+                  style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)', minWidth: '240px' }}
                 />
               </div>
               {/* Kamera-Kompatibilitaets-Filter (nur Sets/Zubehoer) */}
@@ -713,7 +713,7 @@ export default function AdminVerfuegbarkeitPage() {
                   value={cameraFilter}
                   onChange={(e) => setCameraFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-lg text-sm font-body"
-                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', minWidth: '200px' }}
+                  style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)', minWidth: '200px' }}
                 >
                   <option value="">Alle Kameras</option>
                   {shopProducts.map((p) => (
@@ -726,7 +726,7 @@ export default function AdminVerfuegbarkeitPage() {
                   type="button"
                   onClick={() => { setSearch(''); chips.set(new Set()); setCameraFilter(''); }}
                   className="px-2.5 py-1 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
-                  style={{ color: '#cbd5e1', border: '1px solid #334155' }}
+                  style={{ color: 'var(--admin-text-2)', border: '1px solid var(--admin-faint)' }}
                 >
                   ✕ Filter zurücksetzen
                 </button>
@@ -735,7 +735,7 @@ export default function AdminVerfuegbarkeitPage() {
             {/* Multi-Select-Chips (mehrere gleichzeitig waehlbar) */}
             {chips.opts.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-heading font-semibold mr-1" style={{ color: '#94a3b8' }}>
+                <span className="text-[11px] font-heading font-semibold mr-1" style={{ color: 'var(--admin-muted)' }}>
                   {chips.label}:
                 </span>
                 {chips.opts.map((o) => {
@@ -749,7 +749,7 @@ export default function AdminVerfuegbarkeitPage() {
                       style={
                         active
                           ? { background: '#0c4a6e', color: '#7dd3fc', border: '1px solid #0ea5e9' }
-                          : { background: '#0f172a', color: '#94a3b8', border: '1px solid #334155' }
+                          : { background: 'var(--admin-surface)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }
                       }
                     >
                       {active ? '✓ ' : ''}{o.label}
@@ -769,13 +769,13 @@ export default function AdminVerfuegbarkeitPage() {
           <div className="flex items-center justify-end mb-3">
             <button onClick={scrollToToday}
               className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              style={{ color: 'var(--admin-accent)', border: '1px solid var(--admin-faint)' }}>
               → Heute
             </button>
           </div>
 
           {ganttLoading ? (
-            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: '#64748b' }}>
+            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: 'var(--admin-text-dim)' }}>
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -783,11 +783,11 @@ export default function AdminVerfuegbarkeitPage() {
               Lade Verfügbarkeit…
             </div>
           ) : !ganttData || ganttData.products.length === 0 ? (
-            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Kameras vorhanden.</p>
+            <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>Keine Kameras vorhanden.</p>
           ) : (
             <div className="space-y-3">
               {/* Legende */}
-              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: 'var(--admin-text-2)' }}>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7c3aed' }} /> ⏳ Zahlung offen</span>
@@ -803,15 +803,15 @@ export default function AdminVerfuegbarkeitPage() {
                   Eine Buchung belegt nur so viele Zeilen wie Kameras sie
                   tatsächlich enthält (Greedy-Zuteilung in cameraAssignment). */}
               {cameraProducts.length === 0 ? (
-                <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+                <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>
                   Noch keine Kameras mit Seriennummern angelegt.
                 </p>
               ) : visibleCameraGroups.length === 0 ? (
-                <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+                <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>
                   Keine Treffer für die aktiven Filter.
                 </p>
               ) : (
-                <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid var(--admin-border)', background: 'var(--admin-surface)' }}>
                   <table className="w-full text-[11px]" style={{ minWidth: `${200 + days.length * 34}px`, borderCollapse: 'collapse' }}>
                     <thead>
                       {/* Monats-Balken */}
@@ -944,8 +944,8 @@ export default function AdminVerfuegbarkeitPage() {
 
               {/* Kameras ohne Seriennummern — als Hinweis unter dem Kalender. */}
               {emptyCameraProducts.length > 0 && (
-                <div className="rounded-xl px-4 py-3 text-xs" style={{ border: '1px solid #1e293b', background: '#0f172a', color: '#64748b' }}>
-                  <span className="font-heading font-semibold" style={{ color: '#94a3b8' }}>Ohne Seriennummern (nicht im Kalender):</span>
+                <div className="rounded-xl px-4 py-3 text-xs" style={{ border: '1px solid var(--admin-border)', background: 'var(--admin-surface)', color: 'var(--admin-text-dim)' }}>
+                  <span className="font-heading font-semibold" style={{ color: 'var(--admin-muted)' }}>Ohne Seriennummern (nicht im Kalender):</span>
                   <span className="ml-2">
                     {emptyCameraProducts.map((p, i) => (
                       <span key={p.id}>
@@ -968,26 +968,26 @@ export default function AdminVerfuegbarkeitPage() {
           <div className="flex items-center justify-end mb-3">
             <button onClick={scrollToToday}
               className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              style={{ color: 'var(--admin-accent)', border: '1px solid var(--admin-faint)' }}>
               → Heute
             </button>
           </div>
 
           {ganttLoading ? (
-            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: '#64748b' }}>
+            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: 'var(--admin-text-dim)' }}>
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
               Lade Verfügbarkeit…
             </div>
           ) : !ganttData || ganttData.accessories.length === 0 ? (
-            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Kein Zubehör vorhanden.</p>
+            <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>Kein Zubehör vorhanden.</p>
           ) : visibleAccessories.length === 0 ? (
-            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+            <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>
               Keine Treffer für die aktiven Filter.
             </p>
           ) : (
             <div className="space-y-3">
               {/* Legende */}
-              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: 'var(--admin-text-2)' }}>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Alle frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Teilweise belegt</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Ausgebucht</span>
@@ -1112,25 +1112,25 @@ export default function AdminVerfuegbarkeitPage() {
           <div className="flex items-center justify-end mb-3">
             <button onClick={scrollToToday}
               className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              style={{ color: 'var(--admin-accent)', border: '1px solid var(--admin-faint)' }}>
               → Heute
             </button>
           </div>
 
           {ganttLoading ? (
-            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: '#64748b' }}>
+            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: 'var(--admin-text-dim)' }}>
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
               Lade Verfügbarkeit…
             </div>
           ) : !ganttData || ganttData.sets.length === 0 ? (
-            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Sets vorhanden.</p>
+            <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>Keine Sets vorhanden.</p>
           ) : visibleSets.length === 0 ? (
-            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+            <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>
               Keine Treffer für die aktiven Filter.
             </p>
           ) : (
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: 'var(--admin-text-2)' }}>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
               </div>
@@ -1275,9 +1275,9 @@ export default function AdminVerfuegbarkeitPage() {
             left: tooltip.x,
             top: tooltip.y,
             transform: 'translate(-50%, -100%)',
-            background: '#1e293b',
-            color: '#e2e8f0',
-            border: '1px solid #334155',
+            background: 'var(--admin-surface-2)',
+            color: 'var(--admin-text)',
+            border: '1px solid var(--admin-faint)',
           }}
         >
           {tooltip.content}
