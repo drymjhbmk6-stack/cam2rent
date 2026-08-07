@@ -338,7 +338,7 @@ export default function NeuerBelegWizard() {
   const allClassified = step3Positionen.length > 0 && step3Positionen.every((p) => p.klassifizierung !== 'pending');
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung/belege" />
       <div className="max-w-4xl mx-auto mt-4">
         <h1 className="text-2xl font-heading mb-2">Neuer Beleg</h1>
@@ -348,7 +348,7 @@ export default function NeuerBelegWizard() {
           {[1, 2, 3].map((s) => (
             <div
               key={s}
-              className={`flex-1 px-3 py-2 rounded border ${step === s ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : step > s ? 'bg-emerald-900/30 border-emerald-700 text-emerald-300' : 'bg-slate-900 border-slate-700 text-slate-500'}`}
+              className={`flex-1 px-3 py-2 rounded border ${step === s ? 'bg-admin-accent text-slate-900 border-[var(--admin-accent-hover)] font-semibold' : step > s ? 'bg-emerald-900/30 border-emerald-700 text-emerald-300' : 'bg-[var(--admin-input-bg)] border-[var(--admin-faint)] text-[var(--admin-text-dim)]'}`}
             >
               {s}. {s === 1 ? 'Quelle' : s === 2 ? 'Daten' : 'Klassifizierung'}
             </div>
@@ -377,30 +377,30 @@ export default function NeuerBelegWizard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={() => setQuelle('upload')}
-                className={`p-4 text-left rounded border ${quelle === 'upload' ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-700 bg-[#111827] hover:border-slate-600'}`}
+                className={`p-4 text-left rounded border ${quelle === 'upload' ? 'border-cyan-400 bg-cyan-500/10' : 'border-[var(--admin-faint)] bg-admin-surface hover:border-[var(--admin-muted-2)]'}`}
               >
                 <div className="font-semibold">📄 PDF/Foto hochladen</div>
-                <div className="text-xs text-slate-400 mt-1">OCR liest Lieferant + Positionen automatisch</div>
+                <div className="text-xs text-admin-muted mt-1">OCR liest Lieferant + Positionen automatisch</div>
               </button>
               <button
                 onClick={() => setQuelle('manuell')}
-                className={`p-4 text-left rounded border ${quelle === 'manuell' ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-700 bg-[#111827] hover:border-slate-600'}`}
+                className={`p-4 text-left rounded border ${quelle === 'manuell' ? 'border-cyan-400 bg-cyan-500/10' : 'border-[var(--admin-faint)] bg-admin-surface hover:border-[var(--admin-muted-2)]'}`}
               >
                 <div className="font-semibold">✍ Manuell erfassen</div>
-                <div className="text-xs text-slate-400 mt-1">Lieferant + Positionen direkt eingeben</div>
+                <div className="text-xs text-admin-muted mt-1">Lieferant + Positionen direkt eingeben</div>
               </button>
             </div>
 
             <Link
               href="/admin/buchhaltung/belege/bulk"
-              className="block p-3 bg-[#111827] border border-slate-800 hover:border-slate-600 rounded text-sm text-slate-300"
+              className="block p-3 bg-admin-surface border border-admin-border hover:border-[var(--admin-muted-2)] rounded text-sm text-admin-text-2"
             >
               📚 <span className="font-semibold">Mehrere Belege auf einmal?</span>{' '}
-              <span className="text-slate-400">Bis zu 10 Dateien hochladen — zur Bulk-Seite →</span>
+              <span className="text-admin-muted">Bis zu 10 Dateien hochladen — zur Bulk-Seite →</span>
             </Link>
 
             {quelle === 'upload' && (
-              <div className="p-4 bg-[#111827] border border-slate-800 rounded">
+              <div className="p-4 bg-admin-surface border border-admin-border rounded">
                 <label className="block text-sm mb-2">Datei wählen (PDF, JPG, PNG, WebP, max 20 MB)</label>
                 <input
                   type="file"
@@ -420,7 +420,7 @@ export default function NeuerBelegWizard() {
             <button
               onClick={handleNextFromStep1}
               disabled={!quelle || busy}
-              className="px-4 py-2 bg-cyan-500 disabled:bg-slate-700 hover:bg-cyan-400 text-slate-900 disabled:text-slate-500 rounded font-semibold"
+              className="px-4 py-2 bg-admin-accent disabled:bg-[var(--admin-faint)] hover:bg-admin-accent-hover text-slate-900 disabled:text-[var(--admin-text-dim)] rounded font-semibold"
             >
               {busy ? 'Verarbeite…' : 'Weiter'}
             </button>
@@ -433,7 +433,7 @@ export default function NeuerBelegWizard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm mb-1">Lieferant</label>
-                <select value={lieferantId} onChange={(e) => setLieferantId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+                <select value={lieferantId} onChange={(e) => setLieferantId(e.target.value)} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
                   <option value="">– wählen –</option>
                   {lieferanten.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -442,20 +442,20 @@ export default function NeuerBelegWizard() {
                   placeholder="oder neuen Lieferanten anlegen…"
                   value={neuerLieferantName}
                   onChange={(e) => setNeuerLieferantName(e.target.value)}
-                  className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-sm mt-2"
+                  className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-sm mt-2"
                 />
               </div>
               <div>
                 <label className="block text-sm mb-1">Beleg-Datum *</label>
-                <input type="date" value={belegDatum} onChange={(e) => setBelegDatum(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+                <input type="date" value={belegDatum} onChange={(e) => setBelegDatum(e.target.value)} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
               </div>
               <div>
                 <label className="block text-sm mb-1">Bezahl-Datum</label>
-                <input type="date" value={bezahlDatum} onChange={(e) => setBezahlDatum(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+                <input type="date" value={bezahlDatum} onChange={(e) => setBezahlDatum(e.target.value)} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
               </div>
               <div>
                 <label className="block text-sm mb-1">Rechnungsnummer Lieferant</label>
-                <input type="text" value={rechnungsnummer} onChange={(e) => setRechnungsnummer(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+                <input type="text" value={rechnungsnummer} onChange={(e) => setRechnungsnummer(e.target.value)} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
               </div>
             </div>
 
@@ -469,14 +469,14 @@ export default function NeuerBelegWizard() {
                 placeholder="Begründung (Pflicht)"
                 value={eigenbelegGrund}
                 onChange={(e) => setEigenbelegGrund(e.target.value)}
-                className="w-full bg-[#111827] border border-amber-700 rounded px-3 py-2 text-base"
+                className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base"
               />
             )}
 
             {/* Positionen */}
             <div>
               <h3 className="text-sm font-semibold mb-2">Positionen</h3>
-              <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+              <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] font-semibold">
                 <div className="col-span-4">Bezeichnung</div>
                 <div className="col-span-1 text-center">Menge</div>
                 <div className="col-span-2 text-right">Einzel netto</div>
@@ -491,26 +491,26 @@ export default function NeuerBelegWizard() {
                   return (
                   <div
                     key={idx}
-                    className="rounded border border-slate-800 bg-slate-900/30 p-2 space-y-2 md:p-0 md:bg-transparent md:border-0 md:rounded-none md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0"
+                    className="rounded border border-admin-border bg-slate-900/30 p-2 space-y-2 md:p-0 md:bg-transparent md:border-0 md:rounded-none md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0"
                   >
                     <input
                       placeholder="Bezeichnung"
                       value={p.bezeichnung}
                       aria-label="Bezeichnung"
                       onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, bezeichnung: e.target.value } : pp))}
-                      className="w-full md:col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      className="w-full md:col-span-4 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm"
                     />
                     <div className="grid grid-cols-4 gap-2 md:contents">
-                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1">Menge</label>
-                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Netto</label>
-                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Brutto</label>
-                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-center">MwSt</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1">Menge</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-right">Netto</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-right">Brutto</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-[var(--admin-text-dim)] col-span-1 text-center">MwSt</label>
                       <input
                         type="number" min="1"
                         value={p.menge}
                         aria-label="Menge"
                         onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, menge: Math.max(1, parseInt(e.target.value || '1', 10)) } : pp))}
-                        className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                        className="col-span-1 md:col-span-1 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm text-center"
                       />
                       <input
                         type="number" step="0.01" min="0"
@@ -518,7 +518,7 @@ export default function NeuerBelegWizard() {
                         value={p.einzelpreis_netto || ''}
                         aria-label="Einzelpreis netto"
                         onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: parseFloat(e.target.value || '0') } : pp))}
-                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
+                        className="col-span-1 md:col-span-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm text-right"
                       />
                       <input
                         type="number" step="0.01" min="0"
@@ -531,21 +531,21 @@ export default function NeuerBelegWizard() {
                           const netto = f > 0 ? brutto / f : brutto;
                           setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: netto } : pp));
                         }}
-                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
+                        className="col-span-1 md:col-span-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm text-right"
                       />
                       <input
                         type="number" step="0.5" min="0" max="100"
                         value={p.mwst_satz}
                         aria-label="MwSt-Satz"
                         onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, mwst_satz: parseFloat(e.target.value || '0') } : pp))}
-                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                        className="col-span-1 md:col-span-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1.5 text-sm text-center"
                       />
                     </div>
                     <button
                       onClick={() => setPositionen((prev) => prev.filter((_, i) => i !== idx))}
                       disabled={positionen.length === 1}
                       aria-label="Position entfernen"
-                      className="md:col-span-1 self-end md:self-auto px-2 py-1 text-rose-400 hover:text-rose-300 disabled:text-slate-600 text-sm md:text-base"
+                      className="md:col-span-1 self-end md:self-auto px-2 py-1 text-rose-400 hover:text-rose-300 disabled:text-[var(--admin-muted-2)] text-sm md:text-base"
                     >✕ <span className="md:hidden">Entfernen</span></button>
                   </div>
                   );
@@ -555,16 +555,16 @@ export default function NeuerBelegWizard() {
                 onClick={() => setPositionen((p) => [...p, { bezeichnung: '', menge: 1, einzelpreis_netto: 0, mwst_satz: 19 }])}
                 className="mt-2 text-cyan-400 text-sm hover:text-cyan-300"
               >+ Position hinzufügen</button>
-              <div className="mt-3 text-right text-sm text-slate-400">
-                Netto: <span className="font-mono text-slate-200">{fmtEuro(summeNetto)}</span>
+              <div className="mt-3 text-right text-sm text-admin-muted">
+                Netto: <span className="font-mono text-admin-text">{fmtEuro(summeNetto)}</span>
                 {' · '}
-                Brutto: <span className="font-mono text-slate-200">{fmtEuro(summeBrutto)}</span>
+                Brutto: <span className="font-mono text-admin-text">{fmtEuro(summeBrutto)}</span>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setStep(1)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded">Zurück</button>
-              <button onClick={handleSaveStep2} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold">
+              <button onClick={() => setStep(1)} className="px-4 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] rounded">Zurück</button>
+              <button onClick={handleSaveStep2} disabled={busy} className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover disabled:bg-[var(--admin-faint)] text-slate-900 rounded font-semibold">
                 {busy ? 'Speichert…' : 'Weiter zur Klassifizierung'}
               </button>
             </div>
@@ -575,18 +575,18 @@ export default function NeuerBelegWizard() {
         {step === 3 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-400">Klassifiziere jede Position. Erst danach kann der Beleg festgeschrieben werden.</p>
+              <p className="text-sm text-admin-muted">Klassifiziere jede Position. Erst danach kann der Beleg festgeschrieben werden.</p>
               <button onClick={applyKi} disabled={busy} className="text-cyan-400 hover:text-cyan-300 text-sm">
                 {busy ? 'KI läuft…' : '✨ KI-Klassifizierung anwenden'}
               </button>
             </div>
 
             {step3Positionen.map((p) => (
-              <div key={p.id} className="p-3 bg-[#111827] border border-slate-800 rounded">
+              <div key={p.id} className="p-3 bg-admin-surface border border-admin-border rounded">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <div className="font-semibold">{p.bezeichnung}</div>
-                    <div className="text-xs text-slate-400">{p.menge}× {fmtEuro(Number(p.einzelpreis_netto))} = {fmtEuro(Number(p.gesamt_brutto))} brutto</div>
+                    <div className="text-xs text-admin-muted">{p.menge}× {fmtEuro(Number(p.einzelpreis_netto))} = {fmtEuro(Number(p.gesamt_brutto))} brutto</div>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded border ${
                     p.klassifizierung === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
@@ -594,13 +594,13 @@ export default function NeuerBelegWizard() {
                     p.klassifizierung === 'gwg' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                     p.klassifizierung === 'verbrauch' ? 'bg-violet-500/10 text-violet-300 border-violet-500/30' :
                     p.klassifizierung === 'ausgabe' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
-                    'bg-slate-700/30 text-slate-400 border-slate-700'
+                    'bg-slate-700/30 text-admin-muted border-slate-700'
                   }`}>
                     {KLASS_LABEL[p.klassifizierung as Klass] ?? '—'}
                   </span>
                 </div>
                 {p.ki_vorschlag && (
-                  <div className="text-xs text-slate-400 italic mb-2">
+                  <div className="text-xs text-admin-muted italic mb-2">
                     💡 KI: {p.ki_vorschlag.klassifizierung} — {p.ki_vorschlag.begruendung} ({Math.round(p.ki_vorschlag.confidence * 100)}%)
                   </div>
                 )}
@@ -617,7 +617,7 @@ export default function NeuerBelegWizard() {
                         'Ignorieren — keine Buchung, keine Inventar.'
                       }
                       className={`px-3 py-1 text-xs rounded border ${
-                        p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
+                        p.klassifizierung === k ? 'bg-admin-accent text-slate-900 border-[var(--admin-accent-hover)] font-semibold' : 'bg-[var(--admin-secondary-bg)] hover:bg-[var(--admin-faint)] border-[var(--admin-faint)]'
                       }`}
                     >
                       {KLASS_LABEL[k]}
@@ -627,14 +627,14 @@ export default function NeuerBelegWizard() {
               </div>
             ))}
 
-            <div className="flex gap-2 pt-3 border-t border-slate-800">
-              <Link href={`/admin/buchhaltung/belege/${belegId}`} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded">
+            <div className="flex gap-2 pt-3 border-t border-admin-border">
+              <Link href={`/admin/buchhaltung/belege/${belegId}`} className="px-4 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] rounded">
                 Speichern & schließen
               </Link>
               <button
                 onClick={handleFestschreiben}
                 disabled={busy || !allClassified}
-                className="px-4 py-2 bg-emerald-500 disabled:bg-slate-700 hover:bg-emerald-400 disabled:text-slate-500 text-slate-900 rounded font-semibold"
+                className="px-4 py-2 bg-emerald-500 disabled:bg-[var(--admin-faint)] hover:bg-emerald-400 disabled:text-[var(--admin-text-dim)] text-slate-900 rounded font-semibold"
               >
                 {busy ? 'Wird festgeschrieben…' : '🔒 Beleg festschreiben'}
               </button>
