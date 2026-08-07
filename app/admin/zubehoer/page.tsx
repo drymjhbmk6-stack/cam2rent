@@ -10,6 +10,7 @@ import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 const ACCESSORIES_CACHE_KEY = 'admin:accessories';
 import { useBrandColors } from '@/hooks/useBrandColors';
@@ -143,6 +144,9 @@ export default function AdminZubehoerPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [productList, setProductList] = useState<{ id: string; name: string; brand: string }[]>([]);
 
+  const toast = useToast();
+  const confirm = useConfirm();
+
   useEffect(() => {
     loadAccessories();
     // Kamera-Liste aus DB laden (gleiche Quelle wie /admin/preise/kameras)
@@ -168,9 +172,9 @@ export default function AdminZubehoerPage() {
   }
 
   async function handleCreate() {
-    if (!newForm.name.trim()) { alert('Bitte einen Namen eingeben.'); return; }
+    if (!newForm.name.trim()) { toast.error('Bitte einen Namen eingeben.'); return; }
     if (newForm.is_bulk && !newForm.inventar_code) {
-      alert('Bei Sammel-Zubehör ist ein vollständiger Inventar-Code Pflicht (alle 4 Segmente).');
+      toast.error('Bei Sammel-Zubehör ist ein vollständiger Inventar-Code Pflicht (alle 4 Segmente).');
       return;
     }
     setCreating(true);
@@ -188,18 +192,18 @@ export default function AdminZubehoerPage() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        alert(`Fehler: ${d.error ?? 'Unbekannter Fehler (Status ' + res.status + ')'}`);
+        toast.error(`Fehler: ${d.error ?? 'Unbekannter Fehler (Status ' + res.status + ')'}`);
         return;
       }
       const okBody = await res.json().catch(() => ({}));
       if (Array.isArray(okBody.warnings) && okBody.warnings.length > 0) {
-        alert('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
+        toast.warning('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
       }
       setNewForm(emptyForm());
       setShowNew(false);
       loadAccessories();
     } catch (e) {
-      alert(`Netzwerkfehler: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`Netzwerkfehler: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setCreating(false);
     }
@@ -263,9 +267,11 @@ export default function AdminZubehoerPage() {
         : null;
 
       if (newId) {
-        const ok = confirm(
-          'Achtung: Wenn du die Bezeichnung änderst, sind bestehende QR-Aufkleber ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
-        );
+        const ok = await confirm({
+          title: 'Bezeichnung ändern?',
+          message: 'Achtung: Wenn du die Bezeichnung änderst, sind bestehende QR-Aufkleber ungültig und müssen neu gedruckt werden. Trotzdem ändern?',
+          danger: true,
+        });
         if (!ok) {
           setSavingId(null);
           return;
@@ -286,12 +292,12 @@ export default function AdminZubehoerPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || 'Fehler beim Speichern.');
+        toast.error(err.error || 'Fehler beim Speichern.');
         return;
       }
       const okBody = await res.json().catch(() => ({}));
       if (Array.isArray(okBody.warnings) && okBody.warnings.length > 0) {
-        alert('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
+        toast.warning('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
       }
       // Bei ID-Aenderung Liste neu laden — Position/Identitaet aendert sich,
       // in-place mapping wuerde Geister-Eintrag erzeugen.
@@ -317,20 +323,20 @@ export default function AdminZubehoerPage() {
       setTimeout(() => setSavedId(null), 3000);
       scrollToCard(targetId);
     } catch {
-      alert('Fehler beim Speichern.');
+      toast.error('Fehler beim Speichern.');
     } finally {
       setSavingId(null);
     }
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" wirklich löschen?`)) return;
+    if (!(await confirm({ message: `"${name}" wirklich löschen?`, danger: true }))) return;
     setDeletingId(id);
     try {
       await fetch(`/api/admin/accessories/${id}`, { method: 'DELETE' });
       setAccessories((prev) => prev.filter((a) => a.id !== id));
     } catch {
-      alert('Fehler beim Löschen.');
+      toast.error('Fehler beim Löschen.');
     } finally {
       setDeletingId(null);
     }
