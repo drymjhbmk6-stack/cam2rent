@@ -32,8 +32,8 @@ const QUICK_LINKS = [
   { href: '/admin/buchungen', label: 'Alle Buchungen →' },
   { href: '/admin/buchungen/neu', label: 'Neue manuelle Buchung' },
   { href: '/admin/verfuegbarkeit', label: 'Kalender' },
-  { href: '/admin/versand', label: 'Versand' },
-  { href: '/admin/retouren', label: 'Retouren' },
+  { href: '/admin/retouren', label: 'Versand & Rückgabe' },
+  { href: '/admin/sendungen', label: 'Paketverfolgung' },
 ];
 
 export default function TagesgeschaeftDashboardPage() {

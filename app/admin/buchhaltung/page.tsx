@@ -117,13 +117,12 @@ function BuchhaltungContent() {
         </p>
       </div>
 
-      {/* Quick-Links zur neuen Welt (Konsolidierungs-Refactor) */}
+      {/* Werkzeuge ohne eigenen Sidebar-Eintrag. Belege/Anlagen/Inventar stehen
+          jetzt direkt in der Sidebar (Finanzen bzw. Katalog) — hier nur noch die
+          zwei Tools, die sonst nirgends verlinkt sind. */}
       <div style={{ marginBottom: 16, padding: 12, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, color: 'var(--admin-muted)', alignSelf: 'center' }}>Neue Welt:</span>
-        <Link href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>📄 Belege</Link>
-        <Link href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</Link>
+        <span style={{ fontSize: 12, color: 'var(--admin-muted)', alignSelf: 'center' }}>Werkzeuge:</span>
         <Link href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</Link>
-        <Link href="/admin/inventar" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>📦 Inventar</Link>
         <Link href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>⚙ WBW-Berechnung</Link>
       </div>
 
