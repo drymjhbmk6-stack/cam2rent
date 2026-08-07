@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
@@ -103,6 +104,7 @@ export default function BelegeListePage() {
   const [monthFilter, setMonthFilter] = useState<string>('');
   const initRef = useRef(false);
   const reqIdRef = useRef(0);
+  const toast = useToast();
 
   useEffect(() => {
     const load = async () => {
@@ -154,7 +156,7 @@ export default function BelegeListePage() {
       try {
         const res = await fetch('/api/admin/belege/retry-failed-ocr', { method: 'POST' });
         if (!res.ok) {
-          alert('Retry fehlgeschlagen — bitte später erneut versuchen.');
+          toast.error('Retry fehlgeschlagen — bitte später erneut versuchen.');
           break;
         }
         const data = await res.json();
@@ -164,7 +166,7 @@ export default function BelegeListePage() {
         setRetryStatus({ done, remaining, succeeded });
         if ((data.retried ?? 0) === 0) break; // Sicherheits-Bremse
       } catch {
-        alert('Netzwerkfehler beim Retry — bitte erneut versuchen.');
+        toast.error('Netzwerkfehler beim Retry — bitte erneut versuchen.');
         break;
       }
     }
@@ -284,7 +286,7 @@ export default function BelegeListePage() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-dvh text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung" />
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -313,25 +315,25 @@ export default function BelegeListePage() {
                     setScanResult({ scanned: data.scanned ?? 0, flagged: data.flagged ?? 0 });
                     await refreshList();
                   } else {
-                    alert(data.error ?? 'Scan fehlgeschlagen');
+                    toast.error(data.error ?? 'Scan fehlgeschlagen');
                   }
                 } finally {
                   setScanning(false);
                 }
               }}
               disabled={scanning}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-[var(--admin-faint)] text-slate-900 rounded font-semibold"
               title="Sucht inhaltliche Duplikate im gesamten Bestand und markiert sie"
             >
               {scanning ? 'Scanne…' : '🔍 Duplikate scannen'}
             </button>
             <Link
               href="/admin/buchhaltung/belege/bulk"
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-semibold"
+              className="px-4 py-2 bg-[var(--admin-secondary-bg)] hover:bg-[var(--admin-faint)] text-admin-text border border-[var(--admin-faint)] rounded font-semibold"
             >
               📚 Mehrere hochladen
             </Link>
-            <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
+            <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded font-semibold">
               + Neuer Beleg
             </Link>
           </div>
@@ -372,12 +374,12 @@ export default function BelegeListePage() {
             placeholder="Suchen (Inhalt, Lieferant, Nr.)…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base flex-1 min-w-[200px]"
+            className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base flex-1 min-w-[200px]"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base"
+            className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base"
           >
             <option value="">Alle Status</option>
             <option value="offen">Offen</option>
@@ -389,7 +391,7 @@ export default function BelegeListePage() {
             <select
               value={yearFilter ?? ''}
               onChange={(e) => { setYearFilter(e.target.value); setMonthFilter(''); }}
-              className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base"
+              className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base"
               aria-label="Jahr wählen"
             >
               {years.map((y) => (
@@ -406,8 +408,8 @@ export default function BelegeListePage() {
               onClick={() => setMonthFilter('')}
               className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                 effectiveMonth === ''
-                  ? 'bg-cyan-500 text-slate-900 border-cyan-500'
-                  : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
+                  ? 'bg-admin-accent text-slate-900 border-[var(--admin-accent)]'
+                  : 'bg-admin-surface text-admin-text-2 border-[var(--admin-faint)] hover:border-[var(--admin-text-dim)]'
               }`}
               style={{ scrollSnapAlign: 'start' }}
             >
