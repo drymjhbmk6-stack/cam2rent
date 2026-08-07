@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { useProducts } from '@/components/ProductsProvider';
 import { useAccessories } from '@/components/AccessoriesProvider';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Customer { id: string; full_name: string; email: string }
 
@@ -52,6 +53,7 @@ function remaining(expiresAt: string): string {
 export default function ReservierungenPage() {
   const { products } = useProducts();
   const { accessories } = useAccessories();
+  const confirm = useConfirm();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custSearch, setCustSearch] = useState('');
@@ -213,7 +215,8 @@ export default function ReservierungenPage() {
   }
 
   async function cancelReservation(id: string) {
-    if (!confirm('Diese Reservierung wirklich zurückziehen? Das Inventar wird sofort freigegeben.')) return;
+    const ok = await confirm({ message: 'Diese Reservierung wirklich zurückziehen? Das Inventar wird sofort freigegeben.', danger: true });
+    if (!ok) return;
     await fetch(`/api/admin/reservierung?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
     loadReservations();
   }
@@ -318,7 +321,7 @@ export default function ReservierungenPage() {
                 </select>
                 {lines.length > 1 && (
                   <button onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                    className="px-2 py-2 text-status-error text-sm">✕</button>
+                    className="px-2 py-2 text-admin-danger text-sm">✕</button>
                 )}
               </div>
 
@@ -334,7 +337,7 @@ export default function ReservierungenPage() {
                       <input type="number" min={1} value={a.qty}
                         onChange={(e) => setAccQty(idx, a.accessory_id, parseInt(e.target.value, 10) || 1)}
                         className="w-16 text-base rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-brand-black dark:text-white" />
-                      <button onClick={() => removeAccessory(idx, a.accessory_id)} className="text-status-error">✕</button>
+                      <button onClick={() => removeAccessory(idx, a.accessory_id)} className="text-admin-danger">✕</button>
                     </div>
                   ))}
                 </div>
@@ -369,7 +372,7 @@ export default function ReservierungenPage() {
           + weitere Kamera
         </button>
 
-        {error && <p className="text-sm text-status-error mb-3">{error}</p>}
+        {error && <p className="text-sm text-admin-danger mb-3">{error}</p>}
         {result && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-3 mb-3 text-sm">
             <p className="text-emerald-700 dark:text-emerald-300 font-medium mb-1">
@@ -409,7 +412,7 @@ export default function ReservierungenPage() {
                     <button
                       onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/reservierung/${r.token}`)}
                       className="text-xs text-brand-primary">Link kopieren</button>
-                    <button onClick={() => cancelReservation(r.id)} className="text-xs text-status-error">zurückziehen</button>
+                    <button onClick={() => cancelReservation(r.id)} className="text-xs text-admin-danger">zurückziehen</button>
                   </>
                 )}
               </div>
