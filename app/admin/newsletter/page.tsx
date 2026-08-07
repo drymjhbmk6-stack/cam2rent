@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 type Tab = 'subscribers' | 'compose' | 'push';
 
@@ -36,7 +37,7 @@ export default function NewsletterAdminPage() {
   const [tab, setTab] = useState<Tab>('subscribers');
 
   return (
-    <div className="min-h-screen bg-brand-bg dark:bg-brand-black">
+    <div className="text-admin-text">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <AdminBackLink />
         <div className="mb-6">
@@ -66,10 +67,12 @@ function CustomerPushTab() {
   const [url, setUrl] = useState('/kameras');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null);
+  const confirm = useConfirm();
 
   async function send() {
     setFeedback(null);
-    if (!confirm('Push an alle registrierten Kunden-Geräte senden?')) return;
+    const ok = await confirm({ message: 'Push an alle registrierten Kunden-Geräte senden?' });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await fetch('/api/admin/customer-push/send', {
@@ -170,8 +173,8 @@ function TabButton({
       className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-all"
       style={
         active
-          ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }
-          : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+          ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', border: '1px solid rgba(6,182,212,0.3)' }
+          : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }
       }
     >
       {label}
@@ -190,6 +193,7 @@ function SubscribersTab() {
     stats: { total: 0, confirmed: 0, pending: 0, unsubscribed: 0 },
   });
   const [loading, setLoading] = useState(true);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -211,7 +215,8 @@ function SubscribersTab() {
   }, [load]);
 
   async function deleteEntry(id: string) {
-    if (!confirm('Eintrag endgültig löschen?')) return;
+    const ok = await confirm({ message: 'Eintrag endgültig löschen?', danger: true });
+    if (!ok) return;
     await fetch(`/api/admin/newsletter/subscribers/${id}`, { method: 'DELETE' });
     await load();
   }
@@ -369,10 +374,14 @@ function ComposeTab() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const confirm = useConfirm();
 
   async function send(mode: 'test' | 'live') {
     setFeedback(null);
-    if (mode === 'live' && !confirm('Wirklich an alle bestätigten Abonnenten senden?')) return;
+    if (mode === 'live') {
+      const ok = await confirm({ message: 'Wirklich an alle bestätigten Abonnenten senden?' });
+      if (!ok) return;
+    }
 
     setBusy(true);
     try {
