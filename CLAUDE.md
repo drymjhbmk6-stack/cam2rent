@@ -2138,12 +2138,19 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   (`preventDefault`/`stopPropagation` → navigiert nicht), unpinned nur bei
   Hover/Fokus sichtbar (`group/nav`), permission-gefiltert über `ALL_NAV_ITEMS`.
   Additiv — bestehende Nav-Logik/Handler unverändert, tsc 0/lint 0.
-- **Bewusst NICHT gebaut (deferred, braucht Live-Check + neue Hot-Path-Daten):**
-  Dashboard-2.0 (KPI-Trend-Delta/Sparklines/„Heute zu erledigen"-Lane). Das
-  Dashboard ist ein konfigurierbares Widget-System ohne Vorperioden-/Serien-Daten
-  in `dashboard-data`; Deltas/Sparklines bräuchten neue DB-Queries auf dem
-  meistgeladenen Admin-Endpoint + nicht smoke-testbare Dataviz → nicht blind
-  bolzen. Nachziehbar mit Live-Umgebung.
+- **Dashboard 2.0 (fertig 2026-08-07):** Metrik-Widgets (Buchungen heute,
+  Umsatz heute/Woche/Monat, Neukunden) zeigen einen Vorperioden-Vergleich
+  (▲/▼ X% vs. gestern/Vorwoche/Vormonat) + eine 14-Tage-Inline-Sparkline
+  (pures SVG, keine Library). `dashboard-data` hat dafür einen **eigenen
+  defensiven `Promise.allSettled`-Block** (Vorperioden-Queries + Tages-Serie) —
+  schlägt er fehl, bleibt das Kern-Dashboard unberührt; Payload rein additiv
+  (`deltaPct`/`deltaLabel`/`series` optional, alte Consumer lesen weiter nur
+  `value`). Die „Heute zu erledigen"-Lane existiert bereits als das gepinnte
+  `action_queue`-Widget (oben im DEFAULT_LAYOUT). Zusätzlich wurde die
+  `DashboardWidgets`-`C`-Palette auf `var(--admin-*)` tokenisiert (Dark
+  pixel-gleich) → die Dashboard-Widgets flippen jetzt in den Light-Mode mit
+  (vorher Dark-Insel). Semantische Signalfarben (green/yellow/purple/blue) +
+  rgba-Tints bleiben literal.
 
 #### Schritt 10 — A11y-Feinschliff (teilweise, fertig 2026-08-07)
 - **Sichtbarer Tastatur-Fokus + reduced-motion (globals.css, additiv, auf
@@ -2159,11 +2166,23 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   (`useIsNarrow`: erster Render false, dann `matchMedia`), `disableCards` als
   Escape-Hatch. Additiv — bestehende Consumer (z. B. `warteliste`) bekommen die
   Karten automatisch, Desktop unverändert. tsc 0/lint 0.
-- **Bewusst NICHT gebaut (deferred, braucht Live-/Device-Check):** Retrofit der
-  ~40 hand-gebauten Legacy-Tabellen (die nutzen weiter `hidden md:table-cell`-
-  Spalten-Ausblenden — funktioniert, nur kein Karten-Layout) auf die DataTable,
-  Master-Detail-Split-View-Verallgemeinerung, Kontrast-Audit beider Themes am
-  echten Gerät. Alles visuell/mobil und in der Sandbox nicht verifizierbar.
+- **Kontrast-Audit beider Themes (fertig 2026-08-07):** statischer WCAG-Check
+  aller Text-auf-Fläche-Token-Paare (Skript rechnet die Kontrastverhältnisse aus
+  den Hex-Werten). **Keine harten Fehlschläge** — alles ≥ 3.0 (AA für große/UI-
+  Texte). Einziger Sub-4.5-Fall bei kleinem Text war der Light-Accent auf Weiß
+  (3.68); nur das **Light-Token** auf cyan-700 (`#0e7490` → 5.36 auf Weiß /
+  5.12 auf thead) angehoben (Dark-Accent `#06b6d4` unverändert → Dark
+  pixel-gleich). Die übrigen Sub-4.5-Paare sind Header (13px bold uppercase =
+  AA-large ok) bzw. bewusst dimmes Sekundärtext.
+- **Bewusst NICHT als Bulk gebaut (per-Seite-Live-Test nötig, by design):**
+  Retrofit der ~40 hand-gebauten Legacy-Tabellen auf die geteilte `DataTable`.
+  Das ist laut Schritt-7/8-Konzept eine **seitenweise, einzeln deploy-/testbare**
+  Migration (Sortierung/Row-Klick/Bulk-Select-Semantik pro Tabelle) — kein
+  sicherer Blind-Bulk-Change. Die Tabellen funktionieren weiter (Spalten-
+  Ausblenden `hidden md:table-cell`); neue/migrierte Tabellen bekommen das
+  Karten-Fallback automatisch über die DataTable. Ebenfalls offen: Master-
+  Detail-Split-View-Verallgemeinerung (visuell/mobil, nur am echten Gerät
+  seriös prüfbar).
 - **`/admin/warteliste` (Muster-Seite, fertig):** hartkodierte Slate-Palette (flippte
   bisher NICHT in Light) → `PageHeader`/`Card`/`Button`/`EmptyState`/`TableSkeleton` +
   `DataTable` (sortierbar, a11y) + Token-Farben. Logik 1:1 (load/DELETE/Gruppierung/
