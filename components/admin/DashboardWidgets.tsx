@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, Fragment } from 'react';
+import { useState } from 'react';
 import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
@@ -621,6 +621,7 @@ export function QuickActionsWidget() {
 
 interface QueueBooking {
   id: string;
+  user_id?: string | null;
   product_name: string;
   customer_name: string;
   status: string;
@@ -712,21 +713,30 @@ interface CoordinationTask {
 
 interface QueueRow {
   key: string;
-  title: string;
-  subtitle: string;
+  /** Kundenname (fett auf der Karte). */
+  customerName: string;
+  /** Detailzeile (Produkt · Zeitraum bzw. Aufgabenbeschreibung). */
+  detail: string;
   action: QueueAction;
   /** Datum für die Sortierung (YYYY-MM-DD). Was als nächstes ansteht zuerst. */
   sortDate: string;
+  /** Fälligkeitsdatum als Anzeige (YYYY-MM-DD, leer = sofort). */
+  dueDate: string;
   /** Fälligkeits-Bucket: 0=Heute/überfällig, 1=in 3 Tagen, 2=in 7 Tagen, 3=später. */
   bucket: number;
+  /** Schnell-Links: Kunde (user_id) + Buchung (booking id), falls vorhanden. */
+  customerId?: string | null;
+  bookingId?: string | null;
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
   /** Nur Terminabsprache-Zeilen: Buchung + Richtung für den „vereinbart"-Button. */
   coord?: { id: string; type: 'pickup' | 'return' };
 }
 
-// Fälligkeits-Buckets für die Gruppierung im Aufgaben-Widget.
-const BUCKET_LABELS = ['Heute', 'In 3 Tagen', 'In 7 Tagen', 'Später (mehr als 7 Tage)'];
+// Fälligkeits-Buckets = Kanban-Spalten (links → rechts).
+const BUCKET_LABELS = ['Heute', 'In 3 Tagen', 'In 7 Tagen', 'Später'];
+// Akzentfarbe pro Spalte (Dringlichkeit fällt nach rechts ab).
+const COL_ACCENT = [C.red, C.yellow, C.cyan, C.textDim];
 
 // Heutiges Datum in Berlin-Zeit als YYYY-MM-DD (en-CA liefert genau dieses Format).
 function berlinTodayStr(): string {
@@ -815,11 +825,13 @@ export function ActionQueueWidget({ data, loading }: {
   // Ohne Fälligkeitsdatum → Bucket "Heute" (sind sofort zu erledigen).
   const verificationRows: QueueRow[] = (data?.verifications ?? []).map((v) => ({
     key: `verif-${v.id}`,
-    title: v.name || 'Kunde',
-    subtitle: `Ausweis hochgeladen · ${formatDate(v.created_at)}`,
+    customerName: v.name || 'Kunde',
+    detail: `Ausweis hochgeladen · ${formatDate(v.created_at)}`,
     action: { label: '✅ Verifizieren', href: `/admin/kunden/${v.id}`, color: C.purple, weight: 0 },
     sortDate: '',
+    dueDate: '',
     bucket: 0,
+    customerId: v.id,
   }));
 
   // Abhol-/Rückgabe-Terminabsprache: mit dem Kunden eine Uhrzeit ausmachen.
@@ -828,8 +840,8 @@ export function ActionQueueWidget({ data, loading }: {
   // Standard-Buchungsaufgaben.
   const coordinationRows: QueueRow[] = (data?.coordinations ?? []).map((c) => ({
     key: `coord-${c.type}-${c.id}`,
-    title: `${c.customer_name || 'Kunde'} · ${c.type === 'pickup' ? 'Abholung' : 'Rückgabe'} ${formatDate(c.due_date)}`,
-    subtitle: c.type === 'pickup' ? '📞 Abholtermin vereinbaren' : '📞 Rückgabetermin vereinbaren',
+    customerName: c.customer_name || 'Kunde',
+    detail: `${c.type === 'pickup' ? '📞 Abholtermin' : '📞 Rückgabetermin'} vereinbaren · ${c.product_name || ''}`,
     action: {
       // Klick auf den Button markiert den Termin als vereinbart → Aufgabe
       // verschwindet. Der Rest der Zeile bleibt ein Link zur Buchung (anrufen,
@@ -841,27 +853,31 @@ export function ActionQueueWidget({ data, loading }: {
       kind: 'coord-done',
     },
     sortDate: c.due_date,
+    dueDate: c.due_date,
     bucket: bucketForDays(daysUntilDue(c.due_date, today)),
+    bookingId: c.id,
     coord: { id: c.id, type: c.type },
   }));
 
   const bookingRows: QueueRow[] = (data?.items ?? []).flatMap((b) => {
     const out: QueueRow[] = [];
-    const title = `${b.customer_name || 'Kunde'} · ${formatDate(b.rental_from)} – ${formatDate(b.rental_to)}`;
-    const subtitle = b.product_name || 'Buchung';
+    const customerName = b.customer_name || 'Kunde';
+    const detail = `${b.product_name || 'Buchung'} · ${formatDate(b.rental_from)}–${formatDate(b.rental_to)}`;
     const sortDate = dueDateForBooking(b);
     const bucket = bucketForDays(daysUntilDue(sortDate, today));
 
     const action = queueActionForBooking(b);
     if (action) {
       out.push({
-        // Name + Datum fett ganz oben, Produkt darunter.
         key: b.id,
-        title,
-        subtitle,
+        customerName,
+        detail,
         action,
         sortDate,
+        dueDate: sortDate,
         bucket,
+        customerId: b.user_id ?? null,
+        bookingId: b.id,
         checks: {
           verified: b.verified ?? false,
           signed: b.contract_signed ?? false,
@@ -880,11 +896,14 @@ export function ActionQueueWidget({ data, loading }: {
     if (b.delivery_mode === 'versand' && b.status === 'confirmed' && !shippingLabelsComplete(b)) {
       out.push({
         key: `label-${b.id}`,
-        title,
-        subtitle,
+        customerName,
+        detail,
         action: { label: '🏷 Versand- & Retourenlabel erstellen', href: '/admin/retouren', color: C.cyan, weight: 3 },
         sortDate,
+        dueDate: sortDate,
         bucket,
+        customerId: b.user_id ?? null,
+        bookingId: b.id,
       });
     }
 
@@ -948,6 +967,66 @@ export function ActionQueueWidget({ data, loading }: {
       x.action.weight - y.action.weight,
     );
 
+  // In 4 Spalten aufteilen (rows ist bereits nach Bucket → Datum → Dringlichkeit sortiert).
+  const columns: QueueRow[][] = [0, 1, 2, 3].map((bkt) => rows.filter((r) => r.bucket === bkt));
+
+  // Eine Karte im Kanban-Board.
+  function renderCard(row: QueueRow) {
+    const col = row.action.color;
+    const busy = busyId === row.key;
+    const isHandler = row.action.kind === 'mark-shipped' || row.action.kind === 'coord-done';
+    const onClick =
+      row.action.kind === 'coord-done' && row.coord
+        ? () => markCoordinationDone(row.key, row.coord!)
+        : () => markShipped(row.key);
+    const actionStyle = {
+      display: 'block' as const, width: '100%', textAlign: 'center' as const,
+      fontSize: 12, fontWeight: 700 as const, color: col,
+      background: `${col}1a`, border: `1px solid ${col}40`,
+      padding: '6px 8px', borderRadius: 8, whiteSpace: 'normal' as const,
+    };
+    const quickLink = {
+      fontSize: 11, fontWeight: 600 as const, color: C.cyan, background: C.cyanDim,
+      padding: '3px 8px', borderRadius: 6, textDecoration: 'none' as const, whiteSpace: 'nowrap' as const,
+    };
+    return (
+      <div key={row.key} style={{
+        display: 'flex', flexDirection: 'column', gap: 6,
+        background: C.cardHover, border: `1px solid ${C.border}`,
+        borderLeft: `3px solid ${col}`, borderRadius: 8, padding: 10,
+      }}>
+        {/* Fälligkeit (spätestens) */}
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+          {row.dueDate ? `📅 bis ${formatDate(row.dueDate)}` : '📅 sofort'}
+        </div>
+        {/* Was zu tun ist */}
+        {isHandler ? (
+          <button type="button" disabled={busy} onClick={onClick} style={{ ...actionStyle, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Wird gesetzt…' : row.action.label}
+          </button>
+        ) : (
+          <Link href={row.action.href} style={actionStyle}>{row.action.label}</Link>
+        )}
+        {/* Kundenname */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {row.customerName}
+        </div>
+        <div style={{ fontSize: 11, color: errorId === row.key ? C.red : C.textDim, lineHeight: 1.35 }}>
+          {errorId === row.key ? 'Fehler — bitte erneut versuchen' : row.detail}
+        </div>
+        {/* 4 Status-Tags */}
+        {row.checks && <StatusChips c={row.checks} />}
+        {/* Schnell-Links */}
+        {(row.customerId || row.bookingId) && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+            {row.customerId && <Link href={`/admin/kunden/${row.customerId}`} style={quickLink}>👤 Kunde</Link>}
+            {row.bookingId && <Link href={`/admin/buchungen/${row.bookingId}`} style={quickLink}>📄 Buchung</Link>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{
       background: C.card,
@@ -985,7 +1064,7 @@ export function ActionQueueWidget({ data, loading }: {
         </Link>
       </div>
 
-      {/* Content */}
+      {/* Content — Kanban-Board: 4 Spalten nach Fälligkeit (links → rechts) */}
       {loading ? (
         <Spinner />
       ) : rows.length === 0 ? (
@@ -993,94 +1072,28 @@ export function ActionQueueWidget({ data, loading }: {
           Alles erledigt — keine offenen Aufgaben 🎉
         </div>
       ) : (
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
-          {rows.map((row, idx) => {
-            // Gruppen-Kopf einfügen, sobald sich der Fälligkeits-Bucket ändert.
-            const showHeader = idx === 0 || rows[idx - 1].bucket !== row.bucket;
-            const header = showHeader ? (
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', flex: 1, alignItems: 'flex-start', paddingBottom: 4 }}>
+          {columns.map((colRows, bkt) => (
+            <div key={bkt} style={{ flex: '1 0 240px', minWidth: 240, maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Spalten-Kopf */}
               <div style={{
-                fontSize: 10, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
-                color: C.textDim, padding: '10px 8px 4px', marginTop: idx === 0 ? 0 : 4,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                padding: '6px 10px', borderRadius: 8,
+                background: `${COL_ACCENT[bkt]}14`, borderTop: `2px solid ${COL_ACCENT[bkt]}`,
               }}>
-                {BUCKET_LABELS[row.bucket]}
+                <span style={{ fontSize: 12, fontWeight: 800, color: C.text, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                  {BUCKET_LABELS[bkt]}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: COL_ACCENT[bkt] }}>{colRows.length}</span>
               </div>
-            ) : null;
-            const lastInList = idx === rows.length - 1;
-            const lastInBucket = lastInList || rows[idx + 1].bucket !== row.bucket;
-            const rowStyle = {
-              display: 'flex' as const, alignItems: 'center' as const, gap: 10,
-              padding: '10px 8px',
-              borderBottom: lastInBucket ? 'none' : `1px solid ${C.border}`,
-              borderLeft: `3px solid ${row.action.color}`,
-              borderRadius: 6,
-            };
-            const textBlock = (
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {row.title}
-                </div>
-                <div style={{ fontSize: 11, color: errorId === row.key ? C.red : C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {errorId === row.key ? 'Fehler — bitte erneut versuchen' : row.subtitle}
-                </div>
-                {row.checks && <StatusChips c={row.checks} />}
+              {/* Karten */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 440, paddingRight: 2 }}>
+                {colRows.length === 0
+                  ? <div style={{ fontSize: 11, color: C.textDim, textAlign: 'center', padding: '12px 4px' }}>—</div>
+                  : colRows.map(renderCard)}
               </div>
-            );
-
-            // Aktion mit Handler (Status setzen / Termin als vereinbart
-            // markieren) → Button, Rest der Zeile bleibt ein Link zur
-            // Buchungsdetailseite.
-            if (row.action.kind === 'mark-shipped' || row.action.kind === 'coord-done') {
-              const busy = busyId === row.key;
-              const onClick =
-                row.action.kind === 'coord-done' && row.coord
-                  ? () => markCoordinationDone(row.key, row.coord!)
-                  : () => markShipped(row.key);
-              return (
-                <Fragment key={row.key}>
-                  {header}
-                  <div style={rowStyle}>
-                    <Link href={row.action.href} style={{ display: 'flex', minWidth: 0, flex: 1, textDecoration: 'none' }}>
-                      {textBlock}
-                    </Link>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={onClick}
-                      style={{
-                        fontSize: 11, fontWeight: 700, color: row.action.color,
-                        background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
-                        padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
-                        cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
-                      }}
-                    >
-                      {busy ? 'Wird gesetzt…' : row.action.label}
-                    </button>
-                  </div>
-                </Fragment>
-              );
-            }
-
-            return (
-              <Fragment key={row.key}>
-                {header}
-                <Link
-                  href={row.action.href}
-                  style={{ ...rowStyle, textDecoration: 'none', transition: 'background 0.12s' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  {textBlock}
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, color: row.action.color,
-                    background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
-                    padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
-                  }}>
-                    {row.action.label}
-                  </span>
-                </Link>
-              </Fragment>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>

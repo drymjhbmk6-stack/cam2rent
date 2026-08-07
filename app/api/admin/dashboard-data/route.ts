@@ -382,6 +382,7 @@ export async function GET() {
       const verified = customerVerified || gatePassed;
       return {
         id,
+        user_id: uid || null,
         product_name: (b.product_name as string) ?? '',
         customer_name: (b.customer_name as string) ?? '',
         status: (b.status as string) ?? '',
