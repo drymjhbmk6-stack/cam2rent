@@ -1,8 +1,23 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { TableSkeleton } from './Skeleton';
 import { EmptyState } from './EmptyState';
+
+/** Hydration-sicher: erster Render (Server + Client-Hydration) = false, danach
+ *  matchMedia. Schaltet die Tabelle unter `maxWidth` auf Karten-Layout um. */
+function useIsNarrow(maxWidth = 640): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [maxWidth]);
+  return narrow;
+}
 
 /**
  * Einheitliche Admin-Tabelle (Schritt 7). Spalten-Konfiguration, Sortierung mit
@@ -44,6 +59,9 @@ export interface DataTableProps<T> {
   /** Aktiviert Sticky-Header + vertikales Scrollen. */
   maxHeight?: number | string;
   skeletonRows?: number;
+  /** Unter 640px wird die Tabelle als Label:Wert-Karten gerendert. `true`
+   *  erzwingt die klassische (horizontal scrollende) Tabelle auch auf Mobile. */
+  disableCards?: boolean;
 }
 
 function hideClass(hideBelow?: 'md' | 'lg'): string {
@@ -65,7 +83,9 @@ export function DataTable<T>({
   minWidth = 600,
   maxHeight,
   skeletonRows = 8,
+  disableCards = false,
 }: DataTableProps<T>) {
+  const isNarrow = useIsNarrow();
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultSort?.dir ?? 'asc');
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -112,6 +132,62 @@ export function DataTable<T>({
 
   if (rows.length === 0) {
     return <div style={containerStyle}>{empty ?? <EmptyState title={emptyTitle} description={emptyDescription} />}</div>;
+  }
+
+  // ── Mobile-Karten (< 640px) ────────────────────────────────────────────────
+  // Jede Zeile als Stapel aus Label:Wert-Paaren (Label = Spalten-Header). Zeigt
+  // auch die auf Mobile sonst ausgeblendeten Spalten (hideBelow), weil Karten
+  // vertikal Platz haben. Klick/Tastatur wie in der Tabelle.
+  if (isNarrow && !disableCards) {
+    const clickable = !!onRowClick;
+    return (
+      <div style={{ ...containerStyle, overflow: 'visible' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10 }}>
+          {sortedRows.map((row) => {
+            const key = rowKey(row);
+            return (
+              <div
+                key={key}
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? () => onRowClick!(row) : undefined}
+                onKeyDown={
+                  clickable
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onRowClick!(row);
+                        }
+                      }
+                    : undefined
+                }
+                style={{
+                  background: 'var(--admin-surface-2)',
+                  border: '1px solid var(--admin-border)',
+                  borderRadius: 12,
+                  padding: 12,
+                  cursor: clickable ? 'pointer' : undefined,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                {columns.map((col) => (
+                  <div key={col.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--admin-accent)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                      {col.header}
+                    </span>
+                    <span style={{ fontSize: 14, color: 'var(--admin-text)', textAlign: 'right', minWidth: 0 }}>
+                      {col.render(row)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   const thBase: React.CSSProperties = {
