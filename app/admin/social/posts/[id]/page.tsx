@@ -199,12 +199,15 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
 
   async function handleGenerateImage() {
     if (aiGenerating || !editable) return;
-    if (!confirm(
-      'Neues KI-Bild generieren?\n\n' +
-      '• Kosten: ~0,04 € (DALL-E 3) bzw. bis ~0,19 € (gpt-image-1)\n' +
-      '• Dauer: 10-30 Sekunden\n' +
-      '• Das aktuelle Bild wird ersetzt.'
-    )) return;
+    if (!(await confirm({
+      title: 'KI-Bild generieren?',
+      message:
+        'Neues KI-Bild generieren?\n\n' +
+        '• Kosten: ~0,04 € (DALL-E 3) bzw. bis ~0,19 € (gpt-image-1)\n' +
+        '• Dauer: 10-30 Sekunden\n' +
+        '• Das aktuelle Bild wird ersetzt.',
+      confirmLabel: 'Generieren',
+    }))) return;
     setAiGenerating(true);
     setImgError('');
     try {
@@ -380,7 +383,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                   const res = await fetch('/api/admin/social/upload-image', { method: 'POST', body: fd });
                   const data = await res.json();
                   if (res.ok && data.url) setImageUrl(data.url);
-                  else alert(data.error ?? 'Upload fehlgeschlagen');
+                  else toast.error(data.error ?? 'Upload fehlgeschlagen');
                   e.target.value = '';
                 }}
               />
