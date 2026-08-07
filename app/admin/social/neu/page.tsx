@@ -7,6 +7,7 @@ import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
 import UnsplashPicker from '@/components/admin/UnsplashPicker';
 import ImagePositionPicker from '@/components/admin/ImagePositionPicker';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface Template {
@@ -28,6 +29,8 @@ interface Account {
 
 export default function NewPostPage() {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -52,12 +55,15 @@ export default function NewPostPage() {
       setImgError('Bitte zuerst Caption eingeben.');
       return;
     }
-    if (!confirm(
-      'Neues KI-Bild generieren?\n\n' +
-      '• Kosten: ~0,04 € (DALL-E 3) bzw. bis ~0,19 € (gpt-image-1)\n' +
-      '• Dauer: 10-30 Sekunden\n' +
-      '• Das aktuelle Bild wird ersetzt.'
-    )) return;
+    if (!(await confirm({
+      title: 'KI-Bild generieren?',
+      message:
+        'Neues KI-Bild generieren?\n\n' +
+        '• Kosten: ~0,04 € (DALL-E 3) bzw. bis ~0,19 € (gpt-image-1)\n' +
+        '• Dauer: 10-30 Sekunden\n' +
+        '• Das aktuelle Bild wird ersetzt.',
+      confirmLabel: 'Generieren',
+    }))) return;
     setAiGenerating(true);
     setImgError('');
     try {
@@ -206,8 +212,8 @@ export default function NewPostPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <AdminBackLink />
-      <h1 className="text-2xl font-bold text-white mb-1 mt-4">Neuer Post</h1>
-      <p className="text-sm text-slate-400 mb-6">
+      <h1 className="text-2xl font-bold text-admin-heading mb-1 mt-4">Neuer Post</h1>
+      <p className="text-sm text-admin-muted mb-6">
         Manuell erstellen oder von der KI generieren lassen.
       </p>
 
@@ -218,13 +224,13 @@ export default function NewPostPage() {
       )}
 
       {/* KI-Generierung */}
-      <section className="mb-6 rounded-xl bg-slate-900/50 border border-slate-800 p-5">
-        <h2 className="font-semibold text-white mb-3">KI-Generierung (optional)</h2>
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Vorlage</label>
+      <section className="mb-6 rounded-xl bg-slate-900/50 border border-admin-border p-5">
+        <h2 className="font-semibold text-admin-heading mb-3">KI-Generierung (optional)</h2>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Vorlage</label>
         <select
           value={selectedTemplate}
           onChange={(e) => setSelectedTemplate(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm mb-3"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm mb-3"
         >
           <option value="">— Keine Vorlage (eigener Text) —</option>
           {templates.map((t) => (
@@ -236,7 +242,7 @@ export default function NewPostPage() {
 
         {selectedTemplate && (
           <div className="mb-3">
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Variablen (z.B. title=..., product_name=...)</label>
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Variablen (z.B. title=..., product_name=...)</label>
             <input
               type="text"
               placeholder="z.B. product_name=GoPro Hero 13, brand=GoPro"
@@ -249,14 +255,14 @@ export default function NewPostPage() {
                 }
                 setTemplateVars(obj);
               }}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
             />
           </div>
         )}
 
         {!selectedTemplate && (
           <div className="mb-3">
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">
               Eigenes Thema / Ankündigung
             </label>
             <textarea
@@ -278,9 +284,9 @@ COMMUNITY-POSTS (Follower einbeziehen):
 TEAM / BTS:
 - Neues Reinigungsverfahren: jede Kamera wird vor Versand 15 Min UV-desinfiziert
 - Lernt unser Team kennen: Max kümmert sich um Bestellungen bis 14 Uhr`}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm font-mono text-xs"
             />
-            <label className="flex items-center gap-2 mt-2 text-sm text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2 mt-2 text-sm text-admin-text cursor-pointer">
               <input
                 type="checkbox"
                 checked={generateImage}
@@ -303,39 +309,39 @@ TEAM / BTS:
 
       {/* Caption */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Post-Text</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Post-Text</label>
         <textarea
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           rows={6}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
           placeholder="Was möchtest du posten?"
         />
-        <p className="text-xs text-slate-500 mt-1">{caption.length} Zeichen</p>
+        <p className="text-xs text-[var(--admin-text-dim)] mt-1">{caption.length} Zeichen</p>
       </section>
 
       {/* Hashtags */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Hashtags</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Hashtags</label>
         <input
           type="text"
           value={hashtagsText}
           onChange={(e) => setHashtagsText(e.target.value)}
           placeholder="#actioncam #gopro #cam2rent"
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
         />
       </section>
 
       {/* Bild */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Bild</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Bild</label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
             placeholder="Bild-URL oder Datei hochladen →"
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+            className="flex-1 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
           />
           <button
             type="button"
@@ -349,7 +355,7 @@ TEAM / BTS:
           <button
             type="button"
             onClick={() => setUnsplashOpen(true)}
-            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+            className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border whitespace-nowrap"
             title="Stockfoto auf Unsplash suchen"
           >
             📸 Unsplash
@@ -357,12 +363,12 @@ TEAM / BTS:
           <button
             type="button"
             onClick={() => setLibraryOpen(true)}
-            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+            className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border whitespace-nowrap"
             title="Bild aus eigener Bibliothek waehlen"
           >
             📚 Bibliothek
           </button>
-          <label className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 cursor-pointer whitespace-nowrap">
+          <label className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border cursor-pointer whitespace-nowrap">
             📷 Hochladen
             <input
               type="file"
@@ -376,7 +382,7 @@ TEAM / BTS:
                 const res = await fetch('/api/admin/social/upload-image', { method: 'POST', body: fd });
                 const data = await res.json();
                 if (res.ok && data.url) setImageUrl(data.url);
-                else alert(data.error ?? 'Upload fehlgeschlagen');
+                else toast.error(data.error ?? 'Upload fehlgeschlagen');
                 e.target.value = '';
               }}
             />
@@ -397,9 +403,9 @@ TEAM / BTS:
         )}
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-slate-800" />
+          <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-admin-border" />
         )}
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-[var(--admin-text-dim)] mt-1">
           Drei Quellen: 📚 Bibliothek (eigene Produkt-/Set-/Blog-Bilder), 📷 vom PC hochladen, oder KI-generiert (oben).
           Instagram verlangt ein Bild — für reine Text-Posts Instagram deaktivieren.
         </p>
@@ -407,62 +413,62 @@ TEAM / BTS:
 
       {/* Link (FB) */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Link (nur Facebook)</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Link (nur Facebook)</label>
         <input
           type="text"
           value={linkUrl}
           onChange={(e) => setLinkUrl(e.target.value)}
           placeholder="https://cam2rent.de/…"
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
         />
       </section>
 
       {/* Plattformen */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-2">Plattformen</label>
+        <label className="block text-sm font-semibold text-admin-text mb-2">Plattformen</label>
         <div className="flex gap-3">
-          <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/50 border border-admin-border cursor-pointer">
             <input
               type="checkbox"
               checked={platforms.includes('facebook')}
               onChange={() => togglePlatform('facebook')}
               disabled={!fbAccount}
             />
-            <span className="text-sm text-slate-200">Facebook {!fbAccount && <span className="text-slate-500">(nicht verbunden)</span>}</span>
+            <span className="text-sm text-admin-text">Facebook {!fbAccount && <span className="text-[var(--admin-text-dim)]">(nicht verbunden)</span>}</span>
           </label>
-          <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/50 border border-admin-border cursor-pointer">
             <input
               type="checkbox"
               checked={platforms.includes('instagram')}
               onChange={() => togglePlatform('instagram')}
               disabled={!igAccount}
             />
-            <span className="text-sm text-slate-200">Instagram {!igAccount && <span className="text-slate-500">(nicht verbunden)</span>}</span>
+            <span className="text-sm text-admin-text">Instagram {!igAccount && <span className="text-[var(--admin-text-dim)]">(nicht verbunden)</span>}</span>
           </label>
         </div>
       </section>
 
       {/* Zeitplanung */}
       <section className="mb-6">
-        <label className="block text-sm font-semibold text-slate-200 mb-2">Veröffentlichung</label>
+        <label className="block text-sm font-semibold text-admin-text mb-2">Veröffentlichung</label>
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-2">
             <input type="radio" checked={schedule === 'draft'} onChange={() => setSchedule('draft')} />
-            <span className="text-sm text-slate-200">Als Entwurf speichern</span>
+            <span className="text-sm text-admin-text">Als Entwurf speichern</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="radio" checked={schedule === 'now'} onChange={() => setSchedule('now')} />
-            <span className="text-sm text-slate-200">Sofort veröffentlichen</span>
+            <span className="text-sm text-admin-text">Sofort veröffentlichen</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="radio" checked={schedule === 'later'} onChange={() => setSchedule('later')} />
-            <span className="text-sm text-slate-200">Zeitgesteuert:</span>
+            <span className="text-sm text-admin-text">Zeitgesteuert:</span>
             <input
               type="datetime-local"
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
               disabled={schedule !== 'later'}
-              className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+              className="px-2 py-1 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
             />
           </label>
         </div>
@@ -471,7 +477,7 @@ TEAM / BTS:
       {/* Vorschau */}
       {(caption || imageUrl) && (
         <section className="mb-6">
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">Vorschau</h2>
+          <h2 className="text-sm font-semibold text-admin-text mb-3">Vorschau</h2>
           <SocialPostPreview
             caption={caption}
             hashtags={hashtagsText.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`))}
@@ -485,7 +491,7 @@ TEAM / BTS:
             igImagePosition={igImagePosition}
           />
           {imageUrl && (
-            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-admin-border">
               {platforms.includes('facebook') && (
                 <ImagePositionPicker
                   label="Facebook-Ausschnitt"
@@ -504,7 +510,7 @@ TEAM / BTS:
                 <button
                   type="button"
                   onClick={() => setFbImagePosition(igImagePosition)}
-                  className="self-end text-xs text-slate-400 hover:text-cyan-300 underline-offset-2 hover:underline"
+                  className="self-end text-xs text-admin-muted hover:text-cyan-300 underline-offset-2 hover:underline"
                   title="IG-Position auf Facebook übernehmen"
                 >
                   ← IG-Position übernehmen
