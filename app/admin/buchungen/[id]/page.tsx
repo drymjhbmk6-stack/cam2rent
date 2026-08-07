@@ -8,6 +8,7 @@ import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
 import DamageReportModal from '@/components/admin/DamageReportModal';
 import CancellationPreviewModal from '@/components/admin/CancellationPreviewModal';
 import PriceInput from '@/components/admin/PriceInput';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
@@ -244,6 +245,8 @@ function fmtEuro(n: number | null | undefined) {
 export default function BuchungDetailPage() {
   const params = useParams();
   const bookingId = params.id as string;
+  const { success, error: toastError } = useToast();
+  const confirm = useConfirm();
 
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
@@ -527,9 +530,11 @@ export default function BuchungDetailPage() {
   async function handleMarkPaid(paid: boolean) {
     if (!booking) return;
     if (paid) {
-      if (!confirm('Diese Buchung als bezahlt markieren? Die Rechnung wird in der Buchhaltung auf „bezahlt" gesetzt.')) return;
+      const ok = await confirm({ title: 'Als bezahlt markieren', message: 'Diese Buchung als bezahlt markieren? Die Rechnung wird in der Buchhaltung auf „bezahlt" gesetzt.', confirmLabel: 'Als bezahlt markieren' });
+      if (!ok) return;
     } else {
-      if (!confirm('Bezahlt-Markierung aufheben und Rechnung wieder als offen setzen?')) return;
+      const ok = await confirm({ title: 'Bezahlt aufheben', message: 'Bezahlt-Markierung aufheben und Rechnung wieder als offen setzen?', confirmLabel: 'Aufheben' });
+      if (!ok) return;
     }
     setMarkingPaid(true);
     try {
@@ -556,20 +561,22 @@ export default function BuchungDetailPage() {
 
   async function handleApproveBooking() {
     if (!booking) return;
-    if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
+    const ok = await confirm({ title: 'Buchung freigeben', message: 'Buchung freigeben und Zahlungslink an den Kunden senden?', confirmLabel: 'Freigeben & senden' });
+    if (!ok) return;
     setStatusUpdating(true);
     try {
       const res = await fetch('/api/admin/approve-booking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: booking.id }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      alert('Zahlungslink wurde an den Kunden gesendet!');
+      success('Zahlungslink wurde an den Kunden gesendet!');
       window.location.reload();
-    } catch (err) { alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
+    } catch (err) { toastError(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
   }
 
   async function handleRegenerateContract() {
     if (!booking) return;
-    if (!confirm('Vertrag aus der gespeicherten Signatur regenerieren?')) return;
+    const ok = await confirm({ title: 'Vertrag regenerieren', message: 'Vertrag aus der gespeicherten Signatur regenerieren?', confirmLabel: 'Regenerieren' });
+    if (!ok) return;
     setRegenerating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}/regenerate-contract`, {
@@ -578,12 +585,12 @@ export default function BuchungDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         await fetchBooking();
-        alert('Vertrag erfolgreich regeneriert.');
+        success('Vertrag erfolgreich regeneriert.');
       } else {
-        alert(data.error || 'Vertrag konnte nicht regeneriert werden.');
+        toastError(data.error || 'Vertrag konnte nicht regeneriert werden.');
       }
     } catch {
-      alert('Netzwerkfehler beim Regenerieren.');
+      toastError('Netzwerkfehler beim Regenerieren.');
     } finally {
       setRegenerating(false);
     }
@@ -591,7 +598,8 @@ export default function BuchungDetailPage() {
 
   async function handleResetContract() {
     if (!booking) return;
-    if (!confirm('Mietvertrag wirklich zurücksetzen?\n\nDas unterschriebene PDF wird gelöscht und der Kunde muss den Vertrag neu unterschreiben (sichtbar im Kundenkonto, oder über „Jetzt unterschreiben").')) return;
+    const ok = await confirm({ title: 'Mietvertrag zurücksetzen', message: 'Mietvertrag wirklich zurücksetzen?\n\nDas unterschriebene PDF wird gelöscht und der Kunde muss den Vertrag neu unterschreiben (sichtbar im Kundenkonto, oder über „Jetzt unterschreiben").', confirmLabel: 'Zurücksetzen', danger: true });
+    if (!ok) return;
     setResettingContract(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}/reset-contract`, {
@@ -601,15 +609,15 @@ export default function BuchungDetailPage() {
       if (res.ok) {
         await fetchBooking();
         if (data.emailSent) {
-          alert('Mietvertrag zurückgesetzt. Der Kunde wurde per E-Mail zur Neu-Unterschrift aufgefordert.');
+          success('Mietvertrag zurückgesetzt. Der Kunde wurde per E-Mail zur Neu-Unterschrift aufgefordert.');
         } else {
-          alert('Mietvertrag zurückgesetzt — aber die E-Mail an den Kunden ist fehlgeschlagen' + (data.emailError ? `:\n${data.emailError}` : '.') + '\nBitte den Kunden manuell informieren.');
+          toastError('Mietvertrag zurückgesetzt — aber die E-Mail an den Kunden ist fehlgeschlagen' + (data.emailError ? `:\n${data.emailError}` : '.') + '\nBitte den Kunden manuell informieren.');
         }
       } else {
-        alert(data.error || 'Vertrag konnte nicht zurückgesetzt werden.');
+        toastError(data.error || 'Vertrag konnte nicht zurückgesetzt werden.');
       }
     } catch {
-      alert('Netzwerkfehler beim Zurücksetzen.');
+      toastError('Netzwerkfehler beim Zurücksetzen.');
     } finally {
       setResettingContract(false);
     }
@@ -617,7 +625,8 @@ export default function BuchungDetailPage() {
 
   async function handleLockContract() {
     if (!booking) return;
-    if (!confirm('Mietvertrag als geprüft freigeben?\n\nAchtung: Das ist endgültig — die Freigabe kann NICHT rückgängig gemacht werden. Der Vertrag lässt sich danach nicht mehr zurücksetzen.')) return;
+    const ok = await confirm({ title: 'Vertrag freigeben', message: 'Mietvertrag als geprüft freigeben?\n\nAchtung: Das ist endgültig — die Freigabe kann NICHT rückgängig gemacht werden. Der Vertrag lässt sich danach nicht mehr zurücksetzen.', confirmLabel: 'Endgültig freigeben' });
+    if (!ok) return;
     setLockingContract(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}/lock-contract`, {
@@ -629,10 +638,10 @@ export default function BuchungDetailPage() {
       if (res.ok) {
         await fetchBooking();
       } else {
-        alert(data.error || 'Freigabe konnte nicht gespeichert werden.');
+        toastError(data.error || 'Freigabe konnte nicht gespeichert werden.');
       }
     } catch {
-      alert('Netzwerkfehler bei der Freigabe.');
+      toastError('Netzwerkfehler bei der Freigabe.');
     } finally {
       setLockingContract(false);
     }
@@ -643,7 +652,7 @@ export default function BuchungDetailPage() {
     setWbwGateStatus(null);
     fetchBooking();
     if (emailFailed) {
-      alert('WBW gespeichert & Status gesetzt, aber die E-Mail an den Mieter ist fehlgeschlagen. Bitte unter „Bearbeiten" → Wiederbeschaffungswerte erneut senden.');
+      toastError('WBW gespeichert & Status gesetzt, aber die E-Mail an den Mieter ist fehlgeschlagen. Bitte unter „Bearbeiten" → Wiederbeschaffungswerte erneut senden.');
     }
   }
 
@@ -663,7 +672,8 @@ export default function BuchungDetailPage() {
       setWbwGateStatus(newStatus);
       return;
     }
-    if (!confirm(`Status wirklich auf "${STATUS_CONFIG[newStatus]?.label || newStatus}" ändern?`)) return;
+    const ok = await confirm({ title: 'Status ändern', message: `Status wirklich auf "${STATUS_CONFIG[newStatus]?.label || newStatus}" ändern?`, confirmLabel: 'Ändern' });
+    if (!ok) return;
     setStatusUpdating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}`, {
@@ -673,12 +683,12 @@ export default function BuchungDetailPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error ?? 'Fehler beim Aktualisieren.');
+        toastError(d.error ?? 'Fehler beim Aktualisieren.');
         return;
       }
       setBooking((prev) => prev ? { ...prev, status: newStatus } : prev);
     } catch {
-      alert('Netzwerkfehler.');
+      toastError('Netzwerkfehler.');
     } finally {
       setStatusUpdating(false);
     }
@@ -756,7 +766,7 @@ export default function BuchungDetailPage() {
     // Erstattung unter dem Vorschlag verlangt eine Begründung (auch clientseitig
     // geblockt; der Server ist die autoritative Instanz).
     if (cancelIsBelowSuggestion() && !cancelDeviationReason.trim()) {
-      alert('Die Erstattung liegt unter dem AGB-Staffelwert. Bitte eine Begründung angeben.');
+      toastError('Die Erstattung liegt unter dem AGB-Staffelwert. Bitte eine Begründung angeben.');
       return;
     }
     const refundAmount = cancelRefundValue();
@@ -778,7 +788,7 @@ export default function BuchungDetailPage() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        alert(d.message ?? d.error ?? 'Fehler.');
+        toastError(d.message ?? d.error ?? 'Fehler.');
         return;
       }
       setBooking((prev) => prev ? { ...prev, status: 'cancelled' } : prev);
@@ -792,7 +802,7 @@ export default function BuchungDetailPage() {
       setCancelRefundAmount(0);
       setCancelStripeRefund(true);
       setCancelSendEmail(true);
-    } catch { alert('Netzwerkfehler.'); }
+    } catch { toastError('Netzwerkfehler.'); }
     finally { setStatusUpdating(false); }
   }
 
@@ -1054,7 +1064,8 @@ export default function BuchungDetailPage() {
   const totalDiscount = (booking.discount_amount ?? 0) + (booking.duration_discount ?? 0) + (booking.loyalty_discount ?? 0);
 
   async function quickStatusChange(targetStatus: string, label: string) {
-    if (!confirm(`Status wirklich auf "${label}" ändern?`)) return;
+    const ok = await confirm({ title: 'Status ändern', message: `Status wirklich auf "${label}" ändern?`, confirmLabel: 'Ändern' });
+    if (!ok) return;
     setStatusUpdating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}`, {
@@ -1062,10 +1073,10 @@ export default function BuchungDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: targetStatus }),
       });
-      if (!res.ok) { alert('Fehler beim Aktualisieren.'); return; }
+      if (!res.ok) { toastError('Fehler beim Aktualisieren.'); return; }
       setBooking((prev) => prev ? { ...prev, status: targetStatus } : prev);
       setNewStatus(targetStatus);
-    } catch { alert('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
+    } catch { toastError('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
   }
 
   function buildTrackingUrlClient(carrier: 'DHL' | 'DPD', number: string): string {
@@ -1093,7 +1104,7 @@ export default function BuchungDetailPage() {
         tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
       });
       setEditingTracking(false);
-    } catch { alert('Trackingnummer konnte nicht gespeichert werden.'); }
+    } catch { toastError('Trackingnummer konnte nicht gespeichert werden.'); }
     finally { setTrackingSaving(false); }
   }
 
@@ -1111,7 +1122,7 @@ export default function BuchungDetailPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         if (res.status === 503) {
-          alert(data?.error ?? 'Migration fuer Retoure-Tracking steht noch aus.');
+          toastError(data?.error ?? 'Migration fuer Retoure-Tracking steht noch aus.');
           return;
         }
         throw new Error('Fehler');
@@ -1123,7 +1134,7 @@ export default function BuchungDetailPage() {
         return_tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
       });
       setEditingReturnTracking(false);
-    } catch { alert('Rueckgabe-Trackingnummer konnte nicht gespeichert werden.'); }
+    } catch { toastError('Rueckgabe-Trackingnummer konnte nicht gespeichert werden.'); }
     finally { setReturnTrackingSaving(false); }
   }
 
@@ -1878,7 +1889,7 @@ export default function BuchungDetailPage() {
                                 if (!res.ok) throw new Error('Fehler');
                                 setBooking({ ...booking, customer_email: emailDraft.trim() || null });
                                 setEditingEmail(false);
-                              } catch { alert('E-Mail konnte nicht gespeichert werden.'); }
+                              } catch { toastError('E-Mail konnte nicht gespeichert werden.'); }
                               finally { setEmailSaving(false); }
                             })();
                           }
@@ -1893,7 +1904,7 @@ export default function BuchungDetailPage() {
                             if (!res.ok) throw new Error('Fehler');
                             setBooking({ ...booking, customer_email: emailDraft.trim() || null });
                             setEditingEmail(false);
-                          } catch { alert('E-Mail konnte nicht gespeichert werden.'); }
+                          } catch { toastError('E-Mail konnte nicht gespeichert werden.'); }
                           finally { setEmailSaving(false); }
                         }}
                         disabled={emailSaving}
@@ -1968,15 +1979,16 @@ export default function BuchungDetailPage() {
                     </p>
                     {booking.status === 'pending_verification' && (
                       <button onClick={async () => {
-                        if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
+                        const ok = await confirm({ title: 'Buchung freigeben', message: 'Buchung freigeben und Zahlungslink an den Kunden senden?', confirmLabel: 'Freigeben & senden' });
+                        if (!ok) return;
                         setStatusUpdating(true);
                         try {
                           const res = await fetch('/api/admin/approve-booking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: booking.id }) });
                           const data = await res.json();
                           if (!res.ok) throw new Error(data.error);
-                          alert('Zahlungslink wurde an den Kunden gesendet!');
+                          success('Zahlungslink wurde an den Kunden gesendet!');
                           window.location.reload();
-                        } catch (err) { alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
+                        } catch (err) { toastError(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
                       }} disabled={statusUpdating} className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors disabled:opacity-40">
                         {statusUpdating ? 'Wird gesendet...' : 'Freigeben + Zahlungslink senden'}
                       </button>
@@ -4542,7 +4554,7 @@ function TimelineItem({ label, date, status, active }: { label: string; date: st
       <div className="flex flex-col items-center">
         <div
           className="w-3 h-3 rounded-full mt-0.5"
-          style={{ backgroundColor: active ? sc.color : '#e2e8f0' }}
+          style={{ backgroundColor: active ? sc.color : 'var(--admin-text)' }}
         />
         <div className="w-0.5 h-full bg-gray-200 min-h-[16px]" />
       </div>
@@ -4746,7 +4758,7 @@ function ShippingOverrideSection({
           onClick={save}
           disabled={!hasChanges || saving}
           className="px-4 py-2 rounded-lg text-sm font-heading font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: '#06b6d4' }}
+          style={{ background: 'var(--admin-accent)' }}
         >
           {saving ? 'Speichert…' : 'Speichern'}
         </button>
