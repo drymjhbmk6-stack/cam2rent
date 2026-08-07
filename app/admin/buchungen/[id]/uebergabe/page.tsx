@@ -107,7 +107,7 @@ export default function UebergabePage({ params }: { params: Promise<{ id: string
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Lädt…</div>;
+  if (loading) return <div className="p-8 text-center text-[var(--admin-text-dim)]">Lädt…</div>;
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
 
   // Falls bereits gespeichert: Done-Anzeige direkt
@@ -415,13 +415,13 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen text-admin-text">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <AdminBackLink href={`/admin/buchungen/${booking.id}`} label="Zurück zur Buchung" />
 
         <div className="mt-4 mb-6">
           <h1 className="text-2xl font-bold">Übergabeprotokoll</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-admin-muted mt-1">
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
@@ -547,12 +547,12 @@ function Stepper({ step }: { step: Step }) {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${
             i === idx ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
             i < idx ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-            'bg-slate-800 text-slate-500 border border-slate-700'
+            'bg-admin-surface-2 text-[var(--admin-text-dim)] border border-[var(--admin-faint)]'
           }`}>
             {i < idx && <span>✓</span>}
             {labels[k]}
           </div>
-          {i < order.length - 1 && <span className="text-slate-700">→</span>}
+          {i < order.length - 1 && <span className="text-[var(--admin-faint)]">→</span>}
         </div>
       ))}
     </div>
@@ -562,28 +562,28 @@ function Stepper({ step }: { step: Step }) {
 function EquipmentSummary({ booking }: { booking: BookingDetail }) {
   const items = booking.resolved_items ?? [];
   return (
-    <div className="mt-3 pt-3 border-t border-slate-800">
-      <div className="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Mietgegenstände</div>
+    <div className="mt-3 pt-3 border-t border-admin-border">
+      <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-1.5">Mietgegenstände</div>
       <ul className="space-y-1 text-sm">
         <li className="flex justify-between gap-3">
           <span className="font-medium">
             📷 {booking.product_name}
-            {booking.serial_number ? <span className="text-slate-400 font-normal"> · SN {booking.serial_number}</span> : null}
+            {booking.serial_number ? <span className="text-admin-muted font-normal"> · SN {booking.serial_number}</span> : null}
           </span>
-          <span className="text-slate-400 shrink-0">1×</span>
+          <span className="text-admin-muted shrink-0">1×</span>
         </li>
         {items.map((it, i) => (
           <li
             key={i}
-            className={`flex justify-between gap-3 ${it.isFromSet ? 'pl-4 text-slate-300' : 'font-medium'}`}
+            className={`flex justify-between gap-3 ${it.isFromSet ? 'pl-4 text-admin-text-2' : 'font-medium'}`}
           >
             <span className="min-w-0 truncate">
               {it.isFromSet ? '└ ' : '🎒 '}{it.name}
             </span>
-            <span className="text-slate-400 shrink-0">{it.qty}×</span>
+            <span className="text-admin-muted shrink-0">{it.qty}×</span>
           </li>
         ))}
-        {items.length === 0 && <li className="text-slate-500 italic">Kein Zubehör gebucht</li>}
+        {items.length === 0 && <li className="text-[var(--admin-text-dim)] italic">Kein Zubehör gebucht</li>}
       </ul>
     </div>
   );
@@ -591,14 +591,14 @@ function EquipmentSummary({ booking }: { booking: BookingDetail }) {
 
 function BookingInfo({ booking }: { booking: BookingDetail }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 text-sm">
+    <div className="bg-[var(--admin-input-bg)] border border-admin-border rounded-xl p-4 mb-6 text-sm">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
+          <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
           <div>{booking.rental_from} – {booking.rental_to}</div>
         </div>
         <div>
-          <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Lieferart</div>
+          <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Lieferart</div>
           <div>{booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}</div>
         </div>
       </div>
@@ -654,13 +654,13 @@ function Step1(props: {
     reader.readAsDataURL(f);
   }
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+    <div className="bg-[var(--admin-input-bg)] border border-admin-border rounded-xl p-6">
       <h2 className="font-bold text-lg mb-1">1. Zustand bei Übergabe</h2>
-      <p className="text-sm text-slate-400 mb-6">Items abhaken + Zustand festhalten.</p>
+      <p className="text-sm text-admin-muted mb-6">Items abhaken + Zustand festhalten.</p>
 
       {/* Ort der Übergabe */}
       <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Ort der Übergabe *</label>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Ort der Übergabe *</label>
 
         {props.savedAddresses.length > 0 && (
           <div className="space-y-1.5 mb-2.5">
@@ -672,7 +672,7 @@ function Step1(props: {
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
                     selected
                       ? 'bg-cyan-500/10 border-cyan-500'
-                      : 'bg-slate-950 border-slate-700 hover:border-slate-600'
+                      : 'bg-[var(--admin-bg)] border-[var(--admin-faint)] hover:border-[var(--admin-input-border)]'
                   }`}
                 >
                   <input
@@ -681,7 +681,7 @@ function Step1(props: {
                     onChange={() => props.setLocation(selected ? '' : addr)}
                     className="h-4 w-4 accent-cyan-500 shrink-0"
                   />
-                  <span className="text-sm text-slate-200">{addr}</span>
+                  <span className="text-sm text-admin-text">{addr}</span>
                 </label>
               );
             })}
@@ -693,9 +693,9 @@ function Step1(props: {
           value={props.savedAddresses.includes(props.location.trim()) ? '' : props.location}
           onChange={(e) => props.setLocation(e.target.value)}
           placeholder="Andere Adresse eingeben…"
-          className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-base focus:border-cyan-500 focus:outline-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-faint)] text-base focus:border-cyan-500 focus:outline-none"
         />
-        <p className="text-xs text-slate-500 mt-1.5">
+        <p className="text-xs text-[var(--admin-text-dim)] mt-1.5">
           Adresse anhaken oder eine abweichende Adresse eingeben. Feste Adressen
           verwaltest du unter Einstellungen → Allgemein.
         </p>
@@ -703,7 +703,7 @@ function Step1(props: {
 
       {/* Item-Checkliste + Scanner */}
       <div className="mb-5">
-        <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Übergebene Gegenstände *</p>
+        <p className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">Übergebene Gegenstände *</p>
 
         <ScannerBar
           onOpen={() => props.setScannerOpen(true)}
@@ -720,7 +720,7 @@ function Step1(props: {
           onManualPick={(g) => props.setPickerGroup(g)}
         />
 
-        <p className="text-xs text-slate-500 mt-2">
+        <p className="text-xs text-[var(--admin-text-dim)] mt-2">
           Kannst du nicht scannen? Tippe bei einer Kamera- oder Zubehör-Position
           auf <span className="text-cyan-400 font-semibold">📋 Wählen</span> und
           hake das passende Exemplar (Seriennummer/Code) aus der Liste an.
@@ -767,13 +767,13 @@ function Step1(props: {
 
       {/* Zustand-Checkboxen */}
       <div className="mb-5">
-        <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Zustand *</p>
+        <p className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">Zustand *</p>
         <div className="space-y-2">
-          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-[var(--admin-bg)] border border-admin-border cursor-pointer">
             <input type="checkbox" checked={props.tested} onChange={(e) => props.setTested(e.target.checked)} className="w-5 h-5 accent-cyan-500" />
             <span className="text-sm">Funktionsfähig getestet</span>
           </label>
-          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-[var(--admin-bg)] border border-admin-border cursor-pointer">
             <input type="checkbox" checked={props.noDamage} onChange={(e) => props.setNoDamage(e.target.checked)} className="w-5 h-5 accent-cyan-500" />
             <span className="text-sm">Keine sichtbaren Schäden</span>
           </label>
@@ -782,8 +782,8 @@ function Step1(props: {
 
       {/* Foto-Upload (Pflicht) */}
       <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Foto der Übergabe *</label>
-        <p className="text-xs text-slate-500 mb-2">Pflicht: mindestens ein Foto vom Mietgegenstand bei der Übergabe (Zustand dokumentieren).</p>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Foto der Übergabe *</label>
+        <p className="text-xs text-[var(--admin-text-dim)] mb-2">Pflicht: mindestens ein Foto vom Mietgegenstand bei der Übergabe (Zustand dokumentieren).</p>
         {/* Kamera (öffnet direkt die Rückkamera auf Mobile) */}
         <input
           id="handover-photo-camera"
@@ -804,30 +804,30 @@ function Step1(props: {
         {props.photoPreview ? (
           <div className="space-y-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={props.photoPreview} alt="Übergabe-Foto" className="w-full max-h-64 object-contain rounded-lg bg-slate-950 border border-slate-800" />
+            <img src={props.photoPreview} alt="Übergabe-Foto" className="w-full max-h-64 object-contain rounded-lg bg-[var(--admin-bg)] border border-admin-border" />
             <button
               type="button"
               onClick={() => { props.setPhotoFile(null); props.setPhotoPreview(null); }}
-              className="text-xs text-slate-400 hover:text-slate-200 underline"
+              className="text-xs text-admin-muted hover:text-admin-text underline"
             >
               Foto entfernen / neu aufnehmen
             </button>
           </div>
         ) : (
-          <div className="w-full p-6 rounded-lg bg-slate-950 border-2 border-dashed border-slate-700">
+          <div className="w-full p-6 rounded-lg bg-[var(--admin-bg)] border-2 border-dashed border-[var(--admin-faint)]">
             <div className="flex flex-col items-center justify-center mb-4">
-              <svg className="w-8 h-8 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 mb-2 text-[var(--admin-text-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              <span className="text-xs text-slate-500">JPEG, PNG, WebP, HEIC · max 10 MB</span>
+              <span className="text-xs text-[var(--admin-text-dim)]">JPEG, PNG, WebP, HEIC · max 10 MB</span>
             </div>
             <div className="flex gap-2">
-              <label htmlFor="handover-photo-camera" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-medium cursor-pointer transition-colors">
+              <label htmlFor="handover-photo-camera" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-admin-accent hover:bg-admin-accent-hover text-slate-950 text-sm font-medium cursor-pointer transition-colors">
                 <span>📷</span>
                 <span>Foto aufnehmen</span>
               </label>
-              <label htmlFor="handover-photo-gallery" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-sm font-medium cursor-pointer transition-colors">
+              <label htmlFor="handover-photo-gallery" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-admin-surface-2 hover:bg-[var(--admin-faint)] border border-[var(--admin-input-border)] text-admin-text text-sm font-medium cursor-pointer transition-colors">
                 <span>🖼</span>
                 <span>Galerie</span>
               </label>
@@ -838,13 +838,13 @@ function Step1(props: {
 
       {/* Sonstige Anmerkungen */}
       <div className="mb-6">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Sonstige Anmerkungen</label>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Sonstige Anmerkungen</label>
         <textarea
           value={props.otherNote}
           onChange={(e) => props.setOtherNote(e.target.value)}
           rows={3}
           placeholder="z.B. kleine Kratzer am Gehäuse rechts oben"
-          className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-sm focus:border-cyan-500 focus:outline-none resize-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-faint)] text-sm focus:border-cyan-500 focus:outline-none resize-none"
         />
       </div>
 
@@ -852,7 +852,7 @@ function Step1(props: {
         type="button"
         disabled={!props.canProceed}
         onClick={props.onNext}
-        className="w-full px-4 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold transition-colors"
+        className="w-full px-4 py-3 rounded-lg bg-admin-accent hover:bg-admin-accent-hover disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] disabled:cursor-not-allowed text-slate-950 font-semibold transition-colors"
       >
         Weiter zur Vermieter-Signatur
       </button>
@@ -874,7 +874,7 @@ function ThirdPartyPickupBlock(props: {
   customerName: string | null;
 }) {
   return (
-    <div className="mb-5 rounded-lg border border-slate-700 bg-slate-950 p-4">
+    <div className="mb-5 rounded-lg border border-[var(--admin-faint)] bg-[var(--admin-bg)] p-4">
       <label className="flex items-start gap-3 cursor-pointer">
         <input
           type="checkbox"
@@ -884,7 +884,7 @@ function ThirdPartyPickupBlock(props: {
         />
         <span>
           <span className="text-sm font-semibold text-amber-300">Abholende Person ist nicht der Kunde</span>
-          <span className="block text-xs text-slate-400 mt-0.5">
+          <span className="block text-xs text-admin-muted mt-0.5">
             Eine dritte Person holt im Auftrag des Kunden{props.customerName ? ` (${props.customerName})` : ''} ab.
             Der Kunde bleibt Vertragspartner und haftet für das Equipment.
           </span>
@@ -892,18 +892,18 @@ function ThirdPartyPickupBlock(props: {
       </label>
 
       {props.enabled && (
-        <div className="mt-4 space-y-3 border-t border-slate-800 pt-4">
+        <div className="mt-4 space-y-3 border-t border-admin-border pt-4">
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Verhältnis zum Kunden (optional)</label>
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Verhältnis zum Kunden (optional)</label>
             <input
               type="text"
               value={props.relation}
               onChange={(e) => props.setRelation(e.target.value)}
               placeholder="z.B. Ehepartner, Kollege, Bote"
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-base focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] text-base focus:border-cyan-500 focus:outline-none"
             />
           </div>
-          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-[var(--admin-input-bg)] border border-admin-border cursor-pointer">
             <input
               type="checkbox"
               checked={props.poa}
@@ -912,7 +912,7 @@ function ThirdPartyPickupBlock(props: {
             />
             <span className="text-sm">Vollmacht des Kunden liegt vor *</span>
           </label>
-          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer">
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-[var(--admin-input-bg)] border border-admin-border cursor-pointer">
             <input
               type="checkbox"
               checked={props.idChecked}
@@ -963,26 +963,26 @@ function Step2Sign(props: {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+    <div className="bg-[var(--admin-input-bg)] border border-admin-border rounded-xl p-6">
       <h2 className="font-bold text-lg mb-1">{props.title}</h2>
-      <p className="text-sm text-slate-400 mb-6">{props.description}</p>
+      <p className="text-sm text-admin-muted mb-6">{props.description}</p>
 
       {props.topContent}
 
       <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">{props.nameLabel ?? 'Vor- und Nachname *'}</label>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">{props.nameLabel ?? 'Vor- und Nachname *'}</label>
         <input
           type="text"
           value={props.name}
           onChange={(e) => props.setName(e.target.value)}
-          className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-base focus:border-cyan-500 focus:outline-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-faint)] text-base focus:border-cyan-500 focus:outline-none"
         />
       </div>
 
       <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Unterschrift *</label>
+        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Unterschrift *</label>
         <div
-          className="rounded-lg overflow-hidden border-2 border-slate-400"
+          className="rounded-lg overflow-hidden border-2 border-[var(--admin-muted)]"
           style={{ backgroundColor: '#ffffff' }}
         >
           <SignatureCanvas
@@ -998,7 +998,7 @@ function Step2Sign(props: {
         <button
           type="button"
           onClick={clear}
-          className="mt-2 text-xs text-slate-400 hover:text-slate-200 underline"
+          className="mt-2 text-xs text-admin-muted hover:text-admin-text underline"
         >
           Unterschrift löschen
         </button>
@@ -1008,7 +1008,7 @@ function Step2Sign(props: {
         <button
           type="button"
           onClick={props.onBack}
-          className="px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition-colors"
+          className="px-4 py-3 rounded-lg bg-admin-surface-2 hover:bg-[var(--admin-faint)] text-admin-text font-semibold transition-colors"
         >
           Zurück
         </button>
@@ -1016,7 +1016,7 @@ function Step2Sign(props: {
           type="button"
           disabled={!props.canNext || props.nextDisabled}
           onClick={props.onNext}
-          className="flex-1 px-4 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold transition-colors"
+          className="flex-1 px-4 py-3 rounded-lg bg-admin-accent hover:bg-admin-accent-hover disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] disabled:cursor-not-allowed text-slate-950 font-semibold transition-colors"
         >
           {props.nextLabel ?? 'Weiter'}
         </button>
@@ -1029,18 +1029,18 @@ function Step2Sign(props: {
 
 function DoneStep({ bookingId }: { bookingId: string }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
+    <div className="bg-[var(--admin-input-bg)] border border-admin-border rounded-xl p-8 text-center">
       <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center mx-auto mb-4">
         <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       </div>
       <h2 className="font-bold text-xl mb-1">Übergabeprotokoll gespeichert</h2>
-      <p className="text-sm text-slate-400 mb-6">Beide Signaturen liegen vor.</p>
+      <p className="text-sm text-admin-muted mb-6">Beide Signaturen liegen vor.</p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <Link
           href={`/admin/buchungen/${bookingId}`}
-          className="px-4 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold transition-colors"
+          className="px-4 py-3 rounded-lg bg-admin-accent hover:bg-admin-accent-hover text-slate-950 font-semibold transition-colors"
         >
           Zurück zur Buchung
         </Link>
@@ -1062,18 +1062,18 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
       .catch(() => {});
   }, [booking.id, handover.photoPath]);
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen text-admin-text">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <AdminBackLink href={`/admin/buchungen/${booking.id}`} label="Zurück zur Buchung" />
 
         <div className="mt-4 mb-6">
           <h1 className="text-2xl font-bold">Übergabeprotokoll</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-admin-muted mt-1">
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
 
-        <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-6 mb-6">
+        <div className="bg-[var(--admin-input-bg)] border border-emerald-500/40 rounded-xl p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1082,13 +1082,13 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             </div>
             <div>
               <h2 className="font-bold">Protokoll abgeschlossen</h2>
-              <p className="text-xs text-slate-400">am {completedDate}</p>
+              <p className="text-xs text-admin-muted">am {completedDate}</p>
             </div>
           </div>
 
           {handover.location && (
             <div className="mb-4">
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Ort der Übergabe</div>
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Ort der Übergabe</div>
               <div>{handover.location}</div>
             </div>
           )}
@@ -1105,12 +1105,12 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             </div>
           )}
 
-          <div className="mb-4 bg-slate-950/50 rounded-lg p-3 border border-slate-800">
+          <div className="mb-4 bg-[var(--admin-bg)] rounded-lg p-3 border border-admin-border">
             <EquipmentSummary booking={booking} />
           </div>
 
           <div className="mb-4">
-            <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Zustand</div>
+            <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Zustand</div>
             <ul className="text-sm space-y-1">
               <li>{handover.condition.tested ? '✓' : '✗'} Funktionsfähig getestet</li>
               <li>{handover.condition.noDamage ? '✓' : '✗'} Keine sichtbaren Schäden</li>
@@ -1122,30 +1122,30 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
 
           {handover.photoPath && (
             <div className="mb-4">
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Foto der Übergabe</div>
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Foto der Übergabe</div>
               {photoUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={photoUrl} alt="Übergabe-Foto" className="w-full max-h-72 object-contain rounded-lg bg-slate-950 border border-slate-800" />
+                <img src={photoUrl} alt="Übergabe-Foto" className="w-full max-h-72 object-contain rounded-lg bg-[var(--admin-bg)] border border-admin-border" />
               ) : (
-                <div className="text-xs text-slate-500">Foto wird geladen…</div>
+                <div className="text-xs text-[var(--admin-text-dim)]">Foto wird geladen…</div>
               )}
             </div>
           )}
 
           <div className="grid sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Vermieter</div>
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Vermieter</div>
               <div className="font-medium text-sm mb-1">{handover.signatures.landlord.name}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={handover.signatures.landlord.dataUrl} alt="Vermieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
+              <img src={handover.signatures.landlord.dataUrl} alt="Vermieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-[var(--admin-text-2)]" />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">
                 {handover.pickup?.byThirdParty ? 'Abholende Person (i.A.)' : 'Mieter'}
               </div>
               <div className="font-medium text-sm mb-1">{handover.signatures.renter.name}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={handover.signatures.renter.dataUrl} alt="Mieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
+              <img src={handover.signatures.renter.dataUrl} alt="Mieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-[var(--admin-text-2)]" />
             </div>
           </div>
         </div>
