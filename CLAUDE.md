@@ -2120,8 +2120,37 @@ auf die `admin`-Tokens (Schritt 1) + Primitive (Schritt 6/7) umgestellt →
 sauberes Light/Dark. **Kadenz (wegen „nichts kaputt" + keiner Sandbox-Laufzeit):**
 pro Seite ein eigener Commit, reiner Optik-Diff (kein Handler/State/Fetch), jeweils
 `tsc`+`lint` grün, dazwischen vom User live gegengeprüft. Der `.admin-dark`-
-`!important`-Layer (globals.css) wird **erst ganz zuletzt** entfernt, wenn alle
-Seiten migriert sind.
+`!important`-Layer (globals.css) bleibt **dauerhaft** als theme-aware
+Kompatibilitäts-Brücke (siehe Korrektur-Absatz am Ende von Schritt 8 —
+NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
+
+#### Schritt 9 — Navigation (teilweise, fertig 2026-08-07)
+- **Sidebar-Sub-Collapses zusammengeführt:** die drei fast identischen
+  `BlogCollapse`/`PostsCollapse`/`ReelsCollapse` in `AdminLayoutClient.tsx`
+  durch eine generische `SubNavCollapse` (`label`/`icon`/`items`/`storageKey`/
+  `active`/`hideWhenEmpty`) ersetzt. Reiner Refactor (−108 Zeilen) —
+  Collapse-State, localStorage-Keys (`admin_{blog,posts,reels}_collapsed`),
+  Auto-Expand, Optik/Hover/Chevron 1:1 erhalten. tsc 0, lint 0.
+- **Bewusst NICHT gebaut (deferred, braucht Live-Check):** Favoriten/Pins in
+  der Sidebar (stateful, cross-Instanz-Sync desktop+mobile, Stern-Buttons pro
+  Nav-Item im höchst-blast-radius Shell) + Dashboard-2.0 (KPI-Trend-Delta,
+  Sparklines, „Heute zu erledigen"-Lane). Beides ist visuell/interaktiv und in
+  der Sandbox nicht smoke-testbar → gemäß „nichts kaputt / im Zweifel stehen
+  lassen" nicht blind in die Navigation eingebaut. Nachziehbar, sobald live
+  gegengeprüft werden kann.
+
+#### Schritt 10 — A11y-Feinschliff (teilweise, fertig 2026-08-07)
+- **Sichtbarer Tastatur-Fokus + reduced-motion (globals.css, additiv, auf
+  `.admin-shell` begrenzt):** `:focus-visible`-Ring (2px `--admin-accent`,
+  layout-neutral via `outline-offset`) für Links/Buttons/`[role=button]`/
+  `[tabindex]`/Felder/`summary`; `@media (prefers-reduced-motion: reduce)`
+  schaltet Animationen/Transitions/Shimmer im Admin praktisch ab. Kein JS,
+  Maus-Fokus + Storefront unberührt. tsc 0.
+- **Bewusst NICHT gebaut (deferred, braucht Live-Check):** responsives
+  Karten-Fallback für die ~40 Tabellen unter 768px (statt Spalten-Ausblenden),
+  Master-Detail-Split-View-Verallgemeinerung, Kontrast-Audit beider Themes am
+  echten Gerät. Alles visuell/mobil und nicht in der Sandbox verifizierbar →
+  nachziehbar mit Live-/Device-Test.
 - **`/admin/warteliste` (Muster-Seite, fertig):** hartkodierte Slate-Palette (flippte
   bisher NICHT in Light) → `PageHeader`/`Card`/`Button`/`EmptyState`/`TableSkeleton` +
   `DataTable` (sortierbar, a11y) + Token-Farben. Logik 1:1 (load/DELETE/Gruppierung/
@@ -2210,13 +2239,20 @@ Seiten migriert sind.
   `bg-white dark:bg-slate-900`-Brand-Muster) + die **noch aktive
   `.admin-dark`-`!important`-Brücke** (globals.css), die die nicht-tokenisierten
   `brand-*`/`bg-white`/Table-Klassen in BEIDEN Themes dunkel hält.
-- **Letzter, separater Schritt (offen, braucht ausdrückliche Freigabe):** das
-  `.admin-dark`-`!important`-Layer aus `app/globals.css` (~237-303) **entfernen**
-  — erst danach werden die o.g. Brand-Muster-Inseln im Light-Mode hell. Das ist
-  der einzige riskante Pixel-Diff-Schritt (betrifft alle noch nicht voll
-  tokenisierten Flächen gleichzeitig) und wird bewusst NICHT eigenmächtig
-  ausgeführt; er sollte einzeln + mit Live-Gegencheck in Light UND Dark
-  erfolgen.
+- **`.admin-dark`-Layer bleibt DAUERHAFT (Korrektur 2026-08-07):** Der frühere
+  Plan sah vor, das `.admin-dark`-`!important`-Layer am Ende zu **entfernen**.
+  Das ist seit Schritt 1 **falsch/schädlich** und wurde bewusst NICHT gemacht:
+  Der Block liest inzwischen die **Theme-Tokens** (`var(--admin-*)`) und sitzt
+  als **statische** Klasse auf `<main>` (`AdminLayoutClient` ~1054), während die
+  Tokens über `.admin-shell[data-admin-theme]` flippen. Dadurch werden die noch
+  auf `brand-*`/`bg-white`/`table` basierenden Seiten **automatisch theme-aware**
+  — im Light-Mode hell, im Dark-Mode dunkel. **Entfernen würde Dark brechen**
+  (diese Klassen fielen auf ihre literalen Tailwind-Werte zurück → `bg-white` =
+  weiß auf dunklem Grund). Das Layer ist damit die **permanente Kompatibilitäts-
+  Brücke**, kein Wegwerf-Provisorium. Die verbleibenden Dark-Inseln (raw
+  `bg-slate-9xx`/translucente Cards) bleiben absichtlich dunkel, weil eine
+  Token-Umstellung ihre **Dark-Pixel-Identität** brechen würde (translucent →
+  opak); ein eigenes `--admin-card-translucent`-Token wäre Scope-Creep.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
