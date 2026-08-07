@@ -353,5 +353,35 @@
 .admin-dark .border-b { border-color: var(--admin-border); }
 .admin-dark .border-t { border-color: var(--admin-border); }
 
+/* ── A11y: sichtbarer Tastatur-Fokus (Schritt 10) ──────────────────────────
+   Nur bei Tastatur-Navigation (:focus-visible), nicht bei Maus-Klick. Additiv,
+   layout-neutral (outline liegt außerhalb des Flusses). Auf .admin-shell
+   begrenzt, damit der Storefront unberührt bleibt. */
+.admin-shell a:focus-visible,
+.admin-shell button:focus-visible,
+.admin-shell [role='button']:focus-visible,
+.admin-shell [tabindex]:focus-visible,
+.admin-shell input:focus-visible,
+.admin-shell select:focus-visible,
+.admin-shell textarea:focus-visible,
+.admin-shell summary:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Bewegung reduzieren (Schritt 10) ──────────────────────────────────────
+   Respektiert prefers-reduced-motion: schaltet Animationen/Transitions im
+   Adminbereich praktisch ab (Shimmer, Chevron-Rotation, Hover-Übergänge). */
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell *,
+  .admin-shell *::before,
+  .admin-shell *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 
