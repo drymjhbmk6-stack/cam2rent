@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 
 /**
  * Bulk-Upload fuer Belege.
@@ -53,6 +54,7 @@ interface Row {
 
 export default function BelegeBulkUploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const cancelRef = useRef(false);
@@ -83,7 +85,7 @@ export default function BelegeBulkUploadPage() {
       });
     }
     setRows((prev) => [...prev, ...accepted]);
-    if (errors.length) alert(errors.join('\n'));
+    if (errors.length) toast.error(errors.join('\n'));
   }
 
   function removeRow(id: string) {
@@ -240,12 +242,12 @@ export default function BelegeBulkUploadPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#0a0f1e] text-slate-200 p-4">
+    <div className="min-h-dvh text-admin-text p-4">
       <AdminBackLink href="/admin/buchhaltung/belege" />
       <div className="max-w-3xl mx-auto mt-4 space-y-4">
         <div>
           <h1 className="text-2xl font-heading">Bulk-Upload Belege</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-admin-muted mt-1">
             Bis zu {MAX_FILES} Dateien (PDF, JPG, PNG, WebP — je max 20 MB) auf einmal. Jede Datei wird
             hochgeladen, geprüft (Duplikat-Erkennung) und im Hintergrund per KI ausgelesen. Du kannst die
             Seite verlassen — eine Push-Notification informiert dich, sobald die Analyse fertig ist.
@@ -253,7 +255,7 @@ export default function BelegeBulkUploadPage() {
         </div>
 
         {/* Upload-Zone */}
-        <section className="bg-[#111827] border border-dashed border-slate-700 rounded p-4">
+        <section className="bg-admin-surface border border-dashed border-[var(--admin-faint)] rounded p-4">
           <input
             ref={inputRef}
             type="file"
@@ -261,9 +263,9 @@ export default function BelegeBulkUploadPage() {
             accept={ACCEPTED}
             onChange={(e) => pickFiles(e.target.files)}
             disabled={busy || rows.length >= MAX_FILES}
-            className="block w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-cyan-500 file:text-slate-900 file:font-semibold hover:file:bg-cyan-400 disabled:opacity-40"
+            className="block w-full text-sm text-admin-text-2 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-admin-accent file:text-slate-900 file:font-semibold hover:file:bg-admin-accent-hover disabled:opacity-40"
           />
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-[var(--admin-text-dim)] mt-2">
             {rows.length}/{MAX_FILES} Dateien ausgewählt.
             {rows.length >= MAX_FILES && ' Maximum erreicht.'}
           </p>
@@ -276,7 +278,7 @@ export default function BelegeBulkUploadPage() {
               <button
                 onClick={processAll}
                 disabled={counts.pending + counts.error === 0}
-                className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold disabled:opacity-40"
+                className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded font-semibold disabled:opacity-40"
               >
                 {counts.error > 0 && counts.pending === 0
                   ? `${counts.error} Fehler erneut versuchen`
@@ -293,7 +295,7 @@ export default function BelegeBulkUploadPage() {
             <button
               onClick={clearAll}
               disabled={busy}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded disabled:opacity-40"
+              className="px-4 py-2 bg-admin-surface-2 hover:bg-[var(--admin-faint)] text-admin-text-2 border border-[var(--admin-faint)] rounded disabled:opacity-40"
             >
               Liste leeren
             </button>
@@ -306,21 +308,21 @@ export default function BelegeBulkUploadPage() {
             {rows.map((r) => (
               <div
                 key={r.id}
-                className={`bg-[#111827] border rounded p-3 ${
+                className={`bg-admin-surface border rounded p-3 ${
                   r.status === 'error' ? 'border-red-500/40' :
                   r.status === 'duplicate' ? 'border-amber-500/40' :
                   r.status === 'queued' ? 'border-violet-500/40' :
-                  'border-slate-800'
+                  'border-admin-border'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-sm truncate">{r.file.name}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
+                    <div className="text-xs text-[var(--admin-text-dim)] mt-0.5">
                       {fmtSize(r.file.size)} · {r.file.type || 'unbekannt'}
                       {r.belegNr && ` · ${r.belegNr}`}
                     </div>
-                    {r.message && <div className="text-xs text-slate-400 mt-1">{r.message}</div>}
+                    {r.message && <div className="text-xs text-admin-muted mt-1">{r.message}</div>}
                     {r.status === 'duplicate' && r.duplicateBelegId && (
                       <Link
                         href={`/admin/buchhaltung/belege/${r.duplicateBelegId}`}
