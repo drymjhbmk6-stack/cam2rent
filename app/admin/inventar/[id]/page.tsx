@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Unit {
   id: string;
@@ -92,6 +93,8 @@ export default function InventarDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id ?? '');
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [links, setLinks] = useState<Link[]>([]);
@@ -220,13 +223,16 @@ export default function InventarDetailPage() {
   }
 
   async function handleUnlink(linkId: string, label: string) {
-    if (!confirm(
-      `Verknüpfung zu "${label}" wirklich lösen?\n\n` +
-      `Wenn keine weitere Verknüpfung übrig bleibt, werden Kaufpreis, ` +
-      `Kaufdatum und Wiederbeschaffungswert auf diesem Stück zurückgesetzt ` +
-      `(manueller WBW-Override bleibt erhalten). Bei mehreren Verknüpfungen ` +
-      `werden die Werte aus der verbleibenden Quelle neu berechnet.`,
-    )) return;
+    if (!(await confirm({
+      title: 'Verknüpfung lösen',
+      message:
+        `Verknüpfung zu "${label}" wirklich lösen?\n\n` +
+        `Wenn keine weitere Verknüpfung übrig bleibt, werden Kaufpreis, ` +
+        `Kaufdatum und Wiederbeschaffungswert auf diesem Stück zurückgesetzt ` +
+        `(manueller WBW-Override bleibt erhalten). Bei mehreren Verknüpfungen ` +
+        `werden die Werte aus der verbleibenden Quelle neu berechnet.`,
+      danger: true,
+    }))) return;
     setBusy(true);
     const res = await fetch(
       `/api/admin/inventar/${id}/verknuepfen?verknuepfung_id=${encodeURIComponent(linkId)}`,
@@ -250,7 +256,7 @@ export default function InventarDetailPage() {
   }
 
   async function handleClearWbw() {
-    if (!confirm('Manuellen Override entfernen?')) return;
+    if (!(await confirm({ message: 'Manuellen Override entfernen?', danger: true }))) return;
     setBusy(true);
     await fetch(`/api/admin/inventar/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -272,11 +278,14 @@ export default function InventarDetailPage() {
 
   async function handleDelete() {
     if (!unit) return;
-    if (!confirm(
-      `"${unit.bezeichnung}" endgültig aus dem Inventar löschen?\n\n` +
-      `Vermietete Stücke können nicht gelöscht werden. Der gespiegelte ` +
-      `Eintrag in der alten Welt (product_units/accessory_units) wird mit entfernt.`,
-    )) return;
+    if (!(await confirm({
+      title: 'Endgültig löschen',
+      message:
+        `"${unit.bezeichnung}" endgültig aus dem Inventar löschen?\n\n` +
+        `Vermietete Stücke können nicht gelöscht werden. Der gespiegelte ` +
+        `Eintrag in der alten Welt (product_units/accessory_units) wird mit entfernt.`,
+      danger: true,
+    }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -321,10 +330,10 @@ export default function InventarDetailPage() {
     }
   }
 
-  if (!unit) return <div className="p-6 text-slate-400">Lädt…</div>;
+  if (!unit) return <div className="p-6 text-admin-muted">Lädt…</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/inventar" />
       <div className="max-w-4xl mx-auto mt-4 space-y-6">
         <div>
@@ -344,12 +353,12 @@ export default function InventarDetailPage() {
         )}
 
         {/* Stammdaten */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4 space-y-2">
+        <section className="bg-admin-surface border border-admin-border rounded p-4 space-y-2">
           <h2 className="font-semibold mb-2">Stammdaten</h2>
           <Row label="Typ" value={unit.typ === 'kamera' ? 'Kamera' : unit.typ === 'zubehoer' ? 'Zubehör' : 'Verbrauchsmaterial'} />
           <Row label="Tracking" value={unit.tracking_mode === 'bulk' ? 'Bulk (Sammelbestand)' : 'Einzeln (mit Code/SN)'} />
           <Row label="Status" value={
-            <select value={unit.status} onChange={(e) => handleStatusChange(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm">
+            <select value={unit.status} onChange={(e) => handleStatusChange(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1 text-sm">
               <option value="verfuegbar">Verfügbar</option>
               <option value="vermietet">Vermietet</option>
               <option value="wartung">Wartung</option>
@@ -360,14 +369,14 @@ export default function InventarDetailPage() {
           <Row label="Produkt" value={
             showProduktEdit ? (
               <div className="flex gap-2 items-center">
-                <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm max-w-[16rem] truncate">
+                <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1 text-sm max-w-[16rem] truncate">
                   <option value="">— Keins —</option>
                   {produkte.map((p) => (
                     <option key={p.id} value={p.id}>{produktLabel(p)}</option>
                   ))}
                 </select>
-                <button onClick={handleSetProdukt} disabled={busy} className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold">Speichern</button>
-                <button onClick={() => setShowProduktEdit(false)} className="text-slate-400 text-xs hover:text-slate-300">Abbrechen</button>
+                <button onClick={handleSetProdukt} disabled={busy} className="px-2 py-1 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded text-xs font-semibold">Speichern</button>
+                <button onClick={() => setShowProduktEdit(false)} className="text-admin-muted text-xs hover:text-admin-text-2">Abbrechen</button>
               </div>
             ) : (
               <span className="flex gap-2 items-center">
@@ -452,7 +461,7 @@ export default function InventarDetailPage() {
                   <span className="flex items-center justify-end gap-2 text-sm">
                     <span className="font-mono text-xs">{firmwareCheck.latest_version}</span>
                     {firmwareCheck.release_date && (
-                      <span className="text-slate-500 text-xs">
+                      <span className="text-[var(--admin-text-dim)] text-xs">
                         ({new Date(firmwareCheck.release_date).toLocaleDateString('de-DE')})
                       </span>
                     )}
@@ -471,7 +480,7 @@ export default function InventarDetailPage() {
               )}
               {firmwareCheck && firmwareCheck.status === 'unsupported' && (
                 <Row label="Aktuell verfügbar" value={
-                  <span className="text-slate-500 italic text-xs">Marke/Modell vom Firmware-Check nicht unterstützt</span>
+                  <span className="text-[var(--admin-text-dim)] italic text-xs">Marke/Modell vom Firmware-Check nicht unterstützt</span>
                 } />
               )}
               {firmwareCheck && firmwareCheck.status === 'error' && (
@@ -513,7 +522,7 @@ export default function InventarDetailPage() {
               <button
                 onClick={runProductCheck}
                 disabled={firmwareBusy}
-                className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold disabled:opacity-50"
+                className="px-2 py-1 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded text-xs font-semibold disabled:opacity-50"
               >
                 {firmwareBusy ? '…' : 'Neu prüfen'}
               </button>
@@ -532,24 +541,24 @@ export default function InventarDetailPage() {
         )}
 
         {/* WBW */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+        <section className="bg-admin-surface border border-admin-border rounded p-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Wiederbeschaffungswert</h2>
             <div className="flex gap-2">
               {links.length > 0 && (
                 <button
                   onClick={async () => {
-                    if (!confirm('Kaufpreis + Wiederbeschaffungswert anhand der Beleg-Position neu berechnen? Bei Kleinunternehmer wird der Brutto-Betrag genommen (Vorsteuer ist nicht abziehbar).')) return;
+                    if (!(await confirm({ message: 'Kaufpreis + Wiederbeschaffungswert anhand der Beleg-Position neu berechnen? Bei Kleinunternehmer wird der Brutto-Betrag genommen (Vorsteuer ist nicht abziehbar).' }))) return;
                     try {
                       const res = await fetch(`/api/admin/inventar/${unit.id}/refresh-from-beleg`, { method: 'POST' });
                       if (!res.ok) {
                         const d = await res.json().catch(() => ({}));
-                        alert(d.error || 'Fehler beim Neuberechnen');
+                        toast.error(d.error || 'Fehler beim Neuberechnen');
                         return;
                       }
                       window.location.reload();
                     } catch {
-                      alert('Netzwerkfehler beim Neuberechnen');
+                      toast.error('Netzwerkfehler beim Neuberechnen');
                     }
                   }}
                   className="text-cyan-400 text-sm hover:text-cyan-300"
@@ -563,7 +572,7 @@ export default function InventarDetailPage() {
                   {unit.wbw_manuell_gesetzt ? 'Override anpassen' : 'Manuell setzen'}
                 </button>
               ) : (
-                <button onClick={() => setShowWbwEdit(false)} className="text-slate-400 text-sm hover:text-slate-300">Abbrechen</button>
+                <button onClick={() => setShowWbwEdit(false)} className="text-admin-muted text-sm hover:text-admin-text-2">Abbrechen</button>
               )}
               {unit.wbw_manuell_gesetzt && (
                 <button onClick={handleClearWbw} className="text-rose-400 text-sm hover:text-rose-300">Override entfernen</button>
@@ -572,13 +581,13 @@ export default function InventarDetailPage() {
           </div>
           {showWbwEdit ? (
             <div className="flex gap-2 items-center">
-              <input type="number" step="0.01" min="0" value={wbwInput} onChange={(e) => setWbwInput(parseFloat(e.target.value || '0'))} className="bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base flex-1" />
-              <button onClick={handleSetWbw} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded">Speichern</button>
+              <input type="number" step="0.01" min="0" value={wbwInput} onChange={(e) => setWbwInput(parseFloat(e.target.value || '0'))} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base flex-1" />
+              <button onClick={handleSetWbw} disabled={busy} className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded">Speichern</button>
             </div>
           ) : (
             <div>
               <div className="text-2xl font-mono">{fmtEuro(unit.wiederbeschaffungswert ?? unit.kaufpreis_netto ?? null)}</div>
-              <div className="text-xs text-slate-400 mt-1">
+              <div className="text-xs text-admin-muted mt-1">
                 {unit.wbw_manuell_gesetzt && '● Manueller Override aktiv'}
                 {!unit.wbw_manuell_gesetzt && unit.kaufpreis_netto && '○ Berechnet aus Kaufpreis (siehe Liste)'}
                 {!unit.wbw_manuell_gesetzt && !unit.kaufpreis_netto && '⚠ Nicht gesetzt — Beleg verknüpfen oder manuell pflegen'}
@@ -588,13 +597,13 @@ export default function InventarDetailPage() {
         </section>
 
         {/* Verknuepfungen */}
-        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+        <section className="bg-admin-surface border border-admin-border rounded p-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Verknüpfte Belege ({links.length})</h2>
             <button onClick={() => setShowLinkModal(true)} className="text-cyan-400 text-sm hover:text-cyan-300">+ Beleg verknüpfen</button>
           </div>
           {links.length === 0 ? (
-            <p className="text-sm text-slate-500 italic">Keine Verknüpfung</p>
+            <p className="text-sm text-[var(--admin-text-dim)] italic">Keine Verknüpfung</p>
           ) : (
             <div className="space-y-2">
               {links.map((l) => l.beleg_position && (
@@ -604,8 +613,8 @@ export default function InventarDetailPage() {
                       {l.beleg_position.beleg.beleg_nr}
                     </Link>
                     {' · '}
-                    <span className="text-slate-400">{l.beleg_position.bezeichnung}</span>
-                    {l.stueck_anteil > 1 && <span className="text-xs text-slate-500"> ({l.stueck_anteil}× Anteil)</span>}
+                    <span className="text-admin-muted">{l.beleg_position.bezeichnung}</span>
+                    {l.stueck_anteil > 1 && <span className="text-xs text-[var(--admin-text-dim)]"> ({l.stueck_anteil}× Anteil)</span>}
                   </div>
                   <button
                     onClick={() => handleUnlink(l.id, l.beleg_position!.bezeichnung)}
@@ -626,11 +635,11 @@ export default function InventarDetailPage() {
           onSave={(v) => patchField({ notizen: v.trim() || null })}
         />
 
-        <section className="bg-[#111827] border border-rose-500/30 rounded p-4">
+        <section className="bg-admin-surface border border-rose-500/30 rounded p-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <h2 className="font-semibold text-rose-300">Gefahrenzone</h2>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-admin-muted mt-1">
                 {unit.status === 'vermietet'
                   ? 'Stück ist aktuell vermietet — Löschen ist gesperrt.'
                   : 'Entfernt das Stück endgültig aus dem Inventar (inkl. gespiegeltem Legacy-Eintrag).'}
@@ -639,7 +648,7 @@ export default function InventarDetailPage() {
             <button
               onClick={handleDelete}
               disabled={busy || unit.status === 'vermietet'}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-[var(--admin-text-dim)] disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
             >
               {busy ? 'Löscht…' : 'Endgültig löschen'}
             </button>
@@ -650,13 +659,13 @@ export default function InventarDetailPage() {
       {/* Verknuepfungs-Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#111827] border border-slate-700 rounded-lg max-w-2xl w-full p-6">
+          <div className="bg-admin-surface border border-[var(--admin-faint)] rounded-lg max-w-2xl w-full p-6">
             <h2 className="text-lg font-semibold mb-2">Belegposition suchen</h2>
-            <p className="text-xs text-slate-400 mb-3">
+            <p className="text-xs text-admin-muted mb-3">
               Pro Belegposition koennen nur so viele Inventar-Stuecke verknuepft werden wie die Position Mengen hat.
               Bereits voll belegte Positionen sind ausgegraut.
             </p>
-            <input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Bezeichnung, Lieferant…" className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base mb-3" autoFocus />
+            <input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Bezeichnung, Lieferant…" className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base mb-3" autoFocus />
             <div className="max-h-96 overflow-y-auto space-y-1">
               {[...linkResults]
                 .sort((a, b) => {
@@ -686,7 +695,7 @@ export default function InventarDetailPage() {
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium">{r.bezeichnung}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">
+                          <div className="text-xs text-admin-muted mt-0.5">
                             {r.beleg && `${r.beleg.beleg_nr} · ${new Date(r.beleg.beleg_datum).toLocaleDateString('de-DE')}`}
                             {r.beleg?.lieferant && ` · ${r.beleg.lieferant.name}`}
                             {' · '}
@@ -695,7 +704,7 @@ export default function InventarDetailPage() {
                         </div>
                         <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 font-mono ${
                           full
-                            ? 'bg-slate-700/30 text-slate-500 border-slate-700'
+                            ? 'bg-slate-700/30 text-[var(--admin-text-dim)] border-slate-700'
                             : rest < menge
                               ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
                               : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
@@ -706,7 +715,7 @@ export default function InventarDetailPage() {
                     </button>
                   );
                 })}
-              {linkResults.length === 0 && <p className="text-sm text-slate-500 italic p-3">Keine Treffer</p>}
+              {linkResults.length === 0 && <p className="text-sm text-[var(--admin-text-dim)] italic p-3">Keine Treffer</p>}
             </div>
             <div className="mt-3">
               <button onClick={() => setShowLinkModal(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded">Schließen</button>
@@ -721,7 +730,7 @@ export default function InventarDetailPage() {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between items-center gap-3 text-sm py-1">
-      <span className="text-slate-400 shrink-0">{label}</span>
+      <span className="text-admin-muted shrink-0">{label}</span>
       <span className="text-right min-w-0">{value}</span>
     </div>
   );
@@ -741,7 +750,7 @@ function EditableHeading({
   if (!editing) {
     return (
       <h1 className="text-2xl font-heading flex items-center gap-2">
-        <span>{value || <span className="text-slate-500 italic">Ohne Bezeichnung</span>}</span>
+        <span>{value || <span className="text-[var(--admin-text-dim)] italic">Ohne Bezeichnung</span>}</span>
         <button
           onClick={() => { setDraft(value); setEditing(true); }}
           className="text-cyan-400 hover:text-cyan-300 text-sm font-body"
@@ -763,11 +772,11 @@ function EditableHeading({
           if (e.key === 'Enter') { e.preventDefault(); save(); }
           if (e.key === 'Escape') setEditing(false);
         }}
-        className="flex-1 bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-2xl font-heading"
+        className="flex-1 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-2xl font-heading"
         disabled={busy}
       />
-      <button onClick={save} disabled={busy} className="px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-sm font-semibold">Speichern</button>
-      <button onClick={() => setEditing(false)} disabled={busy} className="text-slate-400 hover:text-slate-300 text-sm">Abbrechen</button>
+      <button onClick={save} disabled={busy} className="px-3 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded text-sm font-semibold">Speichern</button>
+      <button onClick={() => setEditing(false)} disabled={busy} className="text-admin-muted hover:text-admin-text-2 text-sm">Abbrechen</button>
     </div>
   );
 
@@ -812,7 +821,7 @@ function EditableInline({
   if (!editing) {
     const display = displayValue ?? (value
       ? (suffix ? `${value} ${suffix}` : value)
-      : (placeholder ? <span className="text-slate-500 italic">{placeholder}</span> : '–'));
+      : (placeholder ? <span className="text-[var(--admin-text-dim)] italic">{placeholder}</span> : '–'));
     return (
       <span className="flex items-center justify-end gap-2">
         <span className={mono ? 'font-mono text-xs' : ''}>{display}</span>
@@ -839,13 +848,13 @@ function EditableInline({
           if (e.key === 'Escape') setEditing(false);
         }}
         placeholder={placeholder}
-        className={`bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm ${mono ? 'font-mono text-xs' : ''}`}
+        className={`bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-2 py-1 text-sm ${mono ? 'font-mono text-xs' : ''}`}
         style={{ width: type === 'date' ? 160 : type === 'number' ? 120 : 220 }}
         disabled={busy}
         step={type === 'number' ? '0.01' : undefined}
       />
-      <button onClick={save} disabled={busy} className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold">Speichern</button>
-      <button onClick={() => setEditing(false)} disabled={busy} className="text-slate-400 hover:text-slate-300 text-xs">Abbrechen</button>
+      <button onClick={save} disabled={busy} className="px-2 py-1 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded text-xs font-semibold">Speichern</button>
+      <button onClick={() => setEditing(false)} disabled={busy} className="text-admin-muted hover:text-admin-text-2 text-xs">Abbrechen</button>
     </span>
   );
 }
@@ -869,7 +878,7 @@ function NotizenSection({
   }
 
   return (
-    <section className="bg-[#111827] border border-slate-800 rounded p-4">
+    <section className="bg-admin-surface border border-admin-border rounded p-4">
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold">Notizen</h2>
         {!editing && (
@@ -889,18 +898,18 @@ function NotizenSection({
             onChange={(e) => setDraft(e.target.value)}
             rows={5}
             placeholder="Interne Notizen zu diesem Stück (Zustand, Reparaturen, Besonderheiten…)"
-            className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-sm"
+            className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-sm"
             disabled={busy}
           />
           <div className="flex gap-2">
-            <button onClick={save} disabled={busy} className="px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-sm font-semibold">Speichern</button>
-            <button onClick={() => setEditing(false)} disabled={busy} className="px-3 py-1 text-slate-400 hover:text-slate-300 text-sm">Abbrechen</button>
+            <button onClick={save} disabled={busy} className="px-3 py-1 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded text-sm font-semibold">Speichern</button>
+            <button onClick={() => setEditing(false)} disabled={busy} className="px-3 py-1 text-admin-muted hover:text-admin-text-2 text-sm">Abbrechen</button>
           </div>
         </div>
       ) : value ? (
-        <p className="text-sm text-slate-300 whitespace-pre-wrap">{value}</p>
+        <p className="text-sm text-admin-text-2 whitespace-pre-wrap">{value}</p>
       ) : (
-        <p className="text-sm text-slate-500 italic">Keine Notizen</p>
+        <p className="text-sm text-[var(--admin-text-dim)] italic">Keine Notizen</p>
       )}
     </section>
   );
