@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Template {
   id: string;
@@ -27,6 +28,8 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export default function TemplatesPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Template | null>(null);
