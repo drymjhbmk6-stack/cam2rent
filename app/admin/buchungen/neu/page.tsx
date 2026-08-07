@@ -124,13 +124,13 @@ function getSetPrice(set: DynSet, days: number): number {
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', background: '#0f172a', border: '1px solid #334155',
-  borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14,
+  width: '100%', background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)',
+  borderRadius: 8, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14,
 };
 const selectStyle: React.CSSProperties = { ...inputStyle };
-const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4, fontWeight: 600 };
-const sectionStyle: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 };
-const headingStyle: React.CSSProperties = { color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.8 };
+const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600 };
+const sectionStyle: React.CSSProperties = { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', padding: 20, marginBottom: 16 };
+const headingStyle: React.CSSProperties = { color: 'var(--admin-muted)', textTransform: 'uppercase' as const, letterSpacing: 0.8 };
 
 /* ─── Component ─────────────────────────────────────────────────────────────── */
 
@@ -740,7 +740,7 @@ export default function ManualBookingPage() {
   if (loading) {
     return (
       <div style={{ padding: '20px 16px', maxWidth: 800 }}>
-        <p style={{ color: '#64748b' }}>Daten werden geladen...</p>
+        <p style={{ color: 'var(--admin-text-dim)' }}>Daten werden geladen...</p>
       </div>
     );
   }
@@ -748,15 +748,15 @@ export default function ManualBookingPage() {
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800 }}>
       <AdminBackLink href="/admin/buchungen" label="Zurück zu Buchungen" />
-      <h1 className="font-heading font-bold text-xl mb-1" style={{ color: '#e2e8f0' }}>
+      <h1 className="font-heading font-bold text-xl mb-1" style={{ color: 'var(--admin-text)' }}>
         Manuelle Buchung erstellen
       </h1>
-      <p className="text-sm mb-6" style={{ color: '#64748b' }}>
+      <p className="text-sm mb-6" style={{ color: 'var(--admin-text-dim)' }}>
         Für Kleinanzeigen, Telefon- oder sonstige externe Bestellungen
       </p>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}>{error}</div>
+        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: 'var(--admin-danger)', border: '1px solid #ef444440' }}>{error}</div>
       )}
       {success && (
         <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#10b98120', color: '#10b981', border: '1px solid #10b98140' }}>{success}</div>
@@ -772,7 +772,7 @@ export default function ManualBookingPage() {
                 type="button"
                 onClick={() => { setShowCustomerSearch(!showCustomerSearch); if (!showCustomerSearch) loadCustomers(); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                style={{ background: showCustomerSearch ? '#334155' : '#1e293b', color: '#06b6d4', border: '1px solid #334155' }}
+                style={{ background: showCustomerSearch ? 'var(--admin-faint)' : 'var(--admin-surface-2)', color: 'var(--admin-accent)', border: '1px solid var(--admin-faint)' }}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -784,9 +784,9 @@ export default function ManualBookingPage() {
               {showCustomerSearch && (
                 <div
                   className="absolute right-0 top-full mt-2 w-80 rounded-xl shadow-xl z-50"
-                  style={{ background: '#1e293b', border: '1px solid #334155' }}
+                  style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }}
                 >
-                  <div className="p-3 border-b" style={{ borderColor: '#334155' }}>
+                  <div className="p-3 border-b" style={{ borderColor: 'var(--admin-faint)' }}>
                     <input
                       type="text"
                       value={customerSearchQuery}
@@ -794,14 +794,14 @@ export default function ManualBookingPage() {
                       placeholder="Name, E-Mail oder Stadt..."
                       autoFocus
                       className="w-full text-sm"
-                      style={{ ...inputStyle, background: '#0f172a' }}
+                      style={{ ...inputStyle, background: 'var(--admin-input-bg)' }}
                     />
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {customerSearchLoading ? (
-                      <p className="p-4 text-center text-xs" style={{ color: '#64748b' }}>Wird geladen...</p>
+                      <p className="p-4 text-center text-xs" style={{ color: 'var(--admin-text-dim)' }}>Wird geladen...</p>
                     ) : customerSearchResults.length === 0 ? (
-                      <p className="p-4 text-center text-xs" style={{ color: '#64748b' }}>Keine Kunden gefunden</p>
+                      <p className="p-4 text-center text-xs" style={{ color: 'var(--admin-text-dim)' }}>Keine Kunden gefunden</p>
                     ) : (
                       customerSearchResults.map((c) => (
                         <button
@@ -809,14 +809,14 @@ export default function ManualBookingPage() {
                           type="button"
                           onClick={() => selectCustomer(c)}
                           className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-3"
-                          style={{ borderBottom: '1px solid #1e293b' }}
+                          style={{ borderBottom: '1px solid var(--admin-border)' }}
                         >
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: '#06b6d420', color: '#06b6d4' }}>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: '#06b6d420', color: 'var(--admin-accent)' }}>
                             {c.full_name?.charAt(0)?.toUpperCase() || '?'}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate" style={{ color: '#e2e8f0' }}>{c.full_name || 'Kein Name'}</p>
-                            <p className="text-xs truncate" style={{ color: '#64748b' }}>
+                            <p className="text-sm font-medium truncate" style={{ color: 'var(--admin-text)' }}>{c.full_name || 'Kein Name'}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--admin-text-dim)' }}>
                               {c.email}{c.address_city ? ` · ${c.address_city}` : ''}
                             </p>
                           </div>
@@ -831,7 +831,7 @@ export default function ManualBookingPage() {
 
           {/* Ausgewählter Kunde Badge */}
           {customerUserId && (
-            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: '#06b6d410', border: '1px solid #06b6d430', color: '#06b6d4' }}>
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: '#06b6d410', border: '1px solid #06b6d430', color: 'var(--admin-accent)' }}>
               <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
@@ -880,7 +880,7 @@ export default function ManualBookingPage() {
             </div>
           </div>
           {days > 0 && (
-            <p className="text-sm mb-4" style={{ color: '#06b6d4' }}>
+            <p className="text-sm mb-4" style={{ color: 'var(--admin-accent)' }}>
               {days} {days === 1 ? 'Tag' : 'Tage'}
             </p>
           )}
@@ -900,7 +900,7 @@ export default function ManualBookingPage() {
                 onClick={addProduct}
                 disabled={!rentalFrom || !rentalTo || adding}
                 className="px-4 py-2 rounded-lg text-sm font-semibold flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: (!rentalFrom || !rentalTo) ? '#334155' : '#06b6d4', color: 'white' }}
+                style={{ background: (!rentalFrom || !rentalTo) ? 'var(--admin-faint)' : 'var(--admin-accent)', color: 'white' }}
               >
                 {adding ? 'Prüfe...' : '+ Hinzufügen'}
               </button>
@@ -937,27 +937,27 @@ export default function ManualBookingPage() {
                 });
 
                 return (
-                  <div key={sp.id} style={{ background: '#0f172a', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
+                  <div key={sp.id} style={{ background: 'var(--admin-input-bg)', borderRadius: 10, border: '1px solid var(--admin-border)', padding: 16 }}>
                     {/* Produkt-Header */}
                     <div className="flex items-center gap-3 mb-3">
                       <div className="flex-1">
-                        <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p?.name ?? sp.id}</span>
+                        <span className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{p?.name ?? sp.id}</span>
                         {!p?.available && <span className="text-xs ml-2" style={{ color: '#f59e0b' }}>(nicht verfügbar)</span>}
                       </div>
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty - 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>−</button>
-                        <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
-                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
+                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty - 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>−</button>
+                        <span className="text-sm font-semibold w-6 text-center" style={{ color: 'var(--admin-text)' }}>{sp.qty}</span>
+                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>+</button>
                       </div>
-                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{fmtEuro(displayPrice)}</span>}
-                      <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
+                      {days > 0 && <span className="text-xs font-semibold" style={{ color: 'var(--admin-accent)' }}>{fmtEuro(displayPrice)}</span>}
+                      <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: 'var(--admin-danger)' }}>✕</button>
                     </div>
 
                     {/* Preis + Seriennummer */}
                     <div className="mb-3">
                       <div className="flex gap-3 items-end">
                         <div>
-                          <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>PREIS (PRO STÜCK)</p>
+                          <p className="text-xs font-semibold mb-1" style={{ color: 'var(--admin-text-dim)' }}>PREIS (PRO STÜCK)</p>
                           <div className="flex items-center gap-2">
                             <input
                               style={{ ...inputStyle, width: 140, fontSize: 13 }}
@@ -969,12 +969,12 @@ export default function ManualBookingPage() {
                               placeholder={days > 0 ? `${fmtEuro(autoPrice)} (auto)` : 'Preis'}
                             />
                             {hasCustomPrice && (
-                              <button type="button" onClick={() => updateProductCustomPrice(sp.id, '')} className="text-xs" style={{ color: '#94a3b8' }}>✕</button>
+                              <button type="button" onClick={() => updateProductCustomPrice(sp.id, '')} className="text-xs" style={{ color: 'var(--admin-muted)' }}>✕</button>
                             )}
                           </div>
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>SERIENNUMMER</p>
+                          <p className="text-xs font-semibold mb-1" style={{ color: 'var(--admin-text-dim)' }}>SERIENNUMMER</p>
                           <div className="flex items-center gap-2">
                             <input
                               style={{ ...inputStyle, fontSize: 13, flex: 1 }}
@@ -987,7 +987,7 @@ export default function ManualBookingPage() {
                               onClick={() => setScannerTarget(sp.id)}
                               title="Seriennummer scannen"
                               className="px-2.5 py-2 rounded-md transition-colors"
-                              style={{ background: '#06b6d4', color: 'white' }}
+                              style={{ background: 'var(--admin-accent)', color: 'white' }}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 8h10M7 12h10M7 16h10" />
@@ -1001,7 +1001,7 @@ export default function ManualBookingPage() {
                     {/* Sets für dieses Produkt */}
                     {compatSets.length > 0 && (
                       <div className="mb-3">
-                        <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: sp.sets.length === 0 ? '#f59e0b' : '#64748b' }}>
+                        <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: sp.sets.length === 0 ? '#f59e0b' : 'var(--admin-text-dim)' }}>
                           SETS
                           {sp.sets.length === 0 && (
                             <span style={{ color: '#f59e0b', fontWeight: 600 }}>* — bitte mindestens ein Set wählen</span>
@@ -1019,11 +1019,11 @@ export default function ManualBookingPage() {
                             return (
                               <label key={set.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductSet(sp.id, set.id)} className="accent-cyan-400" />
-                                <span style={{ color: '#e2e8f0' }}>{set.name}</span>
+                                <span style={{ color: 'var(--admin-text)' }}>{set.name}</span>
                                 {unavail ? (
-                                  <span className="ml-auto text-xs" style={{ color: '#ef4444' }}>nicht verfügbar</span>
+                                  <span className="ml-auto text-xs" style={{ color: 'var(--admin-danger)' }}>nicht verfügbar</span>
                                 ) : (
-                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{fmtEuro(price)}</span>
+                                  <span className="ml-auto" style={{ color: 'var(--admin-accent)' }}>{fmtEuro(price)}</span>
                                 )}
                               </label>
                             );
@@ -1041,7 +1041,7 @@ export default function ManualBookingPage() {
                       const selectedId = groupAccs.find((a) => sp.accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
                       return (
                         <div key={group} className="mb-3">
-                          <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>{group.toUpperCase()}</p>
+                          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--admin-text-dim)' }}>{group.toUpperCase()}</p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                             {groupAccs.map((acc) => {
                               const isSelected = selectedId === acc.id || (acc.is_upgrade_base && !groupAccs.some((a) => !a.is_upgrade_base && sp.accessories.includes(a.id)));
@@ -1049,8 +1049,8 @@ export default function ManualBookingPage() {
                               return (
                                 <label key={acc.id} className="flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer" style={{ border: `1px solid ${isSelected ? '#06b6d433' : '#1e293b'}`, background: isSelected ? '#06b6d40a' : 'transparent' }}>
                                   <input type="radio" name={`upgrade-${sp.id}-${group}`} checked={isSelected} onChange={() => selectProductUpgrade(sp.id, acc.id, group)} className="accent-cyan-400" />
-                                  <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
-                                  <span className="ml-auto" style={{ color: acc.is_upgrade_base ? '#22c55e' : '#06b6d4' }}>
+                                  <span style={{ color: 'var(--admin-text)' }}>{acc.name}</span>
+                                  <span className="ml-auto" style={{ color: acc.is_upgrade_base ? '#22c55e' : 'var(--admin-accent)' }}>
                                     {acc.is_upgrade_base ? 'inklusive' : `+${fmtEuro(upgradePrice)}`}
                                   </span>
                                 </label>
@@ -1064,7 +1064,7 @@ export default function ManualBookingPage() {
                     {/* Normales Zubehör (Checkboxen) */}
                     {regularAccessories.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>ZUBEHÖR</p>
+                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--admin-text-dim)' }}>ZUBEHÖR</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                           {regularAccessories.map((acc) => {
                             const checked = sp.accessories.includes(acc.id);
@@ -1074,11 +1074,11 @@ export default function ManualBookingPage() {
                             return (
                               <label key={acc.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductAccessory(sp.id, acc.id)} className="accent-cyan-400" />
-                                <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
+                                <span style={{ color: 'var(--admin-text)' }}>{acc.name}</span>
                                 {unavail ? (
-                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfügbar</span>
+                                  <span className="ml-auto" style={{ color: 'var(--admin-danger)' }}>nicht verfügbar</span>
                                 ) : (
-                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{fmtEuro(price)}</span>
+                                  <span className="ml-auto" style={{ color: 'var(--admin-accent)' }}>{fmtEuro(price)}</span>
                                 )}
                               </label>
                             );
@@ -1090,15 +1090,15 @@ export default function ManualBookingPage() {
                     {/* Haftungsschutz pro Kamera (je nach deposit_mode) */}
                     {(depositMode === 'haftung') && (
                       <div className="mt-3">
-                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>HAFTUNGSSCHUTZ</p>
+                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--admin-text-dim)' }}>HAFTUNGSSCHUTZ</p>
                         <div className="space-y-1">
                           {HAFTUNG_OPTIONS.map((opt) => {
                             const price = getHaftungPrice(opt.value);
                             return (
                               <label key={opt.value} className="flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer" style={{ background: sp.haftung === opt.value ? '#06b6d40a' : 'transparent', border: `1px solid ${sp.haftung === opt.value ? '#06b6d433' : '#1e293b'}` }}>
                                 <input type="radio" name={`haftung-${sp.id}`} value={opt.value} checked={sp.haftung === opt.value} onChange={() => updateProductHaftung(sp.id, opt.value)} className="accent-cyan-400" />
-                                <span className="flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
-                                <span style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
+                                <span className="flex-1" style={{ color: 'var(--admin-text)' }}>{opt.label}</span>
+                                <span style={{ color: price > 0 ? 'var(--admin-accent)' : 'var(--admin-text-dim)' }}>
                                   {price > 0 ? fmtEuro(price) : 'Kostenlos'}
                                 </span>
                               </label>
@@ -1110,7 +1110,7 @@ export default function ManualBookingPage() {
 
                     {/* Notiz zu diesem Produkt */}
                     <div className="mt-3">
-                      <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>NOTIZ ZU DIESEM PRODUKT</p>
+                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--admin-text-dim)' }}>NOTIZ ZU DIESEM PRODUKT</p>
                       <textarea
                         style={{ ...inputStyle, minHeight: 50, resize: 'vertical', fontSize: 12 }}
                         value={sp.note}
@@ -1124,7 +1124,7 @@ export default function ManualBookingPage() {
             </div>
           )}
           {selectedProducts.length === 0 && (
-            <p className="text-xs" style={{ color: '#64748b' }}>Noch kein Produkt ausgewählt.</p>
+            <p className="text-xs" style={{ color: 'var(--admin-text-dim)' }}>Noch kein Produkt ausgewählt.</p>
           )}
         </div>
 
@@ -1200,7 +1200,7 @@ export default function ManualBookingPage() {
         {/* ─── Rabatt ─── */}
         <div style={sectionStyle}>
           <h2 className="font-heading font-semibold text-sm mb-1" style={headingStyle}>Rabatt</h2>
-          <p className="text-xs mb-4" style={{ color: '#64748b' }}>
+          <p className="text-xs mb-4" style={{ color: 'var(--admin-text-dim)' }}>
             Wird nur auf Miete, Zubehör und Sets angewendet — nicht auf Haftungsschutz oder Versand.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1243,7 +1243,7 @@ export default function ManualBookingPage() {
                       ...inputStyle,
                       display: 'flex',
                       alignItems: 'center',
-                      color: discountAmount > 0 ? '#10b981' : '#64748b',
+                      color: discountAmount > 0 ? '#10b981' : 'var(--admin-text-dim)',
                       fontWeight: 600,
                     }}
                   >
@@ -1278,9 +1278,9 @@ export default function ManualBookingPage() {
                 onClick={() => setPaymentStatus('paid')}
                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
                 style={{
-                  background: paymentStatus === 'paid' ? '#10b98125' : '#0f172a',
+                  background: paymentStatus === 'paid' ? '#10b98125' : 'var(--admin-input-bg)',
                   border: `1px solid ${paymentStatus === 'paid' ? '#10b981' : '#334155'}`,
-                  color: paymentStatus === 'paid' ? '#10b981' : '#94a3b8',
+                  color: paymentStatus === 'paid' ? '#10b981' : 'var(--admin-muted)',
                 }}
               >
                 Bezahlt
@@ -1290,9 +1290,9 @@ export default function ManualBookingPage() {
                 onClick={() => setPaymentStatus('unpaid')}
                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
                 style={{
-                  background: paymentStatus === 'unpaid' ? '#f59e0b25' : '#0f172a',
+                  background: paymentStatus === 'unpaid' ? '#f59e0b25' : 'var(--admin-input-bg)',
                   border: `1px solid ${paymentStatus === 'unpaid' ? '#f59e0b' : '#334155'}`,
-                  color: paymentStatus === 'unpaid' ? '#f59e0b' : '#94a3b8',
+                  color: paymentStatus === 'unpaid' ? '#f59e0b' : 'var(--admin-muted)',
                 }}
               >
                 Nicht bezahlt
@@ -1328,7 +1328,7 @@ export default function ManualBookingPage() {
                   placeholder="z.B. 3,50 für PayPal-Gebühr"
                   style={inputStyle}
                 />
-                <p style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4 }}>
                   Wird als Betriebsausgabe in der EÜR verbucht (z.B. PayPal-Gebühr)
                 </p>
               </div>
@@ -1338,35 +1338,35 @@ export default function ManualBookingPage() {
         </div>
 
         {/* ─── Zusammenfassung ─── */}
-        <div style={{ background: '#0f172a', borderRadius: 12, border: '1px solid #06b6d433', padding: 20, marginBottom: 24 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#06b6d4', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+        <div style={{ background: 'var(--admin-input-bg)', borderRadius: 12, border: '1px solid #06b6d433', padding: 20, marginBottom: 24 }}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--admin-accent)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
             Zusammenfassung
           </h2>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+            <div className="flex justify-between" style={{ color: 'var(--admin-text)' }}>
               <span>Kamera-Miete ({days || 0} {days === 1 ? 'Tag' : 'Tage'})</span>
               <span>{fmtEuro(rentalPrice)}</span>
             </div>
             {setPrice > 0 && (
-              <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+              <div className="flex justify-between" style={{ color: 'var(--admin-text)' }}>
                 <span>Sets ({selectedProducts.reduce((n, sp) => n + sp.sets.length, 0)}x)</span>
                 <span>{fmtEuro(setPrice)}</span>
               </div>
             )}
             {accessoryPrice > 0 && (
-              <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+              <div className="flex justify-between" style={{ color: 'var(--admin-text)' }}>
                 <span>Zubehör ({selectedProducts.reduce((n, sp) => n + sp.accessories.length, 0)}x)</span>
                 <span>{fmtEuro(accessoryPrice)}</span>
               </div>
             )}
             {haftungPrice > 0 && (
-              <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+              <div className="flex justify-between" style={{ color: 'var(--admin-text)' }}>
                 <span>Haftungsschutz</span>
                 <span>{fmtEuro(haftungPrice)}</span>
               </div>
             )}
             {shippingPrice > 0 && (
-              <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+              <div className="flex justify-between" style={{ color: 'var(--admin-text)' }}>
                 <span>Versand</span>
                 <span>{fmtEuro(shippingPrice)}</span>
               </div>
@@ -1380,19 +1380,19 @@ export default function ManualBookingPage() {
                 <span>−{fmtEuro(discountAmount)}</span>
               </div>
             )}
-            <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
-            <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
+            <div style={{ height: 1, background: 'var(--admin-border)', margin: '8px 0' }} />
+            <div className="flex justify-between font-heading font-bold text-base" style={{ color: 'var(--admin-accent)' }}>
               <span>Gesamt</span>
               <span>{fmtEuro(total)}</span>
             </div>
             {deposit > 0 && (depositMode === 'kaution') && (
-              <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
+              <div className="flex justify-between text-xs" style={{ color: 'var(--admin-text-dim)' }}>
                 <span>Kaution (vorgemerkt)</span>
                 <span>{fmtEuro(deposit)}</span>
               </div>
             )}
             {paymentStatus === 'paid' && parseFloat(paymentFees) > 0 && (
-              <div className="flex justify-between text-xs" style={{ color: '#ef4444' }}>
+              <div className="flex justify-between text-xs" style={{ color: 'var(--admin-danger)' }}>
                 <span>Transaktionsgebühren ({paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'stripe' ? 'Stripe' : 'Gebühr'})</span>
                 <span>-{fmtEuro(parseFloat(paymentFees))}</span>
               </div>
@@ -1431,7 +1431,7 @@ export default function ManualBookingPage() {
               <svg width="20" height="20" fill="none" stroke="#10b981" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               <span style={{ color: '#10b981', fontWeight: 600, fontSize: 14 }}>Vertrag unterschrieben von {signatureData.signerName}</span>
             </div>
-            <button type="button" onClick={() => { setSignatureData(null); setShowSignature(true); }} style={{ color: '#64748b', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            <button type="button" onClick={() => { setSignatureData(null); setShowSignature(true); }} style={{ color: 'var(--admin-text-dim)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
               Neu unterschreiben
             </button>
           </div>
@@ -1444,7 +1444,7 @@ export default function ManualBookingPage() {
             onClick={openInvoicePreview}
             disabled={selectedProducts.length === 0 || !days}
             className="px-5 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50"
-            style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}
+            style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)' }}
           >
             Rechnungsvorschau
           </button>
@@ -1453,15 +1453,15 @@ export default function ManualBookingPage() {
               type="button"
               onClick={() => setShowSignature(true)}
               className="px-5 py-3 rounded-lg font-heading font-semibold text-sm transition-colors"
-              style={{ background: '#1e293b', color: '#f59e0b', border: '1px solid #f59e0b40' }}
+              style={{ background: 'var(--admin-surface-2)', color: '#f59e0b', border: '1px solid #f59e0b40' }}
             >
               Vertrag unterschreiben
             </button>
           )}
-          <button type="submit" disabled={saving || !days} className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: '#06b6d4', color: 'white' }}>
+          <button type="submit" disabled={saving || !days} className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: 'var(--admin-accent)', color: 'white' }}>
             {saving ? 'Wird erstellt...' : 'Buchung erstellen'}
           </button>
-          <button type="button" onClick={() => router.push('/admin/buchungen')} className="px-5 py-3 rounded-lg font-heading font-semibold text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>
+          <button type="button" onClick={() => router.push('/admin/buchungen')} className="px-5 py-3 rounded-lg font-heading font-semibold text-sm" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
             Abbrechen
           </button>
         </div>
@@ -1473,7 +1473,7 @@ export default function ManualBookingPage() {
           <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginBottom: 8 }}>
             Buchung {createdBookingId} erstellt!
           </h3>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 16 }}>
             {paymentStatus === 'unpaid' ? 'Zahlungsdaten stehen auf der Rechnung.' : 'Buchung wurde als bezahlt markiert.'}
           </p>
           <div className="flex gap-3">
@@ -1481,21 +1481,21 @@ export default function ManualBookingPage() {
               href={`/api/invoice/${createdBookingId}`}
               target="_blank"
               className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
-              style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
+              style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)' }}
             >
               Rechnung PDF
             </a>
             <button
               onClick={() => router.push(`/admin/buchungen/${createdBookingId}`)}
               className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
-              style={{ background: '#06b6d4', color: 'white' }}
+              style={{ background: 'var(--admin-accent)', color: 'white' }}
             >
               Zur Buchung
             </button>
             <button
               onClick={() => { setCreatedBookingId(null); setSignatureData(null); setSuccess(''); }}
               className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
-              style={{ background: '#1e293b', color: '#e2e8f0' }}
+              style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text)' }}
             >
               Neue Buchung
             </button>
