@@ -56,12 +56,12 @@ export default function TemplatesPage() {
       setCreating(false);
       load();
     } else {
-      alert('Speichern fehlgeschlagen');
+      toast.error('Speichern fehlgeschlagen');
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Vorlage wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Vorlage wirklich löschen?', danger: true }))) return;
     const res = await fetch(`/api/admin/social/templates/${id}`, { method: 'DELETE' });
     if (res.ok) load();
   }
@@ -80,8 +80,8 @@ export default function TemplatesPage() {
       <AdminBackLink />
       <div className="flex items-center justify-between mb-4 mt-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vorlagen</h1>
-          <p className="text-sm text-slate-400">KI-Prompts für automatisch generierte Posts.</p>
+          <h1 className="text-2xl font-bold text-admin-heading">Vorlagen</h1>
+          <p className="text-sm text-admin-muted">KI-Prompts für automatisch generierte Posts.</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -89,10 +89,10 @@ export default function TemplatesPage() {
             onClick={async () => {
               const res = await fetch('/api/admin/social/templates/seed', { method: 'POST' });
               const data = await res.json();
-              alert(data.message || `${data.imported} neue Standard-Vorlagen importiert (${data.skipped} bereits vorhanden).`);
+              toast.success(data.message || `${data.imported} neue Standard-Vorlagen importiert (${data.skipped} bereits vorhanden).`);
               load();
             }}
-            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-sm hover:bg-slate-700 border border-slate-700"
+            className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-semibold text-sm hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]"
             title="Laedt offizielle Standard-Vorlagen (Community, Ankuendigung, Testimonial, etc.)"
           >
             ↓ Standard-Vorlagen importieren

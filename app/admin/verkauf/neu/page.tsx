@@ -283,7 +283,7 @@ export default function VerkaufNeu() {
 
         {/* 3. Verkaufspositionen */}
         <div className={cardCls}>
-          <h2 className="font-semibold text-white mb-3">3. Verkaufspositionen</h2>
+          <h2 className="font-semibold text-admin-heading mb-3">3. Verkaufspositionen</h2>
           <div className="space-y-2">
             {lines.map((line, idx) => (
               <div key={idx} className="flex gap-2 items-start">
@@ -310,13 +310,13 @@ export default function VerkaufNeu() {
                     placeholder="0,00"
                     aria-label="Einzelpreis"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">€</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-dim)] text-sm">€</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => removeLine(idx)}
                   disabled={lines.length === 1}
-                  className="px-2 py-2 rounded-lg text-slate-500 hover:text-red-400 disabled:opacity-30"
+                  className="px-2 py-2 rounded-lg text-[var(--admin-text-dim)] hover:text-red-400 disabled:opacity-30"
                   aria-label="Position entfernen"
                 >
                   ✕
@@ -332,9 +332,9 @@ export default function VerkaufNeu() {
             + Freie Position hinzufügen
           </button>
 
-          <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-            <span className="text-slate-400">Gesamtbetrag</span>
-            <span className="text-xl font-bold text-white">{fmtEuro(total)}</span>
+          <div className="mt-4 pt-3 border-t border-admin-border flex items-center justify-between">
+            <span className="text-admin-muted">Gesamtbetrag</span>
+            <span className="text-xl font-bold text-admin-heading">{fmtEuro(total)}</span>
           </div>
         </div>
 
