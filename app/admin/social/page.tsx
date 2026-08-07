@@ -110,12 +110,12 @@ export default function SocialDashboard() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <AdminBackLink />
       <div className="flex items-start justify-between gap-3 mt-4 mb-1">
-        <h1 className="text-2xl font-bold text-white">Social Media</h1>
+        <h1 className="text-2xl font-bold text-admin-heading">Social Media</h1>
         <button
           type="button"
           onClick={loadAll}
           disabled={loading}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-medium text-xs hover:bg-slate-700 border border-slate-700 disabled:opacity-50 flex items-center gap-1.5"
+          className="px-3 py-1.5 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-xs hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)] disabled:opacity-50 flex items-center gap-1.5"
           title="Alle Daten neu laden"
         >
           <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,7 +124,7 @@ export default function SocialDashboard() {
           {loading ? 'Lädt…' : 'Neu laden'}
         </button>
       </div>
-      <p className="text-sm text-slate-400 mb-6">
+      <p className="text-sm text-admin-muted mb-6">
         Automatische Posts auf Facebook + Instagram.
       </p>
 
@@ -159,10 +159,10 @@ export default function SocialDashboard() {
         <Link href="/admin/social/neu" className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500">
           + Neuer Post
         </Link>
-        <Link href="/admin/social/posts" className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-sm hover:bg-slate-700 border border-slate-700">
+        <Link href="/admin/social/posts" className="px-4 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-semibold text-sm hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]">
           Alle Posts
         </Link>
-        <Link href="/admin/social/redaktionsplan" className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-sm hover:bg-slate-700 border border-slate-700">
+        <Link href="/admin/social/redaktionsplan" className="px-4 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-semibold text-sm hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]">
           Redaktionsplan
         </Link>
       </div>
@@ -170,14 +170,14 @@ export default function SocialDashboard() {
       {/* Verbundene Konten */}
       {hasAccounts && (
         <section className="mb-6">
-          <h2 className="font-semibold text-white mb-3">Verbundene Konten</h2>
+          <h2 className="font-semibold text-admin-heading mb-3">Verbundene Konten</h2>
           <div className="flex flex-wrap gap-2">
             {accounts.map((a) => (
-              <span key={a.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-slate-800 text-sm text-slate-200">
+              <span key={a.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-admin-border text-sm text-admin-text">
                 <span className="text-xs font-bold" style={{ color: a.platform === 'facebook' ? '#1877f2' : '#e4405f' }}>
                   {a.platform === 'facebook' ? 'FB' : 'IG'}
                 </span>
-                {a.name} {a.username && <span className="text-slate-500">@{a.username}</span>}
+                {a.name} {a.username && <span className="text-[var(--admin-text-dim)]">@{a.username}</span>}
               </span>
             ))}
           </div>
@@ -187,17 +187,17 @@ export default function SocialDashboard() {
       {/* Letzte Posts */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-white">Letzte Posts</h2>
+          <h2 className="font-semibold text-admin-heading">Letzte Posts</h2>
           <Link href="/admin/social/posts" className="text-sm text-cyan-400 hover:text-cyan-300">
             Alle anzeigen →
           </Link>
         </div>
 
-        {loading && <p className="text-slate-400">Lade…</p>}
+        {loading && <p className="text-admin-muted">Lade…</p>}
 
         {!loading && posts.length === 0 && (
-          <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
-            <p className="text-slate-400">Noch keine Posts erstellt.</p>
+          <div className="rounded-xl bg-slate-900/50 border border-admin-border p-8 text-center">
+            <p className="text-admin-muted">Noch keine Posts erstellt.</p>
           </div>
         )}
 
@@ -207,12 +207,12 @@ export default function SocialDashboard() {
               <Link
                 key={p.id}
                 href={`/admin/social/posts/${p.id}`}
-                className="block p-4 rounded-lg bg-slate-900/50 border border-slate-800 hover:border-slate-700"
+                className="block p-4 rounded-lg bg-slate-900/50 border border-admin-border hover:border-[var(--admin-faint)]"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-200 line-clamp-2">{p.caption || '(leer)'}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                    <p className="text-sm text-admin-text line-clamp-2">{p.caption || '(leer)'}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-[var(--admin-text-dim)]">
                       <StatusBadge status={p.status} />
                       <span>•</span>
                       <span>{(p.platforms ?? []).join(', ')}</span>
@@ -276,31 +276,31 @@ function KiBotStatus({ autoEnabled, genStatus, plan }: { autoEnabled: boolean; g
     <section className="mb-6 rounded-xl p-4 border" style={{ background: colors.bg, borderColor: colors.border }}>
       <div className="flex items-center gap-3 mb-2">
         <span className="inline-block w-3 h-3 rounded-full" style={{ background: colors.dot, animation: generating ? 'pulse 1.5s infinite' : undefined }} />
-        <h2 className="font-semibold text-white">{label}</h2>
-        <Link href="/admin/social/einstellungen" className="ml-auto text-xs text-slate-400 hover:text-slate-200">
+        <h2 className="font-semibold text-admin-heading">{label}</h2>
+        <Link href="/admin/social/einstellungen" className="ml-auto text-xs text-admin-muted hover:text-admin-text">
           Einstellungen →
         </Link>
       </div>
-      <p className="text-sm text-slate-300 mb-3">{detail}</p>
+      <p className="text-sm text-admin-text-2 mb-3">{detail}</p>
 
       {/* Mini-Stats Plan */}
       <div className="flex gap-4 text-xs">
-        <span className="text-slate-400">Geplant: <strong className="text-slate-200">{plan.planned}</strong></span>
-        <span className="text-slate-400">Generiert: <strong className="text-slate-200">{plan.generated}</strong></span>
-        <span className="text-slate-400">Freigegeben: <strong className="text-slate-200">{plan.reviewed}</strong></span>
+        <span className="text-admin-muted">Geplant: <strong className="text-admin-text">{plan.planned}</strong></span>
+        <span className="text-admin-muted">Generiert: <strong className="text-admin-text">{plan.generated}</strong></span>
+        <span className="text-admin-muted">Freigegeben: <strong className="text-admin-text">{plan.reviewed}</strong></span>
         <Link href="/admin/social/zeitplan" className="ml-auto text-cyan-400 hover:text-cyan-300">Zum Redaktionsplan →</Link>
       </div>
 
       {/* Upcoming */}
       {plan.upcoming.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-800">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Nächste Einträge</p>
+        <div className="mt-3 pt-3 border-t border-admin-border">
+          <p className="text-xs text-[var(--admin-text-dim)] uppercase tracking-wider mb-2">Nächste Einträge</p>
           <ul className="space-y-1">
             {plan.upcoming.slice(0, 5).map((u) => (
               <li key={u.id} className="text-xs flex items-center gap-2">
-                <span className="text-slate-500 w-24">{new Date(u.scheduled_date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} {u.scheduled_time.slice(0, 5)}</span>
-                <span className="text-slate-300 flex-1 truncate">{u.topic}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{u.status}</span>
+                <span className="text-[var(--admin-text-dim)] w-24">{new Date(u.scheduled_date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} {u.scheduled_time.slice(0, 5)}</span>
+                <span className="text-admin-text-2 flex-1 truncate">{u.topic}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted">{u.status}</span>
               </li>
             ))}
           </ul>
@@ -314,12 +314,12 @@ function KpiCard({ label, value, color }: { label: string; value: number; color:
   const colors = {
     emerald: 'text-emerald-400',
     cyan: 'text-cyan-400',
-    slate: 'text-slate-300',
+    slate: 'text-admin-text-2',
     red: 'text-red-400',
   };
   return (
-    <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500 mb-1">{label}</p>
+    <div className="rounded-xl bg-slate-900/50 border border-admin-border p-4">
+      <p className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">{label}</p>
       <p className={`text-2xl font-bold ${colors[color]}`}>{value}</p>
     </div>
   );
@@ -327,13 +327,13 @@ function KpiCard({ label, value, color }: { label: string; value: number; color:
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
-    draft: { label: 'Entwurf', className: 'bg-slate-800 text-slate-300' },
+    draft: { label: 'Entwurf', className: 'bg-admin-surface-2 text-admin-text-2' },
     scheduled: { label: 'Geplant', className: 'bg-cyan-900/40 text-cyan-300' },
     publishing: { label: 'Wird veröffentlicht…', className: 'bg-amber-900/40 text-amber-300' },
     published: { label: 'Veröffentlicht', className: 'bg-emerald-900/40 text-emerald-300' },
     partial: { label: 'Teilweise', className: 'bg-amber-900/40 text-amber-300' },
     failed: { label: 'Fehler', className: 'bg-red-900/40 text-red-300' },
   };
-  const cfg = map[status] ?? { label: status, className: 'bg-slate-800 text-slate-300' };
+  const cfg = map[status] ?? { label: status, className: 'bg-admin-surface-2 text-admin-text-2' };
   return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.className}`}>{cfg.label}</span>;
 }
