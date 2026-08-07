@@ -338,7 +338,7 @@ export default function AdminBuchungenPage() {
           <Link
             href="/admin/buchungen/neu"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors flex-shrink-0"
-            style={{ background: '#06b6d4', color: 'white' }}
+            style={{ background: 'var(--admin-accent)', color: 'white' }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -364,7 +364,7 @@ export default function AdminBuchungenPage() {
                       ? sc
                         ? { backgroundColor: sc.bg, color: sc.color, border: `1px solid ${sc.color}40` }
                         : { backgroundColor: '#0f172a', color: '#fff' }
-                      : { backgroundColor: 'transparent', color: '#64748b', border: '1px solid #e2e8f0' }
+                      : { backgroundColor: 'transparent', color: 'var(--admin-text-dim)', border: '1px solid var(--admin-border)' }
                   }
                 >
                   {tab.label}
