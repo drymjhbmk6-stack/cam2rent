@@ -62,11 +62,11 @@ export default function AnlagenNeuPage() {
   }, [art, methode, includeTest]);
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung" />
       <div className="max-w-7xl mx-auto mt-4 space-y-4">
         <h1 className="text-2xl font-heading">Anlagen (Steuersicht)</h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-admin-muted">
           Reine Steuersicht — Anschaffungskosten + Buchwert nach AfA. Wiederbeschaffungswerte
           findest du im <Link href="/admin/inventar" className="text-cyan-400 hover:underline">Inventar</Link>.
         </p>
@@ -79,7 +79,7 @@ export default function AnlagenNeuPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <select value={art} onChange={(e) => setArt(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={art} onChange={(e) => setArt(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Arten</option>
             <option value="kamera">Kamera</option>
             <option value="zubehoer">Zubehör</option>
@@ -87,26 +87,26 @@ export default function AnlagenNeuPage() {
             <option value="werkzeug">Werkzeug</option>
             <option value="sonstiges">Sonstiges</option>
           </select>
-          <select value={methode} onChange={(e) => setMethode(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={methode} onChange={(e) => setMethode(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Methoden</option>
             <option value="linear">Linear</option>
             <option value="sofort_gwg">GWG sofort</option>
             <option value="keine">Keine</option>
           </select>
-          <label className="flex items-center gap-2 text-sm text-slate-300 px-3 py-2 bg-[#111827] border border-slate-700 rounded cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-admin-text-2 px-3 py-2 bg-admin-surface border border-[var(--admin-faint)] rounded cursor-pointer">
             <input type="checkbox" checked={includeTest} onChange={(e) => setIncludeTest(e.target.checked)} />
             Test-Anlagen einbeziehen
           </label>
         </div>
 
         {loading ? (
-          <p className="text-slate-400">Lädt…</p>
+          <p className="text-admin-muted">Lädt…</p>
         ) : assets.length === 0 ? (
-          <p className="text-slate-400">Keine Anlagen.</p>
+          <p className="text-admin-muted">Keine Anlagen.</p>
         ) : (
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
+          <div className="bg-admin-surface rounded border border-admin-border overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-left text-xs uppercase text-slate-400">
+              <thead className="bg-[var(--admin-thead-bg)] text-left text-xs uppercase text-admin-muted">
                 <tr>
                   <th className="px-3 py-2">Bezeichnung</th>
                   <th className="px-3 py-2">Art</th>
@@ -120,7 +120,7 @@ export default function AnlagenNeuPage() {
               </thead>
               <tbody>
                 {assets.map((a) => (
-                  <tr key={a.id} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer" onClick={() => { window.location.href = `/admin/buchhaltung/anlagen/${a.id}`; }}>
+                  <tr key={a.id} className="border-t border-admin-border hover:bg-slate-800/40 cursor-pointer" onClick={() => { window.location.href = `/admin/buchhaltung/anlagen/${a.id}`; }}>
                     <td className="px-3 py-2">{a.bezeichnung}</td>
                     <td className="px-3 py-2 text-xs">{ART_LABEL[a.art] ?? a.art}</td>
                     <td className="px-3 py-2 text-xs">{fmtDate(a.anschaffungsdatum)}</td>
@@ -145,10 +145,10 @@ export default function AnlagenNeuPage() {
 }
 
 function Stat({ label, value, color = 'slate' }: { label: string; value: string; color?: string }) {
-  const cl = color === 'cyan' ? 'text-cyan-400' : color === 'amber' ? 'text-amber-400' : 'text-slate-200';
+  const cl = color === 'cyan' ? 'text-cyan-400' : color === 'amber' ? 'text-amber-400' : 'text-admin-text';
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded p-3">
-      <div className="text-xs text-slate-400">{label}</div>
+    <div className="bg-admin-surface border border-admin-border rounded p-3">
+      <div className="text-xs text-admin-muted">{label}</div>
       <div className={`text-lg font-mono ${cl}`}>{value}</div>
     </div>
   );
