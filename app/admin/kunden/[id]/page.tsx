@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDate, fmtDateTime, formatCurrency } from '@/lib/format-utils';
 
 /* ───── Types ───── */
@@ -177,6 +178,8 @@ export default function KundenDetailPage() {
   const params = useParams();
   const router = useRouter();
   const customerId = params.id as string;
+  const { error: toastError } = useToast();
+  const confirm = useConfirm();
 
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
@@ -323,7 +326,7 @@ export default function KundenDetailPage() {
     setVerifyLoading(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      alert(body.message ?? body.error ?? 'Verifizierung fehlgeschlagen.');
+      toastError(body.message ?? body.error ?? 'Verifizierung fehlgeschlagen.');
       return;
     }
     fetchData();
@@ -407,9 +410,12 @@ export default function KundenDetailPage() {
   const [testerLoading, setTesterLoading] = useState(false);
   async function handleTester(next: boolean) {
     if (next) {
-      const ok = confirm(
-        'Tester-Konto aktivieren?\n\nKonsequenzen:\n· Buchungen dieses Kunden tauchen NICHT in Reports/EÜR/DATEV auf\n· Stripe nutzt Test-Keys → echte Karten/PayPal werden NICHT belastet, nur Test-Karten (z.B. 4242 4242 4242 4242)\n· Verifizierungs-Pflicht wird übersprungen\n\nFortfahren?'
-      );
+      const ok = await confirm({
+        title: 'Tester-Konto aktivieren?',
+        message: 'Konsequenzen:\n· Buchungen dieses Kunden tauchen NICHT in Reports/EÜR/DATEV auf\n· Stripe nutzt Test-Keys → echte Karten/PayPal werden NICHT belastet, nur Test-Karten (z.B. 4242 4242 4242 4242)\n· Verifizierungs-Pflicht wird übersprungen\n\nFortfahren?',
+        confirmLabel: 'Aktivieren',
+        danger: true,
+      });
       if (!ok) return;
     }
     setTesterLoading(true);
@@ -421,7 +427,7 @@ export default function KundenDetailPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error ?? 'Fehler beim Setzen des Tester-Flags.');
+        toastError(err.error ?? 'Fehler beim Setzen des Tester-Flags.');
         return;
       }
       fetchData();
@@ -449,7 +455,7 @@ export default function KundenDetailPage() {
     try {
       const percent = remove ? null : Math.round(Number(scdPercent.replace(',', '.')));
       if (!remove && (!Number.isFinite(percent as number) || (percent as number) < 0 || (percent as number) > 100)) {
-        alert('Bitte einen Prozentsatz zwischen 0 und 100 eingeben.');
+        toastError('Bitte einen Prozentsatz zwischen 0 und 100 eingeben.');
         return;
       }
       const res = await fetch('/api/admin/kunden/special-discount', {
@@ -464,7 +470,7 @@ export default function KundenDetailPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error ?? 'Fehler beim Speichern der Sonderkondition.');
+        toastError(err.error ?? 'Fehler beim Speichern der Sonderkondition.');
         return;
       }
       setScdEditing(false);
@@ -603,7 +609,7 @@ export default function KundenDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
+      <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--admin-text-dim)' }}>
         Kundendaten werden geladen...
       </div>
     );
@@ -611,7 +617,7 @@ export default function KundenDetailPage() {
 
   if (!customer) {
     return (
-      <div style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
+      <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--admin-text-dim)' }}>
         Kunde nicht gefunden.
         <div style={{ marginTop: 16 }}>
           <AdminBackLink href="/admin/kunden" label="Zurück zu Kunden" />
@@ -627,17 +633,17 @@ export default function KundenDetailPage() {
         <AdminBackLink href="/admin/kunden" label="Zurück zu Kunden" />
 
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-text)', margin: 0 }}>
             {customer.full_name || 'Unbekannt'}
           </h1>
-          <span style={{ fontSize: 13, color: '#64748b' }}>{customer.email}</span>
+          <span style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>{customer.email}</span>
 
           {/* Badges */}
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
             {customer.blacklisted ? (
               <span style={{
                 display: 'inline-block', padding: '4px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 700, color: '#ef4444', background: '#ef444414',
+                fontSize: 12, fontWeight: 700, color: 'var(--admin-danger)', background: '#ef444414',
               }}>
                 Gesperrt
               </span>
@@ -652,7 +658,7 @@ export default function KundenDetailPage() {
             {customer.verification_status === 'verified' && (
               <span style={{
                 display: 'inline-block', padding: '4px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 700, color: '#06b6d4', background: '#06b6d414',
+                fontSize: 12, fontWeight: 700, color: 'var(--admin-accent)', background: '#06b6d414',
               }}>
                 Verifiziert
               </span>
@@ -673,8 +679,8 @@ export default function KundenDetailPage() {
       {/* ───── Tab Navigation ───── */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 10,
-        background: '#0a0f1e',
-        borderBottom: '1px solid #1e293b',
+        background: 'var(--admin-bg)',
+        borderBottom: '1px solid var(--admin-border)',
         marginBottom: 24,
         display: 'flex',
         gap: 0,
@@ -688,7 +694,7 @@ export default function KundenDetailPage() {
               padding: '12px 20px',
               fontSize: 14,
               fontWeight: 600,
-              color: activeTab === tab.key ? '#06b6d4' : '#64748b',
+              color: activeTab === tab.key ? 'var(--admin-accent)' : 'var(--admin-text-dim)',
               background: 'none',
               border: 'none',
               borderBottom: activeTab === tab.key ? '2px solid #06b6d4' : '2px solid transparent',
@@ -707,11 +713,11 @@ export default function KundenDetailPage() {
         <div>
           {/* Kundendaten */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 24, marginBottom: 20,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>
                 Kundendaten
               </h2>
               {!editProfile && (
@@ -719,7 +725,7 @@ export default function KundenDetailPage() {
                   onClick={openEditProfile}
                   style={{
                     padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                    background: '#1e293b', color: '#06b6d4', border: '1px solid #06b6d440',
+                    background: 'var(--admin-secondary-bg)', color: 'var(--admin-accent)', border: '1px solid #06b6d440',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                   }}
                 >
@@ -746,7 +752,7 @@ export default function KundenDetailPage() {
                     disabled={profileSaving}
                     style={{
                       padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                      background: '#06b6d4', color: '#0a0a0a', border: 'none',
+                      background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 'none',
                       cursor: profileSaving ? 'not-allowed' : 'pointer', opacity: profileSaving ? 0.5 : 1,
                     }}
                   >
@@ -757,7 +763,7 @@ export default function KundenDetailPage() {
                     disabled={profileSaving}
                     style={{
                       padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                      background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                      background: 'var(--admin-secondary-bg)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', cursor: 'pointer',
                     }}
                   >
                     Abbrechen
@@ -791,11 +797,11 @@ export default function KundenDetailPage() {
 
           {/* Ausweis-Verifizierung — immer sichtbar */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 24, marginBottom: 20,
           }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>
                   Ausweis-Verifizierung
                 </h2>
                 <span style={{
@@ -819,7 +825,7 @@ export default function KundenDetailPage() {
 
               {/* Ausweis-Bilder */}
               {idImagesLoading ? (
-                <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
                   Bilder werden geladen...
                 </div>
               ) : (idFrontSignedUrl || idBackSignedUrl) ? (
@@ -827,7 +833,7 @@ export default function KundenDetailPage() {
                   {/* Vorderseite */}
                   <div>
                     <div style={{
-                      fontSize: 11, fontWeight: 600, color: '#64748b',
+                      fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)',
                       textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
                     }}>
                       Vorderseite
@@ -837,8 +843,8 @@ export default function KundenDetailPage() {
                         {!frontImgLoaded && (
                           <div style={{
                             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                            justifyContent: 'center', color: '#64748b', fontSize: 12,
-                            background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                            justifyContent: 'center', color: 'var(--admin-text-dim)', fontSize: 12,
+                            background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)',
                           }}>
                             Bild lädt…
                           </div>
@@ -859,9 +865,9 @@ export default function KundenDetailPage() {
                             }
                           }}
                           style={{
-                            width: '100%', borderRadius: 8, border: '1px solid #1e293b',
+                            width: '100%', borderRadius: 8, border: '1px solid var(--admin-border)',
                             cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
-                            background: '#0a0f1e', display: 'block',
+                            background: 'var(--admin-bg)', display: 'block',
                             opacity: frontImgLoaded ? 1 : 0,
                             minHeight: frontImgLoaded ? undefined : 120,
                           }}
@@ -869,8 +875,8 @@ export default function KundenDetailPage() {
                       </a>
                     ) : (
                       <div style={{
-                        padding: 32, textAlign: 'center', color: '#64748b',
-                        background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                        padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
+                        background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)',
                       }}>
                         Nicht hochgeladen
                       </div>
@@ -880,7 +886,7 @@ export default function KundenDetailPage() {
                   {/* Rückseite */}
                   <div>
                     <div style={{
-                      fontSize: 11, fontWeight: 600, color: '#64748b',
+                      fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)',
                       textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
                     }}>
                       Rückseite
@@ -890,8 +896,8 @@ export default function KundenDetailPage() {
                         {!backImgLoaded && (
                           <div style={{
                             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                            justifyContent: 'center', color: '#64748b', fontSize: 12,
-                            background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                            justifyContent: 'center', color: 'var(--admin-text-dim)', fontSize: 12,
+                            background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)',
                           }}>
                             Bild lädt…
                           </div>
@@ -912,9 +918,9 @@ export default function KundenDetailPage() {
                             }
                           }}
                           style={{
-                            width: '100%', borderRadius: 8, border: '1px solid #1e293b',
+                            width: '100%', borderRadius: 8, border: '1px solid var(--admin-border)',
                             cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
-                            background: '#0a0f1e', display: 'block',
+                            background: 'var(--admin-bg)', display: 'block',
                             opacity: backImgLoaded ? 1 : 0,
                             minHeight: backImgLoaded ? undefined : 120,
                           }}
@@ -922,8 +928,8 @@ export default function KundenDetailPage() {
                       </a>
                     ) : (
                       <div style={{
-                        padding: 32, textAlign: 'center', color: '#64748b',
-                        background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                        padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
+                        background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)',
                       }}>
                         Nicht hochgeladen
                       </div>
@@ -932,8 +938,8 @@ export default function KundenDetailPage() {
                 </div>
               ) : (
                 <div style={{
-                  padding: 20, textAlign: 'center', color: '#64748b', marginBottom: 20,
-                  background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                  padding: 20, textAlign: 'center', color: 'var(--admin-text-dim)', marginBottom: 20,
+                  background: 'var(--admin-bg)', borderRadius: 8, border: '1px solid var(--admin-border)',
                 }}>
                   Keine Ausweisbilder hochgeladen.
                 </div>
@@ -981,7 +987,7 @@ export default function KundenDetailPage() {
                         disabled={verifyLoading}
                         style={{
                           padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                          background: '#1e293b', color: '#ef4444', border: '1px solid #ef444440', cursor: 'pointer',
+                          background: 'var(--admin-secondary-bg)', color: 'var(--admin-danger)', border: '1px solid #ef444440', cursor: 'pointer',
                           opacity: verifyLoading ? 0.5 : 1,
                           display: 'flex', alignItems: 'center', gap: 8,
                         }}
@@ -998,8 +1004,8 @@ export default function KundenDetailPage() {
 
               {/* Erinnerungs-Mail — wenn Kunde noch nicht verifiziert ist */}
               {customer.verification_status !== 'verified' && (
-                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #1e293b' }}>
-                  <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 10px' }}>
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--admin-border)' }}>
+                  <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', margin: '0 0 10px' }}>
                     Schicke dem Kunden eine Erinnerung mit Link zur Konto-Verifizierung.
                   </p>
                   <button
@@ -1007,7 +1013,7 @@ export default function KundenDetailPage() {
                     disabled={reminderLoading}
                     style={{
                       padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                      background: '#1e293b', color: '#06b6d4', border: '1px solid #06b6d440',
+                      background: 'var(--admin-secondary-bg)', color: 'var(--admin-accent)', border: '1px solid #06b6d440',
                       cursor: reminderLoading ? 'not-allowed' : 'pointer',
                       opacity: reminderLoading ? 0.5 : 1,
                       display: 'flex', alignItems: 'center', gap: 8,
@@ -1047,32 +1053,32 @@ export default function KundenDetailPage() {
 
           {/* Aufbewahrung */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 20, marginBottom: 20,
           }}>
-            <div style={{ fontSize: 12, color: '#64748b' }}>
+            <div style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
               Daten werden bis {retentionDate(customer.created_at)} aufbewahrt (10 Jahre ab Registrierung)
             </div>
           </div>
 
           {/* Sperren / Entsperren */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 24,
           }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 16, marginTop: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 16, marginTop: 0 }}>
               Kundenstatus
             </h2>
             {customer.blacklisted ? (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444', fontSize: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: 'var(--admin-danger)', fontSize: 14 }}>
                   <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                   </svg>
                   Gesperrt seit {customer.blacklisted_at ? fmtDate(customer.blacklisted_at) : '—'}
                 </div>
                 {customer.blacklist_reason && (
-                  <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+                  <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 12 }}>
                     Grund: {customer.blacklist_reason}
                   </p>
                 )}
@@ -1081,7 +1087,7 @@ export default function KundenDetailPage() {
                   disabled={blockLoading}
                   style={{
                     padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                    background: '#1e293b', color: '#10b981', border: 'none', cursor: 'pointer',
+                    background: 'var(--admin-secondary-bg)', color: '#10b981', border: 'none', cursor: 'pointer',
                     opacity: blockLoading ? 0.5 : 1,
                   }}
                 >
@@ -1096,8 +1102,8 @@ export default function KundenDetailPage() {
                   placeholder="Grund für die Sperrung (optional)..."
                   rows={2}
                   style={{
-                    width: '100%', background: '#0a0f1e', border: '1px solid #1e293b',
-                    borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 14,
+                    width: '100%', background: 'var(--admin-bg)', border: '1px solid var(--admin-border)',
+                    borderRadius: 8, padding: '8px 12px', color: 'var(--admin-text)', fontSize: 14,
                     resize: 'none', marginBottom: 12, boxSizing: 'border-box',
                   }}
                 />
@@ -1106,7 +1112,7 @@ export default function KundenDetailPage() {
                   disabled={blockLoading}
                   style={{
                     padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                    background: '#ef4444', color: 'white', border: 'none', cursor: 'pointer',
+                    background: 'var(--admin-danger)', color: 'white', border: 'none', cursor: 'pointer',
                     opacity: blockLoading ? 0.5 : 1,
                   }}
                 >
@@ -1118,22 +1124,22 @@ export default function KundenDetailPage() {
 
           {/* Tester-Konto */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 24,
           }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 8, marginTop: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 8, marginTop: 0 }}>
               Tester-Konto
             </h2>
-            <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, marginTop: 0 }}>
-              Buchungen dieses Kunden landen mit <code style={{ color: '#06b6d4' }}>is_test=true</code> in der DB
+            <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 16, marginTop: 0 }}>
+              Buchungen dieses Kunden landen mit <code style={{ color: 'var(--admin-accent)' }}>is_test=true</code> in der DB
               (raus aus Reports/EÜR/DATEV) und gehen gegen Stripe-Test-Keys —
               echte Karten/PayPal werden NICHT belastet, nur Test-Karten wie
-              <code style={{ color: '#06b6d4' }}> 4242 4242 4242 4242</code>.
+              <code style={{ color: 'var(--admin-accent)' }}> 4242 4242 4242 4242</code>.
               Verifizierungs-Pflicht ist übersprungen. E-Mails laufen wie für echte Kunden.
             </p>
             {customer.is_tester ? (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#06b6d4', fontSize: 14, fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: 'var(--admin-accent)', fontSize: 14, fontWeight: 600 }}>
                   ● Tester-Konto aktiv
                 </div>
                 <button
@@ -1141,7 +1147,7 @@ export default function KundenDetailPage() {
                   disabled={testerLoading}
                   style={{
                     padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                    background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                    background: 'var(--admin-secondary-bg)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', cursor: 'pointer',
                     opacity: testerLoading ? 0.5 : 1,
                   }}
                 >
@@ -1154,7 +1160,7 @@ export default function KundenDetailPage() {
                 disabled={testerLoading}
                 style={{
                   padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                  background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+                  background: 'var(--admin-accent)', color: 'white', border: 'none', cursor: 'pointer',
                   opacity: testerLoading ? 0.5 : 1,
                 }}
               >
@@ -1165,16 +1171,16 @@ export default function KundenDetailPage() {
 
           {/* Sonderkonditionen (Kunden-Rabatt) */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 24,
           }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 8, marginTop: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 8, marginTop: 0 }}>
               Sonderkonditionen
             </h2>
-            <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, marginTop: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 16, marginTop: 0 }}>
               Individueller Rabatt für diesen Kunden. Wird im Checkout
-              <strong style={{ color: '#e2e8f0' }}> automatisch</strong> abgezogen und
-              <strong style={{ color: '#e2e8f0' }}> ersetzt</strong> dort die anderen
+              <strong style={{ color: 'var(--admin-text)' }}> automatisch</strong> abgezogen und
+              <strong style={{ color: 'var(--admin-text)' }}> ersetzt</strong> dort die anderen
               Auto-Rabatte (Aktion, Mengen-, Frühbucher-, Treuerabatt). Ein Gutschein-Code
               bleibt zusätzlich möglich.
             </p>
@@ -1187,11 +1193,11 @@ export default function KundenDetailPage() {
                       ● {customer.special_discount_percent}% Sonderrabatt aktiv
                     </div>
                     {customer.special_discount_reason && (
-                      <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, color: 'var(--admin-text-2)', marginBottom: 4 }}>
                         Grund: {customer.special_discount_reason}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 12, color: 'var(--admin-muted)' }}>
                       {customer.special_discount_valid_until
                         ? `Gültig bis ${fmtDate(customer.special_discount_valid_until)}`
                         : 'Unbegrenzt gültig'}
@@ -1200,7 +1206,7 @@ export default function KundenDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 14, color: '#64748b', marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, color: 'var(--admin-text-dim)', marginBottom: 14 }}>
                     Keine Sonderkondition hinterlegt.
                   </div>
                 )}
@@ -1208,9 +1214,9 @@ export default function KundenDetailPage() {
                   onClick={startEditSpecialDiscount}
                   style={{
                     padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                    background: customer.special_discount_percent != null ? '#1e293b' : '#6366f1',
-                    color: customer.special_discount_percent != null ? '#e2e8f0' : 'white',
-                    border: customer.special_discount_percent != null ? '1px solid #334155' : 'none',
+                    background: customer.special_discount_percent != null ? 'var(--admin-secondary-bg)' : '#6366f1',
+                    color: customer.special_discount_percent != null ? 'var(--admin-text)' : 'white',
+                    border: customer.special_discount_percent != null ? '1px solid var(--admin-faint)' : 'none',
                     cursor: 'pointer',
                   }}
                 >
@@ -1220,7 +1226,7 @@ export default function KundenDetailPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Rabatt (%)</label>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Rabatt (%)</label>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -1231,12 +1237,12 @@ export default function KundenDetailPage() {
                     placeholder="z.B. 10"
                     style={{
                       width: 120, padding: '8px 12px', borderRadius: 8, fontSize: 16,
-                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                      background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)',
                     }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Grund / interne Notiz (optional)</label>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Grund / interne Notiz (optional)</label>
                   <textarea
                     value={scdReason}
                     onChange={(e) => setScdReason(e.target.value)}
@@ -1244,19 +1250,19 @@ export default function KundenDetailPage() {
                     placeholder="z.B. Stammkunde / Geschäftspartner"
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 16,
-                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', resize: 'vertical',
+                      background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)', resize: 'vertical',
                     }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Gültig bis (optional, leer = unbegrenzt)</label>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>Gültig bis (optional, leer = unbegrenzt)</label>
                   <input
                     type="date"
                     value={scdValidUntil}
                     onChange={(e) => setScdValidUntil(e.target.value)}
                     style={{
                       padding: '8px 12px', borderRadius: 8, fontSize: 16,
-                      background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                      background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-faint)',
                     }}
                   />
                 </div>
@@ -1290,7 +1296,7 @@ export default function KundenDetailPage() {
                     disabled={scdLoading}
                     style={{
                       padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                      background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                      background: 'var(--admin-secondary-bg)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', cursor: 'pointer',
                       opacity: scdLoading ? 0.5 : 1,
                     }}
                   >
@@ -1305,20 +1311,20 @@ export default function KundenDetailPage() {
 
       {/* ───── Tab: Buchungen ───── */}
       {activeTab === 'buchungen' && (
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', overflow: 'hidden' }}>
           {bookings.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
               Keine Buchungen vorhanden.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                  <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                     {['ID', 'Produkt', 'Zeitraum', 'Status', 'Betrag'].map((h) => (
                       <th key={h} style={{
                         padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--admin-text-dim)',
                       }}>
                         {h}
                       </th>
@@ -1333,19 +1339,19 @@ export default function KundenDetailPage() {
                         key={b.id}
                         onClick={() => router.push(`/admin/buchungen/${b.id}`)}
                         style={{
-                          borderBottom: i < bookings.length - 1 ? '1px solid #1e293b' : 'none',
+                          borderBottom: i < bookings.length - 1 ? '1px solid var(--admin-border)' : 'none',
                           cursor: 'pointer',
                         }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#1e293b44'; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                       >
-                        <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--admin-text-dim)', fontFamily: 'monospace' }}>
                           {b.id.substring(0, 8)}
                         </td>
-                        <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+                        <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>
                           {b.product_name}
                         </td>
-                        <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
+                        <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--admin-muted)' }}>
                           {fmtDate(b.rental_from)} — {fmtDate(b.rental_to)}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
@@ -1356,7 +1362,7 @@ export default function KundenDetailPage() {
                             {st.label}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+                        <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>
                           {formatCurrency(b.price_total)}
                         </td>
                       </tr>
@@ -1371,22 +1377,22 @@ export default function KundenDetailPage() {
 
       {/* ───── Tab: Login-Verlauf ───── */}
       {activeTab === 'logins' && (
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
-            <div style={{ fontSize: 13, color: '#94a3b8' }}>
+        <div style={{ background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--admin-border)' }}>
+            <div style={{ fontSize: 13, color: 'var(--admin-muted)' }}>
               Die letzten 10 Anmeldungen dieses Kontos. Die Aufzeichnung beginnt ab Einführung
               dieser Funktion — frühere Logins liegen nicht vor.
             </div>
           </div>
           {loginHistory.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
               Noch keine Logins aufgezeichnet.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
-                  <tr style={{ textAlign: 'left', color: '#06b6d4', fontSize: 12 }}>
+                  <tr style={{ textAlign: 'left', color: 'var(--admin-accent)', fontSize: 12 }}>
                     <th style={{ padding: '12px 20px', fontWeight: 600 }}>ZEITPUNKT</th>
                     <th style={{ padding: '12px 20px', fontWeight: 600 }}>GERÄT</th>
                     <th style={{ padding: '12px 20px', fontWeight: 600 }}>IP-ADRESSE</th>
@@ -1394,14 +1400,14 @@ export default function KundenDetailPage() {
                 </thead>
                 <tbody>
                   {loginHistory.map((entry, i) => (
-                    <tr key={entry.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #1e293b' }}>
-                      <td style={{ padding: '12px 20px', color: '#e2e8f0', whiteSpace: 'nowrap' }}>
+                    <tr key={entry.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--admin-border)' }}>
+                      <td style={{ padding: '12px 20px', color: 'var(--admin-text)', whiteSpace: 'nowrap' }}>
                         {fmtDateTime(entry.created_at)}
                       </td>
-                      <td style={{ padding: '12px 20px', color: '#94a3b8' }}>
+                      <td style={{ padding: '12px 20px', color: 'var(--admin-muted)' }}>
                         {describeUserAgent(entry.user_agent)}
                       </td>
-                      <td style={{ padding: '12px 20px', color: '#64748b', fontFamily: 'monospace', fontSize: 13 }}>
+                      <td style={{ padding: '12px 20px', color: 'var(--admin-text-dim)', fontFamily: 'monospace', fontSize: 13 }}>
                         {entry.ip || '—'}
                       </td>
                     </tr>
@@ -1418,8 +1424,8 @@ export default function KundenDetailPage() {
         <div>
           {damages.length === 0 ? (
             <div style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-              padding: 32, textAlign: 'center', color: '#64748b',
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
+              padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
             }}>
               Keine Schadensmeldungen vorhanden.
             </div>
@@ -1429,12 +1435,12 @@ export default function KundenDetailPage() {
                 const st = DAMAGE_STATUS[d.status] || { label: d.status, color: '#94a3b8', bg: '#94a3b814' };
                 return (
                   <div key={d.id} style={{
-                    background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+                    background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
                     padding: 20,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{fmtDate(d.created_at)}</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{d.product_name}</span>
+                      <span style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>{fmtDate(d.created_at)}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>{d.product_name}</span>
                       <span style={{
                         display: 'inline-block', padding: '3px 10px', borderRadius: 6,
                         fontSize: 12, fontWeight: 600, color: st.color, background: st.bg,
@@ -1443,11 +1449,11 @@ export default function KundenDetailPage() {
                         {st.label}
                       </span>
                     </div>
-                    <p style={{ fontSize: 14, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 14, color: 'var(--admin-muted)', margin: 0, lineHeight: 1.5 }}>
                       {d.description ? (d.description.length > 200 ? d.description.substring(0, 200) + '...' : d.description) : '—'}
                     </p>
                     {d.damage_amount > 0 && (
-                      <div style={{ marginTop: 8, fontSize: 13, color: '#ef4444', fontWeight: 600 }}>
+                      <div style={{ marginTop: 8, fontSize: 13, color: 'var(--admin-danger)', fontWeight: 600 }}>
                         Schadenshöhe: {formatCurrency(d.damage_amount)}
                       </div>
                     )}
@@ -1466,7 +1472,7 @@ export default function KundenDetailPage() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             marginBottom: 16, gap: 12, flexWrap: 'wrap',
           }}>
-            <div style={{ fontSize: 13, color: '#94a3b8' }}>
+            <div style={{ fontSize: 13, color: 'var(--admin-muted)' }}>
               {conversations.length === 0
                 ? 'Noch keine Konversationen — sende dem Kunden die erste Nachricht.'
                 : `${conversations.length} Konversation${conversations.length === 1 ? '' : 'en'}.`}
@@ -1475,7 +1481,7 @@ export default function KundenDetailPage() {
               type="button"
               onClick={openCompose}
               style={{
-                padding: '10px 18px', background: '#06b6d4', color: '#0a0a0a',
+                padding: '10px 18px', background: 'var(--admin-accent)', color: 'var(--admin-primary-text)',
                 border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14,
                 cursor: 'pointer',
               }}
@@ -1486,8 +1492,8 @@ export default function KundenDetailPage() {
 
           {conversations.length === 0 ? (
             <div style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-              padding: 32, textAlign: 'center', color: '#64748b',
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
+              padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
             }}>
               Keine Nachrichten vorhanden.
             </div>
@@ -1499,17 +1505,17 @@ export default function KundenDetailPage() {
                 const togglingConv = !!convActionLoading[conv.id];
                 return (
                   <div key={conv.id} style={{
-                    background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+                    background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
                     padding: 20,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>
                         {conv.subject || 'Konversation'}
                       </h3>
                       {conv.closed && (
                         <span style={{
                           display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-                          fontSize: 11, fontWeight: 600, color: '#64748b', background: '#64748b14',
+                          fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)', background: '#64748b14',
                         }}>
                           Geschlossen
                         </span>
@@ -1517,12 +1523,12 @@ export default function KundenDetailPage() {
                       {conv.booking_id && (
                         <span style={{
                           display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-                          fontSize: 11, fontWeight: 600, color: '#06b6d4', background: '#06b6d414',
+                          fontSize: 11, fontWeight: 600, color: 'var(--admin-accent)', background: '#06b6d414',
                         }}>
                           Bezug: {conv.booking_id}
                         </span>
                       )}
-                      <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
+                      <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginLeft: 'auto' }}>
                         {fmtDate(conv.created_at)}
                       </span>
                     </div>
@@ -1545,14 +1551,14 @@ export default function KundenDetailPage() {
                               maxWidth: '75%',
                               padding: '10px 14px',
                               borderRadius: 12,
-                              background: isAdmin ? '#06b6d420' : '#1e293b',
+                              background: isAdmin ? '#06b6d420' : 'var(--admin-surface-2)',
                               borderBottomRightRadius: isAdmin ? 4 : 12,
                               borderBottomLeftRadius: isAdmin ? 12 : 4,
                             }}>
-                              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>
+                              <div style={{ fontSize: 10, color: 'var(--admin-text-dim)', marginBottom: 4, fontWeight: 600 }}>
                                 {isAdmin ? 'Admin' : 'Kunde'} — {fmtDateTime(msg.created_at)}
                               </div>
-                              <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                              <div style={{ fontSize: 14, color: 'var(--admin-text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                                 {msg.body}
                               </div>
                             </div>
@@ -1562,12 +1568,12 @@ export default function KundenDetailPage() {
                     </div>
 
                     {/* Inline-Reply ODER geschlossen-Hinweis */}
-                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #1e293b' }}>
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--admin-border)' }}>
                       {conv.closed ? (
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                          padding: '10px 14px', background: '#0f172a', borderRadius: 8,
-                          fontSize: 13, color: '#94a3b8',
+                          padding: '10px 14px', background: 'var(--admin-input-bg)', borderRadius: 8,
+                          fontSize: 13, color: 'var(--admin-muted)',
                         }}>
                           <span>Konversation geschlossen — Kunde kann nicht mehr darauf antworten.</span>
                           <button
@@ -1577,7 +1583,7 @@ export default function KundenDetailPage() {
                             style={{
                               marginLeft: 'auto',
                               padding: '6px 14px', background: 'transparent',
-                              border: '1px solid #06b6d4', color: '#06b6d4',
+                              border: '1px solid #06b6d4', color: 'var(--admin-accent)',
                               borderRadius: 6, fontSize: 12, fontWeight: 600,
                               cursor: togglingConv ? 'wait' : 'pointer',
                               opacity: togglingConv ? 0.6 : 1,
@@ -1597,10 +1603,10 @@ export default function KundenDetailPage() {
                             style={{
                               width: '100%',
                               padding: '10px 12px',
-                              background: '#0f172a',
-                              border: '1px solid #1e293b',
+                              background: 'var(--admin-input-bg)',
+                              border: '1px solid var(--admin-border)',
                               borderRadius: 8,
-                              color: '#e2e8f0',
+                              color: 'var(--admin-text)',
                               fontSize: 16,
                               fontFamily: 'inherit',
                               resize: 'vertical',
@@ -1614,7 +1620,7 @@ export default function KundenDetailPage() {
                               onClick={() => handleToggleConversation(conv.id, true)}
                               style={{
                                 padding: '6px 12px', background: 'transparent',
-                                border: '1px solid #334155', color: '#94a3b8',
+                                border: '1px solid var(--admin-faint)', color: 'var(--admin-muted)',
                                 borderRadius: 6, fontSize: 12, fontWeight: 600,
                                 cursor: togglingConv ? 'wait' : 'pointer',
                                 opacity: togglingConv ? 0.6 : 1,
@@ -1628,8 +1634,8 @@ export default function KundenDetailPage() {
                               onClick={() => handleSendReply(conv.id)}
                               style={{
                                 padding: '8px 18px',
-                                background: sendingReply || !replyValue.trim() ? '#1e293b' : '#06b6d4',
-                                color: sendingReply || !replyValue.trim() ? '#64748b' : '#0a0a0a',
+                                background: sendingReply || !replyValue.trim() ? 'var(--admin-secondary-bg)' : 'var(--admin-accent)',
+                                color: sendingReply || !replyValue.trim() ? 'var(--admin-text-dim)' : 'var(--admin-primary-text)',
                                 border: 'none', borderRadius: 8,
                                 fontWeight: 700, fontSize: 14,
                                 cursor: sendingReply || !replyValue.trim() ? 'not-allowed' : 'pointer',
@@ -1654,8 +1660,8 @@ export default function KundenDetailPage() {
         <div>
           {reviews.length === 0 ? (
             <div style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-              padding: 32, textAlign: 'center', color: '#64748b',
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
+              padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
             }}>
               Keine Bewertungen vorhanden.
             </div>
@@ -1663,11 +1669,11 @@ export default function KundenDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {reviews.map((r) => (
                 <div key={r.id} style={{
-                  background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+                  background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
                   padding: 20,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>
                       {r.product_name || r.product_id || '—'}
                     </span>
                     <div style={{ display: 'flex', gap: 2 }}>
@@ -1677,24 +1683,24 @@ export default function KundenDetailPage() {
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
-                          fill={star <= r.rating ? '#f59e0b' : '#1e293b'}
-                          stroke={star <= r.rating ? '#f59e0b' : '#475569'}
+                          fill={star <= r.rating ? '#f59e0b' : 'var(--admin-surface-2)'}
+                          stroke={star <= r.rating ? '#f59e0b' : 'var(--admin-muted-2)'}
                           strokeWidth={1.5}
                         >
                           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                         </svg>
                       ))}
                     </div>
-                    <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
+                    <span style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginLeft: 'auto' }}>
                       {fmtDate(r.created_at)}
                     </span>
                   </div>
                   {r.title && (
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 6 }}>
                       {r.title}
                     </div>
                   )}
-                  <p style={{ fontSize: 14, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: 14, color: 'var(--admin-muted)', margin: 0, lineHeight: 1.5 }}>
                     {r.text || '—'}
                   </p>
                 </div>
@@ -1709,10 +1715,10 @@ export default function KundenDetailPage() {
         <div>
           {/* Add note form */}
           <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
             padding: 20, marginBottom: 20,
           }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 12, marginTop: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text)', marginBottom: 12, marginTop: 0 }}>
               Neue Notiz
             </h2>
             <textarea
@@ -1721,8 +1727,8 @@ export default function KundenDetailPage() {
               placeholder="Interne Notiz eingeben..."
               rows={3}
               style={{
-                width: '100%', background: '#0a0f1e', border: '1px solid #1e293b',
-                borderRadius: 8, padding: '10px 14px', color: '#e2e8f0', fontSize: 14,
+                width: '100%', background: 'var(--admin-bg)', border: '1px solid var(--admin-border)',
+                borderRadius: 8, padding: '10px 14px', color: 'var(--admin-text)', fontSize: 14,
                 resize: 'vertical', marginBottom: 12, boxSizing: 'border-box',
                 lineHeight: 1.5,
               }}
@@ -1732,7 +1738,7 @@ export default function KundenDetailPage() {
               disabled={noteSaving || !noteText.trim()}
               style={{
                 padding: '8px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+                background: 'var(--admin-accent)', color: 'white', border: 'none', cursor: 'pointer',
                 opacity: noteSaving || !noteText.trim() ? 0.5 : 1,
               }}
             >
@@ -1743,8 +1749,8 @@ export default function KundenDetailPage() {
           {/* Notes list */}
           {notes.length === 0 ? (
             <div style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-              padding: 32, textAlign: 'center', color: '#64748b',
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
+              padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)',
             }}>
               Noch keine Notizen vorhanden.
             </div>
@@ -1752,13 +1758,13 @@ export default function KundenDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {notes.map((note) => (
                 <div key={note.id} style={{
-                  background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+                  background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
                   padding: 20,
                 }}>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 8 }}>
                     {fmtDateTime(note.created_at)}
                   </div>
-                  <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 14, color: 'var(--admin-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {note.content}
                   </div>
                 </div>
@@ -1781,13 +1787,13 @@ export default function KundenDetailPage() {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
               padding: 24, maxWidth: 600, width: '100%',
               display: 'flex', flexDirection: 'column', gap: 14,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#e2e8f0' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--admin-text)' }}>
                 Neue Nachricht an {customer.full_name || 'den Kunden'}
               </h3>
               <button
@@ -1796,7 +1802,7 @@ export default function KundenDetailPage() {
                 onClick={() => setComposeOpen(false)}
                 aria-label="Schließen"
                 style={{
-                  background: 'transparent', border: 'none', color: '#94a3b8',
+                  background: 'transparent', border: 'none', color: 'var(--admin-muted)',
                   fontSize: 22, cursor: composeSending ? 'wait' : 'pointer',
                   padding: 0, lineHeight: 1,
                 }}
@@ -1804,13 +1810,13 @@ export default function KundenDetailPage() {
                 ×
               </button>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>
+            <div style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
               Der Kunde bekommt die Nachricht in seiner Inbox (<code>/konto/nachrichten</code>) und
               zusätzlich eine E-Mail-Benachrichtigung.
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--admin-muted)', marginBottom: 6 }}>
                 Betreff
               </label>
               <input
@@ -1821,15 +1827,15 @@ export default function KundenDetailPage() {
                 placeholder="Worum geht es?"
                 style={{
                   width: '100%', padding: '10px 12px',
-                  background: '#0f172a', border: '1px solid #1e293b',
-                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)',
+                  borderRadius: 8, color: 'var(--admin-text)', fontSize: 16,
                   fontFamily: 'inherit', boxSizing: 'border-box',
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--admin-muted)', marginBottom: 6 }}>
                 Bezug zu Buchung (optional)
               </label>
               <select
@@ -1837,8 +1843,8 @@ export default function KundenDetailPage() {
                 onChange={(e) => setComposeBookingId(e.target.value)}
                 style={{
                   width: '100%', padding: '10px 12px',
-                  background: '#0f172a', border: '1px solid #1e293b',
-                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)',
+                  borderRadius: 8, color: 'var(--admin-text)', fontSize: 16,
                   fontFamily: 'inherit', boxSizing: 'border-box',
                 }}
               >
@@ -1852,7 +1858,7 @@ export default function KundenDetailPage() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--admin-muted)', marginBottom: 6 }}>
                 Nachricht
               </label>
               <textarea
@@ -1863,13 +1869,13 @@ export default function KundenDetailPage() {
                 placeholder="Hallo …"
                 style={{
                   width: '100%', padding: '10px 12px',
-                  background: '#0f172a', border: '1px solid #1e293b',
-                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)',
+                  borderRadius: 8, color: 'var(--admin-text)', fontSize: 16,
                   fontFamily: 'inherit', resize: 'vertical',
                   boxSizing: 'border-box',
                 }}
               />
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 4, textAlign: 'right' }}>
                 {composeBody.length} / 5000
               </div>
             </div>
@@ -1890,7 +1896,7 @@ export default function KundenDetailPage() {
                 onClick={() => setComposeOpen(false)}
                 style={{
                   padding: '10px 16px', background: 'transparent',
-                  border: '1px solid #334155', color: '#94a3b8',
+                  border: '1px solid var(--admin-faint)', color: 'var(--admin-muted)',
                   borderRadius: 8, fontSize: 14, fontWeight: 600,
                   cursor: composeSending ? 'wait' : 'pointer',
                 }}
@@ -1902,7 +1908,7 @@ export default function KundenDetailPage() {
                 disabled={composeSending}
                 onClick={handleSendNewMessage}
                 style={{
-                  padding: '10px 20px', background: '#06b6d4', color: '#0a0a0a',
+                  padding: '10px 20px', background: 'var(--admin-accent)', color: 'var(--admin-primary-text)',
                   border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700,
                   cursor: composeSending ? 'wait' : 'pointer',
                   opacity: composeSending ? 0.7 : 1,
@@ -1939,12 +1945,12 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
   return (
     <div>
       <div style={{
-        fontSize: 11, color: '#64748b', textTransform: 'uppercase',
+        fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase',
         letterSpacing: '0.5px', marginBottom: 4, fontWeight: 600,
       }}>
         {label}
       </div>
-      <div style={{ fontSize: 14, color: '#e2e8f0' }}>{value}</div>
+      <div style={{ fontSize: 14, color: 'var(--admin-text)' }}>{value}</div>
     </div>
   );
 }
@@ -1955,7 +1961,7 @@ function EditField({ label, value, onChange, type = 'text' }: {
   return (
     <div>
       <div style={{
-        fontSize: 11, color: '#64748b', textTransform: 'uppercase',
+        fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase',
         letterSpacing: '0.5px', marginBottom: 4, fontWeight: 600,
       }}>
         {label}
@@ -1965,8 +1971,8 @@ function EditField({ label, value, onChange, type = 'text' }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
-          width: '100%', background: '#0a0f1e', border: '1px solid #1e293b',
-          borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 16,
+          width: '100%', background: 'var(--admin-bg)', border: '1px solid var(--admin-border)',
+          borderRadius: 8, padding: '8px 12px', color: 'var(--admin-text)', fontSize: 16,
           boxSizing: 'border-box',
         }}
       />
@@ -1977,16 +1983,16 @@ function EditField({ label, value, onChange, type = 'text' }: {
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div style={{
-      background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+      background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)',
       padding: 20,
     }}>
       <div style={{
-        fontSize: 11, color: '#64748b', textTransform: 'uppercase',
+        fontSize: 11, color: 'var(--admin-text-dim)', textTransform: 'uppercase',
         letterSpacing: '0.5px', marginBottom: 8, fontWeight: 600,
       }}>
         {label}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: '#06b6d4' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-accent)' }}>
         {value}
       </div>
     </div>
