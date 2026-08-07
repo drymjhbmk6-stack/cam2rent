@@ -5,7 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
-  background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
+  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)',
   borderRadius: 8, padding: '8px 12px', fontSize: 14, width: '100%',
 };
 
@@ -230,7 +230,7 @@ export default function SocialZeitplanPage() {
   const generatedCount = schedule.filter(s => s.status === 'generated' || s.status === 'reviewed').length;
   const publishedCount = schedule.filter(s => s.status === 'published').length;
 
-  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: '#64748b' }}>Laden...</p></div>;
+  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: 'var(--admin-text-dim)' }}>Laden...</p></div>;
 
   function renderCalendar() {
     const today = new Date();
@@ -383,10 +383,10 @@ export default function SocialZeitplanPage() {
         onClick={() => setEditEntry(null)}
       >
         <div
-          style={{ background: '#1e293b', borderRadius: 12, border: '1px solid #334155', width: '100%', maxWidth: 560, padding: 24, position: 'relative' }}
+          style={{ background: 'var(--admin-modal-bg)', borderRadius: 12, border: '1px solid var(--admin-faint)', width: '100%', maxWidth: 560, padding: 24, position: 'relative' }}
           onClick={e => e.stopPropagation()}
         >
-          <button onClick={() => setEditEntry(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+          <button onClick={() => setEditEntry(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', color: 'var(--admin-text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
 
           <div className="flex items-center gap-2 mb-4">
             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: st.bg, color: st.color, fontWeight: 700 }}>{st.label}</span>
@@ -395,14 +395,14 @@ export default function SocialZeitplanPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Thema</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Thema</label>
               <input type="text" defaultValue={entry.topic}
                 onBlur={e => { if (e.target.value !== entry.topic) updateField(entry.id, 'topic', e.target.value); }}
                 style={{ ...inputStyle }} />
             </div>
 
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Blickwinkel / Angle</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Blickwinkel / Angle</label>
               <input type="text" defaultValue={entry.angle || ''}
                 onBlur={e => updateField(entry.id, 'angle', e.target.value || null)}
                 placeholder="z.B. Produktvergleich, Tipps, Behind-the-Scenes…"
@@ -419,14 +419,14 @@ export default function SocialZeitplanPage() {
             </div>
 
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Keywords (kommagetrennt)</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Keywords (kommagetrennt)</label>
               <input type="text" defaultValue={(entry.keywords || []).join(', ')}
                 onBlur={e => { const kw = e.target.value.split(',').map(k => k.trim()).filter(Boolean); updateField(entry.id, 'keywords', kw); }}
                 style={{ ...inputStyle }} />
             </div>
 
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Plattformen</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Plattformen</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {['facebook', 'instagram'].map(p => {
                   const active = (entry.platforms || []).includes(p);
@@ -448,13 +448,13 @@ export default function SocialZeitplanPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Datum</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Datum</label>
                 <input type="date" defaultValue={entry.scheduled_date}
                   onBlur={e => { if (e.target.value !== entry.scheduled_date) updateField(entry.id, 'scheduled_date', e.target.value); }}
                   style={{ ...inputStyle }} />
               </div>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Uhrzeit</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Uhrzeit</label>
                 <input type="time" defaultValue={entry.scheduled_time}
                   onBlur={e => { if (e.target.value !== entry.scheduled_time) updateField(entry.id, 'scheduled_time', e.target.value); }}
                   style={{ ...inputStyle }} />
@@ -471,7 +471,7 @@ export default function SocialZeitplanPage() {
                 </span>
                 {entry.reviewed ? 'Als gesehen markiert' : 'Als gesehen markieren'}
               </button>
-              <button onClick={() => deleteEntry(entry.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#ef444420', color: '#ef4444', fontSize: 12, fontWeight: 600 }}>
+              <button onClick={() => deleteEntry(entry.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#ef444420', color: 'var(--admin-danger)', fontSize: 12, fontWeight: 600 }}>
                 Löschen
               </button>
             </div>
@@ -491,10 +491,10 @@ export default function SocialZeitplanPage() {
             )}
 
             {entry.post && (
-              <div style={{ borderTop: '1px solid #334155', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ borderTop: '1px solid var(--admin-faint)', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase', marginBottom: 2 }}>Generierter Post</p>
-                  <p style={{ fontSize: 13, color: '#e2e8f0' }}>{entry.post.caption?.slice(0, 60)}…</p>
+                  <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{entry.post.caption?.slice(0, 60)}…</p>
                 </div>
                 <Link href={`/admin/social/posts/${entry.post.id}`} style={{ padding: '6px 12px', borderRadius: 8, background: '#8b5cf6', color: 'white', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                   Bearbeiten
@@ -517,13 +517,13 @@ export default function SocialZeitplanPage() {
     return (
       <>
         <div className="flex items-center gap-2 mb-4">
-          <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Import-Datum:</label>
-          <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+          <label className="text-[11px] font-heading" style={{ color: 'var(--admin-muted)' }}>Import-Datum:</label>
+          <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
         </div>
 
         {seriesList.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-sm" style={{ color: '#475569' }}>Keine Serien vorhanden.</p>
+            <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Keine Serien vorhanden.</p>
             <Link href="/admin/social/themen" className="text-xs font-heading mt-2 inline-block" style={{ color: '#8b5cf6' }}>Serien unter Themen erstellen</Link>
           </div>
         ) : (
@@ -531,15 +531,15 @@ export default function SocialZeitplanPage() {
             {seriesList.map(series => {
               const allParts = (series.parts ?? []).sort((a, b) => a.part_number - b.part_number);
               return (
-                <div key={series.id} className="rounded-xl p-5" style={{ background: '#1e293b', border: '1px solid #8b5cf630' }}>
+                <div key={series.id} className="rounded-xl p-5" style={{ background: 'var(--admin-surface-2)', border: '1px solid #8b5cf630' }}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{series.title}</span>
+                    <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-text)' }}>{series.title}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded font-heading" style={{ background: '#8b5cf620', color: '#8b5cf6' }}>
                       {allParts.filter(p => p.used).length}/{allParts.length}
                     </span>
                   </div>
                   {allParts.length === 0 ? (
-                    <p className="text-xs" style={{ color: '#475569' }}>Keine Teile vorhanden.</p>
+                    <p className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>Keine Teile vorhanden.</p>
                   ) : (
                     <div className="space-y-1.5">
                       {allParts.map(part => {
@@ -547,8 +547,8 @@ export default function SocialZeitplanPage() {
                           e.topic.includes(series.title) && e.topic.includes(`Teil ${part.part_number}`)
                         );
                         return (
-                          <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#0f172a', opacity: part.used && !inSchedule ? 0.5 : 1 }}>
-                            <span className="text-xs font-body truncate flex-1" style={{ color: '#e2e8f0' }}>
+                          <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'var(--admin-input-bg)', opacity: part.used && !inSchedule ? 0.5 : 1 }}>
+                            <span className="text-xs font-body truncate flex-1" style={{ color: 'var(--admin-text)' }}>
                               <span className="font-heading font-bold mr-1.5" style={{ color: '#8b5cf6' }}>Teil {part.part_number}</span>
                               {part.topic}
                             </span>
@@ -581,10 +581,10 @@ export default function SocialZeitplanPage() {
               {schedule.filter(s => s.series_part).map(entry => {
                 const st = STATUS_MAP[entry.status] ?? STATUS_MAP.planned;
                 return (
-                  <div key={entry.id} className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" style={{ background: '#1e293b', border: '1px solid #334155' }} onClick={() => setEditEntry(entry)}>
+                  <div key={entry.id} className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }} onClick={() => setEditEntry(entry)}>
                     <span className="text-[10px] px-2 py-0.5 rounded font-heading font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
-                    <span className="text-sm font-semibold flex-1 truncate" style={{ color: '#e2e8f0' }}>{entry.topic}</span>
-                    <span className="text-xs" style={{ color: '#475569' }}>{entry.scheduled_date.split('-').reverse().join('.')}</span>
+                    <span className="text-sm font-semibold flex-1 truncate" style={{ color: 'var(--admin-text)' }}>{entry.topic}</span>
+                    <span className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>{entry.scheduled_date.split('-').reverse().join('.')}</span>
                   </div>
                 );
               })}
@@ -600,17 +600,17 @@ export default function SocialZeitplanPage() {
       <AdminBackLink href="/admin/social" label="Zurück zu Social" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Social Redaktionsplan</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>Klick auf Eintrag zum Bearbeiten · Drag &amp; Drop auf anderen Tag zum Verschieben</p>
+          <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'var(--admin-heading)' }}>Social Redaktionsplan</h1>
+          <p className="text-sm" style={{ color: 'var(--admin-text-dim)' }}>Klick auf Eintrag zum Bearbeiten · Drag &amp; Drop auf anderen Tag zum Verschieben</p>
         </div>
-        <div className="flex items-center gap-3 text-xs font-heading" style={{ color: '#94a3b8' }}>
+        <div className="flex items-center gap-3 text-xs font-heading" style={{ color: 'var(--admin-muted)' }}>
           <span>{plannedCount} geplant</span>
           <span style={{ color: '#8b5cf6' }}>{generatedCount} fertig</span>
           <span style={{ color: '#22c55e' }}>{publishedCount} live</span>
         </div>
       </div>
 
-      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: msg.startsWith('Fehler') ? '#ef4444' : '#22c55e' }}>{msg}</div>}
+      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: 'var(--admin-input-bg)', color: msg.startsWith('Fehler') ? '#ef4444' : '#22c55e' }}>{msg}</div>}
 
       {/* Job-Status-Banner */}
       {generating && jobStatus && (
@@ -634,10 +634,10 @@ export default function SocialZeitplanPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6">
-        <button onClick={() => setTab('einzelthemen')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'einzelthemen' ? { background: '#8b5cf6', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}>
+        <button onClick={() => setTab('einzelthemen')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'einzelthemen' ? { background: '#8b5cf6', color: 'white' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
           Einzelthemen
         </button>
-        <button onClick={() => setTab('serien')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'serien' ? { background: '#8b5cf6', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}>
+        <button onClick={() => setTab('serien')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'serien' ? { background: '#8b5cf6', color: 'white' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
           Serien
         </button>
       </div>
@@ -655,41 +655,41 @@ export default function SocialZeitplanPage() {
             <select style={{ ...inputStyle, width: 'auto' }} value={postsPerWeek} onChange={e => setPostsPerWeek(parseInt(e.target.value))}>
               {[1,2,3,4,5,7].map(n => <option key={n} value={n}>{n}/Wo.</option>)}
             </select>
-            <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#8b5cf6' : '#334155', color: showImport ? 'white' : '#e2e8f0' }}>
+            <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#8b5cf6' : 'var(--admin-faint)', color: showImport ? 'white' : 'var(--admin-text)' }}>
               {showImport ? 'Themen schließen' : `Themen anzeigen (${topics.length})`}
             </button>
           </div>
 
           {showImport && (
-            <div className="rounded-xl p-4 mb-6" style={{ background: '#1e293b', border: '1px solid #8b5cf630' }}>
+            <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--admin-surface-2)', border: '1px solid #8b5cf630' }}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-heading font-semibold text-sm" style={{ color: '#8b5cf6' }}>Einzelthemen → in Zeitplan einfügen</h3>
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Datum:</label>
-                  <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                  <label className="text-[11px] font-heading" style={{ color: 'var(--admin-muted)' }}>Datum:</label>
+                  <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
                 </div>
               </div>
               {topics.length === 0 ? (
-                <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Keine offenen Einzelthemen. <Link href="/admin/social/themen" style={{ color: '#8b5cf6' }}>Unter Themen erstellen</Link>.</p>
+                <p className="text-xs py-4 text-center" style={{ color: 'var(--admin-muted-2)' }}>Keine offenen Einzelthemen. <Link href="/admin/social/themen" style={{ color: '#8b5cf6' }}>Unter Themen erstellen</Link>.</p>
               ) : (
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {topics.map(t => {
                     const isOpen = expandedId === `topic-${t.id}`;
                     return (
-                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ background: '#0f172a', border: isOpen ? '1px solid #8b5cf640' : '1px solid #334155' }}>
+                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ background: 'var(--admin-input-bg)', border: isOpen ? '1px solid #8b5cf640' : '1px solid var(--admin-faint)' }}>
                         <div className="flex items-center gap-3 px-3 py-2.5 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : `topic-${t.id}`)}>
                           <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: '#f59e0b20', color: '#f59e0b' }}>Entwurf</span>
-                          <span className="text-sm font-semibold truncate flex-1" style={{ color: '#e2e8f0' }}>{t.topic}</span>
-                          <svg className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: '#475569', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="text-sm font-semibold truncate flex-1" style={{ color: 'var(--admin-text)' }}>{t.topic}</span>
+                          <svg className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: 'var(--admin-muted-2)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
                         {isOpen && (
-                          <div className="px-3 pb-3" style={{ borderTop: '1px solid #334155' }}>
+                          <div className="px-3 pb-3" style={{ borderTop: '1px solid var(--admin-faint)' }}>
                             {t.keywords?.length > 0 && (
                               <div className="flex flex-wrap gap-1 pt-3">
                                 {t.keywords.map((kw, i) => (
-                                  <span key={i} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: '#1e293b', color: '#94a3b8' }}>{kw}</span>
+                                  <span key={i} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>{kw}</span>
                                 ))}
                               </div>
                             )}
@@ -709,9 +709,9 @@ export default function SocialZeitplanPage() {
           )}
 
           {schedule.length === 0 ? (
-            <div className="text-center py-16 rounded-xl" style={{ background: '#1e293b', border: '1px solid #334155' }}>
-              <p className="text-sm" style={{ color: '#475569' }}>Noch keine Einträge im Zeitplan.</p>
-              <p className="text-xs mt-1" style={{ color: '#334155' }}>Themen importieren oder per KI planen.</p>
+            <div className="text-center py-16 rounded-xl" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }}>
+              <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Einträge im Zeitplan.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>Themen importieren oder per KI planen.</p>
             </div>
           ) : (
             renderCalendar()
