@@ -303,6 +303,9 @@ export default function BuchungDetailPage() {
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean; agb: boolean; widerruf: boolean; haftung: boolean; datenschutz: boolean; impressum: boolean }>({ rechnung: true, vertrag: true, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht');
+  // Unter-Reiter des "Bearbeiten"-Tabs — rein optische Gruppierung der schweren
+  // Panels. Alle bleiben gemountet, nur per display umgeschaltet (kein Reset).
+  const [editSubTab, setEditSubTab] = useState<'termin' | 'bestellung' | 'rechnung'>('bestellung');
   const [wbwGateStatus, setWbwGateStatus] = useState<string | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
@@ -1772,16 +1775,37 @@ export default function BuchungDetailPage() {
             {/* ── Reiter: Bearbeiten ── */}
             {activeTab === 'bearbeiten' && (<>
 
-            {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
-              <PostponeSection booking={booking} onSaved={fetchBooking} />
-            )}
+            {/* Innere Unter-Reiter — entzerrt die schweren Bearbeiten-Panels */}
+            <div className="flex flex-wrap gap-2">
+              {([
+                { key: 'termin' as const, label: 'Termin verlegen' },
+                { key: 'bestellung' as const, label: 'Bestellung & Haftung' },
+                { key: 'rechnung' as const, label: 'Rechnung & Adresse' },
+              ]).map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setEditSubTab(t.key)}
+                  className={`px-3 py-1.5 text-sm font-heading font-semibold rounded-lg border transition-colors ${editSubTab === t.key ? 'bg-accent-cyan text-white border-transparent' : 'border-brand-border text-brand-muted hover:text-brand-black'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-            {/* Bearbeiten & Werkzeuge */}
-            <Collapsible
-              title="Bearbeiten & Werkzeuge"
-              subtitle="Bestellung/Zubehör bearbeiten, Haftung, finale Werte, Rechnungsversionen"
-              defaultOpen={true}
-            >
+            {/* Termin verlegen */}
+            <div className="space-y-6" style={{ display: editSubTab === 'termin' ? undefined : 'none' }}>
+              {!['cancelled', 'completed', 'returned'].includes(booking.status) ? (
+                <PostponeSection booking={booking} onSaved={fetchBooking} />
+              ) : (
+                <Section title="Termin verlegen">
+                  <p className="text-sm font-body text-brand-muted">Für abgeschlossene oder stornierte Buchungen nicht verfügbar.</p>
+                </Section>
+              )}
+            </div>
+
+            {/* Bestellung & Haftung */}
+            <div className="space-y-6" style={{ display: editSubTab === 'bestellung' ? undefined : 'none' }}>
               {booking.liability_summary && (
                 <LiabilitySection
                   summary={booking.liability_summary}
@@ -1804,9 +1828,13 @@ export default function BuchungDetailPage() {
               {booking.status === 'confirmed' && (
                 <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
               )}
+            </div>
+
+            {/* Rechnung & Adresse */}
+            <div className="space-y-6" style={{ display: editSubTab === 'rechnung' ? undefined : 'none' }}>
               <BillingAddressSection booking={booking} onSaved={fetchBooking} />
               <InvoiceVersionsPanel bookingId={booking.id} />
-            </Collapsible>
+            </div>
 
             </>)}
 
@@ -2776,43 +2804,6 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
     <div className="flex justify-between items-center">
       <span className="text-sm font-body text-brand-steel">{label}</span>
       <span className="text-sm font-body text-brand-black">{fmtEuro(amount)}</span>
-    </div>
-  );
-}
-
-// Einklappbarer Sammel-Block. Kinder werden per CSS versteckt (nicht
-// unmounten), damit halb ausgefuellte Edit-Formulare beim Zuklappen
-// erhalten bleiben.
-function Collapsible({
-  title, subtitle, defaultOpen = false, children,
-}: {
-  title: string;
-  subtitle?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-brand-bg/60 transition-colors"
-      >
-        <div className="min-w-0">
-          <span className="font-heading font-bold text-base text-brand-black">{title}</span>
-          {subtitle && <p className="text-xs font-body text-brand-muted mt-0.5">{subtitle}</p>}
-        </div>
-        <svg
-          className={`w-4 h-4 text-brand-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      <div className={open ? 'px-5 pb-5 space-y-6 border-t border-brand-border' : 'hidden'}>
-        {children}
-      </div>
     </div>
   );
 }
