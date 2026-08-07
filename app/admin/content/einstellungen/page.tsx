@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 import BlogEinstellungenContent from '@/components/admin/BlogEinstellungenContent';
 import SocialEinstellungenContent from '@/components/admin/SocialEinstellungenContent';
 import ReelsEinstellungenContent from '@/components/admin/ReelsEinstellungenContent';
@@ -26,13 +26,7 @@ function ContentEinstellungenInner() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
-      <AdminBackLink label="Einstellungen" />
-
-      <div className="flex items-center gap-3 mb-6 mt-2">
-        <h1 style={{ color: '#f8fafc', fontSize: 22, fontWeight: 700, margin: 0 }}>
-          Content-Einstellungen
-        </h1>
-      </div>
+      <PageHeader backLabel="Einstellungen" title="Content-Einstellungen" />
 
       {/* Tab-Bar */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -48,8 +42,8 @@ function ContentEinstellungenInner() {
               cursor: 'pointer',
               fontWeight: 600,
               fontSize: 14,
-              background: tab === t.key ? '#FF5C00' : '#1e293b',
-              color: tab === t.key ? '#fff' : '#94a3b8',
+              background: tab === t.key ? '#FF5C00' : 'var(--admin-surface-2)',
+              color: tab === t.key ? '#fff' : 'var(--admin-muted)',
               transition: 'background 0.15s, color 0.15s',
             }}
           >
@@ -68,7 +62,7 @@ function ContentEinstellungenInner() {
 
 export default function ContentEinstellungenPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 32, color: '#94a3b8' }}>Lade…</div>}>
+    <Suspense fallback={<div style={{ padding: 32, color: 'var(--admin-muted)' }}>Lade…</div>}>
       <ContentEinstellungenInner />
     </Suspense>
   );
