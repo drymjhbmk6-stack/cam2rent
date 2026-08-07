@@ -109,7 +109,7 @@ export default function NeuesInventarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/inventar" />
       <div className="max-w-2xl mx-auto mt-4 space-y-4">
         <h1 className="text-2xl font-heading">Inventar manuell anlegen</h1>
@@ -124,10 +124,10 @@ export default function NeuesInventarPage() {
 
         <div className="space-y-3">
           <Label>Bezeichnung *</Label>
-          <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} placeholder="z.B. CAM-GOP-13-01 oder Akku #1" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+          <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} placeholder="z.B. CAM-GOP-13-01 oder Akku #1" className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
 
           <Label>Produkt zuordnen (Stammdaten)</Label>
-          <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">— Kein Produkt zugeordnet —</option>
             {(() => {
               // Dropdown nach dem "Typ"-Feld gefiltert: bei "Kamera" zeigen
@@ -147,14 +147,14 @@ export default function NeuesInventarPage() {
               ));
             })()}
           </select>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--admin-text-dim)]">
             Verknuepft das Inventar-Stueck mit den Produkt-Stammdaten — Voraussetzung fuer Verfuegbarkeit, Mietvertrag-Wiederbeschaffungswert und Auslastungs-Auswertung.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Typ</Label>
-              <select value={typ} onChange={(e) => setTyp(e.target.value as 'kamera' | 'zubehoer' | 'verbrauch')} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+              <select value={typ} onChange={(e) => setTyp(e.target.value as 'kamera' | 'zubehoer' | 'verbrauch')} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
                 <option value="kamera">Kamera</option>
                 <option value="zubehoer">Zubehör</option>
                 <option value="verbrauch">Verbrauchsmaterial</option>
@@ -162,7 +162,7 @@ export default function NeuesInventarPage() {
             </div>
             <div>
               <Label>Tracking</Label>
-              <select value={trackingMode} onChange={(e) => setTrackingMode(e.target.value as 'individual' | 'bulk')} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+              <select value={trackingMode} onChange={(e) => setTrackingMode(e.target.value as 'individual' | 'bulk')} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
                 <option value="individual">Einzeln (mit Code/SN)</option>
                 <option value="bulk">Bulk (mit Bestand)</option>
               </select>
@@ -174,31 +174,31 @@ export default function NeuesInventarPage() {
           {trackingMode === 'individual' && (
             <>
               <Label>Seriennummer (vom Hersteller)</Label>
-              <input value={seriennummer} onChange={(e) => setSeriennummer(e.target.value)} placeholder="optional" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base font-mono text-sm" />
+              <input value={seriennummer} onChange={(e) => setSeriennummer(e.target.value)} placeholder="optional" className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base font-mono text-sm" />
             </>
           )}
 
           {trackingMode === 'bulk' && (
             <>
               <Label>Anfangsbestand</Label>
-              <input type="number" min="0" value={bestand} onChange={(e) => setBestand(parseInt(e.target.value || '0', 10))} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+              <input type="number" min="0" value={bestand} onChange={(e) => setBestand(parseInt(e.target.value || '0', 10))} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
             </>
           )}
 
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2 border-t border-admin-border">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={wbwEnabled} onChange={(e) => setWbwEnabled(e.target.checked)} />
               Wiederbeschaffungswert manuell setzen (optional)
             </label>
             {wbwEnabled && (
-              <input type="number" step="0.01" min="0" value={wbw} onChange={(e) => setWbw(parseFloat(e.target.value || '0'))} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base mt-2" placeholder="EUR" />
+              <input type="number" step="0.01" min="0" value={wbw} onChange={(e) => setWbw(parseFloat(e.target.value || '0'))} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base mt-2" placeholder="EUR" />
             )}
           </div>
 
           <Label>Notizen</Label>
-          <textarea value={notizen} onChange={(e) => setNotizen(e.target.value)} rows={3} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-sm" />
+          <textarea value={notizen} onChange={(e) => setNotizen(e.target.value)} rows={3} className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-sm" />
 
-          <button onClick={handleSave} disabled={busy || !bezeichnung || !inventarCode} className="px-4 py-2 bg-cyan-500 disabled:bg-slate-700 hover:bg-cyan-400 disabled:text-slate-500 text-slate-900 rounded font-semibold">
+          <button onClick={handleSave} disabled={busy || !bezeichnung || !inventarCode} className="px-4 py-2 bg-admin-accent disabled:bg-admin-surface-2 hover:bg-admin-accent-hover disabled:text-admin-muted-2 text-slate-900 rounded font-semibold">
             {busy ? 'Speichert…' : 'Anlegen'}
           </button>
         </div>
@@ -208,6 +208,6 @@ export default function NeuesInventarPage() {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-sm text-slate-400">{children}</label>;
+  return <label className="block text-sm text-admin-muted">{children}</label>;
 }
 
