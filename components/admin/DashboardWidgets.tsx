@@ -240,9 +240,30 @@ function Spinner() {
 
 // ─── MetricWidget ────────────────────────────────────────────────
 
+/** Kompakte Inline-Sparkline (14-Tage-Trend) — pures SVG, keine Library. */
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  if (!values || values.length < 2) return null;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  if (max === min) return null; // flach → keine Sparkline
+  const W = 72, H = 22;
+  const step = W / (values.length - 1);
+  const pts = values
+    .map((v, i) => `${(i * step).toFixed(1)},${(H - ((v - min) / (max - min)) * (H - 2) - 1).toFixed(1)}`)
+    .join(' ');
+  const lastX = ((values.length - 1) * step).toFixed(1);
+  const lastY = (H - ((values[values.length - 1] - min) / (max - min)) * (H - 2) - 1).toFixed(1);
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" style={{ display: 'block' }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+      <circle cx={lastX} cy={lastY} r="1.8" fill={color} />
+    </svg>
+  );
+}
+
 export function MetricWidget({ widgetId, data, loading }: {
   widgetId: string;
-  data: { value: number } | null;
+  data: { value: number; deltaPct?: number | null; deltaLabel?: string; series?: number[] } | null;
   loading: boolean;
 }) {
   const { accent, bg } = getWidgetColor(widgetId);
@@ -291,12 +312,24 @@ export function MetricWidget({ widgetId, data, loading }: {
         <Spinner />
       ) : (
         <>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.text, lineHeight: 1.1 }}>
-            {isRevenue ? formatCurrency(data?.value ?? 0) : (data?.value ?? 0)}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: C.text, lineHeight: 1.1 }}>
+              {isRevenue ? formatCurrency(data?.value ?? 0) : (data?.value ?? 0)}
+            </div>
+            {data?.series && data.series.length >= 2 && (
+              <Sparkline values={data.series} color={accent} />
+            )}
           </div>
           <div style={{ fontSize: 12, color: C.textDim, fontWeight: 500 }}>
             {label[widgetId] || widgetId}
           </div>
+          {typeof data?.deltaPct === 'number' && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: data.deltaPct >= 0 ? C.green : C.red, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span aria-hidden="true">{data.deltaPct >= 0 ? '▲' : '▼'}</span>
+              {Math.abs(data.deltaPct)}%
+              <span style={{ color: C.textDim, fontWeight: 500 }}>{data.deltaLabel || ''}</span>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -1184,7 +1217,7 @@ export function WidgetRenderer({ widgetId, data, loading }: {
   }
 
   // Default: metric
-  return <MetricWidget widgetId={widgetId} data={(widgetData as { value: number } | undefined) ?? null} loading={loading} />;
+  return <MetricWidget widgetId={widgetId} data={(widgetData as { value: number; deltaPct?: number | null; deltaLabel?: string; series?: number[] } | undefined) ?? null} loading={loading} />;
 }
 
 // ─── Edit Mode Widget Panel ──────────────────────────────────────

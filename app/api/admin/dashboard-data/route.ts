@@ -456,20 +456,66 @@ export async function GET() {
       }
     }
 
+    // ── Trend-Deltas + 14-Tage-Sparkline (Dashboard 2.0) ─────────────────────
+    // Vorperioden-Vergleich + tägliche Umsatz-/Buchungs-Serie. Eigener
+    // allSettled-Block: schlägt hier etwas fehl, bleiben die Kernwerte oben
+    // unberührt (Dashboard bricht NIE an diesen Zusatz-Queries). Rein additiv.
+    const trend: Record<string, number | null> = {};
+    let revSeries: number[] = [];
+    let bookSeries: number[] = [];
+    try {
+      const prevDayStart = mkIso(bYear, bMonth, bDay - 1);
+      const prevWeekStart = mkIso(bYear, bMonth, bDay - mondayOffset - 7);
+      const prevMonthStart = mkIso(bYear, bMonth - 1, 1);
+      const seriesStart = mkIso(bYear, bMonth, bDay - 13);
+
+      const [pDayRev, pWeekRev, pMonthRev, pDayCount, pWeekCust, seriesRes] = await Promise.allSettled([
+        supabase.from('bookings').select('price_total').eq('is_test', testMode).gte('created_at', prevDayStart).lt('created_at', todayStart).not('status', 'eq', 'cancelled'),
+        supabase.from('bookings').select('price_total').eq('is_test', testMode).gte('created_at', prevWeekStart).lt('created_at', weekStart).not('status', 'eq', 'cancelled'),
+        supabase.from('bookings').select('price_total').eq('is_test', testMode).gte('created_at', prevMonthStart).lt('created_at', monthStart).not('status', 'eq', 'cancelled'),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('is_test', testMode).gte('created_at', prevDayStart).lt('created_at', todayStart),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', prevWeekStart).lt('created_at', weekStart),
+        supabase.from('bookings').select('price_total, created_at').eq('is_test', testMode).gte('created_at', seriesStart).not('status', 'eq', 'cancelled'),
+      ]);
+
+      const pct = (cur: number, prev: number): number | null => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
+
+      if (pDayRev.status === 'fulfilled') trend.revenue_today = pct(sumPrices(revenueTodayRes.data), sumPrices(pDayRev.value.data));
+      if (pWeekRev.status === 'fulfilled') trend.revenue_week = pct(sumPrices(revenueWeekRes.data), sumPrices(pWeekRev.value.data));
+      if (pMonthRev.status === 'fulfilled') trend.revenue_month = pct(sumPrices(revenueMonthRes.data), sumPrices(pMonthRev.value.data));
+      if (pDayCount.status === 'fulfilled') trend.daily_bookings = pct(dailyBookingsRes.count ?? 0, pDayCount.value.count ?? 0);
+      if (pWeekCust.status === 'fulfilled') trend.new_customers_week = pct(newCustomersWeekRes.count ?? 0, pWeekCust.value.count ?? 0);
+
+      if (seriesRes.status === 'fulfilled' && seriesRes.value.data) {
+        const bounds: number[] = [];
+        for (let i = 0; i < 14; i++) bounds.push(Date.parse(mkIso(bYear, bMonth, bDay - 13 + i)));
+        revSeries = new Array(14).fill(0);
+        bookSeries = new Array(14).fill(0);
+        for (const r of seriesRes.value.data as { price_total: number; created_at: string }[]) {
+          const ts = Date.parse(r.created_at);
+          if (Number.isNaN(ts)) continue;
+          let idx = 0;
+          for (let i = 13; i >= 0; i--) { if (ts >= bounds[i]) { idx = i; break; } }
+          revSeries[idx] += r.price_total || 0;
+          bookSeries[idx] += 1;
+        }
+      }
+    } catch { /* Trend/Sparkline sind optional — Kern-Dashboard bleibt unberührt */ }
+
     // ── Build response ───────────────────────────────────────────
 
     const data: Record<string, unknown> = {
-      daily_bookings:    { value: dailyBookingsRes.count ?? 0 },
+      daily_bookings:    { value: dailyBookingsRes.count ?? 0, deltaPct: trend.daily_bookings ?? null, deltaLabel: 'vs. gestern', series: bookSeries },
       pending_shipments: { value: pendingShipmentsRes.count ?? 0 },
       upcoming_returns:  { value: upcomingReturnsRes.count ?? 0 },
       unread_messages:   { value: unreadMessagesRes.count ?? 0 },
       open_damages:      { value: openDamagesRes.count ?? 0 },
-      revenue_today:     { value: sumPrices(revenueTodayRes.data) },
-      revenue_week:      { value: sumPrices(revenueWeekRes.data) },
-      revenue_month:     { value: sumPrices(revenueMonthRes.data) },
+      revenue_today:     { value: sumPrices(revenueTodayRes.data), deltaPct: trend.revenue_today ?? null, deltaLabel: 'vs. gestern', series: revSeries },
+      revenue_week:      { value: sumPrices(revenueWeekRes.data), deltaPct: trend.revenue_week ?? null, deltaLabel: 'vs. Vorwoche', series: revSeries },
+      revenue_month:     { value: sumPrices(revenueMonthRes.data), deltaPct: trend.revenue_month ?? null, deltaLabel: 'vs. Vormonat', series: revSeries },
       active_bookings:   { value: activeBookingsRes.count ?? 0 },
       total_customers:   { value: totalCustomersRes.count ?? 0 },
-      new_customers_week: { value: newCustomersWeekRes.count ?? 0 },
+      new_customers_week: { value: newCustomersWeekRes.count ?? 0, deltaPct: trend.new_customers_week ?? null, deltaLabel: 'vs. Vorwoche' },
 
       recent_bookings:        { items: recentBookingsRes.data ?? [] },
       upcoming_returns_list:  { items: upcomingReturnsListRes.data ?? [] },
