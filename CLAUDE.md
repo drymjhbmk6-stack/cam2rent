@@ -2322,14 +2322,27 @@ kein Handler geändert), pro Schritt eigener Commit.
   Metrik-Kacheln (Umsatz Woche, Kunden gesamt, Neukunden Woche standardmäßig
   ausgeblendet, per „+ Widget" wieder einblendbar). Nur der Default; Geräte mit
   eigener localStorage-Anpassung unberührt.
-- **Bewusst NICHT angefasst (keine Dubletten-Redirects — würden Funktionen kappen):**
-  `/admin/versand` (alte Listen-Seite mit eigenem Pack-/Lieferschein-/„Als versendet"-
-  Workflow, aktiv aus Pack-Flow/Dashboard/Buchungen verlinkt), top-level `/admin/anlagen`
-  (Anlagenverzeichnis/WBW, verlinkt aus Einkauf/Scan/Klassifizierung — parallel zu
-  `/admin/buchhaltung/anlagen` = Steuersicht), `/admin/social/redaktionsplan`
-  (wiederkehrende Zeitpläne, eigenes Tool ≠ `/admin/social/zeitplan` Kalender). Alle
-  drei sind eigenständige, live verlinkte Seiten → nicht in der Sidebar, aber erreichbar.
-  Offene Entscheidung für den Owner, ob eine davon konsolidiert werden soll.
+- **Drei „Dubletten" auffindbar + unterscheidbar gemacht (kein Redirect/Löschen —
+  würde Funktionen kappen):** Es sind eigenständige, aktiv verlinkte Seiten, keine
+  echten Duplikate — `/admin/versand` (Pack-/Lieferschein-/„Als versendet"-Werkzeuge,
+  verlinkt aus Pack-Flow/Dashboard/Buchungen), top-level `/admin/anlagen`
+  (Anlagenverzeichnis/Zeitwert ≠ `/admin/buchhaltung/anlagen` Steuersicht, verlinkt
+  aus Einkauf/Scan/Klassifizierung), `/admin/social/redaktionsplan` (wiederkehrende
+  Zeitpläne ≠ `/admin/social/zeitplan` Kalender). Statt Redirect: in `ADMIN_NAV_INDEX`
+  (⌘K) mit **klaren Labels** aufgenommen („Versand-Werkzeuge (Packliste/Lieferschein)",
+  „Anlagenverzeichnis (Zeitwert)", „Wiederkehrende Social-Zeitpläne") — findbar ohne
+  Sidebar-Clutter. Sidebar-Finanzen „Anlagen" → **„Anlagen (Steuersicht)"** und der
+  Social-Dashboard-Link „Redaktionsplan" → **„Wiederkehrende Zeitpläne"** (grenzen die
+  Paare optisch ab; hrefs unverändert).
+- **Buchungsdetail „Bearbeiten"-Reiter entzerrt** (`app/admin/buchungen/[id]/page.tsx`):
+  die 6 gestapelten Panels (Postpone, Liability, BookingEdit, WbwFinalize,
+  BillingAddress, InvoiceVersions) in **3 innere Unter-Reiter** (Termin verlegen ·
+  Bestellung & Haftung · Rechnung & Adresse), gleiches display-Toggle-Muster wie
+  Einstellungen (Panels bleiben gemountet, `editSubTab`-State, kein Reset). Alle
+  `status`-/`liability_summary`-Guards 1:1; ungenutzt gewordene `Collapsible`-Hülle
+  entfernt. Andere 4 Reiter unberührt. Bewusst **kein** Voll-Extrakt der Reiter in
+  eigene Komponenten (Prop-Threading-Risiko ohne Nutzer-Nutzen) und **keine** reine
+  Quell-Konsolidierung der verstreuten Tab-Blöcke (runtime-identisch → unsichtbar).
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 > ⚠️ **Teilweise überholt** durch das Aufräumen 2026-08-07 (siehe Abschnitt
