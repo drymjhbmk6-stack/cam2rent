@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Verbrauchsartikel {
   id: string;
@@ -98,18 +99,18 @@ function AccessoryMultiSelect({
   if (unmatched.length) groups.push({ key: '__none__', label: 'Ohne Kamera-Zuordnung', items: unmatched });
 
   return (
-    <div className="rounded border border-slate-700 bg-[#0a0f1e]">
+    <div className="rounded border border-[var(--admin-faint)] bg-[var(--admin-bg)]">
       <input
-        className="w-full px-2 py-1.5 bg-transparent border-b border-slate-700 text-slate-50 text-sm outline-none"
+        className="w-full px-2 py-1.5 bg-transparent border-b border-[var(--admin-input-border)] text-admin-text text-sm outline-none"
         placeholder="Zubehör suchen…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
       <div className="max-h-56 overflow-y-auto p-1">
-        {accessories.length === 0 && <div className="px-2 py-2 text-xs text-slate-500">Kein Zubehör geladen.</div>}
+        {accessories.length === 0 && <div className="px-2 py-2 text-xs text-[var(--admin-text-dim)]">Kein Zubehör geladen.</div>}
         {groups.map((g) => (
           <div key={g.key}>
-            <div className="sticky top-0 bg-[#0a0f1e] px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-400/80">
+            <div className="sticky top-0 bg-[var(--admin-bg)] px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-400/80">
               {g.label}
             </div>
             {g.items.map((a) => {
@@ -124,11 +125,11 @@ function AccessoryMultiSelect({
           </div>
         ))}
         {groups.length === 0 && accessories.length > 0 && (
-          <div className="px-2 py-2 text-xs text-slate-500">Keine Treffer.</div>
+          <div className="px-2 py-2 text-xs text-[var(--admin-text-dim)]">Keine Treffer.</div>
         )}
       </div>
       {selected.length > 0 && (
-        <div className="px-2 py-1.5 border-t border-slate-700 text-xs text-slate-400">
+        <div className="px-2 py-1.5 border-t border-[var(--admin-faint)] text-xs text-admin-muted">
           {selected.length} ausgewählt — pro zurückgegebenem/versendetem Exemplar wird abgezogen (Abzugsmenge × Stückzahl).
         </div>
       )}
@@ -137,6 +138,7 @@ function AccessoryMultiSelect({
 }
 
 export default function VerbrauchPage() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<Verbrauchsartikel[]>(
     () => getCached<Verbrauchsartikel[]>(CACHE_KEY) ?? [],
   );
@@ -400,7 +402,13 @@ export default function VerbrauchPage() {
   }
 
   async function handleDelete(a: Verbrauchsartikel) {
-    if (!confirm(`„${a.name}“ wirklich löschen? Der Zähler geht dabei verloren.`)) return;
+    const ok = await confirm({
+      title: 'Verbrauchsartikel löschen',
+      message: `„${a.name}“ wirklich löschen? Der Zähler geht dabei verloren.`,
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!ok) return;
     setBusyId(a.id);
     try {
       const res = await fetch(`/api/admin/verbrauch/${a.id}`, { method: 'DELETE' });
@@ -420,20 +428,20 @@ export default function VerbrauchPage() {
   }
 
   const inputCls =
-    'px-2 py-1.5 rounded bg-[#0a0f1e] border border-slate-700 text-slate-50 text-sm w-full';
+    'px-2 py-1.5 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm w-full';
 
   function photoBlock(url: string, onPick: (f: File) => void, onClear: () => void) {
     return (
       <div className="flex items-center gap-3">
         {url ? (
           <button type="button" onClick={() => setLightbox(url)} title="Vergrößern">
-            <Image src={url} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-slate-700" />
+            <Image src={url} alt="" width={64} height={64} unoptimized className="w-16 h-16 object-cover rounded border border-[var(--admin-faint)]" />
           </button>
         ) : (
-          <div className="w-16 h-16 rounded border border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Foto</div>
+          <div className="w-16 h-16 rounded border border-dashed border-[var(--admin-faint)] flex items-center justify-center text-admin-muted-2 text-xs">Foto</div>
         )}
         <div className="flex flex-col gap-1">
-          <label className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm cursor-pointer inline-block w-fit">
+          <label className="px-3 py-1.5 rounded bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-sm cursor-pointer inline-block w-fit">
             {uploading ? 'Lädt…' : url ? 'Foto ändern' : '📷 Foto hochladen'}
             <input
               type="file"
@@ -453,13 +461,13 @@ export default function VerbrauchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink />
       <div className="max-w-5xl mx-auto mt-4 space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">Verbrauch</h1>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-admin-muted text-sm mt-1">
               Interner Zähler für Verbrauchsmaterial (z.B. Gummibärchentüten,
               Füllmaterial, Klebepads). Optional automatischer Abzug bei Versand/
               Abholung oder bei Rückgabe — auch verknüpft mit Zubehör.
@@ -467,7 +475,7 @@ export default function VerbrauchPage() {
           </div>
           <button
             onClick={() => setShowNew((v) => !v)}
-            className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold text-sm"
+            className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded font-semibold text-sm"
           >
             {showNew ? 'Abbrechen' : '+ Artikel anlegen'}
           </button>
@@ -494,34 +502,34 @@ export default function VerbrauchPage() {
         )}
 
         {showNew && (
-          <div className="p-4 bg-[#111827] border border-slate-800 rounded space-y-3">
+          <div className="p-4 bg-admin-surface border border-admin-border rounded space-y-3">
             <h2 className="font-semibold text-sm">Neuer Verbrauchsartikel</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Name</span>
+                <span className="text-admin-muted">Name</span>
                 <input className={inputCls} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="z.B. Klebepad" />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Anfangsbestand</span>
+                <span className="text-admin-muted">Anfangsbestand</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={0} value={nBestand} onChange={(e) => setNBestand(e.target.value)} />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Abzugsmenge pro Buchung / Stück</span>
+                <span className="text-admin-muted">Abzugsmenge pro Buchung / Stück</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={1} value={nQty} onChange={(e) => setNQty(e.target.value)} />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Warnung ab Bestand (leer = aus)</span>
+                <span className="text-admin-muted">Warnung ab Bestand (leer = aus)</span>
                 <input className={inputCls} type="number" inputMode="numeric" min={0} value={nWarn} onChange={(e) => setNWarn(e.target.value)} placeholder="z.B. 3" />
               </label>
               <label className="text-sm space-y-1">
-                <span className="text-slate-400">Abzug bei</span>
+                <span className="text-admin-muted">Abzug bei</span>
                 <select className={inputCls} value={nTrigger} onChange={(e) => setNTrigger(e.target.value as 'shipment' | 'return')}>
                   <option value="shipment">Versand / Abholung</option>
                   <option value="return">Rückgabe</option>
                 </select>
               </label>
               <div className="text-sm space-y-1">
-                <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
+                <span className="text-admin-muted">Verknüpft mit Zubehör (optional, mehrere)</span>
                 <AccessoryMultiSelect
                   accessories={accessories}
                   cameras={cameras}
@@ -535,15 +543,15 @@ export default function VerbrauchPage() {
               <span>Automatisch abziehen</span>
             </label>
             <label className="text-sm space-y-1 block">
-              <span className="text-slate-400">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
+              <span className="text-admin-muted">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
               <textarea className={inputCls + ' min-h-[60px]'} value={nNotiz} onChange={(e) => setNNotiz(e.target.value)} placeholder="z.B. Nachbestellen bei https://…" />
             </label>
             {photoBlock(nImage, async (f) => { const u = await uploadImage(newTmpId.current, f); if (u) setNImage(u); }, () => setNImage(''))}
             <div className="flex gap-2">
-              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">
+              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">
                 {saving ? 'Speichern…' : 'Anlegen'}
               </button>
-              <button onClick={() => { setShowNew(false); resetNew(); }} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+              <button onClick={() => { setShowNew(false); resetNew(); }} className="px-4 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] rounded text-sm">
                 Abbrechen
               </button>
             </div>
@@ -551,11 +559,11 @@ export default function VerbrauchPage() {
         )}
 
         {loading && items.length === 0 && (
-          <div className="p-6 text-slate-400 text-sm">Wird geladen…</div>
+          <div className="p-6 text-admin-muted text-sm">Wird geladen…</div>
         )}
 
         {!loading && items.length === 0 && !migrationPending && (
-          <div className="p-6 bg-[#111827] border border-slate-800 rounded text-slate-400 text-sm">
+          <div className="p-6 bg-admin-surface border border-admin-border rounded text-admin-muted text-sm">
             Noch keine Verbrauchsartikel. Lege oben den ersten an.
           </div>
         )}
@@ -569,21 +577,21 @@ export default function VerbrauchPage() {
             return (
               <div
                 key={a.id}
-                className={`p-4 bg-[#111827] border rounded ${low ? 'border-amber-500/50' : 'border-slate-800'}`}
+                className={`p-4 bg-admin-surface border rounded ${low ? 'border-amber-500/50' : 'border-admin-border'}`}
               >
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   {/* Foto + Bestand + Name */}
                   <div className="flex items-center gap-4 min-w-0">
                     {a.image_url ? (
                       <button type="button" onClick={() => setLightbox(a.image_url!)} title="Vergrößern" className="flex-shrink-0">
-                        <Image src={a.image_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-cover rounded border border-slate-700" />
+                        <Image src={a.image_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-cover rounded border border-[var(--admin-faint)]" />
                       </button>
                     ) : null}
                     <div className="text-center">
-                      <div className={`text-3xl font-bold tabular-nums ${low ? 'text-amber-400' : 'text-slate-50'}`}>
+                      <div className={`text-3xl font-bold tabular-nums ${low ? 'text-amber-400' : 'text-admin-text'}`}>
                         {a.bestand}
                       </div>
-                      <div className="text-[10px] uppercase tracking-wide text-slate-500">Bestand</div>
+                      <div className="text-[10px] uppercase tracking-wide text-[var(--admin-text-dim)]">Bestand</div>
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{a.name}</div>
@@ -593,7 +601,7 @@ export default function VerbrauchPage() {
                             Auto-Abzug −{a.deduct_qty} {triggerLabel(a.deduct_trigger)}
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600 text-slate-400">
+                          <span className="px-2 py-0.5 rounded bg-slate-700/40 border border-[var(--admin-muted-2)] text-admin-muted">
                             Kein Auto-Abzug
                           </span>
                         )}
@@ -603,7 +611,7 @@ export default function VerbrauchPage() {
                           </span>
                         ))}
                         {a.warn_threshold !== null && (
-                          <span className={`px-2 py-0.5 rounded border ${low ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-700/40 border-slate-600 text-slate-400'}`}>
+                          <span className={`px-2 py-0.5 rounded border ${low ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-700/40 border-[var(--admin-muted-2)] text-admin-muted'}`}>
                             Warnung ab {a.warn_threshold}
                           </span>
                         )}
@@ -613,11 +621,11 @@ export default function VerbrauchPage() {
 
                   {/* Manuelle Bestandsanpassung */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => adjust(a.id, -1)} disabled={busy || a.bestand <= 0} className="w-9 h-9 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-lg font-bold" title="−1">−</button>
-                    <button onClick={() => adjust(a.id, 1)} disabled={busy} className="w-9 h-9 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-lg font-bold" title="+1">+</button>
+                    <button onClick={() => adjust(a.id, -1)} disabled={busy || a.bestand <= 0} className="w-9 h-9 rounded bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-40 text-lg font-bold" title="−1">−</button>
+                    <button onClick={() => adjust(a.id, 1)} disabled={busy} className="w-9 h-9 rounded bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-40 text-lg font-bold" title="+1">+</button>
                     <div className="flex items-center gap-1">
                       <input
-                        className="px-2 py-1.5 rounded bg-[#0a0f1e] border border-slate-700 text-slate-50 text-sm w-20"
+                        className="px-2 py-1.5 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm w-20"
                         type="number"
                         inputMode="numeric"
                         placeholder="Wert"
@@ -625,9 +633,9 @@ export default function VerbrauchPage() {
                         onChange={(e) => setSetValById((m) => ({ ...m, [a.id]: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === 'Enter') setBestand(a.id); }}
                       />
-                      <button onClick={() => setBestand(a.id)} disabled={busy} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-sm">Setzen</button>
+                      <button onClick={() => setBestand(a.id)} disabled={busy} className="px-3 py-1.5 rounded bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:opacity-40 text-sm">Setzen</button>
                     </div>
-                    <button onClick={() => (editing ? setEditId(null) : startEdit(a))} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">
+                    <button onClick={() => (editing ? setEditId(null) : startEdit(a))} className="px-3 py-1.5 rounded bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-sm">
                       {editing ? 'Schließen' : 'Bearbeiten'}
                     </button>
                     <button onClick={() => handleDelete(a)} disabled={busy} className="px-3 py-1.5 rounded bg-rose-600/80 hover:bg-rose-600 disabled:opacity-40 text-sm">Löschen</button>
@@ -636,34 +644,34 @@ export default function VerbrauchPage() {
 
                 {/* Notiz-Zeile */}
                 {a.notiz && (
-                  <div className="mt-2 text-xs text-slate-400 whitespace-pre-wrap break-words">
+                  <div className="mt-2 text-xs text-admin-muted whitespace-pre-wrap break-words">
                     📝 {renderNote(a.notiz)}
                   </div>
                 )}
 
                 {editing && (
-                  <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="mt-4 pt-4 border-t border-admin-border grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Name</span>
+                      <span className="text-admin-muted">Name</span>
                       <input className={inputCls} value={eName} onChange={(e) => setEName(e.target.value)} />
                     </label>
                     <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Abzugsmenge pro Buchung / Stück</span>
+                      <span className="text-admin-muted">Abzugsmenge pro Buchung / Stück</span>
                       <input className={inputCls} type="number" inputMode="numeric" min={1} value={eQty} onChange={(e) => setEQty(e.target.value)} />
                     </label>
                     <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Warnung ab Bestand (leer = aus)</span>
+                      <span className="text-admin-muted">Warnung ab Bestand (leer = aus)</span>
                       <input className={inputCls} type="number" inputMode="numeric" min={0} value={eWarn} onChange={(e) => setEWarn(e.target.value)} />
                     </label>
                     <label className="text-sm space-y-1">
-                      <span className="text-slate-400">Abzug bei</span>
+                      <span className="text-admin-muted">Abzug bei</span>
                       <select className={inputCls} value={eTrigger} onChange={(e) => setETrigger(e.target.value as 'shipment' | 'return')}>
                         <option value="shipment">Versand / Abholung</option>
                         <option value="return">Rückgabe</option>
                       </select>
                     </label>
                     <div className="text-sm space-y-1 sm:col-span-2">
-                      <span className="text-slate-400">Verknüpft mit Zubehör (optional, mehrere)</span>
+                      <span className="text-admin-muted">Verknüpft mit Zubehör (optional, mehrere)</span>
                       <AccessoryMultiSelect
                         accessories={accessories}
                         cameras={cameras}
@@ -676,15 +684,15 @@ export default function VerbrauchPage() {
                       <span>Automatisch abziehen</span>
                     </label>
                     <label className="text-sm space-y-1 sm:col-span-2">
-                      <span className="text-slate-400">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
+                      <span className="text-admin-muted">Notiz (optional) — z.B. Nachbestell-Link / Lieferant</span>
                       <textarea className={inputCls + ' min-h-[60px]'} value={eNotiz} onChange={(e) => setENotiz(e.target.value)} />
                     </label>
                     <div className="sm:col-span-2">
                       {photoBlock(eImage, async (f) => { const u = await uploadImage(a.id, f); if (u) setEImage(u); }, () => setEImage(''))}
                     </div>
                     <div className="sm:col-span-2 flex gap-2">
-                      <button onClick={() => saveEdit(a.id)} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">Speichern</button>
-                      <button onClick={() => setEditId(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Abbrechen</button>
+                      <button onClick={() => saveEdit(a.id)} disabled={busy} className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover disabled:opacity-50 text-slate-900 rounded font-semibold text-sm">Speichern</button>
+                      <button onClick={() => setEditId(null)} className="px-4 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] rounded text-sm">Abbrechen</button>
                     </div>
                   </div>
                 )}
