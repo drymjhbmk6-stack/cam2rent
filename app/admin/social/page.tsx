@@ -163,7 +163,7 @@ export default function SocialDashboard() {
           Alle Posts
         </Link>
         <Link href="/admin/social/redaktionsplan" className="px-4 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-semibold text-sm hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]">
-          Redaktionsplan
+          Wiederkehrende Zeitpläne
         </Link>
       </div>
 

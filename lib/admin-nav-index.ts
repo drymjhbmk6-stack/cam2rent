@@ -39,6 +39,7 @@ export const ADMIN_NAV_INDEX: AdminNavEntry[] = [
   { label: 'Neue manuelle Buchung', href: '/admin/buchungen/neu', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', action: true, keywords: 'anlegen erstellen order' },
   { label: 'Versand & Rückgabe', href: '/admin/retouren', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'retouren versand rückgabe etikett packen' },
   { label: 'Paketverfolgung', href: '/admin/sendungen', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'tracking sendungen dhl dpd' },
+  { label: 'Versand-Werkzeuge (Packliste/Lieferschein)', href: '/admin/versand', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'versand packliste lieferschein als versendet markieren' },
   { label: 'Schadensmeldungen', href: '/admin/schaeden', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'schaden damage' },
 
   // Kalender & Verfügbarkeit
@@ -88,7 +89,8 @@ export const ADMIN_NAV_INDEX: AdminNavEntry[] = [
   { label: 'Social Posts', href: '/admin/social/posts', group: 'Content', perm: 'content', keywords: 'posts' },
   { label: 'Neuer Post', href: '/admin/social/neu', group: 'Content', perm: 'content', action: true, keywords: 'post erstellen' },
   { label: 'Social Themen & Serien', href: '/admin/social/themen', group: 'Content', perm: 'content', keywords: 'themen serien' },
-  { label: 'Social Redaktionsplan', href: '/admin/social/zeitplan', group: 'Content', perm: 'content', keywords: 'zeitplan redaktionsplan' },
+  { label: 'Social Redaktionsplan', href: '/admin/social/zeitplan', group: 'Content', perm: 'content', keywords: 'zeitplan redaktionsplan kalender' },
+  { label: 'Wiederkehrende Social-Zeitpläne', href: '/admin/social/redaktionsplan', group: 'Content', perm: 'content', keywords: 'wiederkehrend serie täglich wöchentlich zeitplan' },
   { label: 'Social KI-Plan (Bulk)', href: '/admin/social/plan', group: 'Content', perm: 'content', keywords: 'ki plan bulk' },
   { label: 'Social Vorlagen', href: '/admin/social/vorlagen', group: 'Content', perm: 'content', keywords: 'vorlagen templates' },
   { label: 'Reels', href: '/admin/social/reels', group: 'Content', perm: 'content', keywords: 'reels video' },
@@ -100,7 +102,8 @@ export const ADMIN_NAV_INDEX: AdminNavEntry[] = [
   // Finanzen
   { label: 'Buchhaltung', href: '/admin/buchhaltung', group: 'Finanzen', perm: 'finanzen', keywords: 'rechnungen euer datev cockpit' },
   { label: 'Belege', href: '/admin/buchhaltung/belege', group: 'Finanzen', perm: 'finanzen', keywords: 'belege rechnung eingang' },
-  { label: 'Anlagen', href: '/admin/buchhaltung/anlagen', group: 'Finanzen', perm: 'finanzen', keywords: 'afa anlagenverzeichnis steuersicht' },
+  { label: 'Anlagen (Steuersicht)', href: '/admin/buchhaltung/anlagen', group: 'Finanzen', perm: 'finanzen', keywords: 'afa steuersicht abschreibung' },
+  { label: 'Anlagenverzeichnis (Zeitwert)', href: '/admin/anlagen', group: 'Finanzen', perm: 'finanzen', keywords: 'anlagenverzeichnis wbw wiederbeschaffung zeitwert' },
   { label: 'Einkauf', href: '/admin/einkauf', group: 'Finanzen', perm: 'finanzen', keywords: 'einkauf ocr rechnung upload' },
 
   // Berichte

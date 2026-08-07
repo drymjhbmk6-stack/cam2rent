@@ -232,7 +232,7 @@ const REELS_ITEMS: NavItem[] = [
 const FINANZEN_ITEMS: NavItem[] = [
   { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance, perm: 'finanzen' },
   { href: '/admin/buchhaltung/belege', label: 'Belege', icon: iconCart, perm: 'finanzen' },
-  { href: '/admin/buchhaltung/anlagen', label: 'Anlagen', icon: iconCamera, perm: 'finanzen' },
+  { href: '/admin/buchhaltung/anlagen', label: 'Anlagen (Steuersicht)', icon: iconCamera, perm: 'finanzen' },
   { href: '/admin/einkauf', label: 'Einkauf', icon: iconClipboard, perm: 'finanzen' },
 ];
 
