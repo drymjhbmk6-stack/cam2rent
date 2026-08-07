@@ -5,6 +5,7 @@ import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDateWeekday } from '@/lib/format-utils';
 import {
   expandItems,
@@ -114,20 +115,20 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
       .catch(() => {});
   }, []);
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Lädt…</div>;
+  if (loading) return <div className="p-8 text-center text-admin-muted">Lädt…</div>;
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
 
   const items = expandItems(bookingToScanInput(booking));
   const status = booking.pack_status ?? 'pending';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen text-admin-text">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <AdminBackLink href="/admin/versand" label="Zurück zur Versand-Liste" />
 
         <div className="mt-4 mb-6">
           <h1 className="text-2xl font-bold">Versand vorbereiten</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-admin-muted mt-1">
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
@@ -159,8 +160,8 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
 
         {/* Step-spezifischer Block */}
         {status !== 'checked' && status !== 'pending' && status !== 'packed' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <p className="text-slate-400">Unbekannter Status: {status}</p>
+          <div className="bg-admin-surface border border-admin-border rounded-xl p-6">
+            <p className="text-admin-muted">Unbekannter Status: {status}</p>
           </div>
         )}
         {status === 'pending' && (
@@ -192,13 +193,13 @@ function Stepper({ status }: { status: string }) {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${
             s.active ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
             s.done ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-            'bg-slate-800 text-slate-500 border border-slate-700'
+            'bg-admin-surface-2 text-[var(--admin-text-dim)] border border-[var(--admin-faint)]'
           }`}>
             {s.done && <span>✓</span>}
             {s.label}
           </div>
           {i < steps.length - 1 && (
-            <span className="text-slate-700">→</span>
+            <span className="text-[var(--admin-faint)]">→</span>
           )}
         </div>
       ))}
@@ -210,19 +211,19 @@ function Stepper({ status }: { status: string }) {
 
 function BookingInfo({ booking }: { booking: BookingDetail }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 text-sm">
+    <div className="bg-admin-surface border border-admin-border rounded-xl p-4 mb-6 text-sm">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
+          <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
           <div>{fmtDateWeekday(booking.rental_from)} – {fmtDateWeekday(booking.rental_to)}</div>
         </div>
         <div>
-          <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Versand</div>
+          <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Versand</div>
           <div>{booking.shipping_method === 'express' ? 'Express' : 'Standard'}</div>
         </div>
         {booking.shipping_address && (
           <div className="col-span-2">
-            <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Lieferadresse</div>
+            <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Lieferadresse</div>
             <div className="whitespace-pre-line">{booking.shipping_address}</div>
           </div>
         )}
@@ -465,9 +466,9 @@ function PackStep({
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-      <h2 className="text-lg font-bold mb-1 text-slate-100">Schritt 1: Paket packen</h2>
-      <p className="text-sm text-slate-400 mb-4">
+    <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+      <h2 className="text-lg font-bold mb-1 text-admin-text">Schritt 1: Paket packen</h2>
+      <p className="text-sm text-admin-muted mb-4">
         Pack jedes Item einzeln ein und hake es ab. Am Ende unterschreiben — danach übergibst du das Paket einer zweiten Person zur Kontrolle.
       </p>
 
@@ -488,7 +489,7 @@ function PackStep({
         onManualPick={(g) => setPickerGroup(g)}
       />
 
-      <p className="text-xs text-slate-500 mt-2">
+      <p className="text-xs text-[var(--admin-text-dim)] mt-2">
         Kannst du nicht scannen? Tippe bei einer Kamera- oder Zubehör-Position
         auf <span className="text-cyan-400 font-semibold">📋 Wählen</span> und
         hake das passende Exemplar (Seriennummer/Code) an.
@@ -532,8 +533,8 @@ function PackStep({
         />
       </SerialScanner>
 
-      <div className="mt-6 space-y-3 border-t border-slate-800 pt-4">
-        <h3 className="text-sm font-semibold text-slate-300 mb-2">Zustand bei Verpackung</h3>
+      <div className="mt-6 space-y-3 border-t border-admin-border pt-4">
+        <h3 className="text-sm font-semibold text-admin-text-2 mb-2">Zustand bei Verpackung</h3>
         <Check label="Gerät funktionstüchtig getestet" checked={tested} onChange={setTested} />
         <Check label="Keine sichtbaren Schäden" checked={noVisible} onChange={setNoVisible} />
         <textarea
@@ -541,13 +542,13 @@ function PackStep({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          className="w-full mt-2 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100"
+          className="w-full mt-2 px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-lg text-sm text-admin-text"
         />
       </div>
 
-      <div className="mt-6 border-t border-slate-800 pt-4">
-        <h3 className="text-sm font-semibold text-slate-300 mb-1">Ungefähres Paketgewicht</h3>
-        <p className="text-xs text-slate-500 mb-2">
+      <div className="mt-6 border-t border-admin-border pt-4">
+        <h3 className="text-sm font-semibold text-admin-text-2 mb-1">Ungefähres Paketgewicht</h3>
+        <p className="text-xs text-[var(--admin-text-dim)] mb-2">
           Für das Versandetikett. {booking.pack_weight_estimate_kg != null
             ? `Vorschlag aus hinterlegten Einzelgewichten: ${String(booking.pack_weight_estimate_kg).replace('.', ',')} kg (inkl. Verpackung).`
             : 'Kein Gewicht hinterlegt — bitte schätzen.'}
@@ -561,9 +562,9 @@ function PackStep({
             value={weightKg}
             onChange={(e) => setWeightKg(e.target.value)}
             placeholder="z. B. 1,2"
-            className="w-32 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-base text-slate-100"
+            className="w-32 px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-lg text-base text-admin-text"
           />
-          <span className="text-sm text-slate-400">kg</span>
+          <span className="text-sm text-admin-muted">kg</span>
         </div>
       </div>
 
@@ -587,7 +588,7 @@ function PackStep({
       <button
         onClick={submit}
         disabled={!canSubmit}
-        className="w-full mt-5 bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-slate-950 font-bold py-3 rounded-lg"
+        className="w-full mt-5 bg-admin-accent disabled:bg-[var(--admin-faint)] disabled:cursor-not-allowed text-slate-950 font-bold py-3 rounded-lg"
       >
         {submitting ? 'Speichere…' : 'Fertig — zur Kontrolle übergeben'}
       </button>
@@ -741,10 +742,10 @@ function CheckStep({
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-      <h2 className="text-lg font-bold mb-1 text-slate-100">Schritt 2: Kontrolle (4-Augen-Prinzip)</h2>
-      <p className="text-sm text-slate-400 mb-5">
-        Das Paket wurde von <span className="text-slate-200 font-semibold">{booking.pack_packed_by ?? 'Unbekannt'}</span> gepackt.
+    <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+      <h2 className="text-lg font-bold mb-1 text-admin-text">Schritt 2: Kontrolle (4-Augen-Prinzip)</h2>
+      <p className="text-sm text-admin-muted mb-5">
+        Das Paket wurde von <span className="text-admin-text font-semibold">{booking.pack_packed_by ?? 'Unbekannt'}</span> gepackt.
         Prüfe als zweite Person, ob alles vollständig ist, mache ein Foto und unterschreibe.
       </p>
       {idMatchesPacker && (
@@ -783,19 +784,19 @@ function CheckStep({
         />
       </SerialScanner>
 
-      <div className="mt-6 border-t border-slate-800 pt-4">
-        <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1">Notizen (optional)</label>
+      <div className="mt-6 border-t border-admin-border pt-4">
+        <label className="block text-xs text-[var(--admin-text-dim)] uppercase tracking-wider mb-1">Notizen (optional)</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           placeholder="z.B. Akku 2 fehlt aber Ersatz beigelegt …"
-          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100"
+          className="w-full px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-lg text-sm text-admin-text"
         />
       </div>
 
       <div className="mt-4">
-        <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1">
+        <label className="block text-xs text-[var(--admin-text-dim)] uppercase tracking-wider mb-1">
           Ungefähres Paketgewicht (fürs Etikett)
         </label>
         <div className="flex items-center gap-2">
@@ -807,18 +808,18 @@ function CheckStep({
             value={weightKg}
             onChange={(e) => setWeightKg(e.target.value)}
             placeholder="z. B. 1,2"
-            className="w-32 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-base text-slate-100"
+            className="w-32 px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-lg text-base text-admin-text"
           />
-          <span className="text-sm text-slate-400">kg</span>
+          <span className="text-sm text-admin-muted">kg</span>
         </div>
       </div>
 
       {/* Foto-Upload */}
-      <div className="mt-5 border-t border-slate-800 pt-4">
-        <label className="block text-sm font-semibold text-slate-300 mb-2">
+      <div className="mt-5 border-t border-admin-border pt-4">
+        <label className="block text-sm font-semibold text-admin-text-2 mb-2">
           Foto vom gepackten Paket (Pflicht)
         </label>
-        <p className="text-xs text-slate-500 mb-3">
+        <p className="text-xs text-[var(--admin-text-dim)] mb-3">
           Mach ein Handy-Foto vom Paketinhalt als Nachweis. Das Foto wird intern gespeichert
           (nicht im PDF) und ist später im Admin-Detail abrufbar.
         </p>
@@ -827,11 +828,11 @@ function CheckStep({
           accept="image/*"
           capture="environment"
           onChange={onPhotoChange}
-          className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-500 file:text-slate-950 file:font-semibold file:cursor-pointer"
+          className="block w-full text-sm text-admin-text-2 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-admin-accent file:text-slate-950 file:font-semibold file:cursor-pointer"
         />
         {photoPreview && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoPreview} alt="Vorschau" className="mt-3 max-h-48 rounded-lg border border-slate-700" />
+          <img src={photoPreview} alt="Vorschau" className="mt-3 max-h-48 rounded-lg border border-[var(--admin-faint)]" />
         )}
       </div>
 
@@ -864,7 +865,7 @@ function CheckStep({
       <button
         onClick={submit}
         disabled={!canSubmit}
-        className="w-full mt-5 bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-slate-950 font-bold py-3 rounded-lg"
+        className="w-full mt-5 bg-emerald-500 disabled:bg-[var(--admin-faint)] disabled:cursor-not-allowed text-slate-950 font-bold py-3 rounded-lg"
       >
         {submitting ? 'Speichere + lade Foto hoch …' : 'Fertig — Versand freigeben'}
       </button>
@@ -875,6 +876,7 @@ function CheckStep({
 // ─── Step 3: Fertig ──────────────────────────────────────────────────────────
 
 function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: CurrentAdminUser | null; onReset: () => void }) {
+  const confirm = useConfirm();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
@@ -894,7 +896,7 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
   }, [booking.id, booking.pack_photo_url]);
 
   async function resetWorkflow() {
-    if (!confirm('Pack-Workflow neu starten? Alle Signaturen + Foto werden gelöscht.')) return;
+    if (!(await confirm({ message: 'Pack-Workflow neu starten? Alle Signaturen + Foto werden gelöscht.', danger: true }))) return;
     setResetting(true);
     setResetError('');
     try {
@@ -912,7 +914,7 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
+    <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">✓</div>
         <h2 className="text-lg font-bold">Fertig — Paket bereit für Versand</h2>
@@ -920,19 +922,19 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
 
       <div className="text-sm space-y-2 mb-6">
         <div>
-          <span className="text-slate-500">Gepackt von:</span>{' '}
+          <span className="text-[var(--admin-text-dim)]">Gepackt von:</span>{' '}
           <span className="font-semibold">{booking.pack_packed_by}</span>
           {booking.pack_packed_at && (
-            <span className="text-slate-500 ml-2 text-xs">
+            <span className="text-[var(--admin-text-dim)] ml-2 text-xs">
               ({new Date(booking.pack_packed_at).toLocaleString('de-DE')})
             </span>
           )}
         </div>
         <div>
-          <span className="text-slate-500">Kontrolliert von:</span>{' '}
+          <span className="text-[var(--admin-text-dim)]">Kontrolliert von:</span>{' '}
           <span className="font-semibold">{booking.pack_checked_by}</span>
           {booking.pack_checked_at && (
-            <span className="text-slate-500 ml-2 text-xs">
+            <span className="text-[var(--admin-text-dim)] ml-2 text-xs">
               ({new Date(booking.pack_checked_at).toLocaleString('de-DE')})
             </span>
           )}
@@ -942,7 +944,7 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <a
           href={pdfUrl}
-          className="block bg-cyan-500 text-slate-950 font-bold py-3 px-4 rounded-lg text-center hover:bg-cyan-400"
+          className="block bg-admin-accent text-slate-950 font-bold py-3 px-4 rounded-lg text-center hover:bg-admin-accent-hover"
         >
           📄 Packliste-PDF öffnen / drucken
         </a>
@@ -951,12 +953,12 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
             href={photoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="block bg-slate-800 border border-slate-700 text-slate-200 font-semibold py-3 px-4 rounded-lg text-center hover:bg-slate-700"
+            className="block bg-admin-surface-2 border border-[var(--admin-faint)] text-admin-text font-semibold py-3 px-4 rounded-lg text-center hover:bg-[var(--admin-faint)]"
           >
             📷 Verpackungs-Foto ansehen
           </a>
         ) : booking.pack_photo_url ? (
-          <div className="block bg-slate-800 border border-slate-700 text-slate-500 font-semibold py-3 px-4 rounded-lg text-center">
+          <div className="block bg-admin-surface-2 border border-[var(--admin-faint)] text-[var(--admin-text-dim)] font-semibold py-3 px-4 rounded-lg text-center">
             📷 Foto wird geladen…
           </div>
         ) : null}
@@ -967,16 +969,16 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
           <button
             onClick={resetWorkflow}
             disabled={resetting}
-            className="text-xs text-slate-500 hover:text-red-400 underline disabled:opacity-50"
+            className="text-xs text-[var(--admin-text-dim)] hover:text-red-400 underline disabled:opacity-50"
           >
             {resetting ? 'Setze zurück…' : 'Workflow zurücksetzen (neu packen)'}
           </button>
-          <p className="text-[11px] text-slate-600 mt-1">Nur für Owner. Löscht Signaturen + Foto und startet den Pack-Workflow neu.</p>
+          <p className="text-[11px] text-admin-muted-2 mt-1">Nur für Owner. Löscht Signaturen + Foto und startet den Pack-Workflow neu.</p>
           {resetError && <p className="text-xs text-red-400 mt-1">{resetError}</p>}
         </div>
       )}
 
-      <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-500">
+      <div className="mt-6 pt-4 border-t border-admin-border text-xs text-[var(--admin-text-dim)]">
         <Link href="/admin/versand" className="hover:text-cyan-400">← Zurück zur Versand-Übersicht</Link>
       </div>
     </div>
@@ -1023,8 +1025,8 @@ function SignatureBlock({
   accountHint?: string;
 }) {
   return (
-    <div className="mt-6 border-t border-slate-800 pt-4">
-      <label className="block text-sm font-semibold text-slate-300 mb-2">{title}</label>
+    <div className="mt-6 border-t border-admin-border pt-4">
+      <label className="block text-sm font-semibold text-admin-text-2 mb-2">{title}</label>
       {accountHint && (
         <p className="text-xs text-cyan-400 mb-2">{accountHint}</p>
       )}
@@ -1033,9 +1035,9 @@ function SignatureBlock({
         placeholder="Vor- und Nachname"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100 mb-3"
+        className="w-full px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-lg text-sm text-admin-text mb-3"
       />
-      <p className="text-xs text-slate-300 mb-1.5">Hier mit Finger oder Stift unterschreiben:</p>
+      <p className="text-xs text-admin-text-2 mb-1.5">Hier mit Finger oder Stift unterschreiben:</p>
       <div className="bg-white rounded-lg overflow-hidden border-2 border-slate-300 shadow-inner" style={{ height: 160 }}>
         <SignatureCanvas
           ref={sigRef}
@@ -1051,7 +1053,7 @@ function SignatureBlock({
         <button
           type="button"
           onClick={() => { sigRef.current?.clear(); setHasDrawn(false); }}
-          className="text-xs text-slate-400 hover:text-cyan-400 underline-offset-2 hover:underline"
+          className="text-xs text-admin-muted hover:text-cyan-400 underline-offset-2 hover:underline"
         >
           Signatur löschen
         </button>
