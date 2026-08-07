@@ -352,7 +352,7 @@ export default function VerkaufNeu() {
         >
           {submitting ? 'Wird angelegt…' : 'Rechnung schicken'}
         </button>
-        <p className="text-xs text-slate-500 text-center">
+        <p className="text-xs text-[var(--admin-text-dim)] text-center">
           Der Kunde erhält eine Rechnung als PDF sowie einen Stripe-Zahlungslink
           (Kreditkarte / PayPal) per E-Mail.
         </p>
