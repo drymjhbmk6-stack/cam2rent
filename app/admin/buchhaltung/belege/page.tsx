@@ -274,7 +274,7 @@ export default function BelegeListePage() {
         <button
           onClick={() => toggleSort(k)}
           className={`inline-flex items-center gap-1 uppercase text-xs font-semibold tracking-wider transition-colors ${
-            active ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+            active ? 'text-cyan-300' : 'text-admin-muted hover:text-admin-text'
           }`}
           aria-label={`Sortieren nach ${label}${active ? `, aktuell ${sortDir === 'asc' ? 'aufsteigend' : 'absteigend'}` : ''}`}
         >
@@ -421,8 +421,8 @@ export default function BelegeListePage() {
                 onClick={() => setMonthFilter(m.ym)}
                 className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
                   effectiveMonth === m.ym
-                    ? 'bg-cyan-500 text-slate-900 border-cyan-500'
-                    : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
+                    ? 'bg-admin-accent text-slate-900 border-[var(--admin-accent)]'
+                    : 'bg-admin-surface text-admin-text-2 border-[var(--admin-faint)] hover:border-[var(--admin-text-dim)]'
                 }`}
                 style={{ scrollSnapAlign: 'start' }}
               >
@@ -435,29 +435,29 @@ export default function BelegeListePage() {
         {/* Summen-Zeile fuer die aktuelle Ansicht */}
         {!loading && visibleBelege.length > 0 && (
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3 text-sm">
-            <span className="text-slate-400">
+            <span className="text-admin-muted">
               {searching
                 ? `${visibleBelege.length} Treffer`
                 : effectiveMonth
                   ? `${monthLabel(effectiveMonth)} · ${visibleBelege.length} Beleg(e)`
                   : `${effYear} · ${visibleBelege.length} Beleg(e)`}
             </span>
-            <span className="text-slate-300">
-              Summe brutto: <b className="text-white">{fmtEuro(visibleSum)}</b>
+            <span className="text-admin-text-2">
+              Summe brutto: <b className="text-admin-heading">{fmtEuro(visibleSum)}</b>
             </span>
           </div>
         )}
 
         {loading ? (
-          <p className="text-slate-400">Lädt…</p>
+          <p className="text-admin-muted">Lädt…</p>
         ) : visibleBelege.length === 0 ? (
-          <p className="text-slate-400">Keine Belege gefunden.</p>
+          <p className="text-admin-muted">Keine Belege gefunden.</p>
         ) : (
           // overflow-x-auto + min-w auf der Tabelle = horizontal scrollbar auf
           // schmalen Viewports, Lieferanten-Namen werden nicht mehr umbrochen.
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
+          <div className="bg-admin-surface rounded border border-admin-border overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-slate-900 text-left">
+              <thead className="bg-[var(--admin-thead-bg)] text-left">
                 <tr>
                   <SortHeader label="Beleg-Nr" k="beleg_nr" />
                   <SortHeader label="Datum" k="beleg_datum" />
@@ -465,20 +465,20 @@ export default function BelegeListePage() {
                   <SortHeader label="Brutto" k="summe_brutto" align="right" />
                   <SortHeader label="Klassif." k="klassifizierung" />
                   <SortHeader label="Status" k="status" />
-                  <th className="px-3 py-2 text-xs font-semibold text-slate-400 whitespace-nowrap">Beleg</th>
+                  <th className="px-3 py-2 text-xs font-semibold text-admin-muted whitespace-nowrap">Beleg</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleBelege.map((b) => (
                   <tr
                     key={b.id}
-                    className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
+                    className="border-t border-admin-border hover:bg-slate-800/40 cursor-pointer"
                     onClick={() => { window.location.href = `/admin/buchhaltung/belege/${b.id}`; }}
                   >
                     <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{b.beleg_nr}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(b.beleg_datum)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {b.lieferant?.name ?? <span className="text-slate-500 italic">–</span>}
+                      {b.lieferant?.name ?? <span className="text-[var(--admin-text-dim)] italic">–</span>}
                       {b.ist_eigenbeleg && <span className="ml-2 text-xs text-amber-400">(Eigenbeleg)</span>}
                       {(b.ocr_status === 'running' || b.ocr_status === 'pending') && (
                         <span
@@ -525,7 +525,7 @@ export default function BelegeListePage() {
                         onClick={() => setPreviewBelegId(b.id)}
                         title="Rechnung ansehen"
                         aria-label="Rechnung ansehen"
-                        className="text-slate-400 hover:text-cyan-300 text-base"
+                        className="text-admin-muted hover:text-cyan-300 text-base"
                       >
                         👁
                       </button>
@@ -544,11 +544,11 @@ export default function BelegeListePage() {
           onClick={() => setPreviewBelegId(null)}
         >
           <div
-            className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[88vh] flex flex-col"
+            className="bg-[var(--admin-input-bg)] border border-[var(--admin-faint)] rounded-xl w-full max-w-2xl max-h-[88vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-3 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="font-semibold text-white text-sm">Rechnung ansehen</h2>
+            <div className="p-3 border-b border-admin-border flex items-center justify-between">
+              <h2 className="font-semibold text-admin-heading text-sm">Rechnung ansehen</h2>
               <div className="flex items-center gap-3">
                 <Link
                   href={`/admin/buchhaltung/belege/${previewBelegId}`}
@@ -558,7 +558,7 @@ export default function BelegeListePage() {
                 </Link>
                 <button
                   onClick={() => setPreviewBelegId(null)}
-                  className="text-slate-500 hover:text-slate-300 text-xl leading-none"
+                  className="text-[var(--admin-text-dim)] hover:text-admin-text-2 text-xl leading-none"
                   aria-label="Schließen"
                 >
                   ✕

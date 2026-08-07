@@ -219,17 +219,17 @@ function TopicsTab() {
 
 function TopicRow({ topic, onDelete }: { topic: Topic; onDelete: (id: string) => void }) {
   return (
-    <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+    <div className="p-3 rounded-lg bg-slate-900/50 border border-admin-border">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-sm text-slate-200 font-medium">{topic.topic}</p>
-            {topic.category && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase">{topic.category}</span>}
+            <p className="text-sm text-admin-text font-medium">{topic.topic}</p>
+            {topic.category && <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted uppercase">{topic.category}</span>}
             {topic.used && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300">verwendet</span>}
           </div>
-          {topic.angle && <p className="text-xs text-slate-400 mb-1">{topic.angle}</p>}
+          {topic.angle && <p className="text-xs text-admin-muted mb-1">{topic.angle}</p>}
           {topic.keywords.length > 0 && (
-            <p className="text-xs text-slate-500">{topic.keywords.map((k) => (k.startsWith('#') ? k : `#${k}`)).join(' ')}</p>
+            <p className="text-xs text-[var(--admin-text-dim)]">{topic.keywords.map((k) => (k.startsWith('#') ? k : `#${k}`)).join(' ')}</p>
           )}
         </div>
         <button type="button" onClick={() => onDelete(topic.id)} className="text-xs text-red-400 hover:text-red-300">Löschen</button>
@@ -239,6 +239,7 @@ function TopicRow({ topic, onDelete }: { topic: Topic; onDelete: (id: string) =>
 }
 
 function SeriesTab() {
+  const confirm = useConfirm();
   const [series, setSeries] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -287,7 +288,7 @@ function SeriesTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Serie mit allen Teilen löschen?')) return;
+    if (!(await confirm({ message: 'Serie mit allen Teilen löschen?', danger: true }))) return;
     await fetch(`/api/admin/social/series/${id}`, { method: 'DELETE' });
     load();
   }
@@ -308,35 +309,35 @@ function SeriesTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-slate-400">Mehrteilige Post-Serien (z.B. &quot;3-teilige Meisterklasse&quot;).</p>
+        <p className="text-sm text-admin-muted">Mehrteilige Post-Serien (z.B. &quot;3-teilige Meisterklasse&quot;).</p>
         <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500">+ Neue Serie</button>
       </div>
 
       {creating && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5 mb-4">
-          <h3 className="font-semibold text-white mb-3">Neue Serie</h3>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Serientitel</label>
+        <div className="rounded-xl bg-slate-900/50 border border-admin-border p-5 mb-4">
+          <h3 className="font-semibold text-admin-heading mb-3">Neue Serie</h3>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Serientitel</label>
           <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="z.B. Action-Cam Meisterklasse"
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
 
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Beschreibung</label>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Beschreibung</label>
           <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
 
-          <h4 className="font-semibold text-white mt-4 mb-2 text-sm">Teile</h4>
+          <h4 className="font-semibold text-admin-heading mt-4 mb-2 text-sm">Teile</h4>
           {form.parts.map((p, i) => (
-            <div key={i} className="rounded-lg bg-slate-950/50 border border-slate-800 p-3 mb-2">
+            <div key={i} className="rounded-lg bg-slate-950/50 border border-admin-border p-3 mb-2">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-500 uppercase">Teil {i + 1}</span>
+                <span className="text-xs text-[var(--admin-text-dim)] uppercase">Teil {i + 1}</span>
                 {form.parts.length > 1 && <button type="button" onClick={() => removePart(i)} className="text-xs text-red-400 hover:text-red-300">Entfernen</button>}
               </div>
               <input type="text" value={p.topic} onChange={(e) => updatePart(i, 'topic', e.target.value)} placeholder="Thema des Teils"
-                className="w-full mb-2 px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+                className="w-full mb-2 px-3 py-1.5 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
               <input type="text" value={p.angle} onChange={(e) => updatePart(i, 'angle', e.target.value)} placeholder="Kernaussage"
-                className="w-full mb-2 px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+                className="w-full mb-2 px-3 py-1.5 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
               <input type="text" value={p.keywords} onChange={(e) => updatePart(i, 'keywords', e.target.value)} placeholder="Keywords (space-separated)"
-                className="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+                className="w-full px-3 py-1.5 rounded bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
             </div>
           ))}
 
@@ -346,39 +347,39 @@ function SeriesTab() {
             <button type="button" onClick={handleCreate} disabled={!form.title || form.parts.filter((p) => p.topic.trim()).length === 0}
               className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50">Speichern</button>
             <button type="button" onClick={() => setCreating(false)}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 font-semibold text-sm hover:bg-slate-600">Abbrechen</button>
+              className="px-4 py-2 rounded-lg bg-[var(--admin-faint)] text-admin-text font-semibold text-sm hover:bg-[var(--admin-muted-2)]">Abbrechen</button>
           </div>
         </div>
       )}
 
-      {loading && <p className="text-slate-400">Lade…</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
 
-      {!loading && series.length === 0 && !creating && <p className="text-slate-400">Noch keine Serien.</p>}
+      {!loading && series.length === 0 && !creating && <p className="text-admin-muted">Noch keine Serien.</p>}
 
       <div className="space-y-3">
         {series.map((s) => {
           const progress = s.total_parts > 0 ? Math.round((s.generated_parts / s.total_parts) * 100) : 0;
           return (
-            <div key={s.id} className="rounded-xl bg-slate-900/50 border border-slate-800 p-4">
+            <div key={s.id} className="rounded-xl bg-slate-900/50 border border-admin-border p-4">
               <div className="flex items-start justify-between gap-4 mb-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white">{s.title}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{s.generated_parts} / {s.total_parts}</span>
-                    {s.status !== 'active' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{s.status}</span>}
+                    <h3 className="font-semibold text-admin-heading">{s.title}</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted">{s.generated_parts} / {s.total_parts}</span>
+                    {s.status !== 'active' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted">{s.status}</span>}
                   </div>
-                  {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
+                  {s.description && <p className="text-xs text-admin-muted mt-1">{s.description}</p>}
                 </div>
                 <button type="button" onClick={() => handleDelete(s.id)} className="text-xs text-red-400 hover:text-red-300">Löschen</button>
               </div>
-              <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden mb-3">
-                <div className="h-full bg-cyan-500 transition-all" style={{ width: `${progress}%` }} />
+              <div className="h-1.5 rounded-full bg-admin-surface-2 overflow-hidden mb-3">
+                <div className="h-full bg-admin-accent transition-all" style={{ width: `${progress}%` }} />
               </div>
               <ul className="space-y-1">
                 {(s.parts ?? []).sort((a, b) => a.part_number - b.part_number).map((p) => (
                   <li key={p.id} className="text-xs flex items-center gap-2">
-                    <span className={p.used ? 'text-emerald-400' : 'text-slate-500'}>{p.used ? '✓' : '○'}</span>
-                    <span className="text-slate-300">Teil {p.part_number}: {p.topic}</span>
+                    <span className={p.used ? 'text-emerald-400' : 'text-[var(--admin-text-dim)]'}>{p.used ? '✓' : '○'}</span>
+                    <span className="text-admin-text-2">Teil {p.part_number}: {p.topic}</span>
                   </li>
                 ))}
               </ul>
