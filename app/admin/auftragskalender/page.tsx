@@ -44,13 +44,13 @@ type ViewMode = 'monat' | 'agenda';
 // ============================================================
 
 const C = {
-  card: '#1e293b',
-  panel: '#0f172a',
+  card: 'var(--admin-surface-2)',
+  panel: 'var(--admin-surface)',
   cellNormal: '#1e293b',
   cellOther: '#162133',
   cellSpecial: '#3a2530',
   cellToday: '#1e3a52',
-  border: '#334155',
+  border: 'var(--admin-faint)',
 };
 
 const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
@@ -280,7 +280,7 @@ export default function AuftragskalenderPage() {
 
   const navBtn =
     'px-3 py-1.5 rounded text-sm text-slate-200 transition';
-  const navBtnStyle = { background: '#1e293b', border: `1px solid ${C.border}` };
+  const navBtnStyle = { background: 'var(--admin-surface-2)', border: `1px solid ${C.border}` };
 
   return (
     <div className="px-4 py-6 md:px-8 text-slate-200">
@@ -304,7 +304,7 @@ export default function AuftragskalenderPage() {
               className={`px-4 py-2 text-sm font-medium transition ${
                 view === 'monat' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
-              style={view === 'monat' ? undefined : { background: '#1e293b' }}
+              style={view === 'monat' ? undefined : { background: 'var(--admin-surface-2)' }}
             >
               📅 Monat
             </button>
@@ -313,7 +313,7 @@ export default function AuftragskalenderPage() {
               className={`px-4 py-2 text-sm font-medium transition ${
                 view === 'agenda' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
-              style={view === 'agenda' ? undefined : { background: '#1e293b' }}
+              style={view === 'agenda' ? undefined : { background: 'var(--admin-surface-2)' }}
             >
               ✓ To-do-Liste
             </button>
@@ -817,7 +817,7 @@ function AgendaView({
                   : isSunday || holiday
                   ? 'rgba(248,113,113,0.12)'
                   : C.panel,
-                color: isToday ? '#fcd34d' : isSunday || holiday ? '#fca5a5' : '#cbd5e1',
+                color: isToday ? '#fcd34d' : isSunday || holiday ? '#fca5a5' : 'var(--admin-text-2)',
               }}
             >
               <span>
@@ -829,7 +829,7 @@ function AgendaView({
               <button
                 onClick={() => onDayClick(day)}
                 className="text-xs font-medium px-2 py-1 rounded text-slate-200"
-                style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
+                style={{ background: 'var(--admin-surface-2)', border: `1px solid ${C.border}` }}
               >
                 + Notiz
               </button>
@@ -1030,7 +1030,7 @@ function NoteModal({
   const inputStyle = {
     background: C.panel,
     border: `1px solid ${C.border}`,
-    color: '#e2e8f0',
+    color: 'var(--admin-text)',
   };
 
   return (
@@ -1097,7 +1097,7 @@ function NoteModal({
                             setEditText('');
                           }}
                           className="px-3 py-1 text-sm rounded text-slate-200"
-                          style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
+                          style={{ background: 'var(--admin-surface-2)', border: `1px solid ${C.border}` }}
                         >
                           Abbrechen
                         </button>
@@ -1153,7 +1153,7 @@ function NoteModal({
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-sm rounded text-slate-200"
-            style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
+            style={{ background: 'var(--admin-surface-2)', border: `1px solid ${C.border}` }}
           >
             Schließen
           </button>
