@@ -109,22 +109,22 @@ function BuchhaltungContent() {
 
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--admin-text)', margin: 0 }}>
           Buchhaltung
         </h1>
-        <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+        <p style={{ color: 'var(--admin-muted)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
           Cockpit, Einnahmen, Ausgaben, Stripe-Abgleich, Berichte und Einstellungen
         </p>
       </div>
 
       {/* Quick-Links zur neuen Welt (Konsolidierungs-Refactor) */}
-      <div style={{ marginBottom: 16, padding: 12, background: '#0f1729', border: '1px solid #1e293b', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>Neue Welt:</span>
-        <Link href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📄 Belege</Link>
-        <Link href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</Link>
-        <Link href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</Link>
-        <Link href="/admin/inventar" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📦 Inventar</Link>
-        <Link href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>⚙ WBW-Berechnung</Link>
+      <div style={{ marginBottom: 16, padding: 12, background: 'var(--admin-input-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--admin-muted)', alignSelf: 'center' }}>Neue Welt:</span>
+        <Link href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>📄 Belege</Link>
+        <Link href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</Link>
+        <Link href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</Link>
+        <Link href="/admin/inventar" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>📦 Inventar</Link>
+        <Link href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'none' }}>⚙ WBW-Berechnung</Link>
       </div>
 
       {/* Tab-Navigation */}
@@ -147,10 +147,10 @@ export default function BuchhaltungPage() {
   return (
     <Suspense fallback={
       <div style={{ padding: '24px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ height: 32, width: 200, background: '#1e293b', borderRadius: 8, marginBottom: 24 }} />
-        <div style={{ height: 40, background: '#1e293b', borderRadius: 8, marginBottom: 24 }} />
+        <div style={{ height: 32, width: 200, background: 'var(--admin-surface-2)', borderRadius: 8, marginBottom: 24 }} />
+        <div style={{ height: 40, background: 'var(--admin-surface-2)', borderRadius: 8, marginBottom: 24 }} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 100, background: '#1e293b', borderRadius: 8 }} />)}
+          {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 100, background: 'var(--admin-surface-2)', borderRadius: 8 }} />)}
         </div>
       </div>
     }>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtEuro, fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 const SALES_CACHE_KEY = 'admin:verkauf';
 
@@ -42,6 +43,8 @@ export default function VerkaufListe() {
   const [loading, setLoading] = useState(() => getCached<Sale[]>(SALES_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const { success, error: toastError } = useToast();
 
   async function load() {
     // Spinner nur beim ersten Laden (kein Cache) — Wiederbesuch zeigt sofort.
@@ -69,7 +72,10 @@ export default function VerkaufListe() {
       cancel: 'Diesen Verkauf wirklich stornieren? Der Zahlungslink wird deaktiviert.',
       mark_paid: 'Verkauf manuell als bezahlt markieren (z.B. Barzahlung)?',
     };
-    if (confirms[act] && !confirm(confirms[act])) return;
+    if (confirms[act]) {
+      const ok = await confirm({ message: confirms[act], danger: act === 'cancel' });
+      if (!ok) return;
+    }
     setBusyId(id);
     try {
       const res = await fetch(`/api/admin/verkauf/${id}`, {
@@ -79,10 +85,10 @@ export default function VerkaufListe() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Aktion fehlgeschlagen.');
-      if (act === 'resend') alert('Rechnung + Zahlungslink wurden erneut verschickt.');
+      if (act === 'resend') success('Rechnung + Zahlungslink wurden erneut verschickt.');
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Aktion fehlgeschlagen.');
+      toastError(err instanceof Error ? err.message : 'Aktion fehlgeschlagen.');
     } finally {
       setBusyId(null);
     }
@@ -94,8 +100,8 @@ export default function VerkaufListe() {
 
       <div className="flex items-center justify-between mb-6 mt-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Verkäufe</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-admin-heading mb-1">Verkäufe</h1>
+          <p className="text-sm text-admin-muted">
             Zubehör (z.B. Speicherkarten) an Kunden verkaufen — Rechnung + Stripe-Zahlungslink.
           </p>
         </div>
@@ -107,12 +113,12 @@ export default function VerkaufListe() {
         </Link>
       </div>
 
-      {loading && <p className="text-slate-400">Lade…</p>}
-      {error && <p className="text-red-400">{error}</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
+      {error && <p className="text-admin-danger">{error}</p>}
 
       {!loading && !error && sales.length === 0 && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
-          <p className="text-slate-400">
+        <div className="rounded-xl bg-slate-900/50 border border-admin-border p-8 text-center">
+          <p className="text-admin-muted">
             Noch keine Verkäufe. Klicke auf „Neuer Verkauf“, um einen Artikel an einen
             Kunden zu verkaufen.
           </p>
@@ -120,7 +126,7 @@ export default function VerkaufListe() {
       )}
 
       {!loading && !error && sales.length > 0 && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 overflow-hidden">
+        <div className="rounded-xl bg-slate-900/50 border border-admin-border overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-900 border-b border-slate-800 text-left text-slate-400">
@@ -138,16 +144,16 @@ export default function VerkaufListe() {
                   .map((it) => `${it.name}${it.qty > 1 ? ` ×${it.qty}` : ''}`)
                   .join(', ');
                 return (
-                  <tr key={sale.id} className="border-b border-slate-800 last:border-0">
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                  <tr key={sale.id} className="border-b border-admin-border last:border-0">
+                    <td className="px-4 py-3 text-admin-muted whitespace-nowrap">
                       {fmtDateTime(sale.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-white">{sale.customer_name || '—'}</div>
-                      <div className="text-xs text-slate-500">{sale.customer_email}</div>
+                      <div className="text-admin-text">{sale.customer_name || '—'}</div>
+                      <div className="text-xs text-[var(--admin-text-dim)]">{sale.customer_email}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 max-w-[220px]">{itemSummary || '—'}</td>
-                    <td className="px-4 py-3 text-right text-white whitespace-nowrap">
+                    <td className="px-4 py-3 text-admin-text-2 max-w-[220px]">{itemSummary || '—'}</td>
+                    <td className="px-4 py-3 text-right text-admin-text whitespace-nowrap">
                       {fmtEuro(sale.price_total ?? 0)}
                     </td>
                     <td className="px-4 py-3">{statusBadge(sale.status)}</td>
@@ -158,7 +164,7 @@ export default function VerkaufListe() {
                             type="button"
                             disabled={busyId === sale.id}
                             onClick={() => action(sale.id, 'resend')}
-                            className="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs hover:bg-slate-700 border border-slate-700 disabled:opacity-50"
+                            className="px-2 py-1 rounded bg-admin-surface-2 text-admin-text text-xs hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)] disabled:opacity-50"
                           >
                             Link senden
                           </button>
@@ -180,7 +186,7 @@ export default function VerkaufListe() {
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs text-admin-muted-2">—</span>
                       )}
                     </td>
                   </tr>

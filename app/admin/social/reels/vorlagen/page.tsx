@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Template {
   id: string;
@@ -32,6 +33,8 @@ interface MusicTrack {
 }
 
 export default function TemplatesPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -118,7 +121,7 @@ export default function TemplatesPage() {
   }
 
   async function handleDeleteMusic(id: string) {
-    if (!confirm('Track wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Track wirklich löschen?', confirmLabel: 'Löschen', danger: true }))) return;
     await fetch(`/api/admin/reels/music/${id}`, { method: 'DELETE' });
     await loadMusic();
   }
@@ -152,12 +155,12 @@ export default function TemplatesPage() {
       setCreating(false);
     } else {
       const body = await res.json();
-      alert(`Fehler: ${body.error ?? 'unbekannt'}`);
+      toast.error(`Fehler: ${body.error ?? 'unbekannt'}`);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Vorlage wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Vorlage wirklich löschen?', confirmLabel: 'Löschen', danger: true }))) return;
     const res = await fetch(`/api/admin/reels/templates/${id}`, { method: 'DELETE' });
     if (res.ok) await load();
   }

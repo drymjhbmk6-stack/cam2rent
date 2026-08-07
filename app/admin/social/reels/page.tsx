@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface Reel {
   id: string;
@@ -75,6 +76,7 @@ function hybridSort(a: Reel, b: Reel): number {
 }
 
 export default function ReelsListPage() {
+  const confirm = useConfirm();
   const [allReels, setAllReels] = useState<Reel[]>([]);
   const [statusFilter, setStatusFilter] = usePersistentState('admin:social-reels:statusFilter', '');
   const [loading, setLoading] = useState(true);
@@ -140,7 +142,7 @@ export default function ReelsListPage() {
 
   async function handleBulk(action: 'approve' | 'delete') {
     if (selected.size === 0) return;
-    if (action === 'delete' && !confirm(`${selected.size} Reel(s) endgültig löschen? Storage-Files werden mitgelöscht.`)) return;
+    if (action === 'delete' && !(await confirm({ message: `${selected.size} Reel(s) endgültig löschen? Storage-Files werden mitgelöscht.`, confirmLabel: 'Löschen', danger: true }))) return;
     setBulkBusy(true);
     setBulkFeedback(null);
     try {

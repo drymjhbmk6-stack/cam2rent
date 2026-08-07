@@ -178,35 +178,35 @@ export default function KiPlanPage() {
       )}
 
       {/* Generator-Form */}
-      <section className="rounded-xl bg-slate-900/50 border border-slate-800 p-5 mb-6">
-        <h2 className="font-semibold text-white mb-4">Neuen Plan generieren</h2>
+      <section className="rounded-xl bg-slate-900/50 border border-admin-border p-5 mb-6">
+        <h2 className="font-semibold text-admin-heading mb-4">Neuen Plan generieren</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zeitraum (Tage)</label>
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Zeitraum (Tage)</label>
             <input type="number" min={1} max={90} value={days} onChange={(e) => setDays(Number(e.target.value))} disabled={isRunning}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-50" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Posts pro Woche</label>
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Posts pro Woche</label>
             <input type="number" min={1} max={7} value={postsPerWeek} onChange={(e) => setPostsPerWeek(Number(e.target.value))} disabled={isRunning}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-50" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Uhrzeit (0-23)</label>
+            <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Uhrzeit (0-23)</label>
             <input type="number" min={6} max={22} value={postHour} onChange={(e) => setPostHour(Number(e.target.value))} disabled={isRunning}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-50" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-50" />
           </div>
         </div>
 
         <div className="mb-4">
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Plattformen</label>
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">Plattformen</label>
           <div className="flex gap-3">
-            <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-admin-text cursor-pointer">
               <input type="checkbox" checked={platforms.includes('facebook')} onChange={() => togglePlatform('facebook')} disabled={isRunning} />
               Facebook
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-admin-text cursor-pointer">
               <input type="checkbox" checked={platforms.includes('instagram')} onChange={() => togglePlatform('instagram')} disabled={isRunning} />
               Instagram
             </label>
@@ -214,18 +214,18 @@ export default function KiPlanPage() {
         </div>
 
         <div className="mb-4">
-          <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-admin-text cursor-pointer">
             <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} disabled={isRunning} />
             Bilder mit DALL-E 3 generieren (langsamer + kostet ~0,04 € pro Bild)
           </label>
-          <p className="text-xs text-slate-500 mt-1 ml-6">
+          <p className="text-xs text-[var(--admin-text-dim)] mt-1 ml-6">
             Instagram verlangt Bilder. Ohne Bildgenerierung Posts nur auf Facebook.
           </p>
         </div>
 
-        <div className="rounded-lg bg-slate-950/50 border border-slate-800 p-3 mb-4 text-sm">
-          <p className="text-slate-400">
-            Ergibt <strong className="text-slate-200">{Math.ceil((days / 7) * postsPerWeek)} Posts</strong> verteilt über {days} Tage,
+        <div className="rounded-lg bg-slate-950/50 border border-admin-border p-3 mb-4 text-sm">
+          <p className="text-admin-muted">
+            Ergibt <strong className="text-admin-text">{Math.ceil((days / 7) * postsPerWeek)} Posts</strong> verteilt über {days} Tage,
             jeweils um {String(postHour).padStart(2, '0')}:00 Uhr.
           </p>
         </div>
@@ -243,7 +243,7 @@ export default function KiPlanPage() {
       {/* Liste geplanter Posts */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-white">Geplante Posts ({scheduled.length})</h2>
+          <h2 className="font-semibold text-admin-heading">Geplante Posts ({scheduled.length})</h2>
           {scheduled.length > 0 && (
             <button type="button" onClick={handleClearAll} className="text-xs text-red-400 hover:text-red-300">
               Alle löschen
@@ -251,27 +251,27 @@ export default function KiPlanPage() {
           )}
         </div>
 
-        {loading && <p className="text-slate-400">Lade…</p>}
+        {loading && <p className="text-admin-muted">Lade…</p>}
 
         {!loading && scheduled.length === 0 && (
-          <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
-            <p className="text-slate-400">Noch keine geplanten Posts. Generiere einen Plan oben.</p>
+          <div className="rounded-xl bg-slate-900/50 border border-admin-border p-8 text-center">
+            <p className="text-admin-muted">Noch keine geplanten Posts. Generiere einen Plan oben.</p>
           </div>
         )}
 
         <div className="space-y-2">
           {scheduled.map((p) => (
             <Link key={p.id} href={`/admin/social/posts/${p.id}`}
-              className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 border border-slate-800 hover:border-slate-700">
+              className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 border border-admin-border hover:border-[var(--admin-faint)]">
               {p.media_urls[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.media_urls[0]} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
               ) : (
-                <div className="w-14 h-14 rounded-lg bg-slate-800 flex items-center justify-center text-slate-600 text-xs flex-shrink-0">Text</div>
+                <div className="w-14 h-14 rounded-lg bg-admin-surface-2 flex items-center justify-center text-admin-muted-2 text-xs flex-shrink-0">Text</div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-200 line-clamp-2">{p.caption || '(leer)'}</p>
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500">
+                <p className="text-sm text-admin-text line-clamp-2">{p.caption || '(leer)'}</p>
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--admin-text-dim)]">
                   <span className="px-1.5 py-0.5 rounded bg-cyan-900/40 text-cyan-300 text-[10px] font-medium">
                     {fmtDateTime(p.scheduled_at)}
                   </span>
@@ -312,7 +312,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
             {running && <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
             {completed && <span className="text-emerald-400">✓</span>}
             {failed && <span className="text-red-400">✗</span>}
-            <h2 className="font-semibold text-white">
+            <h2 className="font-semibold text-admin-heading">
               {running && !stale && 'Plan wird generiert'}
               {running && stale && 'Job scheint hängen geblieben zu sein'}
               {completed && 'Fertig'}
@@ -320,7 +320,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
               {job.status === 'cancelled' && 'Abgebrochen'}
             </h2>
           </div>
-          <p className="text-sm text-slate-300">{job.message || (failed ? 'Keine Details verfügbar.' : '')}</p>
+          <p className="text-sm text-admin-text-2">{job.message || (failed ? 'Keine Details verfügbar.' : '')}</p>
           {job.error && <p className="text-sm text-red-300 mt-1">⚠ {job.error}</p>}
           {stale && (
             <p className="text-sm text-amber-300 mt-1">
@@ -338,7 +338,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
             <button
               type="button"
               onClick={onReset}
-              className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+              className="text-xs px-2 py-1 rounded bg-admin-surface-2 text-admin-text-2 hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]"
               title="Status zurücksetzen, damit ein neuer Plan gestartet werden kann"
             >
               Zuruecksetzen
@@ -350,7 +350,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
       {/* Progress-Bar */}
       {(running || completed) && job.total > 0 && (
         <>
-          <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-2">
+          <div className="h-2 rounded-full bg-admin-surface-2 overflow-hidden mb-2">
             <div
               className="h-full transition-all"
               style={{
@@ -359,7 +359,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
               }}
             />
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-admin-muted">
             {job.completed} / {job.total} Posts {job.failed > 0 && <span className="text-red-400">({job.failed} Fehler)</span>} · {progress}%
           </p>
         </>
@@ -368,14 +368,14 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
       {/* Recent-Log */}
       {job.recent && job.recent.length > 0 && (
         <details className="mt-3">
-          <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-200">
+          <summary className="text-xs text-admin-muted cursor-pointer hover:text-admin-text">
             Letzte {job.recent.length} Schritte anzeigen
           </summary>
           <ul className="mt-2 space-y-1">
             {job.recent.slice(0, 10).map((r, i) => (
               <li key={i} className="text-xs flex items-start gap-2">
                 <span className={r.ok ? 'text-emerald-400' : 'text-red-400'}>{r.ok ? '✓' : '✗'}</span>
-                <span className="text-slate-300 flex-1">{r.topic}</span>
+                <span className="text-admin-text-2 flex-1">{r.topic}</span>
                 {r.error && <span className="text-red-400 text-[10px]">{r.error.slice(0, 40)}</span>}
               </li>
             ))}
@@ -384,7 +384,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
       )}
 
       {running && (
-        <p className="text-xs text-slate-500 mt-3">
+        <p className="text-xs text-[var(--admin-text-dim)] mt-3">
           💡 Du kannst die Seite verlassen — der Job läuft im Hintergrund weiter und ist beim nächsten Besuch hier sichtbar.
         </p>
       )}
