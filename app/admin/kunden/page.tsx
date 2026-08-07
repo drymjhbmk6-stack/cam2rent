@@ -75,7 +75,7 @@ function displayName(full: string): string {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  none: { label: 'Nicht verifiziert', color: '#94a3b8', bg: '#94a3b814' },
+  none: { label: 'Nicht verifiziert', color: 'var(--admin-muted)', bg: '#94a3b814' },
   pending: { label: 'Ausstehend', color: '#f59e0b', bg: '#f59e0b14' },
   verified: { label: 'Verifiziert', color: '#10b981', bg: '#10b98114' },
   rejected: { label: 'Abgelehnt', color: '#ef4444', bg: '#ef444414' },
@@ -281,10 +281,10 @@ export default function KundenPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--admin-text)', margin: 0 }}>
             Kunden
           </h1>
-          <p style={{ fontSize: 14, color: '#64748b', marginTop: 4, marginBottom: 0 }}>
+          <p style={{ fontSize: 14, color: 'var(--admin-text-dim)', marginTop: 4, marginBottom: 0 }}>
             {search
               ? `${filtered.length} Kunden gefunden`
               : letter
@@ -300,9 +300,9 @@ export default function KundenPage() {
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 600,
-            color: '#94a3b8',
-            background: '#111827',
-            border: '1px solid #1e293b',
+            color: 'var(--admin-muted)',
+            background: 'var(--admin-surface)',
+            border: '1px solid var(--admin-border)',
             cursor: 'pointer',
             whiteSpace: 'nowrap',
           }}
@@ -316,8 +316,8 @@ export default function KundenPage() {
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: 400 }}>
           <svg
-            width="16" height="16" fill="none" stroke="#64748b" viewBox="0 0 24 24"
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}
+            width="16" height="16" fill="none" viewBox="0 0 24 24"
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', stroke: 'var(--admin-text-dim)' }}
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -329,10 +329,10 @@ export default function KundenPage() {
             style={{
               width: '100%',
               padding: '10px 12px 10px 38px',
-              background: '#111827',
-              border: '1px solid #1e293b',
+              background: 'var(--admin-surface)',
+              border: '1px solid var(--admin-border)',
               borderRadius: 8,
-              color: '#e2e8f0',
+              color: 'var(--admin-text)',
               fontSize: 14,
               boxSizing: 'border-box',
               outline: 'none',
@@ -353,8 +353,8 @@ export default function KundenPage() {
                 fontWeight: 600,
                 border: 'none',
                 cursor: 'pointer',
-                background: filter === f.value ? '#1e293b' : 'transparent',
-                color: filter === f.value ? '#22d3ee' : '#64748b',
+                background: filter === f.value ? 'var(--admin-surface-2)' : 'transparent',
+                color: filter === f.value ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
                 transition: 'all 0.2s',
               }}
             >
@@ -390,8 +390,8 @@ export default function KundenPage() {
                   fontWeight: 700,
                   border: 'none',
                   cursor: has ? 'pointer' : 'default',
-                  background: active ? '#06b6d4' : has ? '#111827' : 'transparent',
-                  color: active ? '#0a0f1e' : has ? '#e2e8f0' : '#334155',
+                  background: active ? 'var(--admin-accent)' : has ? 'var(--admin-surface)' : 'transparent',
+                  color: active ? 'var(--admin-primary-text)' : has ? 'var(--admin-text)' : 'var(--admin-faint)',
                 }}
               >
                 {l}
@@ -402,18 +402,18 @@ export default function KundenPage() {
       )}
 
       {/* Tabelle */}
-      <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)', overflow: 'hidden' }}>
         {loading ? (
           <TableSkeleton rows={10} bare />
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
             {!search.trim() && !letter ? 'Buchstaben wählen, um Kunden anzuzeigen.' : 'Keine Kunden gefunden.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: 1040, borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Letzter Login', 'Login her'].map((h) => (
                     <th
                       key={h}
@@ -424,7 +424,7 @@ export default function KundenPage() {
                         fontWeight: 600,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
-                        color: '#64748b',
+                        color: 'var(--admin-text-dim)',
                       }}
                     >
                       {h}
@@ -440,23 +440,23 @@ export default function KundenPage() {
                       key={c.id}
                       onClick={() => router.push(`/admin/kunden/${c.id}`)}
                       style={{
-                        borderBottom: i < filtered.length - 1 ? '1px solid #1e293b' : 'none',
+                        borderBottom: i < filtered.length - 1 ? '1px solid var(--admin-border)' : 'none',
                         cursor: 'pointer',
                         animation: `fadeIn 0.3s ease ${i * 0.03}s both`,
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#1e293b44'; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                     >
-                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>
                         {displayName(c.full_name) || '—'}
                       </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--admin-muted)' }}>
                         {c.email}
                       </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--admin-muted)' }}>
                         {c.address_city || '—'}
                       </td>
-                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 600, color: 'var(--admin-text)' }}>
                         {c.booking_count}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
@@ -484,7 +484,7 @@ export default function KundenPage() {
                                 borderRadius: 6,
                                 fontSize: 12,
                                 fontWeight: 600,
-                                color: '#ef4444',
+                                color: 'var(--admin-danger)',
                                 background: '#ef444414',
                               }}
                             >
@@ -499,7 +499,7 @@ export default function KundenPage() {
                                 borderRadius: 6,
                                 fontSize: 12,
                                 fontWeight: 600,
-                                color: '#94a3b8',
+                                color: 'var(--admin-muted)',
                                 background: '#94a3b814',
                                 border: '1px solid #94a3b833',
                               }}
@@ -599,7 +599,7 @@ export default function KundenPage() {
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--admin-text-dim)', whiteSpace: 'nowrap' }}>
                         {c.last_login ? fmtDateTime(c.last_login) : '—'}
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: agoColor(c.last_login), whiteSpace: 'nowrap' }}>
