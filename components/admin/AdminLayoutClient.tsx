@@ -358,36 +358,50 @@ function NavGroupCollapse({
   );
 }
 
-function ReelsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
-  const visibleItems = REELS_ITEMS.filter((i) => canSee(me, i));
-  const isReelsPath = pathname.startsWith('/admin/social/reels');
-  const [open, setOpen] = useState<boolean>(isReelsPath);
+/**
+ * Generische, aufklappbare Sub-Navigation (Blog / Posts / Reels). Ersetzt die
+ * drei fast identischen `*Collapse`-Komponenten — reiner Refactor, Verhalten
+ * 1:1: Collapse-State pro `storageKey` in localStorage, Auto-Expand wenn
+ * `active` (aktueller Pfad im Bereich), gleiche Optik/Hover/Chevron.
+ * `hideWhenEmpty`: bei 0 sichtbaren Items nichts rendern (Posts/Reels) vs.
+ * Header trotzdem zeigen (Blog).
+ */
+function SubNavCollapse({ label, icon, items, storageKey, active, pathname, onNavClick, me, hideWhenEmpty }: {
+  label: string;
+  icon: React.ReactNode;
+  items: NavItem[];
+  storageKey: string;
+  active: boolean;
+  pathname: string;
+  onNavClick?: () => void;
+  me: MeInfo | null;
+  hideWhenEmpty?: boolean;
+}) {
+  const visibleItems = items.filter((i) => canSee(me, i));
+  const [open, setOpen] = useState<boolean>(active);
 
+  // Initial: Auto-Expand bei aktivem Bereich, sonst localStorage-Stand.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (isReelsPath) {
-      setOpen(true);
-      return;
-    }
+    if (active) { setOpen(true); return; }
     try {
-      const raw = window.localStorage.getItem('admin_reels_collapsed');
+      const raw = window.localStorage.getItem(storageKey);
       if (raw !== null) setOpen(raw === 'false');
-    } catch { /* empty */ }
-  }, [isReelsPath]);
+    } catch { /* localStorage nicht verfügbar */ }
+  }, [active, storageKey]);
 
+  // Auto-Expand bei Navigation in den Bereich.
   useEffect(() => {
-    if (isReelsPath && !open) setOpen(true);
-  }, [isReelsPath, open]);
+    if (active && !open) setOpen(true);
+  }, [active, open]);
 
   function toggle() {
     const next = !open;
     setOpen(next);
-    try {
-      window.localStorage.setItem('admin_reels_collapsed', next ? 'false' : 'true');
-    } catch { /* empty */ }
+    try { window.localStorage.setItem(storageKey, next ? 'false' : 'true'); } catch { /* localStorage nicht verfügbar */ }
   }
 
-  if (visibleItems.length === 0) return null;
+  if (hideWhenEmpty && visibleItems.length === 0) return null;
 
   return (
     <div>
@@ -395,137 +409,15 @@ function ReelsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavCl
         type="button"
         onClick={toggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isReelsPath ? 'var(--admin-accent-soft)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
-        onMouseLeave={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
+        style={{ color: active ? 'var(--admin-accent)' : 'var(--admin-muted)', background: active ? 'var(--admin-accent-soft)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
       >
-        <span style={{ color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconFilm}</span>
-        <span className="flex-1">Reels</span>
+        <span style={{ color: active ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{icon}</span>
+        <span className="flex-1">{label}</span>
         <span
           style={{
-            color: isReelsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
-            transform: open ? 'rotate(90deg)' : 'none',
-            transition: 'transform 0.15s ease',
-          }}
-        >
-          {iconChevron}
-        </span>
-      </button>
-      {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
-          {visibleItems.map((item) => (
-            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PostsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
-  const visibleItems = POSTS_ITEMS.filter((i) => canSee(me, i));
-  // Aktiv wenn auf Social-Posts-Seiten, aber NICHT auf Reels-Seiten
-  const isPostsPath = pathname.startsWith('/admin/social') && !pathname.startsWith('/admin/social/reels');
-  const [open, setOpen] = useState<boolean>(isPostsPath);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (isPostsPath) { setOpen(true); return; }
-    try {
-      const raw = window.localStorage.getItem('admin_posts_collapsed');
-      if (raw !== null) setOpen(raw === 'false');
-    } catch { /* empty */ }
-  }, [isPostsPath]);
-
-  useEffect(() => {
-    if (isPostsPath && !open) setOpen(true);
-  }, [isPostsPath, open]);
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    try { window.localStorage.setItem('admin_posts_collapsed', next ? 'false' : 'true'); } catch { /* empty */ }
-  }
-
-  if (visibleItems.length === 0) return null;
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isPostsPath ? 'var(--admin-accent-soft)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
-        onMouseLeave={(e) => { if (!isPostsPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
-      >
-        <span style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconSocial}</span>
-        <span className="flex-1">Posts</span>
-        <span style={{ color: isPostsPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
-          {iconChevron}
-        </span>
-      </button>
-      {open && (
-        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid var(--admin-border)' }}>
-          {visibleItems.map((item) => (
-            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BlogCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
-  const visibleItems = BLOG_ITEMS.filter((i) => canSee(me, i));
-  const isBlogPath = pathname.startsWith('/admin/blog');
-  const [open, setOpen] = useState<boolean>(isBlogPath);
-
-  // Initial: localStorage oder Auto-Expand bei Blog-Pfad
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (isBlogPath) {
-      setOpen(true);
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem('admin_blog_collapsed');
-      if (raw !== null) setOpen(raw === 'false');
-    } catch {
-      // localStorage nicht verfügbar
-    }
-  }, [isBlogPath]);
-
-  // Auto-Expand bei Navigation in Blog-Bereich
-  useEffect(() => {
-    if (isBlogPath && !open) setOpen(true);
-  }, [isBlogPath, open]);
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    try {
-      window.localStorage.setItem('admin_blog_collapsed', next ? 'false' : 'true');
-    } catch {
-      // localStorage nicht verfügbar
-    }
-  }
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted)', background: isBlogPath ? 'var(--admin-accent-soft)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
-        onMouseLeave={(e) => { if (!isBlogPath) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
-      >
-        <span style={{ color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}>{iconBlog}</span>
-        <span className="flex-1">Blog</span>
-        <span
-          style={{
-            color: isBlogPath ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
+            color: active ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 0.15s ease',
           }}
@@ -743,9 +635,9 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
           open={openGroup === 'content'}
           onToggle={() => toggleGroup('content')}
         >
-          <BlogCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
-          <PostsCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
-          <ReelsCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
+          <SubNavCollapse label="Blog" icon={iconBlog} items={BLOG_ITEMS} storageKey="admin_blog_collapsed" active={pathname.startsWith('/admin/blog')} pathname={pathname} onNavClick={onNavClick} me={me} />
+          <SubNavCollapse label="Posts" icon={iconSocial} items={POSTS_ITEMS} storageKey="admin_posts_collapsed" active={pathname.startsWith('/admin/social') && !pathname.startsWith('/admin/social/reels')} pathname={pathname} onNavClick={onNavClick} me={me} hideWhenEmpty />
+          <SubNavCollapse label="Reels" icon={iconFilm} items={REELS_ITEMS} storageKey="admin_reels_collapsed" active={pathname.startsWith('/admin/social/reels')} pathname={pathname} onNavClick={onNavClick} me={me} hideWhenEmpty />
         </NavGroupCollapse>
         <NavGroupCollapse
           label="Webseite"
