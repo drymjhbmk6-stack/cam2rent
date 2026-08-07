@@ -61,15 +61,15 @@ export default function AusgabenNeuPage() {
   }, [from, to, kategorie, quelle]);
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung" />
       <div className="max-w-7xl mx-auto mt-4 space-y-4">
         <div className="flex justify-between items-start gap-3">
           <div>
             <h1 className="text-2xl font-heading">Ausgaben (vereinheitlicht)</h1>
-            <p className="text-sm text-slate-400">Aus beleg_positionen WHERE klassifizierung=&apos;ausgabe&apos;. Neue Ausgaben über → Beleg.</p>
+            <p className="text-sm text-admin-muted">Aus beleg_positionen WHERE klassifizierung=&apos;ausgabe&apos;. Neue Ausgaben über → Beleg.</p>
           </div>
-          <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">+ Neuer Beleg</Link>
+          <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded font-semibold">+ Neuer Beleg</Link>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -82,27 +82,27 @@ export default function AusgabenNeuPage() {
 
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-slate-400">Von</label>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+            <label className="block text-xs text-admin-muted">Von</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
           </div>
           <div>
-            <label className="block text-xs text-slate-400">Bis</label>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+            <label className="block text-xs text-admin-muted">Bis</label>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
           </div>
-          <select value={quelle} onChange={(e) => setQuelle(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={quelle} onChange={(e) => setQuelle(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Quellen</option>
             <option value="upload">Upload</option>
             <option value="manuell">Manuell</option>
             <option value="stripe_sync">Stripe</option>
             <option value="migration">Migration</option>
           </select>
-          <input value={kategorie} onChange={(e) => setKategorie(e.target.value)} placeholder="Kategorie" className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+          <input value={kategorie} onChange={(e) => setKategorie(e.target.value)} placeholder="Kategorie" className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base" />
         </div>
 
-        {loading ? <p className="text-slate-400">Lädt…</p> : (
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
+        {loading ? <p className="text-admin-muted">Lädt…</p> : (
+          <div className="bg-admin-surface rounded border border-admin-border overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-left text-xs uppercase text-slate-400">
+              <thead className="bg-[var(--admin-thead-bg)] text-left text-xs uppercase text-admin-muted">
                 <tr>
                   <th className="px-3 py-2">Bezeichnung</th>
                   <th className="px-3 py-2">Kategorie</th>
@@ -114,9 +114,9 @@ export default function AusgabenNeuPage() {
               </thead>
               <tbody>
                 {data.map((p) => p.beleg && (
-                  <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer" onClick={() => { window.location.href = `/admin/buchhaltung/belege/${p.beleg!.id}`; }}>
+                  <tr key={p.id} className="border-t border-admin-border hover:bg-slate-800/40 cursor-pointer" onClick={() => { window.location.href = `/admin/buchhaltung/belege/${p.beleg!.id}`; }}>
                     <td className="px-3 py-2">{p.bezeichnung}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{p.kategorie ?? '–'}</td>
+                    <td className="px-3 py-2 text-xs text-admin-muted">{p.kategorie ?? '–'}</td>
                     <td className="px-3 py-2 text-xs">{fmtDate(p.beleg.beleg_datum)}</td>
                     <td className="px-3 py-2 text-xs">{p.beleg.lieferant?.name ?? '–'}</td>
                     <td className="px-3 py-2 text-xs">
@@ -129,7 +129,7 @@ export default function AusgabenNeuPage() {
                 ))}
               </tbody>
             </table>
-            {data.length === 0 && <p className="p-3 text-sm text-slate-500 italic">Keine Ausgaben im Zeitraum.</p>}
+            {data.length === 0 && <p className="p-3 text-sm text-[var(--admin-text-dim)] italic">Keine Ausgaben im Zeitraum.</p>}
           </div>
         )}
       </div>
@@ -138,6 +138,6 @@ export default function AusgabenNeuPage() {
 }
 
 function Stat({ label, value, color = 'slate' }: { label: string; value: string; color?: string }) {
-  const cl = color === 'cyan' ? 'text-cyan-400' : 'text-slate-200';
-  return <div className="bg-[#111827] border border-slate-800 rounded p-3"><div className="text-xs text-slate-400">{label}</div><div className={`text-lg font-mono ${cl}`}>{value}</div></div>;
+  const cl = color === 'cyan' ? 'text-cyan-400' : 'text-admin-text';
+  return <div className="bg-admin-surface border border-admin-border rounded p-3"><div className="text-xs text-admin-muted">{label}</div><div className={`text-lg font-mono ${cl}`}>{value}</div></div>;
 }
