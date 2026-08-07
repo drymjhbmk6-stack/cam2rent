@@ -7,9 +7,9 @@ import { usePersistentState } from '@/lib/use-persistent-state';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg: '#0a0f1e',
-  card: '#111827',
-  border: '#1e293b',
+  bg: 'var(--admin-bg)',
+  card: 'var(--admin-surface)',
+  border: 'var(--admin-border)',
   cyan: '#06b6d4',
   cyanLight: '#22d3ee',
   green: '#10b981',
@@ -17,10 +17,10 @@ const C = {
   red: '#ef4444',
   purple: '#8b5cf6',
   purpleLight: '#a78bfa',
-  text: '#e2e8f0',
-  textMuted: '#94a3b8',
-  textDim: '#64748b',
-  textDark: '#475569',
+  text: 'var(--admin-text)',
+  textMuted: 'var(--admin-muted)',
+  textDim: 'var(--admin-text-dim)',
+  textDark: 'var(--admin-muted-2)',
 } as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -424,7 +424,7 @@ function WeekdayHourHeatmap({ grid }: { grid: number[][] }) {
               <div
                 key={hh}
                 title={`${WEEKDAY_LABELS_LONG[wd]}, ${hh}:00–${(hh + 1) % 24}:00 Uhr — ${v} Besuche`}
-                style={{ height: 20, borderRadius: 3, background: cellBg(v), border: `1px solid ${C.border}55` }}
+                style={{ height: 20, borderRadius: 3, background: cellBg(v), border: `1px solid #1e293b55` }}
               />
             ))}
           </div>
@@ -434,7 +434,7 @@ function WeekdayHourHeatmap({ grid }: { grid: number[][] }) {
           <span>weniger</span>
           <div style={{ display: 'flex', gap: 2 }}>
             {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-              <div key={t} style={{ width: 18, height: 12, borderRadius: 2, background: t === 0 ? '#0f172a' : `rgba(34,211,238,${0.15 + 0.85 * t})`, border: `1px solid ${C.border}55` }} />
+              <div key={t} style={{ width: 18, height: 12, borderRadius: 2, background: t === 0 ? '#0f172a' : `rgba(34,211,238,${0.15 + 0.85 * t})`, border: `1px solid #1e293b55` }} />
             ))}
           </div>
           <span>mehr</span>
@@ -1139,7 +1139,6 @@ export default function AnalyticsPage() {
     color: C.text,
     fontSize: 12,
     outline: 'none',
-    colorScheme: 'dark',
   };
 
   return (
@@ -1505,7 +1504,7 @@ export default function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {(liveData.visitors ?? []).map((v, i) => (
-                      <tr key={i} className="row-fade" style={{ borderBottom: `1px solid ${C.border}22`, animationDelay: `${i * 50}ms` }}>
+                      <tr key={i} className="row-fade" style={{ borderBottom: `1px solid #1e293b22`, animationDelay: `${i * 50}ms` }}>
                         <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: C.textMuted }}>{v.visitor_id}</td>
                         <td style={{ padding: '10px 12px' }}>
                           <span style={{ background: `${C.cyan}18`, color: C.cyanLight, borderRadius: 6, padding: '2px 8px', fontFamily: 'monospace', fontSize: 11 }}>{v.current_page}</span>
@@ -1646,7 +1645,7 @@ export default function AnalyticsPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(funnelData.funnel ?? []).map((step, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 160, textAlign: 'right', fontSize: 13, color: '#cbd5e1', flexShrink: 0 }}>{step.step}</div>
+                    <div style={{ width: 160, textAlign: 'right', fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0 }}>{step.step}</div>
                     <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 28, overflow: 'hidden', position: 'relative' }}>
                       <div style={{
                         width: `${Math.max(2, step.pct)}%`, height: '100%',
@@ -1698,7 +1697,7 @@ export default function AnalyticsPage() {
                       ? (productsData.products ?? []).filter(p => p.slug === filters.product)
                       : productsData.products ?? []
                     ).map((p, i) => (
-                      <tr key={i} className="row-fade" style={{ borderBottom: `1px solid ${C.border}22`, animationDelay: `${i * 40}ms` }}>
+                      <tr key={i} className="row-fade" style={{ borderBottom: `1px solid #1e293b22`, animationDelay: `${i * 40}ms` }}>
                         <td style={{ padding: '10px 12px', fontWeight: 600, color: C.text }}>{p.slug}</td>
                         <td style={{ padding: '10px 12px', color: C.textMuted }}>{p.views}</td>
                         <td style={{ padding: '10px 12px', fontWeight: 700, color: C.green }}>{p.bookings}</td>
@@ -1735,7 +1734,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(trafficData.sources ?? []).map((s, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 100, fontSize: 13, color: '#cbd5e1', flexShrink: 0 }}>{s.source}</div>
+                      <div style={{ width: 100, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0 }}>{s.source}</div>
                       <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
                         <div style={{
                           width: `${s.pct}%`, height: 22, borderRadius: 6,
@@ -1764,7 +1763,7 @@ export default function AnalyticsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {(trafficData.countries ?? []).map((c, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 130, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ width: 130, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           <span style={{ marginRight: 6 }}>{flagEmoji(c.code)}</span>{countryName(c.code)}
                         </div>
                         <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
@@ -1819,7 +1818,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(trafficData?.de_regions ?? []).map((r, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundeslandName(r.name)}</div>
+                      <div style={{ width: 150, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundeslandName(r.name)}</div>
                       <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
                         <div style={{ width: `${r.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.cyan}, ${C.cyan}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
                           <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.count} ({r.pct}%)</span>
@@ -1837,7 +1836,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(trafficData?.de_cities ?? []).map((c, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stadtName(c.name)}</div>
+                      <div style={{ width: 150, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stadtName(c.name)}</div>
                       <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
                         <div style={{ width: `${c.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
                           <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.count} ({c.pct}%)</span>
@@ -1946,7 +1945,7 @@ export default function AnalyticsPage() {
                   ].map((d) => (
                     <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ width: 24 }}>{d.emoji}</span>
-                      <span style={{ width: 60, fontSize: 13, color: '#cbd5e1' }}>{d.label}</span>
+                      <span style={{ width: 60, fontSize: 13, color: 'var(--admin-text-2)' }}>{d.label}</span>
                       <ProgressBar pct={d.pct} color={d.color} height={8} />
                       <span style={{ width: 40, textAlign: 'right', fontSize: 13, color: d.color, fontWeight: 600 }}>{d.pct}%</span>
                     </div>
@@ -1968,7 +1967,7 @@ export default function AnalyticsPage() {
                     const color = bColors[b.browser] ?? C.textDim;
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ width: 70, fontSize: 13, color: '#cbd5e1' }}>{b.browser}</span>
+                        <span style={{ width: 70, fontSize: 13, color: 'var(--admin-text-2)' }}>{b.browser}</span>
                         <ProgressBar pct={b.pct} color={color} height={8} />
                         <span style={{ width: 40, textAlign: 'right', fontSize: 13, color, fontWeight: 600 }}>{b.pct}%</span>
                       </div>
@@ -2011,7 +2010,7 @@ export default function AnalyticsPage() {
                         {i + 1}.
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 13, color: 'var(--admin-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.title}
                         </div>
                       </div>
