@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 const PERMISSION_KEYS = [
   'tagesgeschaeft',
@@ -75,6 +77,7 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function MitarbeiterPage() {
+  const confirm = useConfirm();
   const [me, setMe] = useState<AdminUser | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [notifTypes, setNotifTypes] = useState<NotificationType[]>([]);
@@ -208,7 +211,12 @@ export default function MitarbeiterPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Mitarbeiter "${name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+    const ok = await confirm({
+      title: 'Mitarbeiter löschen',
+      message: `Mitarbeiter "${name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      danger: true,
+    });
+    if (!ok) return;
     setErr('');
     const res = await fetch(`/api/admin/employees/${id}`, { method: 'DELETE' });
     const data = await res.json();
@@ -225,7 +233,7 @@ export default function MitarbeiterPage() {
       <button
         onClick={() => setShowNew((v) => !v)}
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-colors"
-        style={{ background: '#06b6d4', color: '#0a0a0a' }}
+        style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' }}
       >
         {showNew ? '× Schließen' : '+ Neuer Mitarbeiter'}
       </button>
@@ -234,7 +242,7 @@ export default function MitarbeiterPage() {
 
   if (loading) {
     return (
-      <div className="p-8 text-sm" style={{ color: '#94a3b8' }}>Laden…</div>
+      <div className="p-8 text-sm" style={{ color: 'var(--admin-muted)' }}>Laden…</div>
     );
   }
 
@@ -251,17 +259,13 @@ export default function MitarbeiterPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-5xl">
-      <AdminBackLink href="/admin/einstellungen" label="Zurück zu Einstellungen" />
-
-      <div className="mt-4 flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-heading font-black" style={{ color: '#e2e8f0' }}>Mitarbeiter</h1>
-          <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>
-            Lege Mitarbeiter-Konten an und entscheide pro Person, welche Bereiche sie sehen darf.
-          </p>
-        </div>
-        {headerButton}
-      </div>
+      <PageHeader
+        title="Mitarbeiter"
+        subtitle="Lege Mitarbeiter-Konten an und entscheide pro Person, welche Bereiche sie sehen darf."
+        actions={headerButton}
+        backHref="/admin/einstellungen"
+        backLabel="Zurück zu Einstellungen"
+      />
 
       {err && (
         <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: '#450a0a', color: '#fecaca', border: '1px solid #b91c1c' }}>
@@ -271,8 +275,8 @@ export default function MitarbeiterPage() {
 
       {/* Neu-Formular */}
       {showNew && (
-        <div className="mt-6 rounded-lg p-5 space-y-4" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
-          <h2 className="text-lg font-heading font-bold" style={{ color: '#e2e8f0' }}>Neuen Mitarbeiter anlegen</h2>
+        <div className="mt-6 rounded-lg p-5 space-y-4" style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)' }}>
+          <h2 className="text-lg font-heading font-bold" style={{ color: 'var(--admin-text)' }}>Neuen Mitarbeiter anlegen</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Name" value={newName} onChange={setNewName} placeholder="Max Mustermann" />
             <Input label="E-Mail" type="email" value={newEmail} onChange={setNewEmail} placeholder="max@cam2rent.de" />
@@ -280,19 +284,19 @@ export default function MitarbeiterPage() {
             <Input label="Start-Passwort (mind. 8 Zeichen)" type="text" value={newPassword} onChange={setNewPassword} placeholder="Kann später geändert werden" />
             <Input label="Postfach-Adresse für Kunden-E-Mails (optional)" type="email" value={newInbox} onChange={setNewInbox} placeholder="z.B. max@cam2rent.de" />
             <div>
-              <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>Rolle</label>
+              <label className="block text-xs font-heading font-semibold mb-1" style={{ color: 'var(--admin-muted)' }}>Rolle</label>
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as 'owner' | 'employee')}
                 className="w-full rounded-lg px-3 py-2 text-sm"
-                style={{ background: '#0a0f1e', color: '#e2e8f0', border: '1px solid #1e293b' }}
+                style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)' }}
                 disabled={!iAmOwner}
               >
                 <option value="employee">Mitarbeiter</option>
                 {iAmOwner && <option value="owner">Owner (alle Rechte)</option>}
               </select>
               {!iAmOwner && (
-                <p className="text-xs mt-1" style={{ color: '#64748b' }}>Nur Owner können andere zu Owner ernennen.</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--admin-text-dim)' }}>Nur Owner können andere zu Owner ernennen.</p>
               )}
             </div>
           </div>
@@ -308,14 +312,14 @@ export default function MitarbeiterPage() {
               onClick={handleCreate}
               disabled={saving || !newName || !newEmail || newPassword.length < 8}
               className="px-4 py-2 rounded-lg text-sm font-heading font-semibold disabled:opacity-50"
-              style={{ background: '#06b6d4', color: '#0a0a0a' }}
+              style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' }}
             >
               {saving ? 'Speichere…' : 'Anlegen'}
             </button>
             <button
               onClick={() => setShowNew(false)}
               className="px-4 py-2 rounded-lg text-sm"
-              style={{ color: '#94a3b8', border: '1px solid #334155' }}
+              style={{ color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }}
             >
               Abbrechen
             </button>
@@ -326,10 +330,10 @@ export default function MitarbeiterPage() {
       {/* Liste */}
       <div className="mt-8 space-y-3">
         {users.length === 0 && (
-          <div className="rounded-lg p-6 text-sm" style={{ background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b' }}>
+          <div className="rounded-lg p-6 text-sm" style={{ background: 'var(--admin-surface)', color: 'var(--admin-muted)', border: '1px solid var(--admin-border)' }}>
             Noch keine Mitarbeiter-Konten vorhanden. Klick oben auf „+ Neuer Mitarbeiter“.
             <br />
-            <span className="text-xs" style={{ color: '#64748b' }}>
+            <span className="text-xs" style={{ color: 'var(--admin-text-dim)' }}>
               Der ENV-Admin (über ADMIN_PASSWORD) bleibt als Notfall-Login immer aktiv.
             </span>
           </div>
@@ -338,7 +342,7 @@ export default function MitarbeiterPage() {
           <div
             key={u.id}
             className="rounded-lg p-4"
-            style={{ background: '#0f172a', border: u.is_active ? '1px solid #1e293b' : '1px dashed #6b7280' }}
+            style={{ background: 'var(--admin-surface)', border: u.is_active ? '1px solid var(--admin-border)' : '1px dashed var(--admin-muted-2)' }}
           >
             {editingId === u.id ? (
               <div className="space-y-4">
@@ -361,12 +365,12 @@ export default function MitarbeiterPage() {
                     placeholder="z.B. max@cam2rent.de"
                   />
                   <div>
-                    <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>Rolle</label>
+                    <label className="block text-xs font-heading font-semibold mb-1" style={{ color: 'var(--admin-muted)' }}>Rolle</label>
                     <select
                       value={editRole}
                       onChange={(e) => setEditRole(e.target.value as 'owner' | 'employee')}
                       className="w-full rounded-lg px-3 py-2 text-sm"
-                      style={{ background: '#0a0f1e', color: '#e2e8f0', border: '1px solid #1e293b' }}
+                      style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)' }}
                       disabled={!iAmOwner}
                     >
                       <option value="employee">Mitarbeiter</option>
@@ -375,7 +379,7 @@ export default function MitarbeiterPage() {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm" style={{ color: '#e2e8f0' }}>
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--admin-text)' }}>
                   <input
                     type="checkbox"
                     checked={editActive}
@@ -403,14 +407,14 @@ export default function MitarbeiterPage() {
                     onClick={() => handleUpdate(u.id)}
                     disabled={saving}
                     className="px-4 py-2 rounded-lg text-sm font-heading font-semibold disabled:opacity-50"
-                    style={{ background: '#06b6d4', color: '#0a0a0a' }}
+                    style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)' }}
                   >
                     {saving ? 'Speichere…' : 'Speichern'}
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
                     className="px-4 py-2 rounded-lg text-sm"
-                    style={{ color: '#94a3b8', border: '1px solid #334155' }}
+                    style={{ color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }}
                   >
                     Abbrechen
                   </button>
@@ -420,7 +424,7 @@ export default function MitarbeiterPage() {
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-heading font-bold text-base" style={{ color: '#e2e8f0' }}>{u.name}</span>
+                    <span className="font-heading font-bold text-base" style={{ color: 'var(--admin-text)' }}>{u.name}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{
                       background: u.role === 'owner' ? '#7c2d12' : '#1e40af',
                       color: u.role === 'owner' ? '#fed7aa' : '#bfdbfe',
@@ -433,16 +437,16 @@ export default function MitarbeiterPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-sm mt-1" style={{ color: '#94a3b8' }}>
+                  <div className="text-sm mt-1" style={{ color: 'var(--admin-muted)' }}>
                     {u.email}
                     {u.username && (
-                      <span style={{ color: '#06b6d4', marginLeft: 8 }}>· @{u.username}</span>
+                      <span style={{ color: 'var(--admin-accent)', marginLeft: 8 }}>· @{u.username}</span>
                     )}
                     {u.inbox_address && (
                       <span style={{ color: '#38bdf8', marginLeft: 8 }}>· 📧 {u.inbox_address}</span>
                     )}
                   </div>
-                  <div className="text-xs mt-2" style={{ color: '#64748b' }}>
+                  <div className="text-xs mt-2" style={{ color: 'var(--admin-text-dim)' }}>
                     Letzter Login: {fmtDate(u.last_login_at)} · Angelegt: {fmtDate(u.created_at)}
                   </div>
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -457,7 +461,7 @@ export default function MitarbeiterPage() {
                         <span
                           key={p}
                           className="text-xs px-2 py-1 rounded"
-                          style={{ background: '#1e293b', color: '#cbd5e1' }}
+                          style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text-2)' }}
                         >
                           {PERMISSION_LABELS[p] ?? p}
                         </span>
@@ -474,7 +478,7 @@ export default function MitarbeiterPage() {
                   <button
                     onClick={() => startEdit(u)}
                     className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold"
-                    style={{ color: '#06b6d4', border: '1px solid #06b6d4' }}
+                    style={{ color: 'var(--admin-accent)', border: '1px solid var(--admin-accent)' }}
                   >
                     Bearbeiten
                   </button>
@@ -482,7 +486,7 @@ export default function MitarbeiterPage() {
                     <button
                       onClick={() => handleDelete(u.id, u.name)}
                       className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold"
-                      style={{ color: '#ef4444', border: '1px solid #ef4444' }}
+                      style={{ color: 'var(--admin-danger)', border: '1px solid var(--admin-danger)' }}
                     >
                       Löschen
                     </button>
@@ -494,7 +498,7 @@ export default function MitarbeiterPage() {
         ))}
       </div>
 
-      <div className="mt-8 rounded-lg p-4 text-xs" style={{ background: '#0f172a', color: '#64748b', border: '1px solid #1e293b' }}>
+      <div className="mt-8 rounded-lg p-4 text-xs" style={{ background: 'var(--admin-surface)', color: 'var(--admin-text-dim)', border: '1px solid var(--admin-border)' }}>
         <strong>Hinweis:</strong> Der Login per <code>ADMIN_PASSWORD</code>-ENV bleibt als Notfall-Zugang immer erhalten und hat alle Rechte. Mitarbeiter melden sich mit ihrer E-Mail + Passwort an.
       </div>
     </div>
@@ -515,7 +519,7 @@ function Input({
 }) {
   return (
     <div>
-      <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>{label}</label>
+      <label className="block text-xs font-heading font-semibold mb-1" style={{ color: 'var(--admin-muted)' }}>{label}</label>
       <input
         type={type}
         value={value}
@@ -523,7 +527,7 @@ function Input({
         placeholder={placeholder}
         // text-base (16 px) verhindert iOS-Auto-Zoom beim Fokus
         className="w-full rounded-lg px-3 py-2 text-base"
-        style={{ background: '#0a0f1e', color: '#e2e8f0', border: '1px solid #1e293b' }}
+        style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)' }}
       />
     </div>
   );
@@ -542,7 +546,7 @@ function PermissionGrid({
   return (
     <div>
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+        <label className="text-xs font-heading font-semibold" style={{ color: 'var(--admin-muted)' }}>
           Zugriffsrechte
         </label>
         {disabled && (
@@ -562,8 +566,8 @@ function PermissionGrid({
               disabled={disabled}
               className="text-left rounded-lg p-3 transition-colors"
               style={{
-                background: active ? 'rgba(6,182,212,0.1)' : '#0a0f1e',
-                border: active ? '1px solid #06b6d4' : '1px solid #1e293b',
+                background: active ? 'var(--admin-accent-soft)' : 'var(--admin-input-bg)',
+                border: active ? '1px solid var(--admin-accent)' : '1px solid var(--admin-border)',
                 opacity: disabled ? 0.5 : 1,
                 cursor: disabled ? 'not-allowed' : 'pointer',
               }}
@@ -572,21 +576,21 @@ function PermissionGrid({
                 <div
                   className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
                   style={{
-                    borderColor: active ? '#06b6d4' : '#475569',
-                    background: active ? '#06b6d4' : 'transparent',
+                    borderColor: active ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
+                    background: active ? 'var(--admin-accent)' : 'transparent',
                   }}
                 >
                   {active && (
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="3">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="var(--admin-primary-text)" strokeWidth="3">
                       <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
                 </div>
-                <span className="text-sm font-heading font-semibold" style={{ color: active ? '#06b6d4' : '#e2e8f0' }}>
+                <span className="text-sm font-heading font-semibold" style={{ color: active ? 'var(--admin-accent)' : 'var(--admin-text)' }}>
                   {PERMISSION_LABELS[p]}
                 </span>
               </div>
-              <div className="text-xs mt-1 pl-6" style={{ color: '#64748b' }}>
+              <div className="text-xs mt-1 pl-6" style={{ color: 'var(--admin-text-dim)' }}>
                 {PERMISSION_HINTS[p]}
               </div>
             </button>
@@ -633,10 +637,10 @@ function PushGrid({
   if (relevant.length === 0) {
     return (
       <div>
-        <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+        <label className="text-xs font-heading font-semibold" style={{ color: 'var(--admin-muted)' }}>
           Push-Benachrichtigungen
         </label>
-        <p className="text-xs mt-1" style={{ color: '#64748b' }}>
+        <p className="text-xs mt-1" style={{ color: 'var(--admin-text-dim)' }}>
           Zuerst Zugriffsrechte auswählen — dann erscheinen hier die passenden Push-Typen.
         </p>
       </div>
@@ -646,17 +650,17 @@ function PushGrid({
   return (
     <div>
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+        <label className="text-xs font-heading font-semibold" style={{ color: 'var(--admin-muted)' }}>
           Push-Benachrichtigungen (welche Typen auf sein Gerät gebuzzt werden)
         </label>
-        <span className="text-xs" style={{ color: '#64748b' }}>
+        <span className="text-xs" style={{ color: 'var(--admin-text-dim)' }}>
           Abgehakt = bekommt Push. Abwählen = still.
         </span>
       </div>
       <div className="space-y-3">
         {groups.map((g) => (
           <div key={g.group}>
-            <div className="text-xs font-heading font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748b' }}>
+            <div className="text-xs font-heading font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--admin-text-dim)' }}>
               {g.group}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -669,24 +673,24 @@ function PushGrid({
                     onClick={() => toggle(t.type)}
                     className="flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors"
                     style={{
-                      background: on ? 'rgba(6,182,212,0.1)' : '#0a0f1e',
-                      border: on ? '1px solid #06b6d4' : '1px solid #1e293b',
+                      background: on ? 'var(--admin-accent-soft)' : 'var(--admin-input-bg)',
+                      border: on ? '1px solid var(--admin-accent)' : '1px solid var(--admin-border)',
                     }}
                   >
                     <div
                       className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
                       style={{
-                        borderColor: on ? '#06b6d4' : '#475569',
-                        background: on ? '#06b6d4' : 'transparent',
+                        borderColor: on ? 'var(--admin-accent)' : 'var(--admin-muted-2)',
+                        background: on ? 'var(--admin-accent)' : 'transparent',
                       }}
                     >
                       {on && (
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="3">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="var(--admin-primary-text)" strokeWidth="3">
                           <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       )}
                     </div>
-                    <span className="text-sm" style={{ color: on ? '#06b6d4' : '#e2e8f0' }}>
+                    <span className="text-sm" style={{ color: on ? 'var(--admin-accent)' : 'var(--admin-text)' }}>
                       {t.label}
                     </span>
                   </button>
