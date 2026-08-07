@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface ChecklistItem {
   id: string;
@@ -127,6 +128,7 @@ export default function MeineNotizenPage() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,7 +196,8 @@ export default function MeineNotizenPage() {
   }
 
   async function handleDelete(note: Note) {
-    if (!confirm(`Notiz "${note.title || '(ohne Titel)'}" wirklich löschen?`)) return;
+    const ok = await confirm({ title: 'Notiz löschen', message: `Notiz "${note.title || '(ohne Titel)'}" wirklich löschen?`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     const res = await fetch(`/api/admin/mein/notizen/${note.id}`, { method: 'DELETE' });
     if (res.ok) {
       setNotes((prev) => prev.filter((n) => n.id !== note.id));
@@ -202,19 +205,21 @@ export default function MeineNotizenPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0f172a', color: '#e2e8f0' }}>
+    <div style={{ color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 16px 80px' }}>
-        <AdminBackLink />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>📝 Meine Notizen</h1>
-          <button
-            onClick={() => setCreating(true)}
-            style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '10px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
-            disabled={!!warn && !warn.startsWith('Du bist')}
-          >
-            + Neue Notiz
-          </button>
-        </div>
+        <PageHeader
+          backLabel="Zurück"
+          title="📝 Meine Notizen"
+          actions={(
+            <button
+              onClick={() => setCreating(true)}
+              style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 0, padding: '10px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              disabled={!!warn && !warn.startsWith('Du bist')}
+            >
+              + Neue Notiz
+            </button>
+          )}
+        />
 
         {warn && (
           <div style={{ background: '#78350f', color: '#fde68a', padding: '12px 16px', borderRadius: 8, marginBottom: 16, fontSize: 14 }}>
@@ -227,13 +232,13 @@ export default function MeineNotizenPage() {
           placeholder="In Notizen suchen…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', marginBottom: 20, fontSize: 14 }}
+          style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: 'var(--admin-text)', marginBottom: 20, fontSize: 14 }}
         />
 
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Lädt…</p>
+          <p style={{ color: 'var(--admin-muted)' }}>Lädt…</p>
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--admin-text-dim)' }}>
             <p style={{ fontSize: 48, margin: 0 }}>📓</p>
             <p style={{ marginTop: 12 }}>Noch keine Notizen. Leg dir eine an!</p>
           </div>
@@ -418,6 +423,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const confirm = useConfirm();
 
   const activePage = pages[activeIdx] ?? pages[0];
   const isBook = pages.length > 1;
@@ -431,10 +437,11 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
     setActiveIdx(pages.length);
   }
 
-  function removePage() {
+  async function removePage() {
     if (pages.length <= 1) return;
     const label = `Seite ${activeIdx + 1}`;
-    if (!confirm(`${label} mit Text und Bildern wirklich löschen?`)) return;
+    const ok = await confirm({ title: 'Seite löschen', message: `${label} mit Text und Bildern wirklich löschen?`, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     setPages((prev) => prev.filter((_, i) => i !== activeIdx));
     setActiveIdx((i) => Math.max(0, Math.min(i, pages.length - 2)));
   }
@@ -532,14 +539,14 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
       onClick={onClose}>
-      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}
+      <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-faint)', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 18, color: '#f8fafc' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, color: 'var(--admin-heading)' }}>
           {!note ? 'Neue Notiz' : ro ? 'Notiz ansehen' : 'Notiz bearbeiten'}
         </h2>
         {note && !isOwner && (
           ro ? (
-            <div style={{ background: '#334155', color: '#e2e8f0', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
+            <div style={{ background: 'var(--admin-faint)', color: 'var(--admin-text)', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
               👁 Nur-Lese-Zugriff — geteilt von {note.owner_name}. Du kannst diese Notiz ansehen, aber nicht bearbeiten.
             </div>
           ) : (
@@ -549,7 +556,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           )
         )}
 
-        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, marginTop: 12 }}>Titel</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4, marginTop: 12 }}>Titel</label>
         <input
           type="text"
           value={title}
@@ -557,12 +564,12 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           readOnly={ro}
           placeholder="Titel (optional)"
           maxLength={200}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, marginBottom: 12 }}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: 'var(--admin-text)', fontSize: 16, marginBottom: 12 }}
         />
 
         {/* Seiten-Navigator (Buch-Modus) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-          <label style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+          <label style={{ fontSize: 12, color: 'var(--admin-muted)', margin: 0 }}>
             {isBook ? `📖 Seite ${activeIdx + 1} / ${pages.length}` : 'Inhalt'}
           </label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -573,21 +580,21 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                   onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
                   disabled={activeIdx === 0}
                   title="Vorherige Seite"
-                  style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === 0 ? 'default' : 'pointer', opacity: activeIdx === 0 ? 0.4 : 1, fontSize: 14 }}
+                  style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text)', border: '1px solid var(--admin-muted-2)', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === 0 ? 'default' : 'pointer', opacity: activeIdx === 0 ? 0.4 : 1, fontSize: 14 }}
                 >‹</button>
                 <button
                   type="button"
                   onClick={() => setActiveIdx((i) => Math.min(pages.length - 1, i + 1))}
                   disabled={activeIdx === pages.length - 1}
                   title="Nächste Seite"
-                  style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === pages.length - 1 ? 'default' : 'pointer', opacity: activeIdx === pages.length - 1 ? 0.4 : 1, fontSize: 14 }}
+                  style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-text)', border: '1px solid var(--admin-muted-2)', borderRadius: 6, padding: '4px 10px', cursor: activeIdx === pages.length - 1 ? 'default' : 'pointer', opacity: activeIdx === pages.length - 1 ? 0.4 : 1, fontSize: 14 }}
                 >›</button>
                 {!ro && (
                   <button
                     type="button"
                     onClick={removePage}
                     title="Diese Seite löschen"
-                    style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
+                    style={{ background: 'transparent', color: 'var(--admin-danger)', border: '1px solid #7f1d1d', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
                   >🗑 Seite</button>
                 )}
               </>
@@ -613,9 +620,9 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                 title={`Zu Seite ${i + 1}`}
                 style={{
                   width: 28, height: 28, borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  background: i === activeIdx ? '#06b6d4' : '#1e293b',
-                  color: i === activeIdx ? '#0a0a0a' : '#cbd5e1',
-                  border: `1px solid ${i === activeIdx ? '#06b6d4' : '#475569'}`,
+                  background: i === activeIdx ? 'var(--admin-accent)' : 'var(--admin-surface-2)',
+                  color: i === activeIdx ? 'var(--admin-primary-text)' : 'var(--admin-text-2)',
+                  border: `1px solid ${i === activeIdx ? 'var(--admin-accent)' : 'var(--admin-muted-2)'}`,
                 }}
               >{i + 1}</button>
             ))}
@@ -627,23 +634,23 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
           readOnly={ro}
           rows={8}
           placeholder={ro ? '' : (isBook ? `Text für Seite ${activeIdx + 1}…` : 'Was möchtest du dir merken?')}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: 'var(--admin-text)', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
         />
 
         {/* Anhänge der aktiven Seite */}
-        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>
           📎 Bilder &amp; Dateien {isBook ? `auf Seite ${activeIdx + 1}` : ''} (Bilder, PDF, Videos, Text)
         </label>
         {(activePage?.attachments.length ?? 0) > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             {activePage.attachments.map((a) => (
-              <div key={a.id} style={{ position: 'relative', width: 120, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
+              <div key={a.id} style={{ position: 'relative', width: 120, border: '1px solid var(--admin-faint)', borderRadius: 8, padding: 6, background: 'var(--admin-surface-2)' }}>
                 {!ro && (
                   <button
                     type="button"
                     onClick={() => removeAttachment(a.id)}
                     title="Entfernen"
-                    style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: '#fff', border: 0, borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
+                    style={{ position: 'absolute', top: -8, right: -8, background: 'var(--admin-danger)', color: '#fff', border: 0, borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
                   >
                     ✕
                   </button>
@@ -665,7 +672,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                   </div>
                 )}
                 {ro ? (
-                  <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.label || a.filename}>
+                  <div style={{ fontSize: 11, color: 'var(--admin-text-2)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.label || a.filename}>
                     {a.label || a.filename}
                   </div>
                 ) : (
@@ -676,10 +683,10 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                     placeholder="Name…"
                     maxLength={120}
                     title="Name für dieses Bild"
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '4px 6px', fontSize: 11, borderRadius: 4, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0' }}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '4px 6px', fontSize: 11, borderRadius: 4, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: 'var(--admin-text)' }}
                   />
                 )}
-                <div style={{ fontSize: 9, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.filename}>
+                <div style={{ fontSize: 9, color: 'var(--admin-text-dim)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.filename}>
                   {a.filename} · {fmtBytes(a.size)}
                 </div>
               </div>
@@ -699,13 +706,13 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer', marginBottom: 14, opacity: uploading ? 0.6 : 1 }}
+            style={{ background: 'var(--admin-faint)', color: 'var(--admin-text)', border: 0, padding: '8px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer', marginBottom: 14, opacity: uploading ? 0.6 : 1 }}
           >
             {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
           </button>
         )}
 
-        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>
           ✓ To-do-Liste {checklist.length > 0 && `(${checklist.filter((it) => it.done).length}/${checklist.length})`}
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
@@ -724,14 +731,14 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                 onChange={(e) => setChecklist((prev) => prev.map((x) => (x.id === it.id ? { ...x, text: e.target.value } : x)))}
                 readOnly={ro}
                 maxLength={500}
-                style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: it.done ? '#64748b' : '#e2e8f0', fontSize: 15, textDecoration: it.done ? 'line-through' : 'none' }}
+                style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: it.done ? 'var(--admin-text-dim)' : 'var(--admin-text)', fontSize: 15, textDecoration: it.done ? 'line-through' : 'none' }}
               />
               {!ro && (
                 <button
                   type="button"
                   onClick={() => setChecklist((prev) => prev.filter((x) => x.id !== it.id))}
                   title="Punkt entfernen"
-                  style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
+                  style={{ background: 'transparent', border: 0, color: 'var(--admin-danger)', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
                 >
                   ✕
                 </button>
@@ -748,13 +755,13 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
               placeholder="Neuen Punkt hinzufügen…"
               maxLength={500}
-              style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16 }}
+              style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--admin-input-border)', background: 'var(--admin-input-bg)', color: 'var(--admin-text)', fontSize: 16 }}
             />
             <button
               type="button"
               onClick={addItem}
               disabled={!newItemText.trim()}
-              style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 16px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: newItemText.trim() ? 1 : 0.5 }}
+              style={{ background: 'var(--admin-faint)', color: 'var(--admin-text)', border: 0, padding: '8px 16px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: newItemText.trim() ? 1 : 0.5 }}
             >
               + Hinzufügen
             </button>
@@ -764,11 +771,11 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         {/* Teilen — nur Besitzer. Pro Kollege: Aus / Nur lesen / Lesen & Bearbeiten */}
         {isOwner && (
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 6 }}>
               👥 Teilen mit Kollegen {sharedWith.length + sharedRead.length > 0 && `(${sharedWith.length + sharedRead.length})`}
             </label>
             {employees.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Keine weiteren Mitarbeiter vorhanden.</p>
+              <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', margin: 0 }}>Keine weiteren Mitarbeiter vorhanden.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {employees.map((emp) => {
@@ -779,8 +786,8 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                     { m: 'edit', label: '✏ Bearbeiten' },
                   ];
                   return (
-                    <div key={emp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: '6px 10px' }}>
-                      <span style={{ fontSize: 13, color: '#e2e8f0' }}>{emp.name}</span>
+                    <div key={emp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)', borderRadius: 8, padding: '6px 10px' }}>
+                      <span style={{ fontSize: 13, color: 'var(--admin-text)' }}>{emp.name}</span>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {opts.map((o) => {
                           const active = mode === o.m;
@@ -815,7 +822,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
         )}
 
         <div style={{ display: ro ? 'none' : 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--admin-text-2)', fontSize: 14 }}>
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
             📌 Anpinnen
           </label>
@@ -828,19 +835,19 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
                 title={c.label}
                 style={{
                   width: 24, height: 24, borderRadius: 12, background: c.bg,
-                  border: color === c.value ? '2px solid #06b6d4' : '1px solid #475569',
+                  border: color === c.value ? '2px solid var(--admin-accent)' : '1px solid var(--admin-muted-2)',
                   cursor: 'pointer',
                 }}
               />
             ))}
-            <span style={{ width: 1, height: 20, background: '#475569', margin: '0 2px' }} />
+            <span style={{ width: 1, height: 20, background: 'var(--admin-muted-2)', margin: '0 2px' }} />
             {/* Eigene Farbe (Hex) */}
             <label
               title="Eigene Farbe wählen"
               style={{
                 position: 'relative', width: 24, height: 24, borderRadius: 12, cursor: 'pointer',
                 background: customActive ? color : 'conic-gradient(#f87171,#fbbf24,#34d399,#22d3ee,#a78bfa,#f87171)',
-                border: customActive ? '2px solid #06b6d4' : '1px solid #475569',
+                border: customActive ? '2px solid var(--admin-accent)' : '1px solid var(--admin-muted-2)',
                 display: 'inline-block', flexShrink: 0,
               }}
             >
@@ -860,20 +867,20 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
               spellCheck={false}
               style={{
                 width: 96, padding: '5px 8px', borderRadius: 6, fontSize: 13, fontFamily: 'monospace',
-                border: `1px solid ${customActive ? '#06b6d4' : '#475569'}`,
-                background: '#1e293b', color: '#e2e8f0',
+                border: `1px solid ${customActive ? 'var(--admin-accent)' : 'var(--admin-input-border)'}`,
+                background: 'var(--admin-input-bg)', color: 'var(--admin-text)',
               }}
             />
           </div>
         </div>
 
-        {err && <p style={{ color: '#f87171', fontSize: 13, margin: '0 0 12px' }}>⚠ {err}</p>}
+        {err && <p style={{ color: 'var(--admin-danger)', fontSize: 13, margin: '0 0 12px' }}>⚠ {err}</p>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button
             onClick={onClose}
             disabled={saving}
-            style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}
+            style={{ background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-muted-2)', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}
           >
             {ro ? 'Schließen' : 'Abbrechen'}
           </button>
@@ -881,7 +888,7 @@ function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
             <button
               onClick={save}
               disabled={saving || (!title.trim() && checklist.filter((it) => it.text.trim()).length === 0 && pages.every((p) => !p.content.trim() && p.attachments.length === 0))}
-              style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+              style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
             >
               {saving ? 'Speichert…' : 'Speichern'}
             </button>
