@@ -21,15 +21,15 @@ import AvailabilityAlertsBanner from '@/components/admin/AvailabilityAlertsBanne
 // ─── Theme ───────────────────────────────────────────────────────
 
 const C = {
-  card: '#111827',
-  border: '#1e293b',
-  cyan: '#06b6d4',
-  cyanDim: 'rgba(6,182,212,0.15)',
+  card: 'var(--admin-surface)',
+  border: 'var(--admin-border)',
+  cyan: '#06b6d4', // literal: wird in Alpha-Konkatenation (`${C.cyan}40`) genutzt
+  cyanDim: 'var(--admin-accent-soft)',
   green: '#10b981',
   red: '#ef4444',
-  text: '#e2e8f0',
-  textMuted: '#94a3b8',
-  textDim: '#64748b',
+  text: 'var(--admin-text)',
+  textMuted: 'var(--admin-muted)',
+  textDim: 'var(--admin-text-dim)',
 } as const;
 
 // ─── Size → grid column span ────────────────────────────────────
