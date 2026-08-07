@@ -732,7 +732,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
           onToggle={() => toggleGroup('katalog')}
         />
         <NavGroupCollapse
-          label="Rabatte & Aktionen"
+          label="Marketing & Aktionen"
           icon={iconPriceTag}
           items={PREISE_ITEMS}
           matchPaths={GROUP_MATCH.preise}
