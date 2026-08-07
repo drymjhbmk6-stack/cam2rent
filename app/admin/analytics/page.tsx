@@ -78,6 +78,19 @@ function countryName(code: string): string {
   try { return regionNames?.of(code) ?? code; } catch { return code; }
 }
 
+// Cloudflare-Geo-Header sind UTF-8-Bytes, die die Web-Headers-API als latin1
+// dekodiert → "WÃ¼rzburg" statt "Würzburg". Zurück nach UTF-8 dekodieren; bei
+// ungültigem Ergebnis (bereits korrekter String) das Original behalten.
+function fixMojibake(s: string): string {
+  if (!s) return s;
+  try {
+    const repaired = decodeURIComponent(escape(s));
+    return repaired.includes('�') ? s : repaired;
+  } catch {
+    return s;
+  }
+}
+
 // Cloudflare liefert Bundesländer als englische Exonyme (teils mit Präfix wie
 // "State of Berlin" / "Free State of Bavaria") — auf Deutsch mappen.
 const DE_BUNDESLAND: Record<string, string> = {
@@ -108,7 +121,8 @@ const DE_BUNDESLAND: Record<string, string> = {
   'mecklenburg-west pomerania': 'Mecklenburg-Vorpommern',
   'mecklenburg-vorpommern': 'Mecklenburg-Vorpommern',
 };
-function bundeslandName(name: string): string {
+function bundeslandName(rawName: string): string {
+  const name = fixMojibake(rawName);
   const key = name
     .toLowerCase()
     .trim()
@@ -129,7 +143,8 @@ const DE_STADT: Record<string, string> = {
   'frankfurt': 'Frankfurt am Main',
   'frankfurt am main': 'Frankfurt am Main',
 };
-function stadtName(name: string): string {
+function stadtName(rawName: string): string {
+  const name = fixMojibake(rawName);
   return DE_STADT[name.toLowerCase().trim()] ?? name;
 }
 
@@ -1815,13 +1830,13 @@ export default function AnalyticsPage() {
                   🇩🇪 Bundesländer — {getTimeRangeLabel(filters.timeRange)}
                   <InfoTooltip text="Top-Bundesländer deutscher Besucher (eindeutige Besucher, ermittelt über Cloudflare)." />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {(trafficData?.de_regions ?? []).map((r, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 150, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundeslandName(r.name)}</div>
-                      <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
-                        <div style={{ width: `${r.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.cyan}, ${C.cyan}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
-                          <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.count} ({r.pct}%)</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 130, fontSize: 12, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundeslandName(r.name)}</div>
+                      <div style={{ flex: 1, background: C.border, borderRadius: 5, height: 15, overflow: 'hidden' }}>
+                        <div style={{ width: `${r.pct}%`, height: 15, borderRadius: 5, background: `linear-gradient(90deg, ${C.cyan}, ${C.cyan}88)`, display: 'flex', alignItems: 'center', paddingLeft: 7, minWidth: 'fit-content' }}>
+                          <span style={{ color: 'white', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.count} ({r.pct}%)</span>
                         </div>
                       </div>
                     </div>
@@ -1833,13 +1848,13 @@ export default function AnalyticsPage() {
                   🏙 Städte (Deutschland) — {getTimeRangeLabel(filters.timeRange)}
                   <InfoTooltip text="Top-Städte deutscher Besucher (eindeutige Besucher, ermittelt über Cloudflare)." />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {(trafficData?.de_cities ?? []).map((c, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 150, fontSize: 13, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stadtName(c.name)}</div>
-                      <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
-                        <div style={{ width: `${c.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
-                          <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.count} ({c.pct}%)</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 130, fontSize: 12, color: 'var(--admin-text-2)', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stadtName(c.name)}</div>
+                      <div style={{ flex: 1, background: C.border, borderRadius: 5, height: 15, overflow: 'hidden' }}>
+                        <div style={{ width: `${c.pct}%`, height: 15, borderRadius: 5, background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`, display: 'flex', alignItems: 'center', paddingLeft: 7, minWidth: 'fit-content' }}>
+                          <span style={{ color: 'white', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.count} ({c.pct}%)</span>
                         </div>
                       </div>
                     </div>

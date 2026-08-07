@@ -58,7 +58,17 @@ export async function POST(req: NextRequest) {
   // Region (Bundesland) + Stadt — nur vorhanden, wenn der Cloudflare Managed
   // Transform „Add visitor location headers" aktiv ist (sonst null).
   const cleanGeo = (v: string | null): string | null => {
-    const s = (v ?? '').trim().slice(0, 120);
+    let s = (v ?? '').trim();
+    // Cloudflare-Header sind UTF-8-Bytes, die die Fetch-Headers-API als latin1
+    // liest → "WÃ¼rzburg". Zurück nach UTF-8 dekodieren; bei ungültigem Ergebnis
+    // (bereits korrekter String) das Original behalten.
+    if (s) {
+      try {
+        const decoded = Buffer.from(s, 'latin1').toString('utf8');
+        if (!decoded.includes('�')) s = decoded;
+      } catch { /* Original behalten */ }
+    }
+    s = s.slice(0, 120).trim();
     return s.length > 0 ? s : null;
   };
   const region = cleanGeo(req.headers.get('cf-region'));
