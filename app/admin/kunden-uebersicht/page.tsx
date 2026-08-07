@@ -4,14 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WidgetRenderer } from '@/components/admin/DashboardWidgets';
 import { getWidgetDef } from '@/lib/admin-widgets';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 
 const C = {
-  text: '#e2e8f0',
-  textDim: '#64748b',
-  cyan: '#06b6d4',
-  card: '#111827',
-  border: '#1e293b',
+  text: 'var(--admin-text)',
+  textDim: 'var(--admin-text-dim)',
+  cyan: 'var(--admin-accent)',
+  card: 'var(--admin-surface)',
+  border: 'var(--admin-border)',
 } as const;
 
 // Feste Widget-Auswahl fuer Kunden- & Kommunikations-Uebersicht.
@@ -59,16 +59,12 @@ export default function KundenUebersichtPage() {
 
   return (
     <div style={{ padding: '28px 24px', maxWidth: 1200, margin: '0 auto' }}>
-      <AdminBackLink href="/admin" label="Zum Hauptdashboard" />
-
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>
-          Kunden & Kommunikation
-        </h1>
-        <p style={{ fontSize: 13, color: C.textDim, margin: '4px 0 0' }}>
-          Anfragen, Bewertungen, Warteliste und offene Schadensfälle.
-        </p>
-      </div>
+      <PageHeader
+        backHref="/admin"
+        backLabel="Zum Hauptdashboard"
+        title="Kunden & Kommunikation"
+        subtitle="Anfragen, Bewertungen, Warteliste und offene Schadensfälle."
+      />
 
       {/* Quick Links */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
