@@ -629,7 +629,9 @@ interface QueueBooking {
   rental_from: string;
   rental_to: string;
   tracking_number?: string | null;
+  tracking_url?: string | null;
   return_label_url?: string | null;
+  return_tracking_url?: string | null;
   // Status-Übersicht (Dashboard-Aufgaben-Widget)
   verified?: boolean;
   contract_signed?: boolean;
@@ -727,6 +729,8 @@ interface QueueRow {
   /** Schnell-Links: Kunde (user_id) + Buchung (booking id), falls vorhanden. */
   customerId?: string | null;
   bookingId?: string | null;
+  /** Weitere Schnell-Links (Sendungsverfolgung, Retoure) — nur Versand-Buchungen. */
+  extraLinks?: { label: string; href: string; external?: boolean }[];
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
   /** Nur Terminabsprache-Zeilen: Buchung + Richtung für den „vereinbart"-Button. */
@@ -866,6 +870,16 @@ export function ActionQueueWidget({ data, loading }: {
     const sortDate = dueDateForBooking(b);
     const bucket = bucketForDays(daysUntilDue(sortDate, today));
 
+    // Zusätzliche Schnell-Links (nur Versand): Sendungsverfolgung (Hinversand)
+    // + Retoure, sobald ein Retourenlabel/-Tracking existiert.
+    const extraLinks: { label: string; href: string; external?: boolean }[] = [];
+    if (b.delivery_mode === 'versand') {
+      if (b.tracking_url) extraLinks.push({ label: '🚚 Sendung', href: b.tracking_url, external: true });
+      else if (b.tracking_number) extraLinks.push({ label: '🚚 Sendung', href: '/admin/sendungen' });
+      if (b.return_tracking_url) extraLinks.push({ label: '↩ Retoure', href: b.return_tracking_url, external: true });
+      else if (b.return_label_url) extraLinks.push({ label: '↩ Retoure', href: '/admin/retouren' });
+    }
+
     const action = queueActionForBooking(b);
     if (action) {
       out.push({
@@ -878,6 +892,7 @@ export function ActionQueueWidget({ data, loading }: {
         bucket,
         customerId: b.user_id ?? null,
         bookingId: b.id,
+        extraLinks,
         checks: {
           verified: b.verified ?? false,
           signed: b.contract_signed ?? false,
@@ -904,6 +919,7 @@ export function ActionQueueWidget({ data, loading }: {
         bucket,
         customerId: b.user_id ?? null,
         bookingId: b.id,
+        extraLinks,
       });
     }
 
@@ -1017,10 +1033,15 @@ export function ActionQueueWidget({ data, loading }: {
         {/* 4 Status-Tags */}
         {row.checks && <StatusChips c={row.checks} />}
         {/* Schnell-Links */}
-        {(row.customerId || row.bookingId) && (
+        {(row.customerId || row.bookingId || (row.extraLinks?.length ?? 0) > 0) && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
             {row.customerId && <Link href={`/admin/kunden/${row.customerId}`} style={quickLink}>👤 Kunde</Link>}
             {row.bookingId && <Link href={`/admin/buchungen/${row.bookingId}`} style={quickLink}>📄 Buchung</Link>}
+            {(row.extraLinks ?? []).map((l) => (
+              l.external
+                ? <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" style={quickLink}>{l.label}</a>
+                : <Link key={l.label} href={l.href} style={quickLink}>{l.label}</Link>
+            ))}
           </div>
         )}
       </div>

@@ -390,7 +390,9 @@ export async function GET() {
         rental_from: (b.rental_from as string) ?? '',
         rental_to: (b.rental_to as string) ?? '',
         tracking_number: (b.tracking_number as string) ?? null,
+        tracking_url: (b.tracking_url as string) ?? null,
         return_label_url: (b.return_label_url as string) ?? null,
+        return_tracking_url: (b.return_tracking_url as string) ?? null,
         // Status-Übersicht (4 Indikatoren)
         verified,
         contract_signed: b.contract_signed === true,
