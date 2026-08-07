@@ -9,6 +9,7 @@ import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
 import { fmtEuro } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 const SETS_BUNDLE_KEY = 'admin:sets-bundle';
 
@@ -107,6 +108,9 @@ export default function AdminSetsPage() {
   const [creating, setCreating] = useState(false);
 
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const accMap = new Map(accessories.map((a) => [a.id, a]));
 
@@ -223,7 +227,7 @@ export default function AdminSetsPage() {
     const e = editState[id];
     if (!e) return;
     const price = parseFloat(e.price);
-    if (isNaN(price)) { alert('Ungültiger Preis.'); return; }
+    if (isNaN(price)) { toast.error('Ungültiger Preis.'); return; }
     setSavingId(id);
 
     const badgeOption = BADGE_OPTIONS.find((b) => b.value === e.badge);
@@ -267,23 +271,23 @@ export default function AdminSetsPage() {
       setTimeout(() => setSavedId(null), 3000);
       setExpandedId(null);
     } catch {
-      alert('Fehler beim Speichern.');
+      toast.error('Fehler beim Speichern.');
     } finally {
       setSavingId(null);
     }
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Set "${name}" wirklich löschen?`)) return;
+    if (!(await confirm({ message: `Set "${name}" wirklich löschen?`, danger: true }))) return;
     try {
       const res = await fetch('/api/sets', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Fehler.'); return; }
       setSets((prev) => prev.filter((s) => s.id !== id));
-    } catch { alert('Fehler beim Löschen.'); }
+    } catch { toast.error('Fehler beim Löschen.'); }
   }
 
   async function handleDuplicate(set: AdminSet) {
@@ -306,7 +310,7 @@ export default function AdminSetsPage() {
           basic_for_product_ids: set.basic_for_product_ids ?? [],
         }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler beim Duplizieren.'); return; }
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Fehler beim Duplizieren.'); return; }
       const { set: created } = await res.json();
 
       const newAdminSet: AdminSet = {
@@ -330,7 +334,7 @@ export default function AdminSetsPage() {
       setSets((prev) => [...prev, newAdminSet]);
       // Direkt zum Bearbeiten öffnen
       openEdit(newAdminSet);
-    } catch { alert('Netzwerkfehler beim Duplizieren.'); }
+    } catch { toast.error('Netzwerkfehler beim Duplizieren.'); }
     finally { setDuplicatingId(null); }
   }
 
@@ -360,7 +364,7 @@ export default function AdminSetsPage() {
   }
 
   async function handleCreate() {
-    if (!newSet.name.trim()) { alert('Bitte einen Namen eingeben.'); return; }
+    if (!newSet.name.trim()) { toast.error('Bitte einen Namen eingeben.'); return; }
     setCreating(true);
     try {
       const badgeOption = BADGE_OPTIONS.find((b) => b.value === newSet.badge);
@@ -380,7 +384,7 @@ export default function AdminSetsPage() {
           basic_for_product_ids: newSet.basic_for_product_ids,
         }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Fehler.'); return; }
       const { set } = await res.json();
 
       const newAdminSet: AdminSet = {
@@ -399,7 +403,7 @@ export default function AdminSetsPage() {
       setSets((prev) => [...prev, newAdminSet]);
       setNewSet(emptyNew());
       setShowNew(false);
-    } catch { alert('Netzwerkfehler.'); }
+    } catch { toast.error('Netzwerkfehler.'); }
     finally { setCreating(false); }
   }
 
@@ -643,13 +647,13 @@ export default function AdminSetsPage() {
 
                               <button
                                 onClick={async () => {
-                                  if (!confirm('Bild löschen?')) return;
+                                  if (!(await confirm({ message: 'Bild löschen?', danger: true }))) return;
                                   const pathMatch = set.image_url?.match(/product-images\/(.+)$/);
                                   const path = pathMatch?.[1] ?? '';
                                   try {
                                     await fetch('/api/set-images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, setId: set.id }) });
                                     setSets((prev) => prev.map((s) => s.id === set.id ? { ...s, image_url: null } : s));
-                                  } catch { alert('Fehler beim Löschen.'); }
+                                  } catch { toast.error('Fehler beim Löschen.'); }
                                 }}
                                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                               >✕</button>
@@ -670,10 +674,10 @@ export default function AdminSetsPage() {
                               fd.append('file', file);
                               try {
                                 const res = await fetch('/api/set-images', { method: 'POST', body: fd });
-                                if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Upload fehlgeschlagen.'); return; }
+                                if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Upload fehlgeschlagen.'); return; }
                                 const data = await res.json();
                                 setSets((prev) => prev.map((s) => s.id === set.id ? { ...s, image_url: data.url } : s));
-                              } catch { alert('Upload fehlgeschlagen.'); }
+                              } catch { toast.error('Upload fehlgeschlagen.'); }
                               ev.target.value = '';
                             }} />
                           </label>
@@ -1083,7 +1087,7 @@ function AccessorySelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="flex-1 min-w-0 px-3 py-2 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
-      style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
+      style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)' }}
     >
       {categories.map((cat) => {
         const group = accessories.filter((a) => a.category === cat);
@@ -1193,8 +1197,8 @@ function AccessoryItemList({
             onDrop={handleDrop(idx)}
             className="rounded-lg p-3 transition-all"
             style={{
-              background: '#111827',
-              border: `1px solid ${isOver ? '#06b6d4' : '#1e293b'}`,
+              background: 'var(--admin-surface)',
+              border: `1px solid ${isOver ? 'var(--admin-accent)' : 'var(--admin-border)'}`,
               borderLeft: `4px solid ${ok ? '#10b981' : '#ef4444'}`,
               opacity: isDragging ? 0.4 : 1,
               boxShadow: isOver ? '0 0 0 2px rgba(6,182,212,0.25)' : 'none',
@@ -1204,7 +1208,7 @@ function AccessoryItemList({
               <span
                 style={{
                   cursor: 'grab',
-                  color: '#475569',
+                  color: 'var(--admin-muted-2)',
                   fontSize: 14,
                   userSelect: 'none',
                   flexShrink: 0,
@@ -1224,14 +1228,14 @@ function AccessoryItemList({
                 products={products}
               />
               <div className="flex items-center gap-1 flex-shrink-0">
-                <span className="text-xs" style={{ color: '#64748b' }}>×</span>
+                <span className="text-xs" style={{ color: 'var(--admin-text-dim)' }}>×</span>
                 <input
                   type="number"
                   min="1"
                   value={item.qty}
                   onChange={(ev) => updateItem(idx, 'qty', parseInt(ev.target.value) || 1)}
                   className="w-14 px-2 py-2 rounded-[10px] text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
+                  style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text)', border: '1px solid var(--admin-input-border)' }}
                 />
               </div>
               <span className="text-xs flex-shrink-0" style={{ color: ok ? '#10b981' : '#ef4444' }}>
