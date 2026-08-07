@@ -17,8 +17,8 @@ function TabButton({ tab, current, label }: { tab: TabKey; current: TabKey; labe
       className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-all"
       style={
         active
-          ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }
-          : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+          ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', border: '1px solid rgba(6,182,212,0.3)' }
+          : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }
       }
     >
       {label}
