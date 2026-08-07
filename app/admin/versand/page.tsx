@@ -5,6 +5,7 @@ import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, escapeHtml } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 
 interface Booking {
   id: string;
@@ -97,6 +98,7 @@ const URGENCY_CHIP: Record<Urgency, string> = {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminVersandPage() {
+  const toast = useToast();
   const { accessories: STATIC_ACC } = useAccessories();
 
   function accName(id: string): string {
@@ -240,13 +242,13 @@ export default function AdminVersandPage() {
         }),
       });
       const d = await res.json();
-      if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
+      if (!res.ok) { toast.error(`Fehler: ${d.error}`); return; }
       setLabelResult({ labelUrl: d.labelUrl, returnLabelUrl: d.returnLabelUrl, returnError: d.returnError });
       setBookings((prev) => prev.map((b) => b.id === labelModal.id
         ? { ...b, tracking_number: d.trackingNumber, label_url: d.labelUrl, return_label_url: d.returnLabelUrl }
         : b
       ));
-    } catch { alert('Netzwerkfehler.'); }
+    } catch { toast.error('Netzwerkfehler.'); }
     finally { setLabelCreating(false); }
   }
 
@@ -260,11 +262,11 @@ export default function AdminVersandPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookingId: returnModal.id, condition, notes: returnNotes }),
       });
-      if (!res.ok) { alert('Fehler beim Abschließen.'); return; }
+      if (!res.ok) { toast.error('Fehler beim Abschließen.'); return; }
       setBookings((prev) => prev.filter((b) => b.id !== returnModal.id));
       setReturnModal(null);
       setExpandedId(null);
-    } catch { alert('Netzwerkfehler.'); }
+    } catch { toast.error('Netzwerkfehler.'); }
     finally { setReturning(false); }
   }
 
