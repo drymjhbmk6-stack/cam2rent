@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface Appointment {
@@ -192,25 +193,27 @@ export default function MeinKalenderPage() {
   }, [appointments]);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0f172a', color: '#e2e8f0' }}>
+    <div style={{ color: 'var(--admin-text)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px 80px' }}>
-        <AdminBackLink />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>📅 Mein Kalender</h1>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: 2 }}>
-              <button onClick={() => setView('month')} style={{ background: view === 'month' ? '#06b6d4' : 'transparent', color: view === 'month' ? '#0a0a0a' : '#cbd5e1', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Monat</button>
-              <button onClick={() => setView('list')} style={{ background: view === 'list' ? '#06b6d4' : 'transparent', color: view === 'list' ? '#0a0a0a' : '#cbd5e1', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Liste</button>
+        <PageHeader
+          backLabel="Zurück"
+          title="📅 Mein Kalender"
+          actions={(
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)', borderRadius: 8, padding: 2 }}>
+                <button onClick={() => setView('month')} style={{ background: view === 'month' ? 'var(--admin-accent)' : 'transparent', color: view === 'month' ? 'var(--admin-primary-text)' : 'var(--admin-text-2)', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Monat</button>
+                <button onClick={() => setView('list')} style={{ background: view === 'list' ? 'var(--admin-accent)' : 'transparent', color: view === 'list' ? 'var(--admin-primary-text)' : 'var(--admin-text-2)', border: 0, padding: '6px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Liste</button>
+              </div>
+              <button
+                onClick={() => setCreatingOnDate(today)}
+                disabled={!!warn && warn.startsWith('Du bist')}
+                style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 0, padding: '8px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                + Neuer Termin
+              </button>
             </div>
-            <button
-              onClick={() => setCreatingOnDate(today)}
-              disabled={!!warn && warn.startsWith('Du bist')}
-              style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
-            >
-              + Neuer Termin
-            </button>
-          </div>
-        </div>
+          )}
+        />
 
         {warn && (
           <div style={{ background: '#78350f', color: '#fde68a', padding: '12px 16px', borderRadius: 8, marginBottom: 16, fontSize: 14 }}>
@@ -224,7 +227,7 @@ export default function MeinKalenderPage() {
               <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} style={navBtnStyle}>‹</button>
               <button onClick={() => setCursor(new Date())} style={{ ...navBtnStyle, padding: '6px 14px' }}>Heute</button>
               <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} style={navBtnStyle}>›</button>
-              <h2 style={{ margin: 0, fontSize: 18, color: '#f8fafc' }}>
+              <h2 style={{ margin: 0, fontSize: 18, color: 'var(--admin-heading)' }}>
                 {cursor.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' })}
               </h2>
             </div>
@@ -325,9 +328,9 @@ export default function MeinKalenderPage() {
         {view === 'list' && (
           <div>
             {loading ? (
-              <p style={{ color: '#94a3b8' }}>Lädt…</p>
+              <p style={{ color: 'var(--admin-muted)' }}>Lädt…</p>
             ) : upcoming.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--admin-text-dim)' }}>
                 <p style={{ fontSize: 48, margin: 0 }}>🗓</p>
                 <p style={{ marginTop: 12 }}>Keine bevorstehenden Termine.</p>
               </div>
@@ -338,8 +341,8 @@ export default function MeinKalenderPage() {
                     key={a.id}
                     onClick={() => a.is_owner && setEditing(a)}
                     style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
+                      background: 'var(--admin-surface-2)',
+                      border: '1px solid var(--admin-faint)',
                       borderLeft: `4px solid ${colorBg(a.color)}`,
                       borderRadius: 8,
                       padding: '12px 16px',
@@ -348,19 +351,19 @@ export default function MeinKalenderPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>
+                        <div style={{ fontSize: 11, color: 'var(--admin-muted)', marginBottom: 2 }}>
                           {fmtDateLong(a.starts_at)}{!a.all_day ? ` · ${fmtTime(a.starts_at)}` : ' · ganztägig'}
                         </div>
-                        <h3 style={{ margin: '0 0 4px', fontSize: 15, color: '#f8fafc' }}>
+                        <h3 style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--admin-heading)' }}>
                           {a.title}
                           {!a.is_owner && <span style={{ marginLeft: 8, background: '#4c1d95', color: '#ddd6fe', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>von {a.owner_name}</span>}
                         </h3>
-                        {a.location && <p style={{ margin: '0 0 4px', fontSize: 13, color: '#cbd5e1' }}>📍 {a.location}</p>}
-                        {a.description && <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', whiteSpace: 'pre-wrap' }}>{a.description}</p>}
+                        {a.location && <p style={{ margin: '0 0 4px', fontSize: 13, color: 'var(--admin-text-2)' }}>📍 {a.location}</p>}
+                        {a.description && <p style={{ margin: 0, fontSize: 13, color: 'var(--admin-muted)', whiteSpace: 'pre-wrap' }}>{a.description}</p>}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                         {a.reminder_minutes_before != null && (
-                          <span style={{ fontSize: 10, color: '#06b6d4' }}>
+                          <span style={{ fontSize: 10, color: 'var(--admin-accent)' }}>
                             ⏰ {a.reminder_minutes_before < 60 ? `${a.reminder_minutes_before} min` : a.reminder_minutes_before < 1440 ? `${a.reminder_minutes_before / 60} h` : `${a.reminder_minutes_before / 1440} d`} vorher
                           </span>
                         )}
@@ -368,7 +371,7 @@ export default function MeinKalenderPage() {
                           <span style={{ fontSize: 10, color: '#a78bfa' }}>👥 {a.shared_with.length} geteilt</span>
                         )}
                         {a.series_id && (
-                          <span style={{ fontSize: 10, color: '#22d3ee' }}>🔁 Serie</span>
+                          <span style={{ fontSize: 10, color: 'var(--admin-accent-hover)' }}>🔁 Serie</span>
                         )}
                       </div>
                     </div>
@@ -394,9 +397,9 @@ export default function MeinKalenderPage() {
 }
 
 const navBtnStyle: React.CSSProperties = {
-  background: '#1e293b',
-  border: '1px solid #334155',
-  color: '#e2e8f0',
+  background: 'var(--admin-surface-2)',
+  border: '1px solid var(--admin-faint)',
+  color: 'var(--admin-text)',
   padding: '6px 10px',
   borderRadius: 6,
   cursor: 'pointer',
@@ -431,6 +434,7 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
   const [recurrenceCount, setRecurrenceCount] = useState('8');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const canEdit = appointment ? appointment.is_owner : true;
   const isNew = !appointment;
@@ -488,7 +492,8 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
     const msg = scope === 'series'
       ? `Die GANZE Serie von "${appointment.title}" wirklich löschen?`
       : `Termin "${appointment.title}" wirklich löschen?`;
-    if (!confirm(msg)) return;
+    const ok = await confirm({ title: scope === 'series' ? 'Serie löschen' : 'Termin löschen', message: msg, confirmLabel: 'Löschen', danger: true });
+    if (!ok) return;
     setSaving(true);
     const url = `/api/admin/mein/termine/${appointment.id}${scope === 'series' ? '?scope=series' : ''}`;
     const res = await fetch(url, { method: 'DELETE' });
@@ -499,9 +504,9 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16, overflowY: 'auto' }}
       onClick={onClose}>
-      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90dvh', overflowY: 'auto' }}
+      <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-faint)', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90dvh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, color: '#f8fafc' }}>
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, color: 'var(--admin-heading)' }}>
           {isNew ? 'Neuer Termin' : (canEdit ? 'Termin bearbeiten' : 'Termin (geteilt)')}
         </h2>
 
@@ -548,7 +553,7 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
           </div>
         )}
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14, marginBottom: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--admin-text-2)', fontSize: 14, marginBottom: 12 }}>
           <input
             type="checkbox"
             checked={allDay}
@@ -586,7 +591,7 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
                 title={c.label}
                 style={{
                   width: 28, height: 28, borderRadius: 14, background: c.bg,
-                  border: color === c.value ? '3px solid white' : '1px solid #475569',
+                  border: color === c.value ? '3px solid white' : '1px solid var(--admin-muted-2)',
                   cursor: canEdit ? 'pointer' : 'default',
                   opacity: canEdit ? 1 : 0.6,
                 }}
@@ -603,11 +608,11 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
 
         {reminder && (
           <div style={{ display: 'flex', gap: 16, marginBottom: 12, paddingLeft: 4 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--admin-text-2)', fontSize: 13 }}>
               <input type="checkbox" checked={reminderPush} onChange={(e) => setReminderPush(e.target.checked)} disabled={!canEdit} />
               📱 Push-Notification
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--admin-text-2)', fontSize: 13 }}>
               <input type="checkbox" checked={reminderEmail} onChange={(e) => setReminderEmail(e.target.checked)} disabled={!canEdit} />
               ✉ E-Mail
             </label>
@@ -628,7 +633,7 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
                   onChange={(e) => setRecurrenceCount(e.target.value)}
                   style={inputStyle}
                 />
-                <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+                <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', margin: '4px 0 0' }}>
                   Jeder Termin der Serie bekommt eine eigene Erinnerung/Push. Max. 52.
                 </p>
               </Field>
@@ -644,9 +649,9 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
 
         {employees.length > 0 && (
           <Field label={`Teilen mit Kollegen (${shared.length} gewählt)`}>
-            <div style={{ maxHeight: 140, overflowY: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: 8 }}>
+            <div style={{ maxHeight: 140, overflowY: 'auto', background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)', borderRadius: 6, padding: 8 }}>
               {employees.map((emp) => (
-                <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', color: '#cbd5e1', fontSize: 13, cursor: canEdit ? 'pointer' : 'default' }}>
+                <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', color: 'var(--admin-text-2)', fontSize: 13, cursor: canEdit ? 'pointer' : 'default' }}>
                   <input
                     type="checkbox"
                     checked={shared.includes(emp.id)}
@@ -661,11 +666,11 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
                 </label>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>Geteilte Kollegen sehen den Termin (read-only) und bekommen die Erinnerung.</p>
+            <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', margin: '4px 0 0' }}>Geteilte Kollegen sehen den Termin (read-only) und bekommen die Erinnerung.</p>
           </Field>
         )}
 
-        {err && <p style={{ color: '#f87171', fontSize: 13, margin: '0 0 12px' }}>⚠ {err}</p>}
+        {err && <p style={{ color: 'var(--admin-danger)', fontSize: 13, margin: '0 0 12px' }}>⚠ {err}</p>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 12 }}>
           {canEdit && appointment && (
@@ -681,11 +686,11 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            <button onClick={onClose} disabled={saving} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
+            <button onClick={onClose} disabled={saving} style={{ background: 'transparent', color: 'var(--admin-muted)', border: '1px solid var(--admin-muted-2)', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
               {canEdit ? 'Abbrechen' : 'Schließen'}
             </button>
             {canEdit && (
-              <button onClick={save} disabled={saving || !title.trim() || !startsAt} style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
+              <button onClick={save} disabled={saving || !title.trim() || !startsAt} style={{ background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
                 {saving ? 'Speichert…' : 'Speichern'}
               </button>
             )}
@@ -699,7 +704,7 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{label}</label>
+      <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>{label}</label>
       {children}
     </div>
   );
@@ -709,8 +714,8 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
   borderRadius: 6,
-  border: '1px solid #334155',
-  background: '#1e293b',
-  color: '#e2e8f0',
+  border: '1px solid var(--admin-input-border)',
+  background: 'var(--admin-input-bg)',
+  color: 'var(--admin-text)',
   fontSize: 14,
 };
