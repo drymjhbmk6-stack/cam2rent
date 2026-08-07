@@ -57,7 +57,7 @@ export default function SocialPostsList() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <AdminBackLink />
       <div className="flex items-center justify-between mb-4 mt-4">
-        <h1 className="text-2xl font-bold text-white">Posts</h1>
+        <h1 className="text-2xl font-bold text-admin-heading">Posts</h1>
         <Link
           href="/admin/social/neu"
           className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500"
@@ -75,8 +75,8 @@ export default function SocialPostsList() {
             className="px-3 py-1.5 rounded-lg text-sm font-medium border"
             style={
               statusFilter === f.value
-                ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', borderColor: '#06b6d4' }
-                : { background: 'transparent', color: '#94a3b8', borderColor: '#334155' }
+                ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', borderColor: 'var(--admin-accent)' }
+                : { background: 'transparent', color: 'var(--admin-muted)', borderColor: 'var(--admin-faint)' }
             }
           >
             {f.label}
@@ -84,11 +84,11 @@ export default function SocialPostsList() {
         ))}
       </div>
 
-      {loading && <p className="text-slate-400">Lade…</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
 
       {!loading && posts.length === 0 && (
-        <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
-          <p className="text-slate-400">Keine Posts in dieser Kategorie.</p>
+        <div className="rounded-xl bg-slate-900/50 border border-admin-border p-8 text-center">
+          <p className="text-admin-muted">Keine Posts in dieser Kategorie.</p>
         </div>
       )}
 
@@ -98,19 +98,19 @@ export default function SocialPostsList() {
             <Link
               key={p.id}
               href={`/admin/social/posts/${p.id}`}
-              className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 border border-slate-800 hover:border-slate-700"
+              className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 border border-admin-border hover:border-[var(--admin-faint)]"
             >
               {p.media_urls[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.media_urls[0]} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
               ) : (
-                <div className="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center text-slate-600 text-xs">
+                <div className="w-16 h-16 rounded-lg bg-admin-surface-2 flex items-center justify-center text-admin-muted-2 text-xs">
                   Text
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-200 line-clamp-2">{p.caption || '(leer)'}</p>
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 flex-wrap">
+                <p className="text-sm text-admin-text line-clamp-2">{p.caption || '(leer)'}</p>
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--admin-text-dim)] flex-wrap">
                   <StatusBadge status={p.status} />
                   <span>•</span>
                   <span>{(p.platforms ?? []).map((pl) => (pl === 'facebook' ? 'FB' : 'IG')).join(' + ')}</span>
@@ -124,7 +124,7 @@ export default function SocialPostsList() {
                   </span>
                   {p.ai_generated && <span className="px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 text-[10px]">KI</span>}
                   {p.source_type !== 'manual' && (
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{p.source_type}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted text-[10px]">{p.source_type}</span>
                   )}
                 </div>
                 {p.error_message && (
@@ -141,13 +141,13 @@ export default function SocialPostsList() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
-    draft: { label: 'Entwurf', className: 'bg-slate-800 text-slate-300' },
+    draft: { label: 'Entwurf', className: 'bg-admin-surface-2 text-admin-text-2' },
     scheduled: { label: 'Geplant', className: 'bg-cyan-900/40 text-cyan-300' },
     publishing: { label: 'Wird veröffentlicht', className: 'bg-amber-900/40 text-amber-300' },
     published: { label: 'Veröffentlicht', className: 'bg-emerald-900/40 text-emerald-300' },
     partial: { label: 'Teilweise', className: 'bg-amber-900/40 text-amber-300' },
     failed: { label: 'Fehler', className: 'bg-red-900/40 text-red-300' },
   };
-  const cfg = map[status] ?? { label: status, className: 'bg-slate-800 text-slate-300' };
+  const cfg = map[status] ?? { label: status, className: 'bg-admin-surface-2 text-admin-text-2' };
   return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.className}`}>{cfg.label}</span>;
 }

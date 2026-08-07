@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface ScheduleEntry {
   id: string;
@@ -27,6 +28,8 @@ interface Template {
 const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 export default function RedaktionsplanPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,7 @@ export default function RedaktionsplanPage() {
       setCreating(false);
       load();
     } else {
-      alert('Fehler');
+      toast.error('Fehler');
     }
   }
 
@@ -71,7 +74,7 @@ export default function RedaktionsplanPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Eintrag wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Eintrag wirklich löschen?', danger: true }))) return;
     await fetch(`/api/admin/social/schedule/${id}`, { method: 'DELETE' });
     load();
   }
@@ -89,8 +92,8 @@ export default function RedaktionsplanPage() {
       <AdminBackLink />
       <div className="flex items-center justify-between mb-4 mt-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Redaktionsplan</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-admin-heading">Redaktionsplan</h1>
+          <p className="text-sm text-admin-muted">
             Wiederkehrende Posts (z.B. „Jeden Mittwoch 18:00 Produkt-Spotlight“).
           </p>
         </div>
@@ -103,32 +106,32 @@ export default function RedaktionsplanPage() {
         </button>
       </div>
 
-      {loading && <p className="text-slate-400">Lade…</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
 
       {creating && <ScheduleForm templates={templates} onSave={handleCreate} onCancel={() => setCreating(false)} />}
 
       {!loading && entries.length === 0 && !creating && (
-        <p className="text-slate-400">Noch keine Einträge.</p>
+        <p className="text-admin-muted">Noch keine Einträge.</p>
       )}
 
       {!creating && entries.length > 0 && (
         <div className="space-y-2">
           {entries.map((e) => (
-            <div key={e.id} className="p-4 rounded-xl bg-slate-900/50 border border-slate-800">
+            <div key={e.id} className="p-4 rounded-xl bg-slate-900/50 border border-admin-border">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-white">{e.name}</h3>
+                    <h3 className="font-semibold text-admin-heading">{e.name}</h3>
                     {!e.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/40 text-red-300">Pausiert</span>}
                   </div>
-                  <p className="text-sm text-slate-400">{formatRule(e)} • Vorlage: {e.template?.name ?? '?'}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-sm text-admin-muted">{formatRule(e)} • Vorlage: {e.template?.name ?? '?'}</p>
+                  <p className="text-xs text-[var(--admin-text-dim)] mt-1">
                     Nächster Lauf: {e.next_run_at ? fmtDateTime(e.next_run_at) : '—'}
                     {e.last_run_at && <span> • Zuletzt: {fmtDateTime(e.last_run_at)}</span>}
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => toggleActive(e)} className="text-xs text-slate-400 hover:text-slate-200">
+                  <button type="button" onClick={() => toggleActive(e)} className="text-xs text-admin-muted hover:text-admin-text">
                     {e.is_active ? 'Pausieren' : 'Aktivieren'}
                   </button>
                   <button type="button" onClick={() => handleDelete(e.id)} className="text-xs text-red-400 hover:text-red-300">
@@ -162,34 +165,34 @@ function ScheduleForm({
   const [minute, setMinute] = useState(0);
 
   return (
-    <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5 mb-4">
-      <h2 className="font-semibold text-white mb-3">Neuer Redaktionsplan-Eintrag</h2>
+    <div className="rounded-xl bg-slate-900/50 border border-admin-border p-5 mb-4">
+      <h2 className="font-semibold text-admin-heading mb-3">Neuer Redaktionsplan-Eintrag</h2>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Name</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Name</label>
       <input
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="z.B. Wöchentlicher Produkt-Spotlight"
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       />
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Vorlage</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Vorlage</label>
       <select
         value={templateId}
         onChange={(e) => setTemplateId(e.target.value)}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       >
         {templates.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
       </select>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Häufigkeit</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Häufigkeit</label>
       <select
         value={frequency}
         onChange={(e) => setFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       >
         <option value="daily">Täglich</option>
         <option value="weekly">Wöchentlich</option>
@@ -198,8 +201,8 @@ function ScheduleForm({
 
       {frequency === 'weekly' && (
         <>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Wochentag</label>
-          <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Wochentag</label>
+          <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm">
             {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
           </select>
         </>
@@ -207,16 +210,16 @@ function ScheduleForm({
 
       {frequency === 'monthly' && (
         <>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Tag im Monat (1-31)</label>
-          <input type="number" min={1} max={31} value={dayOfMonth} onChange={(e) => setDayOfMonth(Number(e.target.value))} className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+          <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Tag im Monat (1-31)</label>
+          <input type="number" min={1} max={31} value={dayOfMonth} onChange={(e) => setDayOfMonth(Number(e.target.value))} className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
         </>
       )}
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Uhrzeit</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Uhrzeit</label>
       <div className="flex gap-2 mb-4">
-        <input type="number" min={0} max={23} value={hour} onChange={(e) => setHour(Number(e.target.value))} className="w-20 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
-        <span className="text-slate-400 self-center">:</span>
-        <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(Number(e.target.value))} className="w-20 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+        <input type="number" min={0} max={23} value={hour} onChange={(e) => setHour(Number(e.target.value))} className="w-20 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
+        <span className="text-admin-muted self-center">:</span>
+        <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(Number(e.target.value))} className="w-20 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm" />
       </div>
 
       <div className="flex gap-2">
@@ -239,7 +242,7 @@ function ScheduleForm({
         >
           Speichern
         </button>
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 font-semibold text-sm hover:bg-slate-600">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg bg-[var(--admin-faint)] text-admin-text font-semibold text-sm hover:bg-[var(--admin-muted-2)]">
           Abbrechen
         </button>
       </div>

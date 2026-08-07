@@ -107,10 +107,10 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      {loading && <p className="text-slate-400">Lade…</p>}
+      {loading && <p className="text-admin-muted">Lade…</p>}
 
       {!loading && templates.length === 0 && !creating && (
-        <p className="text-slate-400">Noch keine Vorlagen.</p>
+        <p className="text-admin-muted">Noch keine Vorlagen.</p>
       )}
 
       {creating && (
@@ -136,25 +136,25 @@ export default function TemplatesPage() {
           {templates.map((t) => (
             <div
               key={t.id}
-              className="p-4 rounded-xl bg-slate-900/50 border border-slate-800"
+              className="p-4 rounded-xl bg-slate-900/50 border border-admin-border"
             >
               <div className="flex items-start justify-between gap-4 mb-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-white">{t.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase">
+                    <h3 className="font-semibold text-admin-heading">{t.name}</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-surface-2 text-admin-muted uppercase">
                       {TRIGGER_LABELS[t.trigger_type] ?? t.trigger_type}
                     </span>
                     {!t.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/40 text-red-300">Inaktiv</span>}
                   </div>
-                  {t.description && <p className="text-sm text-slate-400">{t.description}</p>}
-                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">{t.caption_prompt}</p>
+                  {t.description && <p className="text-sm text-admin-muted">{t.description}</p>}
+                  <p className="text-xs text-[var(--admin-text-dim)] mt-2 line-clamp-2">{t.caption_prompt}</p>
                 </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => toggleActive(t)}
-                    className="text-xs text-slate-400 hover:text-slate-200"
+                    className="text-xs text-admin-muted hover:text-admin-text"
                   >
                     {t.is_active ? 'Deaktivieren' : 'Aktivieren'}
                   </button>
@@ -213,82 +213,82 @@ function TemplateEditor({
   }
 
   return (
-    <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5">
-      <h2 className="font-semibold text-white mb-3">{initial.id ? 'Vorlage bearbeiten' : 'Neue Vorlage'}</h2>
+    <div className="rounded-xl bg-slate-900/50 border border-admin-border p-5">
+      <h2 className="font-semibold text-admin-heading mb-3">{initial.id ? 'Vorlage bearbeiten' : 'Neue Vorlage'}</h2>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Name</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Name</label>
       <input
         type="text"
         value={t.name ?? ''}
         onChange={(e) => update('name', e.target.value)}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       />
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Beschreibung (optional)</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Beschreibung (optional)</label>
       <input
         type="text"
         value={t.description ?? ''}
         onChange={(e) => update('description', e.target.value)}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       />
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Trigger</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Trigger</label>
       <select
         value={t.trigger_type ?? 'manual'}
         onChange={(e) => update('trigger_type', e.target.value)}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       >
         {Object.entries(TRIGGER_LABELS).map(([k, v]) => (
           <option key={k} value={k}>{v}</option>
         ))}
       </select>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Plattformen</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Plattformen</label>
       <div className="flex gap-3 mb-3">
-        <label className="flex items-center gap-2 text-sm text-slate-200">
+        <label className="flex items-center gap-2 text-sm text-admin-text">
           <input type="checkbox" checked={(t.platforms ?? []).includes('facebook')} onChange={() => togglePlatform('facebook')} />
           Facebook
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-200">
+        <label className="flex items-center gap-2 text-sm text-admin-text">
           <input type="checkbox" checked={(t.platforms ?? []).includes('instagram')} onChange={() => togglePlatform('instagram')} />
           Instagram
         </label>
       </div>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">
         Caption-Prompt (Claude) — Platzhalter mit {`{name}`} ersetzbar
       </label>
       <textarea
         value={t.caption_prompt ?? ''}
         onChange={(e) => update('caption_prompt', e.target.value)}
         rows={6}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm font-mono text-xs"
       />
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">
         Bild-Prompt (DALL-E, optional) — leer lassen für kein Bild
       </label>
       <textarea
         value={t.image_prompt ?? ''}
         onChange={(e) => update('image_prompt', e.target.value)}
         rows={3}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm font-mono text-xs"
       />
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Standard-Hashtags</label>
+      <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Standard-Hashtags</label>
       <input
         type="text"
         value={hashtagsText}
         onChange={(e) => setHashtagsText(e.target.value)}
         placeholder="#actioncam #cam2rent"
-        className="w-full mb-4 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        className="w-full mb-4 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
       />
 
       <div className="flex gap-2">
         <button type="button" onClick={submit} className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500">
           Speichern
         </button>
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 font-semibold text-sm hover:bg-slate-600">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg bg-[var(--admin-faint)] text-admin-text font-semibold text-sm hover:bg-[var(--admin-muted-2)]">
           Abbrechen
         </button>
       </div>
