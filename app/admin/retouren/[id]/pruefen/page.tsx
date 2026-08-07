@@ -200,38 +200,38 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-slate-500">Lädt…</div>;
-  if (error || !booking) return <div className="p-8 text-center text-red-500">{error}</div>;
+  if (loading) return <div className="p-8 text-center text-[var(--admin-text-dim)]">Lädt…</div>;
+  if (error || !booking) return <div className="p-8 text-center text-[var(--admin-danger)]">{error}</div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="text-admin-text">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <AdminBackLink href="/admin/retouren" label="Zurück zur Retouren-Übersicht" />
 
         <div className="mt-4 mb-6">
-          <h1 className="text-2xl font-bold">Rückgabe prüfen</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold text-admin-heading">Rückgabe prüfen</h1>
+          <p className="text-sm text-admin-muted mt-1">
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
 
         {/* Bestellinfo */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 text-sm">
+        <div className="bg-admin-surface border border-admin-border rounded-xl p-4 mb-6 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
+              <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
               <div>{fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}</div>
             </div>
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Kamera</div>
+              <div className="text-[var(--admin-text-dim)] text-xs uppercase tracking-wider mb-0.5">Kamera</div>
               <div>{booking.product_name}</div>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-          <h2 className="text-lg font-bold mb-1 text-slate-100">Vollständigkeit prüfen</h2>
-          <p className="text-sm text-slate-400 mb-4">
+        <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+          <h2 className="text-lg font-bold mb-1 text-admin-heading">Vollständigkeit prüfen</h2>
+          <p className="text-sm text-admin-muted mb-4">
             Hake jedes Item ab oder scanne den Code. Nur eine Person notwendig.
           </p>
 
@@ -267,8 +267,8 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Zusatz-Pruefungen */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">
+        <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+          <h2 className="text-sm font-semibold text-admin-text-2 mb-3 uppercase tracking-wider">
             Zustand der Geräte
           </h2>
           <div className="space-y-2">
@@ -279,8 +279,8 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Gesamtzustand */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">
+        <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+          <h2 className="text-sm font-semibold text-admin-text-2 mb-3 uppercase tracking-wider">
             Gesamtzustand
           </h2>
           <div className="flex gap-2">
@@ -291,9 +291,9 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
                 onClick={() => setCondition(opt.value)}
                 className="flex-1 py-2.5 px-3 rounded-lg text-sm font-semibold border-2 transition-colors"
                 style={{
-                  borderColor: condition === opt.value ? opt.color : '#1e293b',
+                  borderColor: condition === opt.value ? opt.color : 'var(--admin-border)',
                   background: condition === opt.value ? `${opt.color}22` : 'transparent',
-                  color: condition === opt.value ? opt.color : '#94a3b8',
+                  color: condition === opt.value ? opt.color : 'var(--admin-muted)',
                 }}
               >
                 {opt.label}
@@ -311,7 +311,7 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
                 onChange={(e) => setDamageDesc(e.target.value)}
                 rows={3}
                 placeholder="Was ist beschädigt? Wo am Gerät?"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100 outline-none resize-none focus:border-red-500"
+                className="w-full px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded-lg text-sm text-admin-text outline-none resize-none focus:border-red-500"
               />
               <p className="text-xs text-red-400 mt-2">
                 Es wird automatisch eine Schadensmeldung erstellt.
@@ -321,8 +321,8 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Notizen */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+        <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+          <label className="block text-xs font-semibold text-admin-muted uppercase tracking-wider mb-2">
             Notizen (optional)
           </label>
           <textarea
@@ -330,7 +330,7 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder="Interne Notizen zur Rückgabe..."
-            className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100 outline-none resize-none"
+            className="w-full px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded-lg text-sm text-admin-text outline-none resize-none"
           />
         </div>
 
@@ -342,7 +342,7 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
         <button
           onClick={submit}
           disabled={!canSubmit}
-          className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:cursor-not-allowed text-slate-950 disabled:text-slate-500 font-bold py-3 rounded-lg transition-colors"
+          className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-[var(--admin-surface-2)] disabled:cursor-not-allowed text-slate-950 disabled:text-[var(--admin-text-dim)] font-bold py-3 rounded-lg transition-colors"
         >
           {submitting ? 'Wird gespeichert…'
             : condition === 'beschaedigt' ? 'Rückgabe + Schaden melden'
@@ -362,7 +362,7 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
         onChange={(e) => onChange(e.target.checked)}
         className="w-5 h-5 accent-emerald-500"
       />
-      <span className="text-sm text-slate-200">{label}</span>
+      <span className="text-sm text-admin-text">{label}</span>
     </label>
   );
 }
