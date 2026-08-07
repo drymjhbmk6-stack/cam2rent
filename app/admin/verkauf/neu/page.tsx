@@ -144,20 +144,20 @@ export default function VerkaufNeu() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <AdminBackLink href="/admin/verkauf" />
         <div className="mt-4 rounded-xl bg-emerald-900/20 border border-emerald-800 p-8 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Verkauf angelegt</h1>
-          <p className="text-slate-300 mb-1">Verkauf-Nr. {done.bookingId}</p>
-          <p className="text-sm text-slate-400 mb-6">
+          <h1 className="text-2xl font-bold text-admin-heading mb-2">Verkauf angelegt</h1>
+          <p className="text-admin-text-2 mb-1">Verkauf-Nr. {done.bookingId}</p>
+          <p className="text-sm text-admin-muted mb-6">
             {done.emailSent
               ? 'Die Rechnung mit Zahlungslink wurde an den Kunden geschickt.'
               : 'Hinweis: Der E-Mail-Versand ist fehlgeschlagen — Zahlungslink ggf. erneut senden.'}
           </p>
           {done.paymentUrl && (
-            <p className="text-xs text-slate-500 break-all mb-6">
+            <p className="text-xs text-[var(--admin-text-dim)] break-all mb-6">
               Zahlungslink: <a href={done.paymentUrl} className="text-cyan-400 underline" target="_blank" rel="noopener noreferrer">{done.paymentUrl}</a>
             </p>
           )}
           <div className="flex gap-3 justify-center">
-            <Link href="/admin/verkauf" className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700 border border-slate-700">
+            <Link href="/admin/verkauf" className="px-4 py-2 rounded-lg bg-admin-surface-2 text-admin-text text-sm hover:bg-[var(--admin-faint)] border border-[var(--admin-faint)]">
               Zur Verkaufsliste
             </Link>
             <button
@@ -180,16 +180,16 @@ export default function VerkaufNeu() {
   // Kein w-full hier — sonst kollidiert es in der Positions-Zeile mit
   // flex-1 / w-16. Breite wird pro Feld explizit gesetzt.
   const inputCls =
-    'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-base text-white placeholder-slate-600 focus:outline-none focus:border-cyan-600';
-  const cardCls = 'rounded-xl bg-slate-900/50 border border-slate-800 p-5';
-  const labelCls = 'text-xs uppercase tracking-wider text-slate-500 mb-1.5 block';
+    'rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] px-3 py-2 text-base text-[var(--admin-text)] placeholder-slate-600 focus:outline-none focus:border-cyan-600';
+  const cardCls = 'rounded-xl bg-slate-900/50 border border-admin-border p-5';
+  const labelCls = 'text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5 block';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <AdminBackLink href="/admin/verkauf" />
 
-      <h1 className="text-2xl font-bold text-white mb-1 mt-4">Neuer Verkauf</h1>
-      <p className="text-sm text-slate-400 mb-6">
+      <h1 className="text-2xl font-bold text-admin-heading mb-1 mt-4">Neuer Verkauf</h1>
+      <p className="text-sm text-admin-muted mb-6">
         Zubehör (z.B. Speicherkarte) an einen Kunden verkaufen. Der Kunde erhält Rechnung
         und Stripe-Zahlungslink per E-Mail.
       </p>
@@ -197,7 +197,7 @@ export default function VerkaufNeu() {
       <div className="space-y-5">
         {/* 1. Kunde */}
         <div className={cardCls}>
-          <h2 className="font-semibold text-white mb-3">1. Kunde</h2>
+          <h2 className="font-semibold text-admin-heading mb-3">1. Kunde</h2>
           <label className={labelCls}>Kunde aus der Datenbank</label>
           <select
             value={customerId}
@@ -236,14 +236,14 @@ export default function VerkaufNeu() {
 
         {/* 2. Artikel aus Bestellung */}
         <div className={cardCls}>
-          <h2 className="font-semibold text-white mb-1">2. Artikel aus einer Bestellung</h2>
-          <p className="text-xs text-slate-500 mb-3">
+          <h2 className="font-semibold text-admin-heading mb-1">2. Artikel aus einer Bestellung</h2>
+          <p className="text-xs text-[var(--admin-text-dim)] mb-3">
             Optional — wähle eine frühere Buchung des Kunden, um Artikel direkt zu übernehmen.
           </p>
-          {!customerId && <p className="text-sm text-slate-500">Zuerst einen Kunden wählen.</p>}
-          {customerId && bookingsLoading && <p className="text-sm text-slate-500">Lade Buchungen…</p>}
+          {!customerId && <p className="text-sm text-[var(--admin-text-dim)]">Zuerst einen Kunden wählen.</p>}
+          {customerId && bookingsLoading && <p className="text-sm text-[var(--admin-text-dim)]">Lade Buchungen…</p>}
           {customerId && !bookingsLoading && bookings.length === 0 && (
-            <p className="text-sm text-slate-500">Keine Buchungen für diesen Kunden gefunden.</p>
+            <p className="text-sm text-[var(--admin-text-dim)]">Keine Buchungen für diesen Kunden gefunden.</p>
           )}
           {customerId && bookings.length > 0 && (
             <>
@@ -262,14 +262,14 @@ export default function VerkaufNeu() {
               {selectedBooking && (
                 <div className="mt-3 space-y-1.5">
                   {selectedBooking.items.length === 0 && (
-                    <p className="text-sm text-slate-500">Diese Buchung hat keine übernehmbaren Artikel.</p>
+                    <p className="text-sm text-[var(--admin-text-dim)]">Diese Buchung hat keine übernehmbaren Artikel.</p>
                   )}
                   {selectedBooking.items.map((it, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => addLine(it.name, it.qty)}
-                      className="w-full text-left px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-slate-200 hover:border-cyan-600 flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 rounded-lg bg-slate-950 border border-[var(--admin-faint)] text-sm text-admin-text hover:border-cyan-600 flex items-center justify-between"
                     >
                       <span>{it.name}{it.qty > 1 ? ` (×${it.qty})` : ''}</span>
                       <span className="text-cyan-400 text-xs">+ übernehmen</span>
