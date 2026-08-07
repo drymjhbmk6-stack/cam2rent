@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
+import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface FirmwareCheck {
   product_id: string;
@@ -30,6 +31,7 @@ function hasNewVersion(r: FirmwareCheck): boolean {
 }
 
 export default function FirmwareOverviewPage() {
+  const confirm = useConfirm();
   const [rows, setRows] = useState<FirmwareCheck[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,8 @@ export default function FirmwareOverviewPage() {
   useEffect(() => { reload(); }, []);
 
   async function runFullCheck() {
-    if (!confirm('Firmware-Check für alle Kameras starten? Dauert ca. 30–60 Sek.')) return;
+    const ok = await confirm({ message: 'Firmware-Check für alle Kameras starten? Dauert ca. 30–60 Sek.', confirmLabel: 'Prüfen' });
+    if (!ok) return;
     setRunning(true);
     setError(null);
     try {
@@ -124,25 +127,22 @@ export default function FirmwareOverviewPage() {
   const errorsCount = rows.filter((r) => r.status === 'error').length;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
-      <AdminBackLink />
-      <div className="max-w-5xl mx-auto mt-4 space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold">Firmware-Updates</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Quartalslauf (alle 3 Monate) prüft pro Kamera-Modell auf neue
-              Hersteller-Firmware. „Jetzt prüfen“ geht jederzeit manuell.
-            </p>
-          </div>
-          <button
-            onClick={runFullCheck}
-            disabled={running}
-            className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm"
-          >
-            {running ? 'Läuft…' : 'Jetzt prüfen'}
-          </button>
-        </div>
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
+      <div className="max-w-5xl mx-auto space-y-6">
+        <PageHeader
+          backLabel="Zurück"
+          title="Firmware-Updates"
+          subtitle="Quartalslauf (alle 3 Monate) prüft pro Kamera-Modell auf neue Hersteller-Firmware. „Jetzt prüfen“ geht jederzeit manuell."
+          actions={
+            <button
+              onClick={runFullCheck}
+              disabled={running}
+              className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 rounded font-semibold text-sm"
+            >
+              {running ? 'Läuft…' : 'Jetzt prüfen'}
+            </button>
+          }
+        />
 
         {error && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">
@@ -151,7 +151,7 @@ export default function FirmwareOverviewPage() {
         )}
 
         {!loading && rows.length === 0 && (
-          <div className="p-6 bg-[#111827] border border-slate-800 rounded text-slate-400 text-sm">
+          <div className="p-6 bg-admin-surface border border-admin-border rounded text-admin-muted text-sm">
             Noch kein Firmware-Check gelaufen. Klick „Jetzt prüfen“ für den ersten Lauf —
             oder warte auf den Quartals-Cron-Lauf (1. Jan/Apr/Jul/Okt, 07:00 Uhr).
           </div>
@@ -174,7 +174,7 @@ export default function FirmwareOverviewPage() {
         )}
 
         {loading && (
-          <div className="text-slate-400 text-sm">Lädt…</div>
+          <div className="text-admin-muted text-sm">Lädt…</div>
         )}
 
         {sorted.map((r) => {
@@ -189,7 +189,7 @@ export default function FirmwareOverviewPage() {
           return (
             <div
               key={r.product_id}
-              className={`bg-[#111827] border ${borderColor} rounded p-4`}
+              className={`bg-admin-surface border ${borderColor} rounded p-4`}
             >
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
@@ -211,19 +211,19 @@ export default function FirmwareOverviewPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-slate-300 space-y-1">
+                  <div className="text-sm text-admin-text-2 space-y-1">
                     {r.latest_version && (
                       <div>
                         Aktuelle Version: <span className="font-mono">{r.latest_version}</span>
                         {r.release_date && (
-                          <span className="text-slate-500 ml-2 text-xs">
+                          <span className="text-[var(--admin-text-dim)] ml-2 text-xs">
                             (erschienen {new Date(r.release_date).toLocaleDateString('de-DE')})
                           </span>
                         )}
                       </div>
                     )}
                     {r.seen_version && r.seen_version !== r.latest_version && (
-                      <div className="text-slate-500 text-xs">
+                      <div className="text-[var(--admin-text-dim)] text-xs">
                         Zuletzt gesehen: <span className="font-mono">{r.seen_version}</span>
                       </div>
                     )}
@@ -250,7 +250,7 @@ export default function FirmwareOverviewPage() {
                         {r.status === 'ok' ? '🔍 ' : ''}{r.error_message}
                       </div>
                     )}
-                    <div className="text-slate-500 text-xs">
+                    <div className="text-[var(--admin-text-dim)] text-xs">
                       Letzter Check: {new Date(r.last_checked_at).toLocaleString('de-DE')}
                     </div>
                   </div>
