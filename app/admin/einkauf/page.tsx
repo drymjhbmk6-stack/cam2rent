@@ -5,6 +5,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
 import PurchaseItemClassifier, { type ClassifierItem, type ProductOption, type AssetOption } from '@/components/admin/PurchaseItemClassifier';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,31 +86,31 @@ type Tab = 'lieferanten' | 'einkauefe';
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const S = {
-  card: { background: '#111827', borderRadius: 12, border: '1px solid #1e293b' } as React.CSSProperties,
-  input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, width: '100%' } as React.CSSProperties,
+  card: { background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid var(--admin-border)' } as React.CSSProperties,
+  input: { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14, width: '100%' } as React.CSSProperties,
   select: {
-    background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14, width: '100%',
+    background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)', borderRadius: 10, padding: '10px 12px', color: 'var(--admin-text)', fontSize: 14, width: '100%',
     appearance: 'none' as const,
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
   } as React.CSSProperties,
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
-  text: { color: '#e2e8f0' },
-  muted: { color: '#94a3b8' },
-  dim: { color: '#64748b' },
-  cyan: '#06b6d4',
+  label: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--admin-text-dim)', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
+  text: { color: 'var(--admin-text)' },
+  muted: { color: 'var(--admin-muted)' },
+  dim: { color: 'var(--admin-text-dim)' },
+  cyan: 'var(--admin-accent)',
 };
 
 const btnPrimary: React.CSSProperties = {
-  background: '#06b6d4', color: '#0f172a', fontWeight: 700, fontSize: 13,
+  background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', fontWeight: 700, fontSize: 13,
   padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
 };
 const btnSecondary: React.CSSProperties = {
-  background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13,
-  padding: '10px 20px', borderRadius: 10, border: '1px solid #1e293b', cursor: 'pointer',
+  background: 'transparent', color: 'var(--admin-muted)', fontWeight: 600, fontSize: 13,
+  padding: '10px 20px', borderRadius: 10, border: '1px solid var(--admin-border)', cursor: 'pointer',
 };
 const btnDanger: React.CSSProperties = {
-  background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 12,
+  background: 'transparent', color: 'var(--admin-danger)', fontWeight: 600, fontSize: 12,
   padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer',
 };
 
@@ -177,6 +178,9 @@ export default function EinkaufPage() {
   const [assets, setAssets] = useState<AssetOption[]>([]);
 
   const [saving, setSaving] = useState(false);
+
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // ─── Data fetching ──────────────────────────────────────────────────────
 
@@ -263,13 +267,13 @@ export default function EinkaufPage() {
   }
 
   async function deleteSupplier(id: string) {
-    if (!confirm('Lieferant wirklich löschen?')) return;
+    if (!(await confirm({ message: 'Lieferant wirklich löschen?', danger: true }))) return;
     const res = await fetch(`/api/admin/suppliers/${id}`, { method: 'DELETE' });
     if (res.ok) {
       await fetchSuppliers();
     } else {
       const j = await res.json();
-      alert(j.error || 'Fehler beim Löschen');
+      toast.error(j.error || 'Fehler beim Löschen');
     }
   }
 
@@ -287,7 +291,7 @@ export default function EinkaufPage() {
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.error || 'Fehler beim Speichern');
+        toast.error(j.error || 'Fehler beim Speichern');
         return;
       }
       const j = await res.json();
@@ -302,11 +306,11 @@ export default function EinkaufPage() {
         const up = await fetch('/api/admin/purchase-attachments', { method: 'POST', body: fd });
         if (!up.ok) {
           const ej = await up.json().catch(() => ({}));
-          alert(`Einkauf gespeichert, aber Belege fehlgeschlagen: ${ej.error || ej.errors?.join('; ') || up.status}`);
+          toast.error(`Einkauf gespeichert, aber Belege fehlgeschlagen: ${ej.error || ej.errors?.join('; ') || up.status}`);
         } else {
           const ej = await up.json().catch(() => ({}));
           if (ej.errors?.length) {
-            alert(`Einige Belege konnten nicht hochgeladen werden:\n${ej.errors.join('\n')}`);
+            toast.error(`Einige Belege konnten nicht hochgeladen werden:\n${ej.errors.join('\n')}`);
           }
         }
       }
@@ -337,7 +341,7 @@ export default function EinkaufPage() {
     if (reason === null) return; // Abbrechen
     const trimmed = reason.trim();
     if (trimmed.length < 10) {
-      alert('Begründung muss mindestens 10 Zeichen lang sein.');
+      toast.error('Begründung muss mindestens 10 Zeichen lang sein.');
       return;
     }
     const res = await fetch(`/api/admin/purchases/${id}`, {
@@ -353,7 +357,7 @@ export default function EinkaufPage() {
       await fetchPurchases();
     } else {
       const j = await res.json().catch(() => ({}));
-      alert(j.error || 'Fehler beim Löschen');
+      toast.error(j.error || 'Fehler beim Löschen');
     }
   }
 
@@ -366,10 +370,10 @@ export default function EinkaufPage() {
     if (reason === null) return;
     const trimmed = reason.trim();
     if (trimmed.length < 10) {
-      alert('Begründung muss mindestens 10 Zeichen lang sein.');
+      toast.error('Begründung muss mindestens 10 Zeichen lang sein.');
       return;
     }
-    if (!confirm(`Wirklich ${ids.length} ${ids.length === 1 ? 'Einkauf' : 'Einkäufe'} löschen? Diese Aktion ist nicht umkehrbar.`)) return;
+    if (!(await confirm({ message: `Wirklich ${ids.length} ${ids.length === 1 ? 'Einkauf' : 'Einkäufe'} löschen? Diese Aktion ist nicht umkehrbar.`, danger: true }))) return;
 
     setBulkDeleting(true);
     try {
@@ -386,7 +390,7 @@ export default function EinkaufPage() {
       );
       const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
       if (failed.length > 0) {
-        alert(`${ids.length - failed.length} gelöscht, ${failed.length} fehlgeschlagen:\n${failed.slice(0, 5).map((f) => f.reason?.message || f.reason).join('\n')}`);
+        toast.error(`${ids.length - failed.length} gelöscht, ${failed.length} fehlgeschlagen:\n${failed.slice(0, 5).map((f) => f.reason?.message || f.reason).join('\n')}`);
       }
       setSelectedIds(new Set());
       await fetchPurchases();
@@ -469,7 +473,7 @@ export default function EinkaufPage() {
     <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
       <AdminBackLink label="Zurück" />
       {/* Header */}
-      <h1 className="font-heading" style={{ fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 6 }}>
+      <h1 className="font-heading" style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-heading)', marginBottom: 6 }}>
         Einkauf & Lieferanten
       </h1>
       <p style={{ ...S.dim, fontSize: 13, marginBottom: 24 }}>
@@ -485,13 +489,13 @@ export default function EinkaufPage() {
         ].map((c) => (
           <div key={c.label} style={{ ...S.card, padding: '20px 24px' }}>
             <div style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{c.label}</div>
-            <div style={{ color: '#06b6d4', fontSize: 24, fontWeight: 800 }}>{c.value}</div>
+            <div style={{ color: 'var(--admin-accent)', fontSize: 24, fontWeight: 800 }}>{c.value}</div>
           </div>
         ))}
       </div>
 
       {/* ─── Tabs ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #1e293b', paddingBottom: 0 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--admin-border)', paddingBottom: 0 }}>
         {[
           { key: 'lieferanten' as Tab, label: 'Lieferanten' },
           { key: 'einkauefe' as Tab, label: 'Einkäufe' },
@@ -501,8 +505,8 @@ export default function EinkaufPage() {
             onClick={() => setTab(t.key)}
             style={{
               padding: '10px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              background: 'transparent', border: 'none', borderBottom: tab === t.key ? '2px solid #06b6d4' : '2px solid transparent',
-              color: tab === t.key ? '#06b6d4' : '#64748b', marginBottom: -1,
+              background: 'transparent', border: 'none', borderBottom: tab === t.key ? '2px solid var(--admin-accent)' : '2px solid transparent',
+              color: tab === t.key ? 'var(--admin-accent)' : 'var(--admin-text-dim)', marginBottom: -1,
             }}
           >
             {t.label}
@@ -532,7 +536,7 @@ export default function EinkaufPage() {
           {/* New Supplier Form */}
           {showNewSupplier && (
             <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
-              <h3 style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Lieferant</h3>
+              <h3 style={{ color: 'var(--admin-heading)', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Lieferant</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={S.label}>Name *</label>
@@ -575,7 +579,7 @@ export default function EinkaufPage() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                  <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                     {['Name', 'Kontaktperson', 'E-Mail', 'Telefon', ''].map(h => (
                       <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
                     ))}
@@ -614,7 +618,7 @@ export default function EinkaufPage() {
                 zIndex: 10,
                 background: 'rgba(15,23,42,0.95)',
                 backdropFilter: 'blur(8px)',
-                border: '1px solid #06b6d4',
+                border: '1px solid var(--admin-accent)',
                 borderRadius: 10,
                 padding: '10px 14px',
                 marginBottom: 12,
@@ -624,7 +628,7 @@ export default function EinkaufPage() {
                 flexWrap: 'wrap',
               }}
             >
-              <span style={{ color: '#06b6d4', fontWeight: 700, fontSize: 13 }}>
+              <span style={{ color: 'var(--admin-accent)', fontWeight: 700, fontSize: 13 }}>
                 {selectedIds.size} {selectedIds.size === 1 ? 'Eintrag' : 'Einträge'} ausgewählt
               </span>
               <div style={{ flex: 1 }} />
@@ -639,7 +643,7 @@ export default function EinkaufPage() {
                 onClick={bulkDeletePurchases}
                 disabled={bulkDeleting}
                 style={{
-                  background: '#ef4444',
+                  background: 'var(--admin-danger)',
                   color: 'white',
                   fontWeight: 700,
                   fontSize: 13,
@@ -716,9 +720,9 @@ export default function EinkaufPage() {
 
           {/* Trefferanzahl + Filter-Summe */}
           {(filterSupplier || filterStatus || filterYear || filterMonth || purchaseSearch) && (
-            <div style={{ marginBottom: 12, fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--admin-muted)' }}>
               {filteredPurchases.length} {filteredPurchases.length === 1 ? 'Treffer' : 'Treffer'} ·{' '}
-              Summe: <span style={{ color: '#22d3ee', fontWeight: 600 }}>
+              Summe: <span style={{ color: 'var(--admin-accent-hover)', fontWeight: 600 }}>
                 {filteredPurchases.reduce((s, p) => s + (p.total_amount ?? 0), 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
               </span>
             </div>
@@ -727,7 +731,7 @@ export default function EinkaufPage() {
           {/* New Purchase Form */}
           {showNewPurchase && (
             <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
-              <h3 style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Einkauf</h3>
+              <h3 style={{ color: 'var(--admin-heading)', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Einkauf</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={S.label}>Lieferant *</label>
@@ -812,7 +816,7 @@ export default function EinkaufPage() {
               </div>
 
               {/* Total */}
-              <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: '#06b6d4' }}>
+              <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: 'var(--admin-accent)' }}>
                 Gesamt: {fmtCurrency(purchaseForm.items.reduce((s, i) => s + i.quantity * i.unit_price, 0))}
               </div>
 
@@ -838,7 +842,7 @@ export default function EinkaufPage() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                  <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                     <th style={{ padding: '12px 8px 12px 16px', width: 36 }}>
                       <input
                         type="checkbox"
@@ -855,7 +859,7 @@ export default function EinkaufPage() {
                         }}
                         onChange={toggleSelectAllVisible}
                         title="Alle sichtbaren auswählen"
-                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#06b6d4' }}
+                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: 'var(--admin-accent)' }}
                       />
                     </th>
                     {['Datum', 'Lieferant', 'Produkte', 'Betrag', 'Status', ''].map(h => (
@@ -927,14 +931,14 @@ function SupplierRow({
     <>
       <tr
         onClick={onEdit}
-        style={{ borderBottom: '1px solid #1e293b', cursor: 'pointer' }}
+        style={{ borderBottom: '1px solid var(--admin-border)', cursor: 'pointer' }}
         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(6,182,212,0.05)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
-        <td style={{ padding: '12px 16px', color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>{supplier.name}</td>
-        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>{supplier.contact_person || '\u2014'}</td>
-        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>{supplier.email || '\u2014'}</td>
-        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>{supplier.phone || '\u2014'}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-text)', fontSize: 13, fontWeight: 600 }}>{supplier.name}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-muted)', fontSize: 13 }}>{supplier.contact_person || '\u2014'}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-muted)', fontSize: 13 }}>{supplier.email || '\u2014'}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-muted)', fontSize: 13 }}>{supplier.phone || '\u2014'}</td>
         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
           <button
             onClick={e => { e.stopPropagation(); onDelete(); }}
@@ -946,7 +950,7 @@ function SupplierRow({
       </tr>
       {isEditing && (
         <tr>
-          <td colSpan={5} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
+          <td colSpan={5} style={{ background: 'var(--admin-bg)', borderBottom: '1px solid var(--admin-border)', padding: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               <div>
                 <label style={S.label}>Name *</label>
@@ -1014,7 +1018,7 @@ function PurchaseRow({
       <tr
         onClick={onToggle}
         style={{
-          borderBottom: '1px solid #1e293b',
+          borderBottom: '1px solid var(--admin-border)',
           cursor: 'pointer',
           background: selected ? 'rgba(6,182,212,0.08)' : 'transparent',
         }}
@@ -1027,13 +1031,13 @@ function PurchaseRow({
             checked={selected}
             onChange={onToggleSelect}
             title="Auswählen"
-            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#06b6d4' }}
+            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: 'var(--admin-accent)' }}
           />
         </td>
-        <td style={{ padding: '12px 16px', color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>{fmtDate(purchase.order_date)}</td>
-        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>{purchase.supplier?.name || '\u2014'}</td>
-        <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{productSummary || '\u2014'}</td>
-        <td style={{ padding: '12px 16px', color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>{fmtCurrency(purchase.total_amount)}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-text)', fontSize: 13, fontWeight: 600 }}>{fmtDate(purchase.order_date)}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-muted)', fontSize: 13 }}>{purchase.supplier?.name || '\u2014'}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-muted)', fontSize: 13, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{productSummary || '\u2014'}</td>
+        <td style={{ padding: '12px 16px', color: 'var(--admin-text)', fontSize: 13, fontWeight: 600 }}>{fmtCurrency(purchase.total_amount)}</td>
         <td style={{ padding: '12px 16px' }}><StatusBadge status={purchase.status} /></td>
         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
           <button
@@ -1046,11 +1050,11 @@ function PurchaseRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
+          <td colSpan={7} style={{ background: 'var(--admin-bg)', borderBottom: '1px solid var(--admin-border)', padding: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
               <div>
                 <div style={S.label}>Rechnungsnr.</div>
-                <div style={{ color: '#e2e8f0', fontSize: 13 }}>{purchase.invoice_number || '\u2014'}</div>
+                <div style={{ color: 'var(--admin-text)', fontSize: 13 }}>{purchase.invoice_number || '\u2014'}</div>
               </div>
               <div>
                 <div style={S.label}>Status ändern</div>
@@ -1068,7 +1072,7 @@ function PurchaseRow({
               </div>
               <div>
                 <div style={S.label}>Notizen</div>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>{purchase.notes || '\u2014'}</div>
+                <div style={{ color: 'var(--admin-muted)', fontSize: 13 }}>{purchase.notes || '\u2014'}</div>
               </div>
             </div>
 
@@ -1085,11 +1089,11 @@ function PurchaseRow({
               </thead>
               <tbody>
                 {purchase.purchase_items.map(item => (
-                  <tr key={item.id} style={{ borderTop: '1px solid #1e293b' }}>
-                    <td style={{ padding: '8px 12px', color: '#e2e8f0', fontSize: 13 }}>{item.product_name}</td>
-                    <td style={{ padding: '8px 12px', color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{item.quantity}</td>
-                    <td style={{ padding: '8px 12px', color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
-                    <td style={{ padding: '8px 12px', color: '#e2e8f0', fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{fmtCurrency(item.quantity * item.unit_price)}</td>
+                  <tr key={item.id} style={{ borderTop: '1px solid var(--admin-border)' }}>
+                    <td style={{ padding: '8px 12px', color: 'var(--admin-text)', fontSize: 13 }}>{item.product_name}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--admin-muted)', fontSize: 13, textAlign: 'right' }}>{item.quantity}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--admin-muted)', fontSize: 13, textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--admin-text)', fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{fmtCurrency(item.quantity * item.unit_price)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1098,7 +1102,7 @@ function PurchaseRow({
             {/* Klassifizierung & Verknuepfung */}
             <div style={{ marginTop: 20 }}>
               <div style={S.label}>Klassifizierung & Verknüpfung</div>
-              <p style={{ color: '#64748b', fontSize: 12, margin: '0 0 8px' }}>
+              <p style={{ color: 'var(--admin-text-dim)', fontSize: 12, margin: '0 0 8px' }}>
                 Pro Position als Anlagegut, GWG, Ausgabe oder Ignorieren festlegen — auch nachträglich. Anlagegüter können an eine bereits erfasste Anlage gehängt werden.
               </p>
               {purchase.purchase_items.map((item) => (
@@ -1151,8 +1155,8 @@ function PendingFilesPicker({
         onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
         onClick={() => inputRef.current?.click()}
         style={{
-          border: '1px dashed #334155', borderRadius: 10, padding: 16, textAlign: 'center',
-          cursor: 'pointer', background: '#0a0f1e', color: '#94a3b8', fontSize: 13,
+          border: '1px dashed var(--admin-faint)', borderRadius: 10, padding: 16, textAlign: 'center',
+          cursor: 'pointer', background: 'var(--admin-bg)', color: 'var(--admin-muted)', fontSize: 13,
         }}
       >
         📎 Belege hierher ziehen oder klicken (PDF, JPG, PNG, WebP — max 20 MB pro Datei, bis zu 10)
@@ -1170,11 +1174,11 @@ function PendingFilesPicker({
           {files.map((pf, i) => (
             <li key={i} style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+              background: 'var(--admin-bg)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '8px 10px',
             }}>
               <span style={{ fontSize: 16 }}>📄</span>
-              <span style={{ flex: 1, color: '#e2e8f0', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {pf.file.name} <span style={{ color: '#64748b', fontSize: 11 }}>({fmtBytes(pf.file.size)})</span>
+              <span style={{ flex: 1, color: 'var(--admin-text)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pf.file.name} <span style={{ color: 'var(--admin-text-dim)', fontSize: 11 }}>({fmtBytes(pf.file.size)})</span>
               </span>
               <select
                 value={pf.kind}
@@ -1184,7 +1188,7 @@ function PendingFilesPicker({
                   onChange(next);
                 }}
                 style={{
-                  background: '#111827', color: '#e2e8f0', border: '1px solid #1e293b',
+                  background: 'var(--admin-surface)', color: 'var(--admin-text)', border: '1px solid var(--admin-border)',
                   borderRadius: 6, padding: '4px 8px', fontSize: 12,
                 }}
               >
@@ -1196,7 +1200,7 @@ function PendingFilesPicker({
                 onClick={(e) => { e.stopPropagation(); onChange(files.filter((_, j) => j !== i)); }}
                 style={{
                   background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                  color: 'var(--admin-danger)', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
                 }}
                 title="Entfernen"
               >
@@ -1259,24 +1263,24 @@ function AttachmentsSection({
     <div>
       <div style={S.label}>Belege ({attachments.length})</div>
       {attachments.length === 0 ? (
-        <div style={{ color: '#64748b', fontSize: 12, marginBottom: 10 }}>Noch keine Belege hinterlegt.</div>
+        <div style={{ color: 'var(--admin-text-dim)', fontSize: 12, marginBottom: 10 }}>Noch keine Belege hinterlegt.</div>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {attachments.map(att => (
             <li key={att.id} style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+              background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 8, padding: '8px 10px',
             }}>
               <span style={{ fontSize: 16 }}>{att.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
               <a
                 href={`/api/admin/invoices/purchase-pdf?path=${encodeURIComponent(att.storage_path)}`}
                 target="_blank"
                 rel="noreferrer"
-                style={{ flex: 1, color: '#e2e8f0', fontSize: 13, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                style={{ flex: 1, color: 'var(--admin-text)', fontSize: 13, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 onClick={(e) => e.stopPropagation()}
               >
                 {att.filename}
-                {att.size_bytes ? <span style={{ color: '#64748b', fontSize: 11 }}> ({fmtBytes(att.size_bytes)})</span> : null}
+                {att.size_bytes ? <span style={{ color: 'var(--admin-text-dim)', fontSize: 11 }}> ({fmtBytes(att.size_bytes)})</span> : null}
               </a>
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
@@ -1286,7 +1290,7 @@ function AttachmentsSection({
                 onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id, att.filename); }}
                 style={{
                   background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                  color: 'var(--admin-danger)', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
                 }}
                 title="Löschen"
               >
