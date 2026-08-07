@@ -71,7 +71,7 @@ export default function VertragUnterschreibenPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
+      <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--admin-text-dim)' }}>
         Buchung wird geladen...
       </div>
     );
@@ -79,7 +79,7 @@ export default function VertragUnterschreibenPage() {
 
   if (!booking) {
     return (
-      <div style={{ padding: '40px 16px', textAlign: 'center', color: '#ef4444' }}>
+      <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--admin-danger)' }}>
         {error || 'Buchung nicht gefunden.'}
       </div>
     );
@@ -96,10 +96,10 @@ export default function VertragUnterschreibenPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#e2e8f0', marginBottom: 8 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--admin-text)', marginBottom: 8 }}>
           Vertrag unterschrieben!
         </h1>
-        <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24 }}>
+        <p style={{ fontSize: 14, color: 'var(--admin-muted)', marginBottom: 24 }}>
           Der Mietvertrag für Buchung {bookingId} wurde erfolgreich signiert.
           {booking.customer_email && ' Eine Kopie wird per E-Mail versendet.'}
         </p>
@@ -107,7 +107,7 @@ export default function VertragUnterschreibenPage() {
           onClick={() => router.push(`/admin/buchungen/${bookingId}`)}
           style={{
             padding: '12px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-            background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+            background: 'var(--admin-accent)', color: 'var(--admin-primary-text)', border: 'none', cursor: 'pointer',
           }}
         >
           Zurück zur Buchung
@@ -128,7 +128,7 @@ export default function VertragUnterschreibenPage() {
         onClick={() => router.back()}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          color: '#06b6d4', background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--admin-accent)', background: 'none', border: 'none', cursor: 'pointer',
           fontSize: 14, fontWeight: 600, marginBottom: 20, padding: 0,
         }}
       >
@@ -138,26 +138,26 @@ export default function VertragUnterschreibenPage() {
         Zurück
       </button>
 
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: '#e2e8f0', marginBottom: 4 }}>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--admin-text)', marginBottom: 4 }}>
         Vertrag unterschreiben
       </h1>
-      <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24 }}>
+      <p style={{ fontSize: 14, color: 'var(--admin-text-dim)', marginBottom: 24 }}>
         Buchung {bookingId} — {booking.product_name}
       </p>
 
       {error && (
         <div style={{
           padding: '12px 16px', borderRadius: 8, marginBottom: 16,
-          background: '#ef444420', border: '1px solid #ef444440', color: '#ef4444', fontSize: 14,
+          background: '#ef444420', border: '1px solid #ef444440', color: 'var(--admin-danger)', fontSize: 14,
         }}>
           {error}
         </div>
       )}
 
       {saving ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--admin-text-dim)' }}>
           <div style={{
-            width: 32, height: 32, border: '3px solid #06b6d4', borderTopColor: 'transparent',
+            width: 32, height: 32, border: '3px solid var(--admin-accent)', borderTopColor: 'transparent',
             borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px',
           }} />
           Vertrag wird gespeichert...
