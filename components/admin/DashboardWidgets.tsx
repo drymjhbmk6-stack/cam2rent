@@ -5,26 +5,30 @@ import { useState, Fragment } from 'react';
 import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
+// Neutrale Flächen/Texte auf Design-Tokens (Dark-Werte identisch zu den alten
+// Hex → Dark pixel-gleich, Light flippt jetzt mit). Semantische Signalfarben
+// (green/yellow/purple/blue) + rgba-Tints bleiben literal — in beiden Themes
+// gleich. `red` → Danger-Token (dark #ef4444 identisch, light dunkler/lesbarer).
 const C = {
-  card: '#111827',
-  cardHover: '#1a2332',
-  border: '#1e293b',
-  cyan: '#06b6d4',
+  card: 'var(--admin-surface)',
+  cardHover: 'var(--admin-hover)',
+  border: 'var(--admin-border)',
+  cyan: 'var(--admin-accent)',
   cyanDim: 'rgba(6,182,212,0.15)',
   green: '#10b981',
   greenDim: 'rgba(16,185,129,0.15)',
   yellow: '#f59e0b',
   yellowDim: 'rgba(245,158,11,0.15)',
-  red: '#ef4444',
+  red: 'var(--admin-danger)',
   redDim: 'rgba(239,68,68,0.15)',
   purple: '#8b5cf6',
   purpleDim: 'rgba(139,92,246,0.15)',
   blue: '#3b82f6',
   blueDim: 'rgba(59,130,246,0.15)',
-  text: '#e2e8f0',
-  textMuted: '#94a3b8',
-  textDim: '#64748b',
-  bg: '#0a0f1e',
+  text: 'var(--admin-text)',
+  textMuted: 'var(--admin-muted)',
+  textDim: 'var(--admin-text-dim)',
+  bg: 'var(--admin-bg)',
 } as const;
 
 // ─── Icons (inline SVGs) ────────────────────────────────────────
@@ -1237,7 +1241,7 @@ export function WidgetAddPanel({ onAdd, existingIds, onClose, registry }: {
   return (
     <div style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 340,
-      background: '#0f172a', borderLeft: `1px solid ${C.border}`,
+      background: 'var(--admin-surface)', borderLeft: `1px solid ${C.border}`,
       zIndex: 100, overflowY: 'auto', padding: 24,
       boxShadow: '-4px 0 24px rgba(0,0,0,0.4)',
     }}>
