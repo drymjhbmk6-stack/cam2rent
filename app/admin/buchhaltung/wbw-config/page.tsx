@@ -44,13 +44,13 @@ export default function WbwConfigPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung" />
       <div className="max-w-3xl mx-auto mt-4 space-y-6">
         <h1 className="text-2xl font-heading">Wiederbeschaffungswert-Berechnung</h1>
 
-        <div className="bg-[#111827] border border-slate-800 rounded p-4 space-y-3">
-          <p className="text-sm text-slate-400">
+        <div className="bg-admin-surface border border-admin-border rounded p-4 space-y-3">
+          <p className="text-sm text-admin-muted">
             Bestimmt, wie der Wiederbeschaffungswert für nicht manuell gesetzte Inventar-Stücke
             berechnet wird. Linearer Verfall vom Kaufpreis bis zum Restwert-Floor über die
             definierte Nutzungsdauer, danach konstant.
@@ -63,9 +63,9 @@ export default function WbwConfigPage() {
                 type="number" min={0} max={100}
                 value={cfg.floor_percent}
                 onChange={(e) => setCfg((c) => ({ ...c, floor_percent: parseFloat(e.target.value || '0') }))}
-                className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base"
+                className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base"
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-[var(--admin-text-dim)] mt-1">
                 Auf welchen Prozentsatz vom Kaufpreis sinkt der Wert minimal? (z.B. 40 = WBW endet bei 40% vom Kaufpreis)
               </p>
             </div>
@@ -75,9 +75,9 @@ export default function WbwConfigPage() {
                 type="number" min={1}
                 value={cfg.useful_life_months}
                 onChange={(e) => setCfg((c) => ({ ...c, useful_life_months: parseInt(e.target.value || '1', 10) }))}
-                className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base"
+                className="w-full bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base"
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-[var(--admin-text-dim)] mt-1">
                 Über wie viele Monate erfolgt die lineare Wertminderung?
               </p>
             </div>
@@ -86,7 +86,7 @@ export default function WbwConfigPage() {
           {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
 
           <div className="flex items-center gap-3">
-            <button onClick={save} disabled={busy} className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold">
+            <button onClick={save} disabled={busy} className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover disabled:bg-[var(--admin-faint)] text-slate-900 rounded font-semibold">
               {busy ? 'Speichert…' : 'Speichern'}
             </button>
             {savedAt && Date.now() - savedAt < 5000 && (
@@ -96,7 +96,7 @@ export default function WbwConfigPage() {
         </div>
 
         {loaded && (
-          <div className="bg-[#111827] border border-slate-800 rounded p-4">
+          <div className="bg-admin-surface border border-admin-border rounded p-4">
             <h2 className="font-semibold mb-3">Live-Vorschau</h2>
             <div className="space-y-2 text-sm">
               <Preview kaufpreis={449} months={6} compute={previewWbw} />
@@ -121,7 +121,7 @@ function Preview({ kaufpreis, months, compute }: { kaufpreis: number; months: nu
   const wbw = compute(kaufpreis, months);
   return (
     <div className="flex justify-between items-center">
-      <span className="text-slate-400">Kaufpreis {kaufpreis} €, {months} Monate alt</span>
+      <span className="text-admin-muted">Kaufpreis {kaufpreis} €, {months} Monate alt</span>
       <span className="font-mono">→ {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(wbw)}</span>
     </div>
   );
