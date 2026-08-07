@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import AdminBackLink from '@/components/admin/AdminBackLink';
+import { PageHeader } from '@/components/admin/ui';
 import EinstellungenAllgemein from '@/components/admin/EinstellungenAllgemein';
 import VersandpreiseContent from '@/components/admin/VersandpreiseContent';
 import HaftungContent from '@/components/admin/HaftungContent';
@@ -41,8 +41,8 @@ function TabButton({ tab, current, label }: { tab: TabKey; current: TabKey; labe
       className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-all whitespace-nowrap"
       style={
         active
-          ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }
-          : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+          ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)', border: '1px solid rgba(6,182,212,0.3)' }
+          : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)' }
       }
     >
       {label}
@@ -58,13 +58,11 @@ function EinstellungenPageInner() {
   return (
     <div>
       <div className="px-4 sm:px-6 lg:px-8 pt-6 max-w-5xl mx-auto">
-        <AdminBackLink label="Zurück" />
-        <h1 className="font-heading font-bold text-xl mb-1" style={{ color: '#e2e8f0' }}>
-          Einstellungen
-        </h1>
-        <p className="text-sm mb-5" style={{ color: '#64748b' }}>
-          Alle Shop-Konfigurationen an einer Stelle
-        </p>
+        <PageHeader
+          backLabel="Zurück"
+          title="Einstellungen"
+          subtitle="Alle Shop-Konfigurationen an einer Stelle"
+        />
         <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {TABS.map((t) => (
             <TabButton key={t.key} tab={t.key} current={current} label={t.label} />
