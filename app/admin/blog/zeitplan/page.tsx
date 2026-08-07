@@ -5,7 +5,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
-  background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
+  background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)',
   borderRadius: 8, padding: '8px 12px', fontSize: 14, width: '100%',
 };
 
@@ -301,7 +301,7 @@ export default function BlogZeitplanPage() {
   const generatedCount = schedule.filter((s) => s.status === 'generated' || s.status === 'reviewed').length;
   const reviewedCount = schedule.filter((s) => s.reviewed).length;
 
-  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: '#64748b' }}>Laden...</p></div>;
+  if (loading) return <div className="p-4 sm:p-8"><p style={{ color: 'var(--admin-text-dim)' }}>Laden...</p></div>;
 
   // ── Kalender rendern ──────────────────────────────────────────────────────
   function renderCalendar() {
@@ -523,7 +523,7 @@ export default function BlogZeitplanPage() {
           <button
             onClick={() => setPastMonths((p) => p + 3)}
             className="px-3 py-1.5 rounded-lg font-heading font-semibold"
-            style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', fontSize: 12 }}
+            style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)', border: '1px solid var(--admin-faint)', fontSize: 12 }}
           >
             ← 3 frühere Monate anzeigen
           </button>
@@ -531,7 +531,7 @@ export default function BlogZeitplanPage() {
             <button
               onClick={() => setPastMonths(earliestBack)}
               className="px-3 py-1.5 rounded-lg font-heading font-semibold"
-              style={{ background: '#0f172a', color: '#64748b', border: '1px solid #334155', fontSize: 12 }}
+              style={{ background: 'var(--admin-input-bg)', color: 'var(--admin-text-dim)', border: '1px solid var(--admin-faint)', fontSize: 12 }}
             >
               Alle bisherigen anzeigen
             </button>
@@ -541,15 +541,15 @@ export default function BlogZeitplanPage() {
               <button
                 onClick={() => setPastMonths(0)}
                 className="px-3 py-1.5 rounded-lg font-heading font-semibold"
-                style={{ background: 'transparent', color: '#64748b', border: '1px solid #334155', fontSize: 12 }}
+                style={{ background: 'transparent', color: 'var(--admin-text-dim)', border: '1px solid var(--admin-faint)', fontSize: 12 }}
               >
                 Zurücksetzen
               </button>
-              <span style={{ fontSize: 11, color: '#475569' }}>{pastMonths} {pastMonths === 1 ? 'Monat' : 'Monate'} rückwirkend</span>
+              <span style={{ fontSize: 11, color: 'var(--admin-muted-2)' }}>{pastMonths} {pastMonths === 1 ? 'Monat' : 'Monate'} rückwirkend</span>
             </>
           )}
         </div>
-        <p style={{ fontSize: 11, color: '#475569', marginBottom: 12 }}>
+        <p style={{ fontSize: 11, color: 'var(--admin-muted-2)', marginBottom: 12 }}>
           Beitrag verschieben: am PC ziehen &amp; ablegen · am Handy Beitrag kurz gedrückt halten, dann auf den neuen Tag ziehen.
         </p>
         {months}
@@ -570,11 +570,11 @@ export default function BlogZeitplanPage() {
         onClick={() => setEditEntry(null)}
       >
         <div
-          style={{ background: '#1e293b', borderRadius: 12, border: '1px solid #334155', width: '100%', maxWidth: 560, padding: 24, position: 'relative' }}
+          style={{ background: 'var(--admin-modal-bg)', borderRadius: 12, border: '1px solid var(--admin-faint)', width: '100%', maxWidth: 560, padding: 24, position: 'relative' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Close */}
-          <button onClick={() => setEditEntry(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+          <button onClick={() => setEditEntry(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', color: 'var(--admin-text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
 
           <div className="flex items-center gap-2 mb-4">
             <span style={{ ...st, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: st.bg, color: st.color, fontWeight: 700 }}>{st.label}</span>
@@ -584,7 +584,7 @@ export default function BlogZeitplanPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Titel */}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Titel / Thema</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Titel / Thema</label>
               <input type="text" defaultValue={entry.topic}
                 onBlur={e => { if (e.target.value !== entry.topic) updateField(entry.id, 'topic', e.target.value); }}
                 style={{ ...inputStyle }} />
@@ -602,7 +602,7 @@ export default function BlogZeitplanPage() {
 
             {/* Keywords */}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Keywords (kommagetrennt)</label>
+              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Keywords (kommagetrennt)</label>
               <input type="text" defaultValue={(entry.keywords || []).join(', ')}
                 onBlur={e => { const kw = e.target.value.split(',').map(k => k.trim()).filter(Boolean); updateField(entry.id, 'keywords', kw); }}
                 style={{ ...inputStyle }} />
@@ -611,7 +611,7 @@ export default function BlogZeitplanPage() {
             {/* Ton + Länge */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Ton</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Ton</label>
                 <select defaultValue={entry.tone || 'informativ'} onChange={e => updateField(entry.id, 'tone', e.target.value)} style={{ ...inputStyle }}>
                   <option value="informativ">Informativ</option>
                   <option value="locker">Locker</option>
@@ -619,7 +619,7 @@ export default function BlogZeitplanPage() {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Ziel-Länge</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Ziel-Länge</label>
                 <select defaultValue={entry.target_length || 'mittel'} onChange={e => updateField(entry.id, 'target_length', e.target.value)} style={{ ...inputStyle }}>
                   <option value="kurz">Kurz (~500)</option>
                   <option value="mittel">Mittel (~1000)</option>
@@ -631,14 +631,14 @@ export default function BlogZeitplanPage() {
             {/* Datum + Uhrzeit */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Datum</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Datum</label>
                 <input type="date" defaultValue={entry.scheduled_date} disabled={isPublishedEntry(entry)}
                   onBlur={e => { if (e.target.value !== entry.scheduled_date) updateDate(entry.id, e.target.value); }}
                   style={{ ...inputStyle, opacity: isPublishedEntry(entry) ? 0.5 : 1, cursor: isPublishedEntry(entry) ? 'not-allowed' : 'auto' }} />
-                {isPublishedEntry(entry) && <span style={{ fontSize: 10, color: '#64748b' }}>Veröffentlicht — nicht mehr verschiebbar</span>}
+                {isPublishedEntry(entry) && <span style={{ fontSize: 10, color: 'var(--admin-text-dim)' }}>Veröffentlicht — nicht mehr verschiebbar</span>}
               </div>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Uhrzeit</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Uhrzeit</label>
                 <input type="time" defaultValue={entry.scheduled_time}
                   onBlur={e => { if (e.target.value !== entry.scheduled_time) updateTime(entry.id, e.target.value); }}
                   style={{ ...inputStyle }} />
@@ -649,9 +649,9 @@ export default function BlogZeitplanPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <button
                 onClick={() => toggleReviewed(entry)}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: entry.reviewed ? '#22c55e20' : '#334155', color: entry.reviewed ? '#22c55e' : '#94a3b8', fontSize: 12, fontWeight: 600 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: entry.reviewed ? '#22c55e20' : 'var(--admin-faint)', color: entry.reviewed ? '#22c55e' : 'var(--admin-muted)', fontSize: 12, fontWeight: 600 }}
               >
-                <span style={{ width: 16, height: 16, borderRadius: 4, background: entry.reviewed ? '#22c55e' : 'transparent', border: entry.reviewed ? 'none' : '1.5px solid #475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ width: 16, height: 16, borderRadius: 4, background: entry.reviewed ? '#22c55e' : 'transparent', border: entry.reviewed ? 'none' : '1.5px solid var(--admin-muted-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {entry.reviewed && <svg width="10" height="10" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                 </span>
                 {entry.reviewed ? 'Als gesehen markiert' : 'Als gesehen markieren'}
@@ -663,10 +663,10 @@ export default function BlogZeitplanPage() {
 
             {/* Verlinkter Artikel */}
             {entry.blog_posts && (
-              <div style={{ borderTop: '1px solid #334155', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ borderTop: '1px solid var(--admin-faint)', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 600, color: '#06b6d4', textTransform: 'uppercase', marginBottom: 2 }}>Generierter Artikel</p>
-                  <p style={{ fontSize: 13, color: '#e2e8f0' }}>{entry.blog_posts.title}</p>
+                  <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{entry.blog_posts.title}</p>
                 </div>
                 <Link href={`/admin/blog/artikel/${entry.blog_posts.id}`} style={{ padding: '6px 12px', borderRadius: 8, background: '#06b6d4', color: 'white', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                   Bearbeiten
@@ -683,7 +683,7 @@ export default function BlogZeitplanPage() {
   function renderScheduleList(seriesOnly?: boolean) {
     const filtered = seriesOnly ? schedule.filter((s) => s.topic.includes('Teil')) : schedule;
     if (filtered.length === 0) {
-      return <div className="text-center py-12"><p className="text-sm" style={{ color: '#475569' }}>Noch keine Einträge.</p></div>;
+      return <div className="text-center py-12"><p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Einträge.</p></div>;
     }
 
     return (
@@ -700,20 +700,20 @@ export default function BlogZeitplanPage() {
           return (
             <div key={entry.id} draggable={!isPublished} onDragStart={() => { if (!isPublished) handleDragStart(index); }} onDragEnter={() => handleDragEnter(index)} onDragEnd={handleDragEnd} onDragOver={(e) => e.preventDefault()}
               className="rounded-xl transition-colors"
-              style={{ background: isToday ? '#06b6d408' : '#1e293b', border: `1px solid ${isToday ? '#06b6d430' : isExpanded ? '#06b6d450' : '#334155'}`, opacity: entry.status === 'skipped' ? 0.5 : 1 }}>
+              style={{ background: isToday ? '#06b6d408' : 'var(--admin-surface-2)', border: `1px solid ${isToday ? '#06b6d430' : isExpanded ? '#06b6d450' : 'var(--admin-faint)'}`, opacity: entry.status === 'skipped' ? 0.5 : 1 }}>
 
               <div className="p-4 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
                 <div className="flex items-start gap-3">
                   <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
                     <svg className="w-4 h-4 cursor-grab active:cursor-grabbing" fill="none" stroke="#475569" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" /></svg>
                     <button onClick={(e) => { e.stopPropagation(); toggleReviewed(entry); }} className="w-5 h-5 rounded flex items-center justify-center transition-colors"
-                      style={entry.reviewed ? { background: '#22c55e', color: 'white' } : { background: '#0f172a', border: '1.5px solid #475569' }}
+                      style={entry.reviewed ? { background: '#22c55e', color: 'white' } : { background: 'var(--admin-input-bg)', border: '1.5px solid var(--admin-muted-2)' }}
                       title={entry.reviewed ? 'Als ungesehen markieren' : 'Als gesehen markieren'}>
                       {entry.reviewed && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                     </button>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-heading font-semibold text-sm block" style={{ color: '#e2e8f0' }}>{entry.topic}</span>
+                    <span className="font-heading font-semibold text-sm block" style={{ color: 'var(--admin-text)' }}>{entry.topic}</span>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
                       {postIsPublished && <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: '#22c55e20', color: '#22c55e' }}>Veröffentlicht</span>}
@@ -722,56 +722,56 @@ export default function BlogZeitplanPage() {
                       {isPast && !isToday && entry.status === 'planned' && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#ef444420', color: '#ef4444' }}>ÜBERFÄLLIG</span>}
                     </div>
                   </div>
-                  <svg className="w-4 h-4 shrink-0 mt-1 transition-transform" style={{ color: '#475569', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0 mt-1 transition-transform" style={{ color: 'var(--admin-muted-2)', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
               </div>
 
               {isExpanded && (
-                <div className="px-4 pb-4" style={{ borderTop: '1px solid #334155' }} onClick={(e) => e.stopPropagation()}>
+                <div className="px-4 pb-4" style={{ borderTop: '1px solid var(--admin-faint)' }} onClick={(e) => e.stopPropagation()}>
                   <div className="grid grid-cols-2 gap-3 pt-4">
                     <div className="col-span-2">
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Titel / Thema</label>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--admin-text-dim)' }}>Titel / Thema</label>
                       <input type="text" defaultValue={entry.topic}
                         onBlur={(e) => { if (e.target.value !== entry.topic) updateField(entry.id, 'topic', e.target.value); }}
-                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
                     </div>
                     <div className="col-span-2">
                       <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#f59e0b' }}>Ausführlicher KI-Prompt</label>
                       <textarea defaultValue={entry.prompt || ''}
                         onBlur={(e) => updateField(entry.id, 'prompt', e.target.value || null)}
-                        rows={4} className="w-full px-3 py-2 rounded-lg text-sm resize-y" style={{ background: '#0f172a', border: '1px solid #f59e0b40', color: '#e2e8f0', minHeight: 80 }} />
+                        rows={4} className="w-full px-3 py-2 rounded-lg text-sm resize-y" style={{ background: 'var(--admin-input-bg)', border: '1px solid #f59e0b40', color: 'var(--admin-text)', minHeight: 80 }} />
                     </div>
                     <div className="col-span-2">
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Keywords (kommagetrennt)</label>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--admin-text-dim)' }}>Keywords (kommagetrennt)</label>
                       <input type="text" defaultValue={(entry.keywords || []).join(', ')}
                         onBlur={(e) => { const kw = e.target.value.split(',').map((k) => k.trim()).filter(Boolean); updateField(entry.id, 'keywords', kw); }}
-                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ton</label>
-                      <select defaultValue={entry.tone || 'informativ'} onChange={(e) => updateField(entry.id, 'tone', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--admin-text-dim)' }}>Ton</label>
+                      <select defaultValue={entry.tone || 'informativ'} onChange={(e) => updateField(entry.id, 'tone', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }}>
                         <option value="informativ">Informativ</option>
                         <option value="locker">Locker</option>
                         <option value="professionell">Professionell</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ziel-Länge</label>
-                      <select defaultValue={entry.target_length || 'mittel'} onChange={(e) => updateField(entry.id, 'target_length', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--admin-text-dim)' }}>Ziel-Länge</label>
+                      <select defaultValue={entry.target_length || 'mittel'} onChange={(e) => updateField(entry.id, 'target_length', e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }}>
                         <option value="kurz">Kurz (~500)</option>
                         <option value="mittel">Mittel (~1000)</option>
                         <option value="lang">Lang (~1500)</option>
                       </select>
                     </div>
-                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
+                    <div className="col-span-2 rounded-lg p-3" style={{ background: 'var(--admin-input-bg)' }}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Status:</span>
+                          <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--admin-text-dim)' }}>Status:</span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
                         </div>
-                        {entry.generated_at && <span className="text-[10px]" style={{ color: '#475569' }}>Generiert: {new Date(entry.generated_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                        {entry.generated_at && <span className="text-[10px]" style={{ color: 'var(--admin-muted-2)' }}>Generiert: {new Date(entry.generated_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
                       </div>
                     </div>
                   </div>
@@ -779,16 +779,16 @@ export default function BlogZeitplanPage() {
                     <div className="mt-3 rounded-lg p-3 flex items-center justify-between" style={{ background: '#06b6d410', border: '1px solid #06b6d430' }}>
                       <div>
                         <p className="text-[10px] font-semibold uppercase" style={{ color: '#06b6d4' }}>Generierter Artikel</p>
-                        <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{entry.blog_posts.title}</p>
+                        <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{entry.blog_posts.title}</p>
                       </div>
                       <Link href={`/admin/blog/artikel/${entry.blog_posts.id}`} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
                         Bearbeiten
                       </Link>
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
-                    <input type="date" value={entry.scheduled_date} disabled={isPublished} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', opacity: isPublished ? 0.5 : 1, cursor: isPublished ? 'not-allowed' : 'auto' }} />
-                    <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                  <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--admin-faint)' }}>
+                    <input type="date" value={entry.scheduled_date} disabled={isPublished} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)', opacity: isPublished ? 0.5 : 1, cursor: isPublished ? 'not-allowed' : 'auto' }} />
+                    <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
                     <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Löschen</button>
                   </div>
                 </div>
@@ -806,9 +806,9 @@ export default function BlogZeitplanPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Redaktionsplan</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>Klick auf Eintrag zum Bearbeiten · Drag &amp; Drop auf anderen Tag zum Verschieben</p>
+          <p className="text-sm" style={{ color: 'var(--admin-text-dim)' }}>Klick auf Eintrag zum Bearbeiten · Drag &amp; Drop auf anderen Tag zum Verschieben</p>
         </div>
-        <div className="flex items-center gap-3 text-xs font-heading" style={{ color: '#94a3b8' }}>
+        <div className="flex items-center gap-3 text-xs font-heading" style={{ color: 'var(--admin-muted)' }}>
           <button
             onClick={backfillPublished}
             disabled={backfilling}
@@ -824,14 +824,14 @@ export default function BlogZeitplanPage() {
         </div>
       </div>
 
-      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: (msg.startsWith('Fehler') || msg.includes('Error') || msg.includes('Expected')) ? '#ef4444' : '#22c55e' }}>{msg}</div>}
+      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: 'var(--admin-input-bg)', color: (msg.startsWith('Fehler') || msg.includes('Error') || msg.includes('Expected')) ? '#ef4444' : '#22c55e' }}>{msg}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6">
-        <button onClick={() => setTab('einzelthemen')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'einzelthemen' ? { background: '#06b6d4', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}>
+        <button onClick={() => setTab('einzelthemen')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'einzelthemen' ? { background: '#06b6d4', color: 'white' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
           Einzelthemen
         </button>
-        <button onClick={() => setTab('serien')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'serien' ? { background: '#8b5cf6', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}>
+        <button onClick={() => setTab('serien')} className="px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold" style={tab === 'serien' ? { background: '#8b5cf6', color: 'white' } : { background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>
           Serien
         </button>
       </div>
@@ -851,43 +851,43 @@ export default function BlogZeitplanPage() {
             <select style={{ ...inputStyle, width: 'auto' }} value={postsPerWeek} onChange={(e) => setPostsPerWeek(parseInt(e.target.value))}>
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}/Wo.</option>)}
             </select>
-            <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#06b6d4' : '#334155', color: showImport ? 'white' : '#e2e8f0' }}>
+            <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#06b6d4' : 'var(--admin-faint)', color: showImport ? 'white' : 'var(--admin-text)' }}>
               {showImport ? 'Themen schließen' : `Themen anzeigen (${topics.length})`}
             </button>
           </div>
 
           {/* Einzelthemen-Import */}
           {showImport && (
-            <div className="rounded-xl p-4 mb-6" style={{ background: '#1e293b', border: '1px solid #06b6d430' }}>
+            <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--admin-surface-2)', border: '1px solid #06b6d430' }}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-heading font-semibold text-sm" style={{ color: '#06b6d4' }}>Einzelthemen → in Zeitplan einfügen</h3>
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Datum:</label>
-                  <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                  <label className="text-[11px] font-heading" style={{ color: 'var(--admin-muted)' }}>Datum:</label>
+                  <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
                 </div>
               </div>
               {topics.length === 0 ? (
-                <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Keine offenen Einzelthemen. Erstelle welche unter <Link href="/admin/blog/themen" style={{ color: '#06b6d4' }}>Themen → Einzelthemen</Link>.</p>
+                <p className="text-xs py-4 text-center" style={{ color: 'var(--admin-muted-2)' }}>Keine offenen Einzelthemen. Erstelle welche unter <Link href="/admin/blog/themen" style={{ color: '#06b6d4' }}>Themen → Einzelthemen</Link>.</p>
               ) : (
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {topics.map((t) => {
                     const isOpen = expandedId === `topic-${t.id}`;
                     return (
-                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ background: '#0f172a', border: isOpen ? '1px solid #06b6d440' : '1px solid #334155' }}>
+                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ background: 'var(--admin-input-bg)', border: isOpen ? '1px solid #06b6d440' : '1px solid var(--admin-faint)' }}>
                         <div className="flex items-center gap-3 px-3 py-2.5 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : `topic-${t.id}`)}>
                           <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: '#f59e0b20', color: '#f59e0b' }}>Entwurf</span>
-                          <span className="text-sm font-semibold truncate flex-1" style={{ color: '#e2e8f0' }}>{t.topic}</span>
-                          <svg className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: '#475569', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="text-sm font-semibold truncate flex-1" style={{ color: 'var(--admin-text)' }}>{t.topic}</span>
+                          <svg className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: 'var(--admin-muted-2)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
                         {isOpen && (
-                          <div className="px-3 pb-3" style={{ borderTop: '1px solid #334155' }}>
+                          <div className="px-3 pb-3" style={{ borderTop: '1px solid var(--admin-faint)' }}>
                             <div className="pt-3 space-y-2">
                               {t.keywords?.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {t.keywords.map((kw, i) => (
-                                    <span key={i} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: '#1e293b', color: '#94a3b8' }}>{kw}</span>
+                                    <span key={i} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--admin-surface-2)', color: 'var(--admin-muted)' }}>{kw}</span>
                                   ))}
                                 </div>
                               )}
@@ -909,9 +909,9 @@ export default function BlogZeitplanPage() {
 
           {/* Kalender */}
           {schedule.length === 0 ? (
-            <div className="text-center py-16 rounded-xl" style={{ background: '#1e293b', border: '1px solid #334155' }}>
-              <p className="text-sm" style={{ color: '#475569' }}>Noch keine Einträge im Zeitplan.</p>
-              <p className="text-xs mt-1" style={{ color: '#334155' }}>Themen importieren oder per KI planen.</p>
+            <div className="text-center py-16 rounded-xl" style={{ background: 'var(--admin-surface-2)', border: '1px solid var(--admin-faint)' }}>
+              <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Noch keine Einträge im Zeitplan.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>Themen importieren oder per KI planen.</p>
             </div>
           ) : (
             renderCalendar()
@@ -923,13 +923,13 @@ export default function BlogZeitplanPage() {
       {tab === 'serien' && (
         <>
           <div className="flex items-center gap-2 mb-4">
-            <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Import-Datum:</label>
-            <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+            <label className="text-[11px] font-heading" style={{ color: 'var(--admin-muted)' }}>Import-Datum:</label>
+            <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', color: 'var(--admin-text)' }} />
           </div>
 
           {seriesList.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-sm" style={{ color: '#475569' }}>Keine Serien vorhanden.</p>
+              <p className="text-sm" style={{ color: 'var(--admin-muted-2)' }}>Keine Serien vorhanden.</p>
               <Link href="/admin/blog/themen" className="text-xs font-heading mt-2 inline-block" style={{ color: '#06b6d4' }}>Serien unter Themen erstellen</Link>
             </div>
           ) : (
@@ -937,16 +937,16 @@ export default function BlogZeitplanPage() {
               {seriesList.map((series) => {
                 const allParts = (series.blog_series_parts ?? []).sort((a, b) => a.part_number - b.part_number);
                 return (
-                  <div key={series.id} className="rounded-xl p-5" style={{ background: '#1e293b', border: '1px solid #8b5cf630' }}>
+                  <div key={series.id} className="rounded-xl p-5" style={{ background: 'var(--admin-surface-2)', border: '1px solid #8b5cf630' }}>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{series.title}</span>
+                      <span className="font-heading font-semibold text-sm" style={{ color: 'var(--admin-text)' }}>{series.title}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded font-heading" style={{ background: series.status === 'completed' ? '#22c55e20' : '#8b5cf620', color: series.status === 'completed' ? '#22c55e' : '#8b5cf6' }}>
                         {series.generated_parts}/{series.total_parts}
                       </span>
                     </div>
-                    {series.description && <p className="text-xs mb-3" style={{ color: '#475569' }}>{series.description}</p>}
+                    {series.description && <p className="text-xs mb-3" style={{ color: 'var(--admin-muted-2)' }}>{series.description}</p>}
                     {allParts.length === 0 ? (
-                      <p className="text-xs" style={{ color: '#475569' }}>Keine Teile vorhanden.</p>
+                      <p className="text-xs" style={{ color: 'var(--admin-muted-2)' }}>Keine Teile vorhanden.</p>
                     ) : (
                       <div className="space-y-1.5">
                         {allParts.map((part) => {
@@ -959,8 +959,8 @@ export default function BlogZeitplanPage() {
                             ? `Geplant am ${plannedDate.split('-').reverse().join('.')}`
                             : null;
                           return (
-                            <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#0f172a', opacity: part.used && !scheduleEntry ? 0.5 : 1 }}>
-                              <span className="text-xs font-body truncate flex-1" style={{ color: '#e2e8f0' }}>
+                            <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'var(--admin-input-bg)', opacity: part.used && !scheduleEntry ? 0.5 : 1 }}>
+                              <span className="text-xs font-body truncate flex-1" style={{ color: 'var(--admin-text)' }}>
                                 <span className="font-heading font-bold mr-1.5" style={{ color: '#8b5cf6' }}>Teil {part.part_number}</span>
                                 {part.topic}
                               </span>
