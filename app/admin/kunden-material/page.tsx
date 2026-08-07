@@ -7,6 +7,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 const DEFAULT_UGC_COUNTS = { pending: 0, approved: 0, featured: 0, rejected: 0, withdrawn: 0 };
 const ugcCacheKey = (filter: string) => `admin:ugc:${filter}`;
@@ -78,6 +79,8 @@ const STATUS_CONFIG: Record<UgcStatus, { label: string; cls: string }> = {
 export default function KundenMaterialPage() {
   const searchParams = useSearchParams();
   const initialOpen = searchParams.get('open');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [entries, setEntries] = useState<UgcEntry[]>(
     () => getCached<{ entries: UgcEntry[]; counts: Counts }>(ugcCacheKey('pending'))?.entries ?? [],
@@ -147,7 +150,7 @@ export default function KundenMaterialPage() {
       if (!res.ok) throw new Error(data?.error ?? 'Fehler');
       setDetail(data);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler beim Laden.');
+      toast.error(err instanceof Error ? err.message : 'Fehler beim Laden.');
     } finally {
       setDetailLoading(false);
     }
@@ -155,7 +158,7 @@ export default function KundenMaterialPage() {
 
   async function handleApprove() {
     if (!detail) return;
-    if (!confirm('Material freigeben und Gutschein versenden?')) return;
+    if (!(await confirm({ message: 'Material freigeben und Gutschein versenden?' }))) return;
     setActionBusy(true);
     try {
       const res = await fetch(`/api/admin/customer-ugc/${detail.submission.id}/approve`, {
@@ -163,11 +166,11 @@ export default function KundenMaterialPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Freigabe fehlgeschlagen.');
-      alert(`Freigegeben. Gutschein: ${data.couponCode ?? '—'}`);
+      toast.success(`Freigegeben. Gutschein: ${data.couponCode ?? '—'}`);
       setDetail(null);
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler.');
+      toast.error(err instanceof Error ? err.message : 'Fehler.');
     } finally {
       setActionBusy(false);
     }
@@ -186,11 +189,11 @@ export default function KundenMaterialPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Ablehnung fehlgeschlagen.');
-      alert('Abgelehnt und Kunde benachrichtigt.');
+      toast.success('Abgelehnt und Kunde benachrichtigt.');
       setDetail(null);
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler.');
+      toast.error(err instanceof Error ? err.message : 'Fehler.');
     } finally {
       setActionBusy(false);
     }
@@ -199,7 +202,7 @@ export default function KundenMaterialPage() {
   async function handleFeature(channel: 'social' | 'blog' | 'website' | 'other') {
     if (!detail) return;
     const reference = prompt(`Referenz (URL/Post-ID) für den ${channel}-Kanal (optional):`) ?? '';
-    if (!confirm(`Als "${channel}" veröffentlicht markieren und Bonus-Gutschein senden?`)) return;
+    if (!(await confirm({ message: `Als "${channel}" veröffentlicht markieren und Bonus-Gutschein senden?` }))) return;
     setActionBusy(true);
     try {
       const res = await fetch(`/api/admin/customer-ugc/${detail.submission.id}/feature`, {
@@ -209,11 +212,11 @@ export default function KundenMaterialPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Feature fehlgeschlagen.');
-      alert(`Feature markiert. Bonus-Gutschein: ${data.bonusCode ?? '—'}`);
+      toast.success(`Feature markiert. Bonus-Gutschein: ${data.bonusCode ?? '—'}`);
       setDetail(null);
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler.');
+      toast.error(err instanceof Error ? err.message : 'Fehler.');
     } finally {
       setActionBusy(false);
     }
@@ -221,7 +224,7 @@ export default function KundenMaterialPage() {
 
   async function handleDelete() {
     if (!detail) return;
-    if (!confirm('Einreichung und alle Dateien endgültig löschen?')) return;
+    if (!(await confirm({ message: 'Einreichung und alle Dateien endgültig löschen?', danger: true }))) return;
     setActionBusy(true);
     try {
       const res = await fetch(`/api/admin/customer-ugc/${detail.submission.id}`, {
@@ -232,7 +235,7 @@ export default function KundenMaterialPage() {
       setDetail(null);
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler.');
+      toast.error(err instanceof Error ? err.message : 'Fehler.');
     } finally {
       setActionBusy(false);
     }
