@@ -7,6 +7,7 @@ import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
 import UnsplashPicker from '@/components/admin/UnsplashPicker';
 import ImagePositionPicker from '@/components/admin/ImagePositionPicker';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDateTime } from '@/lib/format-utils';
 import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
@@ -46,6 +47,8 @@ interface Account {
 export default function PostDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [post, setPost] = useState<SocialPost | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -134,7 +137,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
   }
 
   async function handlePublishNow() {
-    if (!confirm('Post jetzt sofort auf den ausgewählten Plattformen veröffentlichen?')) return;
+    if (!(await confirm({ message: 'Post jetzt sofort auf den ausgewählten Plattformen veröffentlichen?', confirmLabel: 'Veröffentlichen' }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -187,11 +190,11 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
     const msg = remote
       ? 'Post löschen — auch von Facebook/Instagram entfernen?'
       : 'Post-Entwurf endgültig löschen?';
-    if (!confirm(msg)) return;
+    if (!(await confirm({ message: msg, confirmLabel: 'Löschen', danger: true }))) return;
     const url = `/api/admin/social/posts/${id}` + (remote ? '?remote=1' : '');
     const res = await fetch(url, { method: 'DELETE' });
     if (res.ok) router.push('/admin/social/posts');
-    else alert('Löschen fehlgeschlagen');
+    else toast.error('Löschen fehlgeschlagen');
   }
 
   async function handleGenerateImage() {
@@ -230,7 +233,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
     }
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto px-4 py-8 text-slate-400">Lade…</div>;
+  if (loading) return <div className="max-w-4xl mx-auto px-4 py-8 text-admin-muted">Lade…</div>;
   if (!post) return <div className="max-w-4xl mx-auto px-4 py-8 text-red-400">Post nicht gefunden.</div>;
 
   const isPublished = post.status === 'published' || post.status === 'partial';
@@ -239,8 +242,8 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <AdminBackLink href="/admin/social/posts" />
-      <h1 className="text-2xl font-bold text-white mb-1 mt-4">Post-Details</h1>
-      <p className="text-sm text-slate-400 mb-4">
+      <h1 className="text-2xl font-bold text-admin-heading mb-1 mt-4">Post-Details</h1>
+      <p className="text-sm text-admin-muted mb-4">
         Status: <StatusBadge status={post.status} /> • Erstellt {fmtDateTime(post.created_at)}
         {post.ai_generated && <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 text-[10px]">KI-generiert</span>}
       </p>
@@ -254,11 +257,11 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       )}
 
       {/* Plattform-Info */}
-      <section className="mb-4 rounded-xl bg-slate-900/50 border border-slate-800 p-4">
-        <h2 className="text-sm font-semibold text-slate-300 mb-2">Plattformen</h2>
+      <section className="mb-4 rounded-xl bg-slate-900/50 border border-admin-border p-4">
+        <h2 className="text-sm font-semibold text-admin-text-2 mb-2">Plattformen</h2>
         <div className="flex flex-wrap gap-3 text-sm">
           {post.platforms.includes('facebook') && (
-            <span className="text-slate-200">
+            <span className="text-admin-text">
               <strong className="text-blue-400">FB</strong> {fbAccount?.name ?? '—'}
               {post.fb_permalink && (
                 <a
@@ -271,12 +274,12 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                 </a>
               )}
               {!post.fb_permalink && post.fb_post_id && (
-                <span className="ml-2 text-slate-500 text-xs">(Link wird beim nächsten Post erfasst)</span>
+                <span className="ml-2 text-[var(--admin-text-dim)] text-xs">(Link wird beim nächsten Post erfasst)</span>
               )}
             </span>
           )}
           {post.platforms.includes('instagram') && (
-            <span className="text-slate-200">
+            <span className="text-admin-text">
               <strong className="text-pink-400">IG</strong> {igAccount?.name ?? '—'}
               {post.ig_permalink && (
                 <a
@@ -289,7 +292,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                 </a>
               )}
               {!post.ig_permalink && post.ig_post_id && (
-                <span className="ml-2 text-slate-500 text-xs">(Link wird beim nächsten Post erfasst)</span>
+                <span className="ml-2 text-[var(--admin-text-dim)] text-xs">(Link wird beim nächsten Post erfasst)</span>
               )}
             </span>
           )}
@@ -298,30 +301,30 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
 
       {/* Caption */}
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Post-Text</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Post-Text</label>
         <textarea
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           disabled={!editable}
           rows={6}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-60"
         />
-        <p className="text-xs text-slate-500 mt-1">{caption.length} Zeichen</p>
+        <p className="text-xs text-[var(--admin-text-dim)] mt-1">{caption.length} Zeichen</p>
       </section>
 
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Hashtags</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Hashtags</label>
         <input
           type="text"
           value={hashtagsText}
           onChange={(e) => setHashtagsText(e.target.value)}
           disabled={!editable}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-60"
         />
       </section>
 
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Bild</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Bild</label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
@@ -329,7 +332,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             onChange={(e) => setImageUrl(e.target.value)}
             disabled={!editable}
             placeholder="Bild-URL oder Datei hochladen →"
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
+            className="flex-1 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-60"
           />
           {editable && (
             <button
@@ -346,7 +349,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             <button
               type="button"
               onClick={() => setUnsplashOpen(true)}
-              className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+              className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border whitespace-nowrap"
               title="Stockfoto auf Unsplash suchen"
             >
               📸 Unsplash
@@ -356,14 +359,14 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             <button
               type="button"
               onClick={() => setLibraryOpen(true)}
-              className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+              className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border whitespace-nowrap"
               title="Bild aus eigener Bibliothek waehlen"
             >
               📚 Bibliothek
             </button>
           )}
           {editable && (
-            <label className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 cursor-pointer whitespace-nowrap">
+            <label className="px-3 py-2 rounded-lg bg-admin-surface-2 text-admin-text font-medium text-sm hover:bg-[var(--admin-hover)] border border-admin-border cursor-pointer whitespace-nowrap">
               📷 Hochladen
               <input
                 type="file"
@@ -399,29 +402,29 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
         )}
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-slate-800" />
+          <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-admin-border" />
         )}
       </section>
 
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Link (nur Facebook)</label>
+        <label className="block text-sm font-semibold text-admin-text mb-1">Link (nur Facebook)</label>
         <input
           type="text"
           value={linkUrl}
           onChange={(e) => setLinkUrl(e.target.value)}
           disabled={!editable}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
+          className="w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm disabled:opacity-60"
         />
       </section>
 
       {editable && (
         <section className="mb-6">
-          <label className="block text-sm font-semibold text-slate-200 mb-1">Geplant für</label>
+          <label className="block text-sm font-semibold text-admin-text mb-1">Geplant für</label>
           <input
             type="datetime-local"
             value={scheduledAt}
             onChange={(e) => setScheduledAt(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+            className="px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] text-admin-text text-sm"
           />
         </section>
       )}
@@ -429,7 +432,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       {/* Vorschau */}
       {(caption || imageUrl) && (
         <section className="mb-6">
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">Vorschau</h2>
+          <h2 className="text-sm font-semibold text-admin-text mb-3">Vorschau</h2>
           <SocialPostPreview
             caption={caption}
             hashtags={hashtagsText.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`))}
@@ -443,7 +446,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             igImagePosition={igImagePosition}
           />
           {imageUrl && (
-            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-admin-border">
               {post.platforms.includes('facebook') && (
                 <ImagePositionPicker
                   label="Facebook-Ausschnitt"
@@ -464,7 +467,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                 <button
                   type="button"
                   onClick={() => setFbImagePosition(igImagePosition)}
-                  className="self-end text-xs text-slate-400 hover:text-cyan-300 underline-offset-2 hover:underline"
+                  className="self-end text-xs text-admin-muted hover:text-cyan-300 underline-offset-2 hover:underline"
                   title="IG-Position auf Facebook übernehmen"
                 >
                   ← IG-Position übernehmen
