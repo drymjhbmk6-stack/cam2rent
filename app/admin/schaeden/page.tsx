@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
 import DamageReportModal from '@/components/admin/DamageReportModal';
+import { PageHeader } from '@/components/admin/ui';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -45,6 +46,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
 };
 
 export default function AdminSchaedenPage() {
+  const { success, error: toastError } = useToast();
   const [reports, setReports] = useState<DamageReport[]>(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<DamageReport[]>(DAMAGE_CACHE_KEY) === undefined);
   const [filter, setFilter] = usePersistentState<StatusFilter>('admin:schaeden:filter', 'all');
@@ -121,7 +123,7 @@ export default function AdminSchaedenPage() {
       setSelectedReport(null);
       fetchReports();
     } catch {
-      alert('Fehler beim Aktualisieren.');
+      toastError('Fehler beim Aktualisieren.');
     } finally {
       setSaving(false);
     }
@@ -143,12 +145,12 @@ export default function AdminSchaedenPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || 'Fehler.');
+        toastError(d.error || 'Fehler.');
         return;
       }
-      alert(`${fmtEuro(amount)} Kaution einbehalten.`);
+      success(`${fmtEuro(amount)} Kaution einbehalten.`);
     } catch {
-      alert('Fehler beim Einbehalten.');
+      toastError('Fehler beim Einbehalten.');
     } finally {
       setSaving(false);
     }
@@ -205,43 +207,38 @@ export default function AdminSchaedenPage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ padding: '20px 16px' }}>
-      <AdminBackLink label="Zurück" />
-      {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
-            Schadensmeldungen
-          </h1>
-          <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>
-            Schäden prüfen, Kaution einbehalten, Reparaturen verwalten
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          style={{ padding: '10px 18px', background: '#f97316', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          + Neue Schadensmeldung
-        </button>
-      </div>
+    <div style={{ padding: '20px 16px', color: 'var(--admin-text)' }}>
+      <PageHeader
+        backLabel="Zurück"
+        title="Schadensmeldungen"
+        subtitle="Schäden prüfen, Kaution einbehalten, Reparaturen verwalten"
+        actions={
+          <button
+            onClick={() => setShowCreate(true)}
+            style={{ padding: '10px 18px', background: '#f97316', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            + Neue Schadensmeldung
+          </button>
+        }
+      />
 
       {/* Stat Cards */}
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         {[
           { label: 'Offene Meldungen', value: counts.open, color: '#f59e0b' },
-          { label: 'Bestätigt', value: counts.confirmed, color: '#ef4444' },
+          { label: 'Bestätigt', value: counts.confirmed, color: 'var(--admin-danger)' },
           { label: 'Abgeschlossen', value: counts.resolved, color: '#10b981' },
-          { label: 'Gesamt', value: counts.all, color: '#06b6d4' },
+          { label: 'Gesamt', value: counts.all, color: 'var(--admin-accent)' },
         ].map((stat) => (
-          <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
-            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{stat.label}</p>
+          <div key={stat.label} style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '16px 20px' }}>
+            <p style={{ fontSize: 12, color: 'var(--admin-text-dim)', marginBottom: 4 }}>{stat.label}</p>
             <p style={{ fontSize: 28, fontWeight: 700, letterSpacing: -1, color: stat.color }}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex flex-wrap gap-1 mb-6" style={{ background: '#111827', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
+      <div className="flex flex-wrap gap-1 mb-6" style={{ background: 'var(--admin-surface)', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
         {TABS.map((tab) => (
           <button
             key={tab.value}
@@ -251,8 +248,8 @@ export default function AdminSchaedenPage() {
               borderRadius: 10,
               fontSize: 13,
               fontWeight: filter === tab.value ? 600 : 400,
-              background: filter === tab.value ? '#1e293b' : 'transparent',
-              color: filter === tab.value ? '#22d3ee' : '#64748b',
+              background: filter === tab.value ? 'var(--admin-surface-2)' : 'transparent',
+              color: filter === tab.value ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
               border: 'none',
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -265,19 +262,19 @@ export default function AdminSchaedenPage() {
 
       {/* Content */}
       {loading ? (
-        <div className="text-center py-16" style={{ color: '#64748b' }}>Lädt...</div>
+        <div className="text-center py-16" style={{ color: 'var(--admin-text-dim)' }}>Lädt...</div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
-          <p style={{ color: '#64748b', fontSize: 14 }}>Keine Schadensmeldungen in dieser Kategorie.</p>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Keine Schadensmeldungen in dieser Kategorie.</p>
         </div>
       ) : (
-        <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
                   {['Buchung', 'Kamera', 'Kunde', 'Gemeldet', 'Status', 'Betrag', ''].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       {h}
                     </th>
                   ))}
@@ -290,7 +287,7 @@ export default function AdminSchaedenPage() {
                     <tr
                       key={report.id}
                       style={{
-                        borderBottom: idx < filtered.length - 1 ? '1px solid #1e293b' : 'none',
+                        borderBottom: idx < filtered.length - 1 ? '1px solid var(--admin-border)' : 'none',
                         cursor: 'pointer',
                         transition: 'background 0.15s',
                       }}
@@ -299,22 +296,22 @@ export default function AdminSchaedenPage() {
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}
                     >
                       <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', fontFamily: 'monospace' }}>{report.booking_id}</p>
-                        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)', fontFamily: 'monospace' }}>{report.booking_id}</p>
+                        <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
                           {report.reported_by === 'customer' ? 'Vom Kunden' : 'Vom Admin'}
                         </p>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{report.booking?.product_name || '–'}</p>
+                        <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{report.booking?.product_name || '–'}</p>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{report.booking?.customer_name || '–'}</p>
+                        <p style={{ fontSize: 13, color: 'var(--admin-text)' }}>{report.booking?.customer_name || '–'}</p>
                         {report.booking?.customer_email && (
-                          <p style={{ fontSize: 11, color: '#64748b' }}>{report.booking.customer_email}</p>
+                          <p style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>{report.booking.customer_email}</p>
                         )}
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, color: '#94a3b8' }}>{fmtDateTime(report.created_at)}</p>
+                        <p style={{ fontSize: 13, color: 'var(--admin-muted)' }}>{fmtDateTime(report.created_at)}</p>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: s.bg, color: s.text }}>
@@ -323,13 +320,13 @@ export default function AdminSchaedenPage() {
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         {report.damage_amount != null ? (
-                          <p style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>{fmtEuro(report.damage_amount)}</p>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-danger)' }}>{fmtEuro(report.damage_amount)}</p>
                         ) : (
-                          <p style={{ fontSize: 13, color: '#64748b' }}>–</p>
+                          <p style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>–</p>
                         )}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        <span style={{ fontSize: 12, color: '#06b6d4' }}>Details →</span>
+                        <span style={{ fontSize: 12, color: 'var(--admin-accent)' }}>Details →</span>
                       </td>
                     </tr>
                   );
