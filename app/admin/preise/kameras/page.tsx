@@ -6,6 +6,7 @@ import Image from 'next/image';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BrandBadge from '@/components/BrandBadge';
 import BrandColorManager from '@/components/admin/BrandColorManager';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { type AdminProduct } from '@/lib/price-config';
 
 interface UtilizationData {
@@ -23,6 +24,8 @@ export default function AdminKameraListePage() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [utilization, setUtilization] = useState<Record<string, UtilizationData>>({});
+  const toast = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     fetch('/api/admin/config?key=products')
@@ -52,7 +55,7 @@ export default function AdminKameraListePage() {
   }, []);
 
   async function handleDelete(product: AdminProduct) {
-    if (!confirm(`Kamera "${product.name}" wirklich löschen?`)) return;
+    if (!(await confirm({ title: 'Kamera löschen', message: `Kamera „${product.name}" wirklich löschen?`, danger: true }))) return;
     setDeletingId(product.id);
     try {
       const updated = { ...allProducts };
@@ -66,7 +69,7 @@ export default function AdminKameraListePage() {
       setAllProducts(updated);
       setProducts(Object.values(updated).sort((a, b) => parseInt(a.id) - parseInt(b.id)));
     } catch {
-      alert('Fehler beim Löschen.');
+      toast.error('Fehler beim Löschen.');
     } finally {
       setDeletingId(null);
     }
