@@ -15,6 +15,7 @@ import PriceInput from '@/components/admin/PriceInput';
 import BrandSelect from '@/components/admin/BrandSelect';
 import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 
 interface InventarBridge {
   produkte_id: string | null;
@@ -34,6 +35,8 @@ export default function AdminKameraEditorPage() {
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [uploading, setUploading] = useState(false);
   const { specs: specDefs } = useSpecDefinitions();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // Inventar-Bruecke (neue Welt: inventar_units via migration_audit-Mapping)
   const [bridge, setBridge] = useState<InventarBridge | null>(null);
@@ -211,14 +214,14 @@ export default function AdminKameraEditorPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      alert('Fehler beim Speichern.');
+      toast.error('Fehler beim Speichern.');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    if (!confirm(`Kamera "${product?.name}" wirklich löschen?`)) return;
+    if (!(await confirm({ title: 'Kamera löschen', message: `Kamera „${product?.name}" wirklich löschen?`, danger: true }))) return;
     const updated = { ...allProducts };
     delete updated[id];
     await fetch('/api/admin/config', {
