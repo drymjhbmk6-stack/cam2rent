@@ -2179,6 +2179,23 @@ Seiten migriert sind.
   nutzbar); `reels/zeitplan` behält sein natives `confirm()`. Jede Seite:
   Logik/Fetch/State/Handler 1:1 (Diff = nur Styling + Feedback-Migration), tsc 0,
   lint 0, per-Datei-Logik-Diff geprüft.
+- **Folge-Wellen (ab 2026-08-06, „alle durchziehen"-Mandat):** weitere Seiten
+  auf Tokens migriert (parallele Agents auf disjunkten Datei-Sets, ich verifiziere
+  tsc/lint/Logik-Diff + committe jede einzeln): `schaeden`, `firmware`,
+  `content/einstellungen`, `einstellungen`, `kunden-uebersicht`, `tagesgeschaeft`,
+  `inventar/neu`, `inventar/code-segmente`, `buchungen/[id]/vertrag-unterschreiben`,
+  `einstellungen/mitarbeiter`, `einkauf/upload`, `retouren/[id]/pruefen`,
+  `social/zeitplan`, `kunden`, `verbrauch`, `mein/notizen`, `mein/kalender`.
+  Muster wie im 20er-Batch. **Tailwind-Seiten** (firmware, inventar/*) nutzen die
+  `admin-*`-Tailwind-Klassen (bzw. `[var(--admin-…)]`-Arbitrary für Tokens ohne
+  eigene Klasse wie input-bg/text-dim/faint). **Bewusst dunkle Rest-Inseln
+  (Folge-Change):** `schaeden` Detail-Modal/Lightbox, `firmware` Sekundär-Buttons,
+  `social/zeitplan` Kalender-Grid/STATUS_MAP/Job-Banner (+ natives `confirm` bleibt),
+  `mein/notizen` Notiz-Karten (data-colored `colorBg`), `mein/kalender`
+  Monatsraster, `mitarbeiter` No-Permission-/Danger-Boxen — alle funktional
+  unkritisch, Dark pixel-identisch. **Standalone bleibt ausgeschlossen**
+  (login/scan/qr — dort löst `.admin-shell` + Tokens nicht auf). Jede Seite:
+  tsc 0, lint 0, Logik unverändert.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
