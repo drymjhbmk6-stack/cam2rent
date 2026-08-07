@@ -184,17 +184,17 @@ export default function InventarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-screen text-admin-text px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin" />
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Inventar</h1>
           <div className="flex gap-2 flex-wrap">
-            <Link href="/admin/inventar/code-segmente" className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm">
+            <Link href="/admin/inventar/code-segmente" className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm">
               Code-Segmente
             </Link>
             <MaintenanceMenu />
-            <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
+            <Link href="/admin/inventar/neu" className="px-4 py-2 bg-admin-accent hover:bg-admin-accent-hover text-slate-900 rounded font-semibold">
               + Manuell anlegen
             </Link>
           </div>
@@ -218,14 +218,14 @@ export default function InventarPage() {
         </div>
 
         <div className="flex flex-wrap gap-3 mb-4">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suche..." className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base flex-1 min-w-[200px]" />
-          <select value={typ} onChange={(e) => setTyp(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suche..." className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base flex-1 min-w-[200px]" />
+          <select value={typ} onChange={(e) => setTyp(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Typen</option>
             <option value="kamera">Kamera</option>
             <option value="zubehoer">Zubehör</option>
             <option value="verbrauch">Verbrauch</option>
           </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Status</option>
             <option value="verfuegbar">Verfügbar</option>
             <option value="vermietet">Vermietet</option>
@@ -233,7 +233,7 @@ export default function InventarPage() {
             <option value="defekt">Defekt</option>
             <option value="ausgemustert">Ausgemustert</option>
           </select>
-          <select value={belegStatus} onChange={(e) => setBelegStatus(e.target.value)} className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+          <select value={belegStatus} onChange={(e) => setBelegStatus(e.target.value)} className="bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded px-3 py-2 text-base">
             <option value="">Alle Belege</option>
             <option value="verknuepft">Verknüpft</option>
             <option value="beleg_fehlt">Beleg fehlt</option>
@@ -243,11 +243,11 @@ export default function InventarPage() {
         {loading ? (
           <TableSkeleton rows={8} />
         ) : units.length === 0 ? (
-          <p className="text-slate-400">Keine Einheiten gefunden.</p>
+          <p className="text-admin-muted">Keine Einheiten gefunden.</p>
         ) : (
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
+          <div className="bg-admin-surface rounded border border-admin-border overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-left text-xs uppercase text-slate-400">
+              <thead className="bg-admin-surface text-left text-xs uppercase text-admin-muted">
                 <tr>
                   <th className="px-3 py-2">Bezeichnung</th>
                   <th className="px-3 py-2">Code</th>
@@ -264,7 +264,7 @@ export default function InventarPage() {
                 {units.map((u) => {
                   const d = displayFields(u);
                   return (
-                  <tr key={u.id} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
+                  <tr key={u.id} className="border-t border-admin-border hover:bg-admin-surface-2/40 cursor-pointer"
                       onClick={() => { window.location.href = `/admin/inventar/${u.id}`; }}>
                     <td className="px-3 py-2">{d.bezeichnung}</td>
                     <td className="px-3 py-2 font-mono text-xs">{d.code}</td>
@@ -278,7 +278,7 @@ export default function InventarPage() {
                         : <span className="text-amber-400">⚠ fehlt</span>}
                     </td>
                     <td className="px-3 py-2 text-right text-xs">
-                      <span className={u.wbw_computed === null ? 'text-slate-500 italic' : ''}>
+                      <span className={u.wbw_computed === null ? 'text-[var(--admin-text-dim)] italic' : ''}>
                         {fmtEuro(u.wbw_computed)}
                       </span>
                       {u.wbw_manuell_gesetzt && <span className="ml-1 text-cyan-400" title="Manueller Override">●</span>}
@@ -288,7 +288,7 @@ export default function InventarPage() {
                         onClick={(e) => { e.stopPropagation(); handleDelete(u.id, d.bezeichnung); }}
                         disabled={deletingId === u.id || u.status === 'vermietet'}
                         title={u.status === 'vermietet' ? 'Vermietet — kann nicht gelöscht werden' : 'Endgültig löschen'}
-                        className="text-xs text-rose-400 hover:text-rose-300 disabled:text-slate-600 disabled:cursor-not-allowed"
+                        className="text-xs text-rose-400 hover:text-rose-300 disabled:text-[var(--admin-muted-2)] disabled:cursor-not-allowed"
                       >
                         {deletingId === u.id ? 'Löscht…' : 'Löschen'}
                       </button>
@@ -344,7 +344,7 @@ function MaintenanceMenu() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Reparatur-Tools — im Normalbetrieb nicht noetig"
-        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm flex items-center gap-1.5"
+        className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm flex items-center gap-1.5"
       >
         Wartung
         <span className={`transition-transform text-xs ${open ? 'rotate-180' : ''}`}>▾</span>
@@ -352,12 +352,12 @@ function MaintenanceMenu() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 z-40 w-72 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden"
+          className="absolute right-0 top-full mt-1 z-40 w-72 bg-admin-surface border border-[var(--admin-faint)] rounded-lg shadow-2xl overflow-hidden"
           onClick={() => setOpen(false)}
         >
-          <div className="px-3 py-2 border-b border-slate-700 bg-slate-800/50">
-            <div className="text-xs text-slate-300 font-semibold">Reparatur-Tools</div>
-            <div className="text-[11px] text-slate-500 leading-tight mt-0.5">
+          <div className="px-3 py-2 border-b border-[var(--admin-faint)] bg-admin-surface-2/50">
+            <div className="text-xs text-admin-text-2 font-semibold">Reparatur-Tools</div>
+            <div className="text-[11px] text-[var(--admin-text-dim)] leading-tight mt-0.5">
               Im Normalbetrieb nicht n&ouml;tig. Greifen nur bei Daten-Drift, nach Migrationen oder im Recovery-Fall.
             </div>
           </div>
@@ -398,11 +398,11 @@ function MaintenanceMenuItem({
   children: React.ReactNode;
 }) {
   return (
-    <div className="px-3 py-2 hover:bg-slate-800/40 transition-colors border-b border-slate-800/60 last:border-b-0">
+    <div className="px-3 py-2 hover:bg-admin-surface-2/40 transition-colors border-b border-admin-border/60 last:border-b-0">
       <div className="mb-1">
         {children}
       </div>
-      <div className="text-[11px] text-slate-500 leading-tight pl-0.5" dangerouslySetInnerHTML={{ __html: hint }} />
+      <div className="text-[11px] text-[var(--admin-text-dim)] leading-tight pl-0.5" dangerouslySetInnerHTML={{ __html: hint }} />
     </div>
   );
 }
@@ -410,10 +410,10 @@ function MaintenanceMenuItem({
 function Stat({ label, value, color = 'slate' }: { label: string; value: number; color?: string }) {
   const colorClass = color === 'emerald' ? 'text-emerald-400'
     : color === 'cyan' ? 'text-cyan-400'
-    : color === 'amber' ? 'text-amber-400' : 'text-slate-200';
+    : color === 'amber' ? 'text-amber-400' : 'text-admin-text';
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded p-3">
-      <div className="text-xs text-slate-400">{label}</div>
+    <div className="bg-admin-surface border border-admin-border rounded p-3">
+      <div className="text-xs text-admin-muted">{label}</div>
       <div className={`text-2xl font-mono ${colorClass}`}>{value}</div>
     </div>
   );
@@ -483,12 +483,12 @@ function BackfillCodesButton() {
 
   return (
     <div className="flex items-center gap-2">
-      {result && <span className="text-xs text-slate-400">{result}</span>}
+      {result && <span className="text-xs text-admin-muted">{result}</span>}
       <button
         onClick={run}
         disabled={busy}
         title="Repariert Kamera-Inventar-Einträge: Bezeichnung wird auf den Modellnamen gesetzt, Code auf das saubere Label (z.B. CAM-DJI-OA5-01). Idempotent."
-        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+        className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] text-admin-text rounded text-sm"
       >
         {busy ? 'Räume auf…' : 'Codes aufräumen'}
       </button>
@@ -526,12 +526,12 @@ function BackfillMirrorsButton() {
 
   return (
     <div className="flex items-center gap-2">
-      {result && <span className="text-xs text-slate-400">{result}</span>}
+      {result && <span className="text-xs text-admin-muted">{result}</span>}
       <button
         onClick={run}
         disabled={busy}
         title="Spiegelt alle Einzel-Inventar-Einheiten in product_units/accessory_units. Damit funktioniert die Buchungs-Auto-Zuweisung fuer manuell angelegte Stuecke."
-        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+        className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] text-admin-text rounded text-sm"
       >
         {busy ? 'Spiegele…' : 'Mirror-Backfill'}
       </button>
@@ -573,12 +573,12 @@ function CleanupOrphansButton() {
 
   return (
     <div className="flex items-center gap-2">
-      {result && <span className="text-xs text-slate-400">{result}</span>}
+      {result && <span className="text-xs text-admin-muted">{result}</span>}
       <button
         onClick={run}
         disabled={busy}
         title="Löscht produkte-Rows, deren Shop-Quelle (Kamera oder Zubehör) inzwischen gelöscht wurde. Stammdaten mit aktiven Inventar-Einheiten werden geschont."
-        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+        className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] disabled:bg-admin-surface-2 disabled:text-[var(--admin-text-dim)] text-admin-text rounded text-sm"
       >
         {busy ? 'Räume auf…' : 'Verwaiste aufräumen'}
       </button>
@@ -671,29 +671,29 @@ function ResyncQtyButton() {
       <button
         onClick={openPreview}
         title="Zeigt Zubehöre an, deren Lagerbestand (available_qty) nicht mit den Exemplaren übereinstimmt. Nichts wird ohne Bestätigung geändert."
-        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+        className="px-3 py-2 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm"
       >
         Bestände prüfen
       </button>
-      {result && !open && <span className="text-xs text-slate-400">{result}</span>}
+      {result && !open && <span className="text-xs text-admin-muted">{result}</span>}
 
       {open && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => !applying && setOpen(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+          <div className="bg-admin-surface border border-[var(--admin-faint)] rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[var(--admin-faint)] flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-heading text-slate-100">Bestands-Drift prüfen</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Vergleich zwischen <code className="text-slate-300">accessories.available_qty</code> und gezählten aktiven Exemplaren.
+                <h3 className="text-lg font-heading text-admin-text">Bestands-Drift prüfen</h3>
+                <p className="text-xs text-admin-muted mt-0.5">
+                  Vergleich zwischen <code className="text-admin-text-2">accessories.available_qty</code> und gezählten aktiven Exemplaren.
                   Sammel-Zubehör (Bulk) ist ausgenommen.
                 </p>
               </div>
-              <button onClick={() => !applying && setOpen(false)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+              <button onClick={() => !applying && setOpen(false)} className="text-[var(--admin-text-dim)] hover:text-admin-text-2 text-xl">×</button>
             </div>
 
             <div className="overflow-auto flex-1">
               {loading ? (
-                <div className="p-8 text-center text-slate-400">Lade Drift…</div>
+                <div className="p-8 text-center text-admin-muted">Lade Drift…</div>
               ) : !drift || drift.length === 0 ? (
                 <div className="p-8 text-center text-emerald-400">✓ Keine Drift gefunden — alle Bestände stimmen.</div>
               ) : (
@@ -706,7 +706,7 @@ function ResyncQtyButton() {
                     „Mirror-Backfill“ syncen oder „Bestand wiederherstellen“ laufen lassen.
                   </div>
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
+                    <thead className="bg-admin-surface-2 text-admin-muted text-xs uppercase">
                       <tr>
                         <th className="px-4 py-2 text-left">
                           <input
@@ -732,7 +732,7 @@ function ResyncQtyButton() {
                         const isSafe = row.safe_to_apply;
                         const worldsDiverge = row.legacy_unit_count !== row.inventar_unit_count;
                         return (
-                          <tr key={row.id} className={`border-t border-slate-800 ${!isSafe ? 'bg-slate-900/50 text-slate-400' : 'text-slate-200'}`}>
+                          <tr key={row.id} className={`border-t border-admin-border ${!isSafe ? 'bg-admin-surface/50 text-admin-muted' : 'text-admin-text'}`}>
                             <td className="px-4 py-2">
                               <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                             </td>
@@ -749,7 +749,7 @@ function ResyncQtyButton() {
                                 ? <span className="text-amber-400 text-xs" title="Alte und neue Welt zaehlen unterschiedlich — erst Mirror-Backfill laufen lassen">⚠ Welten driften</span>
                                 : isSafe
                                   ? <span className="text-emerald-400 text-xs">✓ sicher</span>
-                                  : <span className="text-slate-500 text-xs">leer</span>}
+                                  : <span className="text-[var(--admin-text-dim)] text-xs">leer</span>}
                             </td>
                           </tr>
                         );
@@ -760,22 +760,22 @@ function ResyncQtyButton() {
               )}
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-700 flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-400">
+            <div className="px-5 py-3 border-t border-[var(--admin-faint)] flex items-center justify-between gap-3">
+              <span className="text-xs text-admin-muted">
                 {drift && drift.length > 0 && `${selected.size} von ${drift.length} ausgewählt`}
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setOpen(false)}
                   disabled={applying}
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+                  className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm"
                 >
                   Abbrechen
                 </button>
                 <button
                   onClick={apply}
                   disabled={applying || selected.size === 0}
-                  className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+                  className="px-3 py-1.5 bg-admin-accent hover:bg-admin-accent-hover disabled:bg-[var(--admin-faint)] disabled:text-[var(--admin-text-dim)] text-slate-900 rounded text-sm font-semibold"
                 >
                   {applying ? 'Wende an…' : `${selected.size} anpassen`}
                 </button>
@@ -887,35 +887,35 @@ function RestoreQtyButton() {
       >
         Bestand wiederherstellen
       </button>
-      {result && !open && <span className="text-xs text-slate-400">{result}</span>}
+      {result && !open && <span className="text-xs text-admin-muted">{result}</span>}
 
       {open && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => !applying && setOpen(false)}>
-          <div className="bg-slate-900 border border-amber-500/40 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+          <div className="bg-admin-surface border border-amber-500/40 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[var(--admin-faint)] flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-heading text-amber-200">Bestand aus Inventar wiederherstellen</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Liest <code className="text-slate-300">inventar_units</code> (neue Welt) UND <code className="text-slate-300">accessory_units</code> (alte Welt) und setzt
-                  <code className="text-slate-300"> accessories.available_qty</code> auf das Maximum beider. Geht nie nach unten.
+                <p className="text-xs text-admin-muted mt-0.5">
+                  Liest <code className="text-admin-text-2">inventar_units</code> (neue Welt) UND <code className="text-admin-text-2">accessory_units</code> (alte Welt) und setzt
+                  <code className="text-admin-text-2"> accessories.available_qty</code> auf das Maximum beider. Geht nie nach unten.
                 </p>
               </div>
-              <button onClick={() => !applying && setOpen(false)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+              <button onClick={() => !applying && setOpen(false)} className="text-[var(--admin-text-dim)] hover:text-admin-text-2 text-xl">×</button>
             </div>
 
             <div className="overflow-auto flex-1">
               {loading ? (
-                <div className="p-8 text-center text-slate-400">Lade Drift…</div>
+                <div className="p-8 text-center text-admin-muted">Lade Drift…</div>
               ) : !rows || rows.length === 0 ? (
                 <div className="p-8 text-center text-emerald-400">✓ Keine Drift gefunden — alle Bestände passen bereits zum Inventar.</div>
               ) : (
                 <>
                   <div className="px-5 py-3 bg-emerald-500/10 border-b border-emerald-500/30 text-xs text-emerald-200">
                     <strong>{recoveryCount} Recovery-Fall(e):</strong> available_qty wird hochgesetzt. Diese sind <strong>per Default angehakt</strong> —
-                    es geht kein Bestand verloren. <span className="text-slate-400">Eintraege mit negativem Δ (Bestand wuerde gesenkt) bleiben uneingehakt, hier entscheidet der Admin selbst.</span>
+                    es geht kein Bestand verloren. <span className="text-admin-muted">Eintraege mit negativem Δ (Bestand wuerde gesenkt) bleiben uneingehakt, hier entscheidet der Admin selbst.</span>
                   </div>
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
+                    <thead className="bg-admin-surface-2 text-admin-muted text-xs uppercase">
                       <tr>
                         <th className="px-4 py-2 text-left">
                           <input
@@ -939,7 +939,7 @@ function RestoreQtyButton() {
                       {rows.map((row) => {
                         const isRecovery = row.diff > 0;
                         return (
-                          <tr key={row.id} className={`border-t border-slate-800 ${isRecovery ? 'text-slate-100' : 'bg-slate-900/50 text-slate-400'}`}>
+                          <tr key={row.id} className={`border-t border-admin-border ${isRecovery ? 'text-admin-text' : 'bg-admin-surface/50 text-admin-muted'}`}>
                             <td className="px-4 py-2">
                               <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                             </td>
@@ -960,22 +960,22 @@ function RestoreQtyButton() {
               )}
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-700 flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-400">
+            <div className="px-5 py-3 border-t border-[var(--admin-faint)] flex items-center justify-between gap-3">
+              <span className="text-xs text-admin-muted">
                 {rows && rows.length > 0 && `${selected.size} von ${rows.length} ausgewählt`}
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setOpen(false)}
                   disabled={applying}
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+                  className="px-3 py-1.5 bg-[var(--admin-faint)] hover:bg-[var(--admin-muted-2)] text-admin-text rounded text-sm"
                 >
                   Abbrechen
                 </button>
                 <button
                   onClick={apply}
                   disabled={applying || selected.size === 0}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-[var(--admin-faint)] disabled:text-[var(--admin-text-dim)] text-slate-900 rounded text-sm font-semibold"
                 >
                   {applying ? 'Stelle her…' : `${selected.size} wiederherstellen`}
                 </button>
