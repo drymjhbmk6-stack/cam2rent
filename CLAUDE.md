@@ -376,6 +376,23 @@ Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 - **Features:** Komma als Dezimaltrennzeichen, 0 löschbar, `inputMode="decimal"` für Mobile-Tastatur
 - **Verwendet in:** Kamera-Editor (Kaution, Preistabelle, perDayAfter30), Haftungs-Admin
 
+### Dashboard-Aufgaben-Widget — Kanban-Board (Stand 2026-08-07)
+Das „Aufgaben"-Widget (`ActionQueueWidget` in `components/admin/DashboardWidgets.tsx`)
+ist von einer vertikalen Liste mit Bucket-Überschriften auf ein **Kanban-Board mit
+4 Spalten** umgestellt (links→rechts, Konstante `BUCKET_LABELS`): **Heute · In 3
+Tagen · In 7 Tagen · Später**. Jede Aufgabe ist eine **Karte** (`renderCard`): oben
+Fälligkeitsdatum (spätestens, `dueDate`), dann die Aktion („was zu tun"), Kundenname,
+Detailzeile (Produkt · Zeitraum bzw. Aufgabenbeschreibung), die 4 Status-Tags
+(`StatusChips`) und **Schnell-Links** zu Kunde (`/admin/kunden/<user_id>`) + Buchung
+(`/admin/buchungen/<id>`). Dafür liefert `GET /api/admin/dashboard-data` pro
+`action_queue`-Item zusätzlich `user_id` (serverseitig ohnehin als `uid` vorhanden);
+`QueueRow` wurde um `customerName`/`detail`/`dueDate`/`customerId`/`bookingId` erweitert
+(ersetzt `title`/`subtitle`). `columns` = `rows` nach `bucket` gruppiert (Sortierung
+Bucket→Datum→Dringlichkeit unverändert). Alle bestehenden Handler (`mark-shipped`,
+`coord-done`, optimistisches Ausblenden via `doneIds`, `errorId`) + die Chip-/Soft-
+Guard-Logik 1:1 übernommen. Board scrollt horizontal (Mobile: swipen), jede Spalte
+vertikal (`maxHeight 440`); leere Spalte zeigt „—".
+
 ### Dashboard-Aufgaben-Widget — Status-Übersicht pro Buchung (Stand 2026-06-14)
 Jede Buchungszeile im „Aufgaben"-Widget (`ActionQueueWidget`) zeigt unter
 Titel/Untertitel eine Reihe von **4 Status-Chips** (`StatusChips`): **Ausweis**
