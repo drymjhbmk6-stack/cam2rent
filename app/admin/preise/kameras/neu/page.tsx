@@ -15,6 +15,7 @@ import MarkdownEditor from '@/components/MarkdownEditor';
 import PriceInput from '@/components/admin/PriceInput';
 import BrandSelect from '@/components/admin/BrandSelect';
 import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
+import { useToast } from '@/components/admin/ui/FeedbackProvider';
 
 function toSlug(name: string): string {
   return name.toLowerCase()
@@ -47,6 +48,7 @@ export default function AdminNeueKameraPage() {
   const [autoSlug, setAutoSlug] = useState(true);
 
   const { specs: specDefs } = useSpecDefinitions();
+  const toast = useToast();
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then((d) => {
@@ -118,7 +120,7 @@ export default function AdminNeueKameraPage() {
 
   async function handleSave() {
     if (!product.name.trim()) {
-      alert('Bitte einen Namen eingeben.');
+      toast.error('Bitte einen Namen eingeben.');
       return;
     }
     setSaving(true);
@@ -134,7 +136,7 @@ export default function AdminNeueKameraPage() {
       if (!res.ok) throw new Error();
       router.push(`/admin/preise/kameras/${newId}`);
     } catch {
-      alert('Fehler beim Speichern.');
+      toast.error('Fehler beim Speichern.');
       setSaving(false);
     }
   }
