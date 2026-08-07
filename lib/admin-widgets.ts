@@ -62,14 +62,16 @@ export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
 
   // Row 2: Revenue + damage
   { widgetId: 'revenue_today',     size: 'small', visible: true },
-  { widgetId: 'revenue_week',      size: 'small', visible: true },
   { widgetId: 'revenue_month',     size: 'small', visible: true },
   { widgetId: 'open_damages',      size: 'small', visible: true },
+  { widgetId: 'active_bookings',   size: 'small', visible: true },
 
-  // Row 3: More metrics
-  { widgetId: 'active_bookings',    size: 'small', visible: true },
-  { widgetId: 'total_customers',    size: 'small', visible: true },
-  { widgetId: 'new_customers_week', size: 'small', visible: true },
+  // Sekundäre Kennzahlen — standardmäßig ausgeblendet, damit das Dashboard
+  // nicht mit gleichförmigen Kacheln überlädt. Jederzeit per „+ Widget"
+  // wieder einblendbar.
+  { widgetId: 'revenue_week',      size: 'small', visible: false },
+  { widgetId: 'total_customers',    size: 'small', visible: false },
+  { widgetId: 'new_customers_week', size: 'small', visible: false },
 
   // Lists
   { widgetId: 'recent_bookings',       size: 'medium', visible: true },
