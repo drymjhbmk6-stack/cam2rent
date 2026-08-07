@@ -392,6 +392,13 @@ Bucket→Datum→Dringlichkeit unverändert). Alle bestehenden Handler (`mark-sh
 `coord-done`, optimistisches Ausblenden via `doneIds`, `errorId`) + die Chip-/Soft-
 Guard-Logik 1:1 übernommen. Board scrollt horizontal (Mobile: swipen), jede Spalte
 vertikal (`maxHeight 440`); leere Spalte zeigt „—".
+- **Versand-Schnell-Links (Stand 2026-08-07):** Karten von `delivery_mode='versand'`
+  zeigen zusätzlich zu 👤 Kunde / 📄 Buchung: **🚚 Sendung** (Carrier-`tracking_url`
+  → neuer Tab, sonst `/admin/sendungen`, sobald ein Tracking hinterlegt ist) und
+  **↩ Retoure** (`return_tracking_url` → neuer Tab, sonst `/admin/retouren`, sobald
+  ein Retourenlabel/-tracking existiert). `dashboard-data` liefert dafür
+  `tracking_url` + `return_tracking_url` mit (`select('*')`); `QueueRow.extraLinks`
+  trägt die Links, im Builder nur für Versand-Buchungen gefüllt.
 
 ### Dashboard-Aufgaben-Widget — Status-Übersicht pro Buchung (Stand 2026-06-14)
 Jede Buchungszeile im „Aufgaben"-Widget (`ActionQueueWidget`) zeigt unter
