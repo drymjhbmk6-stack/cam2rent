@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
@@ -241,6 +241,54 @@ const SYSTEM_ITEMS: NavItem[] = [
   { href: '/admin/einstellungen', label: 'Einstellungen', exact: true, icon: iconCog, perm: 'system' },
 ];
 
+// Flache Liste aller Nav-Items — nur zum Auflösen gepinnter Favoriten-Hrefs
+// (href → Item mit Icon/Label/Permission). Reihenfolge egal.
+const ALL_NAV_ITEMS: NavItem[] = [
+  ...MEIN_BEREICH_ITEMS, ...TAGESGESCHAEFT_ITEMS, ...KUNDEN_ITEMS, ...KATALOG_ITEMS,
+  ...PREISE_ITEMS, ...WEBSEITE_ITEMS, ...BLOG_ITEMS, ...POSTS_ITEMS, ...REELS_ITEMS,
+  ...FINANZEN_ITEMS, ...BERICHTE_ITEMS, ...SYSTEM_ITEMS,
+];
+
+// ── Favoriten/Pins ──────────────────────────────────────────────────────────
+// Pro Gerät in localStorage; ein Modul-Store hält Desktop- + Mobile-Sidebar
+// synchron (useSyncExternalStore, kein Prop-Threading durch die Nav-Bäume).
+const PIN_KEY = 'admin_pinned_nav';
+const EMPTY_PINS: string[] = [];
+let pinnedCache: string[] | null = null;
+const pinListeners = new Set<() => void>();
+
+function readPins(): string[] {
+  if (pinnedCache) return pinnedCache;
+  if (typeof window === 'undefined') { pinnedCache = EMPTY_PINS; return pinnedCache; }
+  try {
+    const raw = window.localStorage.getItem(PIN_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    pinnedCache = Array.isArray(parsed) ? parsed.filter((h) => typeof h === 'string') : [];
+  } catch { pinnedCache = []; }
+  return pinnedCache;
+}
+function writePins(next: string[]) {
+  pinnedCache = next;
+  try { window.localStorage.setItem(PIN_KEY, JSON.stringify(next)); } catch { /* localStorage n/a */ }
+  pinListeners.forEach((l) => l());
+}
+function togglePin(href: string) {
+  const cur = readPins();
+  writePins(cur.includes(href) ? cur.filter((h) => h !== href) : [...cur, href]);
+}
+function subscribePins(cb: () => void) { pinListeners.add(cb); return () => { pinListeners.delete(cb); }; }
+function usePins(): string[] {
+  return useSyncExternalStore(subscribePins, readPins, () => EMPTY_PINS);
+}
+
+function PinStar({ pinned }: { pinned: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
 // ============================================================
 // Components
 // ============================================================
@@ -248,22 +296,35 @@ const SYSTEM_ITEMS: NavItem[] = [
 function NavLinkItem({ item, pathname, onNavClick }: { item: NavItem; pathname: string; onNavClick?: () => void }) {
   const hrefPath = item.href.split('?')[0];
   const active = item.exact ? pathname === hrefPath : pathname.startsWith(hrefPath);
+  const pins = usePins();
+  const pinned = pins.includes(item.href);
   return (
-    <Link
-      key={item.href}
-      href={item.href}
-      onClick={onNavClick}
-      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1"
-      style={active
-        ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }
-        : { color: 'var(--admin-muted)' }
-      }
-      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
-      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
-    >
-      <span style={active ? { color: 'var(--admin-accent)' } : { color: 'var(--admin-muted-2)' }}>{item.icon}</span>
-      {item.label}
-    </Link>
+    <div className="relative group/nav mx-1">
+      <Link
+        href={item.href}
+        onClick={onNavClick}
+        className="flex items-center gap-3 pl-3 pr-9 py-2 rounded-lg text-sm font-heading font-semibold transition-all"
+        style={active
+          ? { background: 'var(--admin-accent-soft)', color: 'var(--admin-accent)' }
+          : { color: 'var(--admin-muted)' }
+        }
+        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-text)'; }}
+        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--admin-muted)'; }}
+      >
+        <span style={active ? { color: 'var(--admin-accent)' } : { color: 'var(--admin-muted-2)' }}>{item.icon}</span>
+        {item.label}
+      </Link>
+      <button
+        type="button"
+        aria-label={pinned ? `${item.label} aus Favoriten entfernen` : `${item.label} zu Favoriten hinzufügen`}
+        aria-pressed={pinned}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); togglePin(item.href); }}
+        className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity ${pinned ? 'opacity-100' : 'opacity-0 group-hover/nav:opacity-100 focus-visible:opacity-100'}`}
+        style={{ color: pinned ? 'var(--admin-accent)' : 'var(--admin-muted-2)' }}
+      >
+        <PinStar pinned={pinned} />
+      </button>
+    </div>
   );
 }
 
@@ -436,6 +497,28 @@ function SubNavCollapse({ label, icon, items, storageKey, active, pathname, onNa
   );
 }
 
+/** Favoriten-Sektion oben in der Sidebar — nur sichtbar, wenn der User Items
+ *  angepinnt hat (Stern an einem Nav-Item). Auflösung href → Item über
+ *  ALL_NAV_ITEMS, permission-gefiltert wie überall. */
+function FavoritesSection({ me, pathname, onNavClick }: { me: MeInfo | null; pathname: string; onNavClick?: () => void }) {
+  const pins = usePins();
+  if (pins.length === 0) return null;
+  const items = pins
+    .map((href) => ALL_NAV_ITEMS.find((i) => i.href === href))
+    .filter((i): i is NavItem => !!i && canSee(me, i));
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--admin-faint)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
+        ★ Favoriten
+      </div>
+      {items.map((item) => (
+        <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
+      ))}
+    </div>
+  );
+}
+
 function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, theme, onToggleTheme }: {
   pathname: string;
   isDashboard: boolean;
@@ -561,6 +644,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
 
       {/* Navigation groups — Accordion: es ist immer nur eine Gruppe offen */}
       <nav className="flex-1 py-2 overflow-y-auto">
+        <FavoritesSection me={me} pathname={pathname} onNavClick={onNavClick} />
         {me && me.id !== 'legacy-env' && (
           <NavGroupCollapse
             label="Mein Bereich"
