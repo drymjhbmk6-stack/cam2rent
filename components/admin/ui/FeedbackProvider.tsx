@@ -319,23 +319,42 @@ function ConfirmDialog({ opts, onClose }: { opts: ConfirmOptions; onClose: (v: b
  *  useCallback/useEffect-Dependency-Arrays. */
 export function useToast() {
   const ctx = useContext(FeedbackContext);
-  if (!ctx) throw new Error('useToast muss innerhalb von <FeedbackProvider> verwendet werden.');
-  const { toast } = ctx;
-  return useMemo(
-    () => ({
-      toast,
-      success: (message: string, action?: ToastAction) => toast({ kind: 'success', message, action }),
-      error: (message: string) => toast({ kind: 'error', message }),
-      info: (message: string) => toast({ kind: 'info', message }),
-      warning: (message: string) => toast({ kind: 'warning', message }),
-    }),
-    [toast],
-  );
+  const toast = ctx?.toast;
+  return useMemo(() => {
+    if (toast) {
+      return {
+        toast,
+        success: (message: string, action?: ToastAction) => toast({ kind: 'success', message, action }),
+        error: (message: string) => toast({ kind: 'error', message }),
+        info: (message: string) => toast({ kind: 'info', message }),
+        warning: (message: string) => toast({ kind: 'warning', message }),
+      };
+    }
+    // Fallback OHNE Provider (z.B. Blog-Admin mit eigener Shell, oder Prerender):
+    // native Dialoge statt Crash — Verhalten wie vor der Feedback-Migration.
+    const nativeToast = (opts: ToastOptions | string) => {
+      const o: ToastOptions = typeof opts === 'string' ? { message: opts } : opts;
+      const kind = o.kind ?? 'info';
+      if (typeof window !== 'undefined' && (kind === 'error' || kind === 'warning')) window.alert(o.message);
+    };
+    return {
+      toast: nativeToast,
+      success: (message: string, action?: ToastAction) => nativeToast({ kind: 'success', message, action }),
+      error: (message: string) => nativeToast({ kind: 'error', message }),
+      info: (message: string) => nativeToast({ kind: 'info', message }),
+      warning: (message: string) => nativeToast({ kind: 'warning', message }),
+    };
+  }, [toast]);
 }
 
 /** Bestätigungs-Dialog. `const confirm = useConfirm(); if (await confirm({...})) {…}` */
 export function useConfirm() {
   const ctx = useContext(FeedbackContext);
-  if (!ctx) throw new Error('useConfirm muss innerhalb von <FeedbackProvider> verwendet werden.');
-  return ctx.confirm;
+  const confirm = ctx?.confirm;
+  return useMemo(() => {
+    if (confirm) return confirm;
+    // Fallback OHNE Provider: natives confirm() (wie vor der Migration).
+    return (opts: ConfirmOptions): Promise<boolean> =>
+      Promise.resolve(typeof window !== 'undefined' ? window.confirm(opts.message ?? opts.title ?? '') : false);
+  }, [confirm]);
 }
