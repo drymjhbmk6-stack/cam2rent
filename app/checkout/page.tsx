@@ -423,6 +423,27 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
+  // Einen bereits im Warenkorb eingelösten Gutschein übernehmen
+  // (gleicher sessionStorage-Key wie /warenkorb).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('cam2rent_coupon');
+      if (raw) setAppliedCoupon(JSON.parse(raw) as Coupon);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Gutschein-Zustand mit dem Warenkorb synchron halten.
+  const persistCoupon = (coupon: Coupon | null) => {
+    try {
+      if (coupon) sessionStorage.setItem('cam2rent_coupon', JSON.stringify(coupon));
+      else sessionStorage.removeItem('cam2rent_coupon');
+    } catch {
+      /* ignore */
+    }
+  };
+
   // Stripe
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   // CustomerSession-Secret → Payment Element zeigt gespeicherte Karten des Kunden
@@ -687,6 +708,7 @@ export default function CheckoutPage() {
       const data = await res.json();
       if (res.ok && data.coupon) {
         setAppliedCoupon(data.coupon as Coupon);
+        persistCoupon(data.coupon as Coupon);
         setCouponInput('');
       } else {
         setCouponError(data.error ?? 'Ungültiger Gutschein-Code.');
@@ -1307,7 +1329,7 @@ export default function CheckoutPage() {
                             </p>
                           </div>
                           <button
-                            onClick={() => setAppliedCoupon(null)}
+                            onClick={() => { setAppliedCoupon(null); persistCoupon(null); }}
                             className="text-amber-500 hover:text-amber-700 transition-colors text-sm ml-3 flex-shrink-0"
                           >
                             Entfernen
@@ -1329,7 +1351,7 @@ export default function CheckoutPage() {
                             </p>
                           </div>
                           <button
-                            onClick={() => setAppliedCoupon(null)}
+                            onClick={() => { setAppliedCoupon(null); persistCoupon(null); }}
                             className="text-brand-muted dark:text-gray-500 hover:text-status-error transition-colors text-sm ml-3 flex-shrink-0"
                           >
                             Entfernen

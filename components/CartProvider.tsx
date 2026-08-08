@@ -123,6 +123,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = useCallback(() => {
     setItems([]);
     localStorage.removeItem(STORAGE_KEY);
+    // Eingelösten Gutschein-Code mit-leeren, damit er nicht in einen neuen
+    // Warenkorb übernommen wird (Warenkorb + Checkout teilen diesen Key).
+    try {
+      sessionStorage.removeItem('cam2rent_coupon');
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const itemCount = items.length;
