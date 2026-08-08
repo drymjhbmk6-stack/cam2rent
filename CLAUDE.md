@@ -3331,12 +3331,18 @@ auf einen Blick, was monatlich/jährlich fix anfällt.
   generischen `GET/POST /api/admin/settings` — **keine Migration, kein Schema,
   keine eigene API/Route**. Eintrag = `{ id, label, amount, interval, category,
   note }` mit `interval: 'monatlich'|'quartalsweise'|'jaehrlich'`.
-- **UI:** Inline-editierbare Kostenpositionen (Bezeichnung, Betrag €, Intervall,
-  optionale Kategorie mit `<datalist>`-Vorschlägen, optionale Notiz) + „+ Position
-  hinzufügen"/„✕ Löschen" pro Zeile + ein Speichern-Button (persistiert das ganze
-  Array, Dirty-State-Guard). Zwei KpiCards oben: **Fixkosten pro Monat** (Summe,
-  auf Monat normalisiert: quartalsweise ÷3, jährlich ÷12) + **Fixkosten pro Jahr**
-  (= Monat × 12). Buchhaltungs-Dark-Palette wie die Geschwister-Tabs.
+- **UI (Read-/Edit-Toggle):** saubere **Lese-Liste**, gruppiert nach Kategorie
+  mit Zwischensumme (€/Monat) pro Gruppe; innerhalb Gruppe teuerste zuerst,
+  Gruppen nach Zwischensumme sortiert („Ohne Kategorie" ans Ende). Jede Position
+  zeigt normalisierten €/Monat + Intervall-Badge; Bearbeiten (✎) / Löschen (✕)
+  erst per Antippen (Edit-Modus pro Zeile via `editIds`-Set, neue Position startet
+  im Edit-Modus + Auto-Scroll). Felder: Bezeichnung, Betrag €, Intervall,
+  Kategorie (`<datalist>`-Vorschläge), Notiz. **Kompakte Summen-Karte** oben
+  (Monat groß + Jahr klein) mit **Kategorie-Verteilungs-Balken** (gestapelt) +
+  Legende (€/Monat + %). Normalisierung: quartalsweise ÷3, jährlich ÷12; Jahr =
+  Monat × 12. **Sticky Speichern-Leiste** erscheint nur bei ungespeicherten
+  Änderungen (Dirty-Guard, persistiert das ganze Array). Buchhaltungs-Dark-Palette
+  wie die Geschwister-Tabs.
 - **Registriert** in `BuchhaltungTabs.tsx` (`TabId` + Tab-Eintrag) + `page.tsx`
   (`VALID_TABS` + Render-Zweig). `tsc`+`next lint`: 0 Fehler.
 
