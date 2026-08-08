@@ -4,20 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
-import { useAuth } from '@/components/AuthProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
 import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
-import { calcDiscount, type Coupon } from '@/data/coupons';
-
-// Gemeinsamer sessionStorage-Key: der Warenkorb legt den eingelösten Gutschein
-// hier ab, der Checkout liest ihn beim Mount aus → der Kunde muss den Code
-// nicht erneut eingeben.
-const COUPON_STORAGE_KEY = 'cam2rent_coupon';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
-  const { user } = useAuth();
   const router = useRouter();
   const [showDateModal, setShowDateModal] = useState(false);
 
@@ -97,74 +89,7 @@ export default function WarenkorbPage() {
     };
   }, [items, productDiscounts]);
 
-  // ── Gutschein-Code ────────────────────────────────────────────────────────
-  // Der Kunde kann den Code bereits hier eingeben. Er wird serverseitig über
-  // /api/validate-coupon geprüft und in sessionStorage abgelegt, damit der
-  // Checkout ihn übernimmt. Der endgültige Rabatt wird im Checkout mit allen
-  // Auto-Rabatten (Mengen-/Frühbucher-/Treuerabatt) final berechnet — hier
-  // zeigen wir eine Vorschau auf Basis des Warenwerts nach Produktrabatt.
-  const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [couponError, setCouponError] = useState('');
-  const [couponLoading, setCouponLoading] = useState(false);
-
-  // Beim Mount einen evtl. schon eingelösten Gutschein aus sessionStorage laden.
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(COUPON_STORAGE_KEY);
-      if (raw) setAppliedCoupon(JSON.parse(raw) as Coupon);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // Coupon-Basis = Warenwert nach Produktrabatt (Analog zum Checkout, der den
-  // Coupon auf den Rest nach Auto-Rabatten anwendet).
-  const couponBase = Math.max(0, cartTotal - cartDiscount);
-  const couponDiscount = appliedCoupon ? calcDiscount(appliedCoupon, couponBase) : 0;
-
-  const persistCoupon = (coupon: Coupon | null) => {
-    try {
-      if (coupon) sessionStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(coupon));
-      else sessionStorage.removeItem(COUPON_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleApplyCoupon = async () => {
-    const code = couponInput.trim();
-    if (!code) return;
-    setCouponError('');
-    setCouponLoading(true);
-    try {
-      const res = await fetch('/api/validate-coupon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, cartTotal: couponBase, userEmail: user?.email ?? '' }),
-      });
-      const data = await res.json();
-      if (res.ok && data.coupon) {
-        setAppliedCoupon(data.coupon as Coupon);
-        persistCoupon(data.coupon as Coupon);
-        setCouponInput('');
-      } else {
-        setCouponError(data.error ?? 'Ungültiger Gutschein-Code.');
-      }
-    } catch {
-      setCouponError('Netzwerkfehler. Bitte versuche es erneut.');
-    } finally {
-      setCouponLoading(false);
-    }
-  };
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    persistCoupon(null);
-    setCouponError('');
-  };
-
-  const grandTotal = Math.max(0, cartTotal - cartDiscount - couponDiscount + shipping.price);
+  const grandTotal = Math.max(0, cartTotal - cartDiscount + shipping.price);
   const shippingLabel = cartDeliveryMode === 'abholung'
     ? 'Abholung vor Ort'
     : `Hin- und Rückversand (${cartShippingMethod === 'express' ? 'Express' : 'Standard'})`;
@@ -441,16 +366,6 @@ export default function WarenkorbPage() {
                     </span>
                   </div>
                 )}
-                {appliedCoupon && couponDiscount > 0 && (
-                  <div className="flex justify-between items-baseline gap-2 text-sm">
-                    <span className="text-status-success">
-                      Gutschein ({appliedCoupon.code})
-                    </span>
-                    <span className="text-status-success font-medium whitespace-nowrap flex-shrink-0">
-                      -{fmtEuro(couponDiscount)}
-                    </span>
-                  </div>
-                )}
                 <div className="flex justify-between items-baseline gap-2 text-sm">
                   <span className="text-brand-text dark:text-gray-300">
                     {shippingLabel}
@@ -472,55 +387,6 @@ export default function WarenkorbPage() {
                   </span>
                 </div>
               </div>
-              {/* Gutschein-Code */}
-              <div className="mb-4">
-                {appliedCoupon ? (
-                  <div className="flex items-center justify-between gap-2 p-3 rounded-[10px] bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-status-success truncate">
-                        {appliedCoupon.code} angewendet
-                      </p>
-                      {couponDiscount > 0 ? (
-                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">
-                          −{fmtEuro(couponDiscount)}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-amber-600 mt-0.5">
-                          Rabatt wird im Checkout berechnet
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleRemoveCoupon}
-                      className="text-brand-muted dark:text-gray-500 hover:text-status-error transition-colors text-sm flex-shrink-0"
-                    >
-                      Entfernen
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={couponInput}
-                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
-                      className="flex-1 min-w-0 px-3 py-2.5 text-base rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder:text-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                      placeholder="Gutschein-Code"
-                    />
-                    <button
-                      onClick={handleApplyCoupon}
-                      disabled={couponLoading || !couponInput.trim()}
-                      className="px-4 py-2.5 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-body font-medium text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-white/5 transition-colors flex-shrink-0 disabled:opacity-50"
-                    >
-                      {couponLoading ? '…' : 'Einlösen'}
-                    </button>
-                  </div>
-                )}
-                {couponError && (
-                  <p className="text-xs text-status-error mt-2">{couponError}</p>
-                )}
-              </div>
-
               <p className="text-xs text-brand-muted dark:text-gray-500 mb-5">
                 Versandart (Express oder Abholung) kann im Checkout geändert werden.
               </p>
