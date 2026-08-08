@@ -8,11 +8,12 @@ import BuchhaltungTabs, { type TabId } from './components/BuchhaltungTabs';
 import DashboardTab from './components/DashboardTab';
 import EinnahmenTab from './components/EinnahmenTab';
 import AusgabenIntegratedTab from './components/AusgabenIntegratedTab';
+import FixkostenTab from './components/FixkostenTab';
 import StripeAbgleichTab from './components/StripeAbgleichTab';
 import ReportsCombinedTab from './components/ReportsCombinedTab';
 import EinstellungenTab from './components/EinstellungenTab';
 
-const VALID_TABS: TabId[] = ['dashboard', 'einnahmen', 'ausgaben', 'stripe', 'reports', 'einstellungen'];
+const VALID_TABS: TabId[] = ['dashboard', 'einnahmen', 'ausgaben', 'fixkosten', 'stripe', 'reports', 'einstellungen'];
 
 /**
  * Backwards-Compat: alte URL-Parameter (vor Etappe 2) auf neue Tabs mappen.
@@ -134,6 +135,7 @@ function BuchhaltungContent() {
         {activeTab === 'dashboard' && <DashboardTab onNavigate={handleNavigate} />}
         {activeTab === 'einnahmen' && <EinnahmenTab />}
         {activeTab === 'ausgaben' && <AusgabenIntegratedTab />}
+        {activeTab === 'fixkosten' && <FixkostenTab />}
         {activeTab === 'stripe' && <StripeAbgleichTab />}
         {activeTab === 'reports' && <ReportsCombinedTab />}
         {activeTab === 'einstellungen' && <EinstellungenTab />}

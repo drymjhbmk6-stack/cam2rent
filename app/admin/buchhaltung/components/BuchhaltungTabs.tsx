@@ -1,6 +1,6 @@
 'use client';
 
-export type TabId = 'dashboard' | 'einnahmen' | 'ausgaben' | 'stripe' | 'reports' | 'einstellungen';
+export type TabId = 'dashboard' | 'einnahmen' | 'ausgaben' | 'fixkosten' | 'stripe' | 'reports' | 'einstellungen';
 
 interface Tab {
   id: TabId;
@@ -23,6 +23,11 @@ const TABS: Tab[] = [
     id: 'ausgaben',
     label: 'Ausgaben',
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+  },
+  {
+    id: 'fixkosten',
+    label: 'Fixkosten',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>,
   },
   {
     id: 'stripe',

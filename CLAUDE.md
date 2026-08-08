@@ -3318,6 +3318,27 @@ Tab-basiertes Cockpit mit **6 Top-Level-Tabs** (frueher 9, zusammengelegt). Quer
 - **Stripe-Abgleich**: unveraendert.
 - **Berichte** (`?tab=reports&sub=...`): Wrapper mit Pills `analyse | datev`. Analyse = bestehender `ReportsTab` (EÜR, USt-VA, Umsatzliste). DATEV = bestehender `DatevExportTab`.
 - **Einstellungen**: unveraendert.
+- **Fixkosten** (`?tab=fixkosten`, Stand 2026-08-08): reine ÜBERSICHT der fixen
+  (wiederkehrenden) Betriebskosten — siehe eigener Abschnitt unten.
+
+### Fixkosten-Übersicht (`/admin/buchhaltung?tab=fixkosten`, Stand 2026-08-08)
+Eigener Tab im Buchhaltungs-Cockpit (`FixkostenTab.tsx`) zum Erfassen der fixen
+Betriebskosten (Server, Software-Abos, Versicherungen, Miete …). **Reine
+Übersicht — KEINE Verrechnung nach irgendwohin:** die Werte fließen NICHT in EÜR,
+DATEV, Cockpit-KPIs, Ausgaben, Berichte oder sonst wo ein. Zweck: der Admin sieht
+auf einen Blick, was monatlich/jährlich fix anfällt.
+- **Persistenz:** `admin_settings`-Key `fixkosten` als JSON-Array über den
+  generischen `GET/POST /api/admin/settings` — **keine Migration, kein Schema,
+  keine eigene API/Route**. Eintrag = `{ id, label, amount, interval, category,
+  note }` mit `interval: 'monatlich'|'quartalsweise'|'jaehrlich'`.
+- **UI:** Inline-editierbare Kostenpositionen (Bezeichnung, Betrag €, Intervall,
+  optionale Kategorie mit `<datalist>`-Vorschlägen, optionale Notiz) + „+ Position
+  hinzufügen"/„✕ Löschen" pro Zeile + ein Speichern-Button (persistiert das ganze
+  Array, Dirty-State-Guard). Zwei KpiCards oben: **Fixkosten pro Monat** (Summe,
+  auf Monat normalisiert: quartalsweise ÷3, jährlich ÷12) + **Fixkosten pro Jahr**
+  (= Monat × 12). Buchhaltungs-Dark-Palette wie die Geschwister-Tabs.
+- **Registriert** in `BuchhaltungTabs.tsx` (`TabId` + Tab-Eintrag) + `page.tsx`
+  (`VALID_TABS` + Render-Zweig). `tsc`+`next lint`: 0 Fehler.
 
 ### WISO-Steuer-Export der EÜR (Stand 2026-08-02)
 Buchungsgenauer CSV-Export der EÜR fuer den Import in **WISO Steuer:Sparbuch
