@@ -66,25 +66,40 @@ export async function GET(req: NextRequest) {
   // Gutschein-Code generieren falls Rabatt aktiviert
   let couponCode: string | undefined;
   if (discountEnabled && discountPercent > 0) {
-    couponCode = `COMEBACK${discountPercent}`;
+    const code = `COMEBACK${discountPercent}`;
 
     // Gutschein in Supabase anlegen falls nicht vorhanden
     const { data: existingCoupon } = await supabase
       .from('coupons')
       .select('id')
-      .eq('code', couponCode)
+      .ilike('code', code)
       .maybeSingle();
 
-    if (!existingCoupon) {
-      await supabase.from('coupons').insert({
-        code: couponCode,
+    if (existingCoupon) {
+      couponCode = code;
+    } else {
+      // target_type MUSS ein erlaubter CHECK-Wert sein: 'all' | 'accessory'
+      // | 'group' | 'user'. Frueher stand hier faelschlich 'order' → Insert
+      // scheiterte still am Constraint, die Mail bot aber trotzdem den Code an
+      // (toter Gutschein). 'all' = gilt fuer die ganze Bestellung ("Alles").
+      const { error: couponErr } = await supabase.from('coupons').insert({
+        code,
         type: 'percent',
         value: discountPercent,
-        target_type: 'order',
+        description: 'Warenkorb-Erinnerung (COMEBACK)',
+        target_type: 'all',
         active: true,
         once_per_customer: true,
         not_combinable: false,
       });
+      if (couponErr) {
+        // Anlegen fehlgeschlagen → Code NICHT in der Mail anbieten, sonst
+        // bekaeme der Kunde einen ungueltigen Gutschein.
+        console.error('[abandoned-cart] Gutschein-Anlage fehlgeschlagen:', couponErr.message);
+        couponCode = undefined;
+      } else {
+        couponCode = code;
+      }
     }
   }
 

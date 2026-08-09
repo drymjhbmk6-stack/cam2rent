@@ -1145,6 +1145,29 @@ nie zurückgeladen).
   Zeiträume. Kauf/`clearCart` leert lokal + löscht (via leerem Sync) die
   Server-Kopie.
 
+### Warenkorb-Erinnerung — Gutschein-Bug + Crontab (Stand 2026-08-09)
+Die Abandoned-Cart-Erinnerung (`/api/cron/abandoned-cart`) war **doppelt kaputt**:
+- **Kein Crontab-Eintrag** → der Cron lief nie automatisch (als einer von nur zwei
+  Crons ohne Crontab-Zeile). Muss auf dem Hetzner-Server gesetzt werden (GET,
+  Header-Auth, Cloudflare-Bypass via `--resolve`):
+  ```
+  0 */6 * * * curl -s --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/abandoned-cart
+  ```
+- **Gutschein wurde nie angelegt** (Bug gefixt): der Insert setzte
+  `target_type: 'order'` — dieser Wert ist im CHECK-Constraint der `coupons`-Tabelle
+  NICHT erlaubt (`'all'|'accessory'|'group'|'user'`) → Insert scheiterte still am
+  Constraint, aber der Insert-Fehler wurde **nicht geprüft** → die Mail bot
+  `COMEBACK<prozent>` trotzdem an (toter Code). Fix: `target_type: 'all'` (=
+  „Alles", gilt für die ganze Bestellung, wie FEEDBACK15/NEU10) + Fehlerprüfung:
+  schlägt das Anlegen fehl, wird der Code NICHT mehr in der Mail angeboten.
+  Existenz-Check jetzt via `ilike` (matcht den `UPPER(code)`-Unique-Index).
+- **Coupon-Eigenschaften** (unverändert): EIN geteilter Code `COMEBACK<prozent>`
+  für alle (nicht personalisiert), `once_per_customer`, kein Ablauf, kein
+  Gesamt-Cap, mit Auto-Rabatten kombinierbar. Wird beim ersten erfolgreichen
+  Cron-Lauf einmal angelegt und danach idempotent wiederverwendet. Bereits
+  verschickte Mails, die den Code nennen, funktionieren rückwirkend, sobald der
+  Code existiert.
+
 ### 48-Stunden-Reservierung für Bestandskunden (Self-Service, Stand 2026-08-04)
 Ein Bestandskunde ruft an → der Admin reserviert Kamera + Zubehör für einen Zeitraum
 (Inventar wird für andere blockiert) und schickt dem Kunden einen Link. Der Kunde öffnet
