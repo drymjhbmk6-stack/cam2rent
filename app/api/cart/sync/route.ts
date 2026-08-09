@@ -5,6 +5,53 @@ import { cookies } from 'next/headers';
 import { syncCartHolds, releaseUserCartHolds, type CartHoldItem } from '@/lib/cart-holds';
 import { isUserTester } from '@/lib/tester-mode';
 
+function getAuthClient() {
+  return cookies().then((cookieStore) =>
+    createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); },
+        },
+      },
+    ),
+  );
+}
+
+/**
+ * GET /api/cart/sync
+ * Liefert den serverseitig gespeicherten Warenkorb des eingeloggten Kunden
+ * (aktiver `abandoned_carts`-Eintrag). Damit ist der Warenkorb kontogebunden:
+ * er wird beim Login auf jedem Geraet wiederhergestellt, auch nach dem Leeren
+ * des Browsers. Reines Lesen — kein Hold-Sync, keine Mutation.
+ */
+export async function GET() {
+  const supabaseAuth = await getAuthClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+  }
+
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('abandoned_carts')
+      .select('items, cart_total, updated_at')
+      .eq('user_id', user.id)
+      .eq('recovered', false)
+      .maybeSingle();
+
+    const items = Array.isArray(data?.items) ? data!.items : [];
+    return NextResponse.json({ items });
+  } catch (err) {
+    console.error('Cart load error:', err);
+    // Defensiv: Warenkorb-Wiederherstellung darf nie den Shop blockieren.
+    return NextResponse.json({ items: [] });
+  }
+}
+
 /**
  * POST /api/cart/sync
  * Sweep 8 M4: User-ID + E-Mail werden aus der Session gepinnt.

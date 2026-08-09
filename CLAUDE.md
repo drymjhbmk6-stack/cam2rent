@@ -1095,6 +1095,49 @@ Sobald ein **eingeloggter** Kunde eine Kamera in den Warenkorb legt, wird der ge
      */15 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/cart-holds-cleanup
      ```
 
+### Kontogebundener Warenkorb — geräteübergreifend + browser-persistent (Stand 2026-08-09)
+Der Warenkorb ist jetzt **an das Kundenkonto gebunden**, nicht mehr nur an den
+Browser. Ein eingeloggter Kunde findet seinen Warenkorb auf **jedem Gerät** und
+**auch nach dem Leeren des Browsers** wieder — die Items werden beim Login vom
+Server geladen. **Keine Migration, kein Schema-Change** — nutzt die bereits
+existierende `abandoned_carts`-Tabelle (ein aktiver Eintrag pro Kunde mit
+`items` JSONB, bislang nur für die Abandoned-Cart-Erinnerungsmail befüllt, aber
+nie zurückgeladen).
+- **`GET /api/cart/sync`** (neu, Cookie-Auth): liefert die Items des aktiven
+  `abandoned_carts`-Eintrags des eingeloggten Kunden (`recovered=false`). Rein
+  lesend (kein Hold-Sync). Defensiv → `{ items: [] }` bei Fehler. Der bestehende
+  `POST /api/cart/sync` (schreibt Items + Hold-Sync, seit Sweep 8 session-gepinnt)
+  ist **unverändert**.
+- **`components/CartProvider.tsx`:**
+  - **Laden beim Login:** neuer Effekt auf `[user, hydrated]` — sobald ein User da
+    ist, wird `GET /api/cart/sync` geholt und per `mergeCarts()` mit dem lokalen
+    Warenkorb **zusammengeführt** (Union, inhaltliches Dedup via `cartItemKey` =
+    Produkt + Zeitraum + Haftung + Liefer-/Versandart + Zubehör; die zufällige
+    `id` taugt nicht als Schlüssel). Es geht also nichts verloren, wenn auf
+    Gerät A lokal + auf dem Server (Gerät B) je etwas liegt.
+  - **Leeren beim Logout:** wechselt `user` von gesetzt → null, wird der **lokale**
+    Warenkorb geleert (`setItems([])` + `localStorage.removeItem`). Die
+    **Server-Kopie bleibt** (der Sync-Effekt schreibt bei fehlendem User nicht →
+    kein Delete) → beim nächsten Login kommt der Warenkorb zurück. Auf geteilten
+    Geräten sieht der nächste Nutzer den Warenkorb nicht.
+  - **Race-Absicherung (kritisch):** `loadedForUserRef` merkt, für welche
+    User-ID der Server-Warenkorb schon geladen wurde. Der Sync-Effekt
+    (`POST /api/cart/sync`, der bei **leerem** Warenkorb den Server-Eintrag
+    **löscht**) läuft erst, wenn `loadedForUserRef.current === user.id`. Sonst
+    würde ein frisches Gerät (leerer localStorage) den Server-Warenkorb löschen,
+    **bevor** er geladen wird. Der Ref wird **nur nach erfolgreichem** Laden
+    gesetzt — bei Netzfehler (`!res.ok`/Exception) bleibt der Sync gesperrt, damit
+    ein transienter Fehler den Server-Stand nicht mit dem leeren lokalen
+    überschreibt (Warenkorb bleibt lokal nutzbar, Retry beim nächsten Render).
+- **Anonyme Besucher unverändert:** ohne Login lebt der Warenkorb weiter nur im
+  localStorage (kein Server-Backup) — er wird beim Login mit dem Server-Stand
+  gemerged.
+- **Kein Ablauf:** der (jetzt kontogebundene) Warenkorb wird nicht automatisch
+  gelöscht; nur die 30-Min-**Reservierung** (`cart_holds`) verfällt. Beim Checkout
+  greift weiterhin der Verfügbarkeits-/Überbuchungsschutz gegen veraltete
+  Zeiträume. Kauf/`clearCart` leert lokal + löscht (via leerem Sync) die
+  Server-Kopie.
+
 ### 48-Stunden-Reservierung für Bestandskunden (Self-Service, Stand 2026-08-04)
 Ein Bestandskunde ruft an → der Admin reserviert Kamera + Zubehör für einen Zeitraum
 (Inventar wird für andere blockiert) und schickt dem Kunden einen Link. Der Kunde öffnet
