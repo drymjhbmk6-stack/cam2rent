@@ -6,6 +6,13 @@ Lokaler Pfad: `C:\Cam2Rent\cam2rent`
 GitHub: drymjhbmk6-stack/cam2rent (master)
 Server: Hetzner CPX32 (178.104.117.135) + Coolify → cam2rent.de (live seit 2026-05-01)
 
+## Crontab
+**Autoritative Cron-Liste: `CRONTAB.md` (Repo-Root).** Enthält alle Cron-Jobs
+gruppiert + das `--resolve`/`x-cron-secret`-Prinzip + welche Routen GET-only sind
+(dürfen NICHT `-X POST`). **Bei jedem neuen Cron-Job diese Datei aktualisieren**
+(Zeile + Gruppe eintragen, Job-Zahl im Titel hochzählen), damit die Übersicht
+vollständig bleibt.
+
 ## Sprache
 Alle UI-Texte, Kommentare und Kommunikation auf **Deutsch**.
 **Umlaute:** Immer ä/ö/ü verwenden, NIEMALS ae/oe/ue in UI-Texten.
