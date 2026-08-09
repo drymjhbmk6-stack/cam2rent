@@ -2470,8 +2470,10 @@ export async function sendReservationExpired(data: {
 /**
  * Erinnert den Kunden, dass für seine Buchung noch kein unterschriebener
  * Mietvertrag vorliegt. Wird vom Cron `/api/cron/contract-reminder` täglich
- * geschickt, solange der Puffertag (Versand-/Übergabetag) näher rückt. Ohne
- * Unterschrift wird die Buchung am Puffertag automatisch storniert.
+ * geschickt, solange der Puffertag (Versand-/Übergabetag) näher rückt. Bei
+ * Versand wird die Buchung ohne Unterschrift am Puffertag automatisch
+ * storniert; bei ABHOLUNG NICHT (Kunde kann bei der Übergabe unterschreiben)
+ * — dann ohne Storno-Drohung + ohne Alarm-Styling.
  */
 export async function sendContractSignReminder(data: {
   customerName: string;
@@ -2487,9 +2489,13 @@ export async function sendContractSignReminder(data: {
   const BASE_URL = await getSiteUrl();
   const isPickup = data.deliveryMode === 'abholung';
   const isFinal = data.daysUntilDeadline <= 1; // letzter Tag / morgen Storno
+  // Abholung wird NIEMALS wegen fehlendem Vertrag auto-storniert (harter Filter
+  // in /api/cron/contract-auto-cancel) — der Kunde kann bei der Übergabe
+  // unterschreiben. Daher keine Storno-Drohung + kein Alarm-Styling bei Abholung.
+  const alarm = isFinal && !isPickup;
 
   const subject = stripSubject(
-    isFinal
+    alarm
       ? `LETZTE ERINNERUNG: Mietvertrag für Buchung ${data.bookingNumber} unterschreiben — sonst Storno`
       : `Bitte Mietvertrag unterschreiben — Buchung ${data.bookingNumber}`,
   );
@@ -2523,9 +2529,11 @@ export async function sendContractSignReminder(data: {
     )
     .join('');
 
-  const deadlineHint = isFinal
-    ? `Wenn bis ${isPickup ? 'zur Übergabe' : 'zum Versandtag'} kein unterschriebener Mietvertrag vorliegt, müssen wir die Buchung <strong>automatisch stornieren</strong> und erstatten dir den vollen Betrag. Das Unterschreiben dauert nur einen Moment.`
-    : `Ohne unterschriebenen Mietvertrag können wir die Kamera nicht ${isPickup ? 'übergeben' : 'versenden'}. Erledige die Unterschrift bitte rechtzeitig — sonst wird die Buchung kurz vor Mietbeginn automatisch storniert.`;
+  const deadlineHint = isPickup
+    ? `Am einfachsten unterschreibst du den Mietvertrag vorab in deinem Konto — alternativ kannst du das auch direkt bei der Abholung erledigen. Das Unterschreiben dauert nur einen Moment.`
+    : isFinal
+      ? `Wenn bis zum Versandtag kein unterschriebener Mietvertrag vorliegt, müssen wir die Buchung <strong>automatisch stornieren</strong> und erstatten dir den vollen Betrag. Das Unterschreiben dauert nur einen Moment.`
+      : `Ohne unterschriebenen Mietvertrag können wir die Kamera nicht versenden. Erledige die Unterschrift bitte rechtzeitig — sonst wird die Buchung kurz vor Mietbeginn automatisch storniert.`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
@@ -2536,7 +2544,7 @@ export async function sendContractSignReminder(data: {
           <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
         </td></tr>
         <tr><td style="padding:32px;">
-          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${isFinal ? '#9a3412' : '#0a0a0a'};">${isFinal ? 'Letzte Erinnerung: Mietvertrag unterschreiben' : 'Bitte Mietvertrag unterschreiben'}</h1>
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${alarm ? '#9a3412' : '#0a0a0a'};">${alarm ? 'Letzte Erinnerung: Mietvertrag unterschreiben' : 'Bitte Mietvertrag unterschreiben'}</h1>
           <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
             Hallo ${h(data.customerName)},<br><br>
             für deine Buchung liegt noch <strong>kein unterschriebener Mietvertrag</strong> vor. Damit alles glattläuft, brauchen wir deine digitale Unterschrift.
@@ -2544,7 +2552,7 @@ export async function sendContractSignReminder(data: {
           <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;padding:8px 0;">
             ${detailTable}
           </table>
-          <a href="${BASE_URL}/konto/buchungen" style="display:inline-block;padding:14px 28px;background:${isFinal ? '#ea580c' : '#0a0a0a'};color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+          <a href="${BASE_URL}/konto/buchungen" style="display:inline-block;padding:14px 28px;background:${alarm ? '#ea580c' : '#0a0a0a'};color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
             Jetzt unterschreiben
           </a>
           <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">${deadlineHint}</p>
