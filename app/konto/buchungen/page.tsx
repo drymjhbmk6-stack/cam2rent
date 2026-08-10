@@ -700,6 +700,127 @@ function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onCl
   );
 }
 
+// ─── Bestelldetails (aufklappbar) ────────────────────────────────────────────
+
+interface OrderDetails {
+  bookingType: 'miete' | 'kauf';
+  items: { name: string; qty: number; isFromSet: boolean; setName: string | null }[];
+  saleItems: { name: string; qty: number; unit_price: number }[];
+  price: { rental: number; accessories: number; haftung: number; shipping: number; discount: number; total: number; deposit: number };
+  couponCode: string | null;
+}
+
+function PriceRow({ label, value, negative }: { label: string; value: number; negative?: boolean }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span className="text-brand-text dark:text-gray-300">{label}</span>
+      <span className={`font-medium ${negative ? 'text-green-600' : 'text-brand-black dark:text-white'}`}>
+        {negative ? '−' : ''}{formatCurrency(Math.abs(value))}
+      </span>
+    </div>
+  );
+}
+
+function BookingDetailsSection({ bookingId }: { bookingId: string }) {
+  const [data, setData] = useState<OrderDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/booking/${bookingId}/details`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('load'))))
+      .then((d) => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [bookingId]);
+
+  if (loading) {
+    return (
+      <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex justify-center">
+        <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (error || !data) {
+    return (
+      <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 text-xs text-brand-muted dark:text-gray-500">
+        Details konnten nicht geladen werden.
+      </div>
+    );
+  }
+
+  const p = data.price;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 grid gap-5 sm:grid-cols-2">
+      {/* Enthaltene Positionen */}
+      <div>
+        <p className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-2">
+          {data.bookingType === 'kauf' ? 'Gekaufte Artikel' : 'Enthaltenes Zubehör'}
+        </p>
+        {data.bookingType === 'kauf' ? (
+          data.saleItems.length === 0 ? (
+            <p className="text-xs text-brand-muted dark:text-gray-500">Keine Artikel hinterlegt.</p>
+          ) : (
+            <ul className="space-y-1">
+              {data.saleItems.map((it, i) => (
+                <li key={i} className="flex justify-between text-sm text-brand-text dark:text-gray-300">
+                  <span>{it.qty > 1 ? `${it.qty}× ` : ''}{it.name}</span>
+                  <span className="text-brand-black dark:text-white font-medium">{formatCurrency(it.unit_price * it.qty)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : data.items.length === 0 ? (
+          <p className="text-xs text-brand-muted dark:text-gray-500">Kein Zubehör gebucht — nur die Kamera.</p>
+        ) : (
+          <ul className="space-y-1">
+            {data.items.map((it, i) => (
+              <li
+                key={i}
+                className={`text-sm text-brand-text dark:text-gray-300 ${it.isFromSet ? 'pl-3 border-l-2 border-brand-border dark:border-white/10' : ''}`}
+              >
+                <span className={!it.isFromSet ? 'font-medium text-brand-black dark:text-white' : ''}>
+                  {it.qty > 1 ? `${it.qty}× ` : ''}{it.name}
+                </span>
+                {it.isFromSet && <span className="text-xs text-brand-muted dark:text-gray-500 ml-1">(im Set)</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Preisaufstellung */}
+      <div>
+        <p className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-2">Preisaufstellung</p>
+        <div className="space-y-1">
+          {data.bookingType === 'miete' && (
+            <>
+              {p.rental > 0 && <PriceRow label="Miete" value={p.rental} />}
+              {p.accessories > 0 && <PriceRow label="Zubehör" value={p.accessories} />}
+              {p.haftung > 0 && <PriceRow label="Haftungsschutz" value={p.haftung} />}
+              {p.shipping > 0 && <PriceRow label="Versand" value={p.shipping} />}
+              {p.discount > 0 && (
+                <PriceRow label={`Rabatt${data.couponCode ? ` (${data.couponCode})` : ''}`} value={p.discount} negative />
+              )}
+            </>
+          )}
+          <div className="flex justify-between pt-1.5 mt-1.5 border-t border-brand-border dark:border-white/10">
+            <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Gesamt</span>
+            <span className="text-sm font-heading font-bold text-brand-black dark:text-white">{formatCurrency(p.total)}</span>
+          </div>
+          {p.deposit > 0 && (
+            <p className="text-xs text-brand-muted dark:text-gray-500 pt-1">
+              Kaution (Vorautorisierung, kein Geldfluss): {formatCurrency(p.deposit)}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BuchungenPage() {
@@ -714,7 +835,16 @@ export default function BuchungenPage() {
   const [signTarget, setSignTarget] = useState<Booking | null>(null);
   const [postponeTarget, setPostponeTarget] = useState<Booking | null>(null);
   const [extensionSuccess, setExtensionSuccess] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
+
+  function toggleDetails(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -1021,6 +1151,16 @@ export default function BuchungenPage() {
                     </div>
 
                     <div className="flex items-center gap-3 flex-wrap">
+                      {/* Bestelldetails aufklappen */}
+                      <button
+                        onClick={() => toggleDetails(booking.id)}
+                        aria-expanded={expandedIds.has(booking.id)}
+                        className="flex items-center gap-1.5 text-xs font-heading font-semibold text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors"
+                      >
+                        <svg className={`w-3.5 h-3.5 transition-transform ${expandedIds.has(booking.id) ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        {expandedIds.has(booking.id) ? 'Details ausblenden' : 'Details'}
+                      </button>
+
                       {/* Invoice */}
                       <a href={`/api/invoice/${booking.id}`} download className="flex items-center gap-1.5 text-xs font-heading font-semibold text-accent-blue hover:underline">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
@@ -1112,6 +1252,9 @@ export default function BuchungenPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Aufklappbare Bestelldetails (Zubehör/Set + Preisaufstellung) */}
+                  {expandedIds.has(booking.id) && <BookingDetailsSection bookingId={booking.id} />}
                 </div>
               );
             })}
