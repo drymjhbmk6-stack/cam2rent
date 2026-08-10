@@ -704,20 +704,35 @@ function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onCl
 
 interface OrderDetails {
   bookingType: 'miete' | 'kauf';
-  items: { name: string; qty: number; isFromSet: boolean; setName: string | null }[];
+  cameras: string[];
+  sets: { name: string; cameraName: string | null; items: { name: string; qty: number }[] }[];
+  accessories: { name: string; qty: number }[];
   saleItems: { name: string; qty: number; unit_price: number }[];
   price: { rental: number; accessories: number; haftung: number; shipping: number; discount: number; total: number; deposit: number };
   couponCode: string | null;
 }
 
-function PriceRow({ label, value, negative }: { label: string; value: number; negative?: boolean }) {
+function PriceRow({ label, value, negative, strong }: { label: string; value: number; negative?: boolean; strong?: boolean }) {
   return (
-    <div className="flex justify-between text-sm">
-      <span className="text-brand-text dark:text-gray-300">{label}</span>
-      <span className={`font-medium ${negative ? 'text-green-600' : 'text-brand-black dark:text-white'}`}>
+    <div className="flex justify-between items-baseline text-sm">
+      <span className={strong ? 'font-heading font-semibold text-brand-black dark:text-white' : 'text-brand-text dark:text-gray-300'}>{label}</span>
+      <span className={`tabular-nums ${negative ? 'text-green-600 font-medium' : strong ? 'font-heading font-bold text-brand-black dark:text-white' : 'font-medium text-brand-black dark:text-white'}`}>
         {negative ? '−' : ''}{formatCurrency(Math.abs(value))}
       </span>
     </div>
+  );
+}
+
+/** Ein Zubehör-Punkt (Menge + Name). */
+function ItemRow({ name, qty }: { name: string; qty: number }) {
+  return (
+    <li className="flex items-baseline gap-2 text-sm text-brand-text dark:text-gray-300">
+      <span className="text-brand-muted dark:text-gray-500 mt-px">•</span>
+      <span>
+        {qty > 1 && <span className="font-semibold text-brand-black dark:text-white">{qty}× </span>}
+        {name}
+      </span>
+    </li>
   );
 }
 
@@ -737,64 +752,92 @@ function BookingDetailsSection({ bookingId }: { bookingId: string }) {
 
   if (loading) {
     return (
-      <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex justify-center">
+      <div className="mt-4 pt-4 border-t border-brand-border dark:border-white/10 flex justify-center">
         <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
   if (error || !data) {
     return (
-      <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 text-xs text-brand-muted dark:text-gray-500">
+      <div className="mt-4 pt-4 border-t border-brand-border dark:border-white/10 text-xs text-brand-muted dark:text-gray-500">
         Details konnten nicht geladen werden.
       </div>
     );
   }
 
   const p = data.price;
+  const hasContent = data.sets.length > 0 || data.accessories.length > 0;
 
   return (
-    <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 grid gap-5 sm:grid-cols-2">
-      {/* Enthaltene Positionen */}
-      <div>
-        <p className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-2">
-          {data.bookingType === 'kauf' ? 'Gekaufte Artikel' : 'Enthaltenes Zubehör'}
-        </p>
-        {data.bookingType === 'kauf' ? (
-          data.saleItems.length === 0 ? (
-            <p className="text-xs text-brand-muted dark:text-gray-500">Keine Artikel hinterlegt.</p>
+    <div className="mt-4 pt-4 border-t border-brand-border dark:border-white/10 space-y-5">
+      {/* Verkauf */}
+      {data.bookingType === 'kauf' ? (
+        <div>
+          <p className="text-xs font-heading font-semibold uppercase tracking-wide text-brand-muted dark:text-gray-500 mb-2">Gekaufte Artikel</p>
+          {data.saleItems.length === 0 ? (
+            <p className="text-sm text-brand-muted dark:text-gray-500">Keine Artikel hinterlegt.</p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {data.saleItems.map((it, i) => (
                 <li key={i} className="flex justify-between text-sm text-brand-text dark:text-gray-300">
                   <span>{it.qty > 1 ? `${it.qty}× ` : ''}{it.name}</span>
-                  <span className="text-brand-black dark:text-white font-medium">{formatCurrency(it.unit_price * it.qty)}</span>
+                  <span className="text-brand-black dark:text-white font-medium tabular-nums">{formatCurrency(it.unit_price * it.qty)}</span>
                 </li>
               ))}
             </ul>
-          )
-        ) : data.items.length === 0 ? (
-          <p className="text-xs text-brand-muted dark:text-gray-500">Kein Zubehör gebucht — nur die Kamera.</p>
-        ) : (
-          <ul className="space-y-1">
-            {data.items.map((it, i) => (
-              <li
-                key={i}
-                className={`text-sm text-brand-text dark:text-gray-300 ${it.isFromSet ? 'pl-3 border-l-2 border-brand-border dark:border-white/10' : ''}`}
-              >
-                <span className={!it.isFromSet ? 'font-medium text-brand-black dark:text-white' : ''}>
-                  {it.qty > 1 ? `${it.qty}× ` : ''}{it.name}
-                </span>
-                {it.isFromSet && <span className="text-xs text-brand-muted dark:text-gray-500 ml-1">(im Set)</span>}
-              </li>
+          )}
+        </div>
+      ) : (
+        <div>
+          <p className="text-xs font-heading font-semibold uppercase tracking-wide text-brand-muted dark:text-gray-500 mb-2.5">Bestellinhalt</p>
+
+          {!hasContent && (
+            <p className="text-sm text-brand-muted dark:text-gray-500">Kein Zubehör gebucht — nur die Kamera.</p>
+          )}
+
+          <div className="space-y-3">
+            {/* Sets — je eine Karte mit zugeordneter Kamera */}
+            {data.sets.map((set, i) => (
+              <div key={i} className="rounded-xl border border-brand-border dark:border-white/10 bg-brand-bg/60 dark:bg-white/[0.03] p-3.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">
+                    📦 {set.name}
+                  </span>
+                  {set.cameraName && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-accent-blue-soft text-accent-blue dark:bg-accent-blue/15">
+                      📷 {set.cameraName}
+                    </span>
+                  )}
+                </div>
+                {set.items.length > 0 && (
+                  <ul className="space-y-1 pl-0.5">
+                    {set.items.map((it, j) => (
+                      <ItemRow key={j} name={it.name} qty={it.qty} />
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
-          </ul>
-        )}
-      </div>
+
+            {/* Einzeln gewähltes Zubehör */}
+            {data.accessories.length > 0 && (
+              <div className="rounded-xl border border-brand-border dark:border-white/10 bg-brand-bg/60 dark:bg-white/[0.03] p-3.5">
+                <p className="text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">Zusätzliches Zubehör</p>
+                <ul className="space-y-1 pl-0.5">
+                  {data.accessories.map((it, i) => (
+                    <ItemRow key={i} name={it.name} qty={it.qty} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Preisaufstellung */}
       <div>
-        <p className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-2">Preisaufstellung</p>
-        <div className="space-y-1">
+        <p className="text-xs font-heading font-semibold uppercase tracking-wide text-brand-muted dark:text-gray-500 mb-2.5">Preisaufstellung</p>
+        <div className="rounded-xl border border-brand-border dark:border-white/10 bg-brand-bg/60 dark:bg-white/[0.03] p-3.5 space-y-1.5">
           {data.bookingType === 'miete' && (
             <>
               {p.rental > 0 && <PriceRow label="Miete" value={p.rental} />}
@@ -806,13 +849,12 @@ function BookingDetailsSection({ bookingId }: { bookingId: string }) {
               )}
             </>
           )}
-          <div className="flex justify-between pt-1.5 mt-1.5 border-t border-brand-border dark:border-white/10">
-            <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Gesamt</span>
-            <span className="text-sm font-heading font-bold text-brand-black dark:text-white">{formatCurrency(p.total)}</span>
+          <div className="pt-2 mt-1 border-t border-brand-border dark:border-white/10">
+            <PriceRow label="Gesamt" value={p.total} strong />
           </div>
           {p.deposit > 0 && (
-            <p className="text-xs text-brand-muted dark:text-gray-500 pt-1">
-              Kaution (Vorautorisierung, kein Geldfluss): {formatCurrency(p.deposit)}
+            <p className="text-xs text-brand-muted dark:text-gray-500 pt-1.5">
+              Kaution (Vorautorisierung, kein Geldfluss): <span className="tabular-nums">{formatCurrency(p.deposit)}</span>
             </p>
           )}
         </div>

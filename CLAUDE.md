@@ -2774,25 +2774,38 @@ Die Buchungsliste `/konto/buchungen` zeigte pro Karte nur Summen (Zeitraum,
 Miettage, Gesamt) — **was** genau gebucht wurde (Zubehör/Set) und die
 **Preisaufstellung** fehlten komplett. Jetzt hat jede Karte einen **„Details"-
 Toggle** (erste Aktion in der Aktionszeile, Chevron): aufgeklappt zeigt eine
-zweispaltige Sektion (a) das enthaltene Zubehör/Set (Namen + Menge, Sets
-expandiert, Set-Teile eingerückt mit „(im Set)"-Label; „Kein Zubehör gebucht —
-nur die Kamera" wenn leer) und (b) die Preisaufstellung (Miete · Zubehör ·
+Sektion mit (a) **Bestellinhalt** und (b) **Preisaufstellung** (Miete · Zubehör ·
 Haftungsschutz · Versand · Rabatt (−, mit Coupon-Code) · **Gesamt** + Kaution-
 Hinweis falls > 0). Verkaufsbuchungen (`booking_type='kauf'`) zeigen die
 `sale_items` + nur den Gesamtbetrag.
+- **Set → Kamera zugeordnet (Stand 2026-08-10):** Bei Multi-Kamera-Buchungen
+  (z. B. GoPro + OSMO, je ein „Basic Set") erschienen im ersten Wurf zwei
+  gleichnamige „Basic Set"-Blöcke ohne Kamera-Bezug — nicht unterscheidbar. Jetzt
+  ist jedes Set eine **eigene Karte** mit einem **Kamera-Badge** („📷 GoPro
+  Hero13 Black"). Zuordnung im Endpoint: `sets.product_ids` → Buchungs-Kamera per
+  `product_id`-Match (`resolveBookingCameras`), Fallback über den Katalog-Namen
+  (`getProducts`, für Legacy-Kameras ohne `product_id`). Kein Badge, wenn das Set
+  keiner Buchungs-Kamera eindeutig zuzuordnen ist. Set-Teile stehen als
+  aufgelöste Liste in der Set-Karte, direkt gewähltes Zubehör in einer eigenen
+  Karte „Zusätzliches Zubehör".
 - **Endpoint** `GET /api/booking/[id]/details` (Cookie-Auth, kunden-eigen via
   `.eq('user_id', user.id)` — kein E-Mail-Fallback, analog `/pay` + Sweep 6
   Vuln 14): löst Zubehör/Sets über `resolveAccessoryItems` auf (inkl.
   Upgrade-Gruppen-Skip wie Packliste/Übergabe, damit die Anzeige dem
-  Ausgelieferten entspricht) und liefert die Preis-Komponenten
-  (`price_rental`/`price_accessories`/`price_haftung`/`shipping_price` + Summe
-  aller Rabattfelder + `price_total`/`deposit`). `select('*')` → defensiv gegen
-  fehlende Migrationen (`early_bird_discount`/`special_discount`/`sale_items`/
-  `booking_type` optional). Rein lesend, gibt nur abgeleitete Felder zurück.
+  Ausgelieferten entspricht), baut die flache Liste in **Gruppen** um (Set-
+  Container = `!isFromSet && !accessory_id`, danach die `isFromSet`-Sub-Items;
+  gleichnamige Sets bleiben durch die Reihenfolge/Set-ID getrennt — NICHT nach
+  `setName` gruppieren) und liefert die Preis-Komponenten (`price_rental`/
+  `price_accessories`/`price_haftung`/`shipping_price` + Summe aller Rabattfelder
+  + `price_total`/`deposit`). `select('*')` → defensiv gegen fehlende
+  Migrationen (`early_bird_discount`/`special_discount`/`sale_items`/
+  `booking_type`/`cameras`/`product_ids` optional). Rein lesend, gibt nur
+  abgeleitete Felder zurück.
 - **UI** (`app/konto/buchungen/page.tsx`): `expandedIds`-Set + `toggleDetails`,
   `BookingDetailsSection` lädt die Details **lazy beim Aufklappen** (eigener
-  Fetch pro Buchung, Spinner/Fehler-Zustand). Keine Migration — die Preis-/
-  Zubehör-Spalten existieren längst.
+  Fetch pro Buchung, Spinner/Fehler-Zustand), rendert Set-/Zubehör-Karten +
+  Preis-Karte im dunklen Theme. Keine Migration — die Preis-/Zubehör-Spalten
+  existieren längst.
 
 ### Auto-Logout nach Inaktivität (Stand 2026-06-14)
 Idle-basiertes automatisches Ausloggen über den Hook `hooks/useAutoLogout.ts`
