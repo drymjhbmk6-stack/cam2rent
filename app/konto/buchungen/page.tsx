@@ -994,11 +994,15 @@ export default function BuchungenPage() {
   }
 
   // Kunde darf selbst verlegen: aktive Buchung, bis 1 Tag vor Versand-/Abholtag,
-  // nur einmal, Vertrag nicht gesperrt.
+  // nur einmal, Vertrag nicht gesperrt. Bei Status 'postponed' (auf unbestimmte
+  // Zeit verlegt) gibt es keinen gültigen Versand-/Abholtag mehr (der alte
+  // Zeitraum ist stale) — dort entfällt die Fristprüfung, der Kunde kann direkt
+  // einen neuen Termin wählen.
   function canPostpone(b: Booking): boolean {
-    if (b.status !== 'confirmed') return false;
+    if (b.status !== 'confirmed' && b.status !== 'postponed') return false;
     if ((b.postpone_count ?? 0) >= 1) return false;
     if (b.contract_locked === true) return false;
+    if (b.status === 'postponed') return true;
     const todayIso = new Date().toISOString().split('T')[0];
     return approxShipIso(b) > todayIso;
   }
@@ -1237,7 +1241,7 @@ export default function BuchungenPage() {
                       {canPostpone(booking) && (
                         <button onClick={() => setPostponeTarget(booking)} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-amber-600 hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          Verlegen
+                          {booking.status === 'postponed' ? 'Neuen Termin wählen' : 'Verlegen'}
                         </button>
                       )}
 

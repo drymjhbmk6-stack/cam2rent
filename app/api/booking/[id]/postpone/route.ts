@@ -30,8 +30,12 @@ const limiter = rateLimit({ maxAttempts: 10, windowMs: 60_000 });
  * fuer den neuen Zeitraum neu. „Auf unbestimmte Zeit" ist NICHT moeglich
  * (nur Admin).
  *
- * Gates: status='confirmed', bis spaetestens 1 Tag vor dem Versand-/Abholtag,
- * nur EINMAL pro Buchung (postpone_count===0), Vertrag nicht gesperrt.
+ * Gates: status='confirmed' ODER status='postponed' (auf unbestimmte Zeit
+ * verlegt — dort waehlt der Kunde jetzt selbst den neuen Termin), bei
+ * status='confirmed' zusaetzlich bis spaetestens 1 Tag vor dem
+ * Versand-/Abholtag (bei 'postponed' entfaellt diese Frist, da der alte
+ * Zeitraum stale ist), nur EINMAL pro Buchung (postpone_count===0), Vertrag
+ * nicht gesperrt.
  * Der Storno-Schutz laeuft ueber cancellation_anchor_date (siehe
  * lib/booking-postpone.ts) — Verlegen oeffnet das kostenlose Storno nicht neu.
  */
@@ -105,7 +109,8 @@ export async function POST(
   }
 
   // ── Gates ────────────────────────────────────────────────────────────────
-  if (booking.status !== 'confirmed') {
+  const isIndefinitelyPostponed = booking.status === 'postponed';
+  if (booking.status !== 'confirmed' && !isIndefinitelyPostponed) {
     return NextResponse.json(
       { error: 'Diese Buchung kann nicht mehr verlegt werden.' },
       { status: 409 },
@@ -124,21 +129,27 @@ export async function POST(
     );
   }
 
-  // Zeit-Gate: nur bis zum Tag VOR dem Versand-/Abholtag.
-  const buf = await loadBufferDays(supabase);
-  const shipDate = computeShipDate(
-    booking.rental_from,
-    booking.delivery_mode,
-    buf,
-    (booking.ship_date_override as string | null) ?? null,
-  );
   const todayIso = getBerlinDateString();
-  const shipIso = toIsoDate(shipDate);
-  if (shipIso <= todayIso) {
-    return NextResponse.json(
-      { error: 'Die Verlegung ist ab dem Versand-/Abholtag nicht mehr möglich. Bitte kontaktiere uns.' },
-      { status: 409 },
+  const buf = await loadBufferDays(supabase);
+
+  // Zeit-Gate: nur bis zum Tag VOR dem Versand-/Abholtag — gilt nur, wenn die
+  // Buchung noch einen gueltigen (nicht-stale) Zeitraum hat. Bei 'postponed'
+  // ist der alte rental_from laengst ueberholt (das ist ja der Grund fuer die
+  // unbestimmte Verlegung) — dort entfaellt die Fristpruefung.
+  if (!isIndefinitelyPostponed) {
+    const shipDate = computeShipDate(
+      booking.rental_from,
+      booking.delivery_mode,
+      buf,
+      (booking.ship_date_override as string | null) ?? null,
     );
+    const shipIso = toIsoDate(shipDate);
+    if (shipIso <= todayIso) {
+      return NextResponse.json(
+        { error: 'Die Verlegung ist ab dem Versand-/Abholtag nicht mehr möglich. Bitte kontaktiere uns.' },
+        { status: 409 },
+      );
+    }
   }
 
   // Neues Datum muss in der Zukunft liegen (nicht in der Vergangenheit versenden).
