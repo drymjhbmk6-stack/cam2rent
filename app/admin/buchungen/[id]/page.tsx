@@ -3076,6 +3076,7 @@ function LinkedBookingsSection({ booking, onLinked }: { booking: BookingDetail; 
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<ShipmentGroupCandidate[]>([]);
+  const [searchError, setSearchError] = useState('');
   const [searching, setSearching] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [unlinking, setUnlinking] = useState(false);
@@ -3095,14 +3096,16 @@ function LinkedBookingsSection({ booking, onLinked }: { booking: BookingDetail; 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!showSearch || query.trim().length < 2) { setCandidates([]); return; }
+    if (!showSearch || query.trim().length < 2) { setCandidates([]); setSearchError(''); return; }
     const t = setTimeout(async () => {
-      setSearching(true);
+      setSearching(true); setSearchError('');
       try {
         const res = await fetch(`/api/admin/booking/${booking.id}/link-shipment?q=${encodeURIComponent(query.trim())}`);
         const data = await res.json();
+        if (data.migration_pending) { setSearchError('Migration steht noch aus.'); setCandidates([]); return; }
+        if (data.search_error) { setSearchError(data.search_error); setCandidates([]); return; }
         setCandidates(data.candidates ?? []);
-      } catch { /* ignore */ }
+      } catch { setSearchError('Netzwerkfehler bei der Suche.'); }
       finally { setSearching(false); }
     }, 300);
     return () => clearTimeout(t);
@@ -3212,7 +3215,10 @@ function LinkedBookingsSection({ booking, onLinked }: { booking: BookingDetail; 
                 </button>
               </div>
               {searching && <p className="text-xs font-body text-brand-muted mt-2">Suche…</p>}
-              {!searching && query.trim().length >= 2 && candidates.length === 0 && (
+              {!searching && searchError && (
+                <p className="text-xs font-body text-red-600 mt-2">{searchError}</p>
+              )}
+              {!searching && !searchError && query.trim().length >= 2 && candidates.length === 0 && (
                 <p className="text-xs font-body text-brand-muted mt-2">Keine Treffer.</p>
               )}
               {candidates.length > 0 && (

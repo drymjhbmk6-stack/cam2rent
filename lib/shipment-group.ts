@@ -38,6 +38,19 @@ const VERSAND_STATUSES = new Set(['preparing_shipment', 'shipped', 'delivered'])
 const ABHOLUNG_STATUSES = new Set(['awaiting_pickup', 'picked_up']);
 const SYNCABLE_STATUSES = new Set([...VERSAND_STATUSES, ...ABHOLUNG_STATUSES]);
 
+/**
+ * Prüft explizit, ob die Migration `supabase-bookings-shipment-group.sql`
+ * (Spalte `bookings.shipment_group_id`) bereits angewendet wurde. Wird von
+ * der Verknüpfen-API genutzt, um dem Admin ehrlich "Migration steht noch
+ * aus" statt eines irreführenden "keine Treffer" zu zeigen — die restlichen
+ * Helper hier fangen einen fehlenden Spalten-Fehler intern ab (best-effort),
+ * ohne das kenntlich zu machen.
+ */
+export async function hasShipmentGroupColumn(supabase: SB): Promise<boolean> {
+  const { error } = await supabase.from('bookings').select('shipment_group_id').limit(1);
+  return !error;
+}
+
 export interface ShipmentGroupMember {
   id: string;
   status: string;

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sanitizeSearchInput } from '@/lib/search-sanitize';
 import {
+  hasShipmentGroupColumn,
   loadShipmentGroupSiblings,
   propagateShipmentFields,
 } from '@/lib/shipment-group';
@@ -29,14 +30,19 @@ export async function GET(
   const { id } = await params;
   const supabase = createServiceClient();
 
-  const { data: self, error } = await supabase
+  // Migration explizit prüfen, BEVOR irgendeine Query läuft, die die neue
+  // Spalte referenziert — sonst würde ein fehlender Spalten-Fehler in der
+  // Suche weiter unten still zu "candidates: []" (= "Keine Treffer") statt
+  // zu einem ehrlichen Migrations-Hinweis führen.
+  if (!(await hasShipmentGroupColumn(supabase))) {
+    return NextResponse.json({ migration_pending: true, siblings: [], candidates: [] });
+  }
+
+  const { data: self } = await supabase
     .from('bookings')
     .select('id')
     .eq('id', id)
     .maybeSingle();
-  if (error && /shipment_group_id/i.test(error.message || '')) {
-    return NextResponse.json({ migration_pending: true, siblings: [], candidates: [] });
-  }
   if (!self) {
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
@@ -45,19 +51,25 @@ export async function GET(
 
   const q = sanitizeSearchInput(req.nextUrl.searchParams.get('q'));
   let candidates: Record<string, unknown>[] = [];
+  let searchError: string | null = null;
   if (q.length >= 2) {
     const like = `%${q}%`;
     const excludeIds = new Set([id, ...siblings.map((s) => s.id)]);
-    const { data } = await supabase
+    const { data, error: searchErr } = await supabase
       .from('bookings')
       .select(SEARCH_COLS)
       .or(`id.ilike.${like},customer_name.ilike.${like},customer_email.ilike.${like},product_name.ilike.${like}`)
       .order('created_at', { ascending: false })
       .limit(20);
-    candidates = (data ?? []).filter((b) => !excludeIds.has(b.id as string));
+    if (searchErr) {
+      console.error('[link-shipment GET] Suche fehlgeschlagen:', searchErr.message);
+      searchError = 'Suche fehlgeschlagen — bitte erneut versuchen.';
+    } else {
+      candidates = (data ?? []).filter((b) => !excludeIds.has(b.id as string));
+    }
   }
 
-  return NextResponse.json({ siblings, candidates });
+  return NextResponse.json({ siblings, candidates, search_error: searchError });
 }
 
 export async function POST(
