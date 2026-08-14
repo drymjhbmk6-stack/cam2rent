@@ -185,3 +185,48 @@ export async function propagateShipmentStatus(
     // best-effort — Statuspropagierung darf den auslösenden Vorgang nie kippen.
   }
 }
+
+/**
+ * Direkt beim Verknüpfen aufrufen: überträgt den bereits vorhandenen
+ * Status-Vorsprung sofort auf die restlichen Gruppenmitglieder, statt bis
+ * zur nächsten Statusänderung zu warten. Sonst bliebe eine Buchung, die
+ * bereits "shipped" ist, beim Verknüpfen mit einer noch "preparing_shipment"-
+ * Buchung inkonsistent zurück. Nutzt dieselbe Vorwärts-/Lieferart-Logik wie
+ * `propagateShipmentStatus` (pro Lieferart wird der am weitesten
+ * fortgeschrittene Status der Gruppe ermittelt und von dort aus propagiert).
+ */
+export async function syncShipmentGroupStatusNow(
+  supabase: SB,
+  memberIds: string[],
+): Promise<void> {
+  if (memberIds.length < 2) return;
+  try {
+    const { data: rows } = await supabase
+      .from('bookings')
+      .select('id, status, delivery_mode, shipped_at')
+      .in('id', memberIds);
+    const members = (rows ?? []) as {
+      id: string; status: string; delivery_mode: string | null; shipped_at: string | null;
+    }[];
+    for (const isVersand of [true, false]) {
+      const inMode = members.filter((m) => ((m.delivery_mode ?? 'versand') === 'versand') === isVersand);
+      if (inMode.length < 2) continue;
+      let leader: (typeof inMode)[number] | null = null;
+      let leaderRank = -1;
+      for (const m of inMode) {
+        const rank = STATUS_RANK[m.status];
+        if (rank !== undefined && rank > leaderRank) { leader = m; leaderRank = rank; }
+      }
+      if (leader) {
+        await propagateShipmentStatus(
+          supabase,
+          leader.id,
+          leader.status,
+          leader.shipped_at ? { shipped_at: leader.shipped_at } : {},
+        );
+      }
+    }
+  } catch {
+    // best-effort — darf das Verknüpfen selbst nie kippen.
+  }
+}

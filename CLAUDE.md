@@ -1812,10 +1812,15 @@ Alltagsbetrieb.
   Section „Verknüpfte Bestellungen (gemeinsamer Versand)" unter „Versand &
   Tracking". Suche nach Kunde/E-Mail/Produkt/Buchungsnummer, „Verknüpfen"
   merged zwei (auch bereits gruppierte) Cluster zu einer Gruppe und spiegelt
-  vorhandene Trackingdaten sofort. „Diese Buchung aus der Verknüpfung lösen"
-  trennt nur die aktuell geöffnete Buchung ab (Rest der Gruppe bleibt
-  verknüpft); bleibt nur noch 1 Mitglied übrig, wird die Gruppe automatisch
-  aufgelöst.
+  vorhandene Trackingdaten sofort. **`syncShipmentGroupStatusNow()` gleicht
+  beim Verknüpfen zusätzlich sofort einen Status-Vorsprung an** (z.B. eine
+  bereits „Versendet"-Buchung zieht eine noch „Wird versendet"-Buchung beim
+  Verknüpfen direkt auf denselben Status hoch, statt erst bei der nächsten
+  Aktion) — pro Lieferart wird der am weitesten fortgeschrittene Status der
+  (jetzt gemeinsamen) Gruppe ermittelt und per `propagateShipmentStatus`
+  verteilt. „Diese Buchung aus der Verknüpfung lösen" trennt nur die aktuell
+  geöffnete Buchung ab (Rest der Gruppe bleibt verknüpft); bleibt nur noch
+  1 Mitglied übrig, wird die Gruppe automatisch aufgelöst.
 - **API** `GET/POST/DELETE /api/admin/booking/[id]/link-shipment` (Permission
   über den bestehenden Prefix `/api/admin/booking` → `tagesgeschaeft`). GET
   liefert Gruppenmitglieder + (bei `?q=`) Suchkandidaten. POST `{target_id}`

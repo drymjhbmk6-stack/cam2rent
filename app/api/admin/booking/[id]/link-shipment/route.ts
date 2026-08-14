@@ -6,6 +6,7 @@ import {
   hasShipmentGroupColumn,
   loadShipmentGroupSiblings,
   propagateShipmentFields,
+  syncShipmentGroupStatusNow,
 } from '@/lib/shipment-group';
 
 /**
@@ -143,6 +144,11 @@ export async function POST(
   if (srcFull) {
     await propagateShipmentFields(supabase, id, srcFull as Record<string, unknown>);
   }
+
+  // Status-Vorsprung sofort übernehmen — nicht erst bei der nächsten
+  // Statusänderung (z.B. eine schon "shipped" gemeldete Buchung soll eine
+  // noch "preparing_shipment"-Buchung beim Verknüpfen direkt mitziehen).
+  await syncShipmentGroupStatusNow(supabase, [...memberIds]);
 
   await logAudit({
     action: 'booking.link_shipment',
