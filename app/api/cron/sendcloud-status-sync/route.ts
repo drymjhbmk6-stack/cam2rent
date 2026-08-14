@@ -8,6 +8,7 @@ import { sendShippingConfirmation } from '@/lib/email';
 import { fetchParcelsByOrderNumber, type ParcelStatus } from '@/lib/sendcloud-tracking';
 import { logAudit } from '@/lib/audit';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentStatus } from '@/lib/shipment-group';
 
 /**
  * Automatische Versand-/Retoure-Statussteuerung via Sendcloud-Live-Status.
@@ -201,6 +202,9 @@ export async function GET(req: NextRequest) {
           // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent).
           deductConsumablesForBooking(supabase, b.id).catch(() => {});
 
+          // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit.
+          propagateShipmentStatus(supabase, b.id, 'shipped', { shipped_at: now }).catch(() => {});
+
           const trackingNumber = b.tracking_number || best?.trackingNumber || '';
           const trackingUrl = b.tracking_url || best?.trackingUrl || '';
           const carrier = b.tracking_carrier || carrierFromCode(best?.carrier) || '';
@@ -241,6 +245,8 @@ export async function GET(req: NextRequest) {
         if (!claim.error && claim.data) {
           curStatus = 'delivered';
           delivered++;
+          // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit.
+          propagateShipmentStatus(supabase, b.id, 'delivered').catch(() => {});
           await logAudit({
             action: 'booking.delivered',
             entityType: 'booking',

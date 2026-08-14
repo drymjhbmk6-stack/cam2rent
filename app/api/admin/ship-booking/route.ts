@@ -4,6 +4,7 @@ import { sendShippingConfirmation } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { buildTrackingUrl, isAllowedCarrier } from '@/lib/tracking-url';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentFields, propagateShipmentStatus } from '@/lib/shipment-group';
 
 /**
  * POST /api/admin/ship-booking
@@ -101,6 +102,15 @@ export async function POST(req: NextRequest) {
 
     // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent pro Buchung).
     deductConsumablesForBooking(supabase, bookingId).catch(() => {});
+
+    // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit — sowohl die
+    // Trackingnummer als auch der Status.
+    propagateShipmentFields(supabase, bookingId, {
+      tracking_number: trackingNumber.trim(),
+      tracking_url: trackingUrl,
+      tracking_carrier: carrierForDb,
+    }).catch(() => {});
+    propagateShipmentStatus(supabase, bookingId, 'shipped', { shipped_at: new Date().toISOString() }).catch(() => {});
 
     // Versand-E-Mail an Kunden (fire-and-forget)
     if (booking.customer_email) {

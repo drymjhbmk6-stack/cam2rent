@@ -12,6 +12,7 @@ import {
 import { detectFileType, detectImageType } from '@/lib/file-type-check';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { propagateShipmentFields } from '@/lib/shipment-group';
 
 const STORAGE_BUCKET = 'return-labels';
 
@@ -228,6 +229,10 @@ export async function POST(
   // unterscheiden ist).
   const dbUrl = `${STORAGE_BUCKET}/${storagePath}`;
   await supabase.from('bookings').update({ return_label_url: dbUrl }).eq('id', bookingId);
+
+  // Verknüpfte Bestellungen (gemeinsamer Versand) bekommen dasselbe
+  // Rücksendeetikett — physisch ist es eine einzige Retoure.
+  propagateShipmentFields(supabase, bookingId, { return_label_url: dbUrl }).catch(() => {});
 
   await logAudit({
     action: 'return_label.upload',

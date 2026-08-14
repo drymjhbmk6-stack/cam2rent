@@ -393,6 +393,7 @@ export async function GET() {
         tracking_url: (b.tracking_url as string) ?? null,
         return_label_url: (b.return_label_url as string) ?? null,
         return_tracking_url: (b.return_tracking_url as string) ?? null,
+        shipment_group_id: (b.shipment_group_id as string) ?? null,
         // Status-Übersicht (4 Indikatoren)
         verified,
         contract_signed: b.contract_signed === true,

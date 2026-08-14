@@ -1656,6 +1656,8 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
+            <LinkedBookingsSection booking={booking} onLinked={fetchBooking} />
+
             </>)}
 
             {/* ── Reiter: Dokumente & E-Mail ── */}
@@ -3036,6 +3038,210 @@ function PostponeSection({ booking, onSaved }: { booking: BookingDetail; onSaved
       >
         {saving ? 'Wird verlegt…' : mode === 'indefinite' ? 'Auf unbestimmte Zeit verlegen' : 'Auf neuen Termin verlegen'}
       </button>
+    </Section>
+  );
+}
+
+interface ShipmentGroupMember {
+  id: string;
+  status: string;
+  customer_name: string | null;
+  product_name: string | null;
+  delivery_mode: string | null;
+  rental_from: string | null;
+  rental_to: string | null;
+}
+
+interface ShipmentGroupCandidate {
+  id: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  product_name: string | null;
+  status: string;
+  rental_from: string | null;
+  rental_to: string | null;
+}
+
+/**
+ * "Verknüpfte Bestellungen" — mehrere Buchungen desselben Kunden, die in
+ * EINEM Paket verschickt/abgeholt werden (`bookings.shipment_group_id`,
+ * lib/shipment-group.ts). Verknüpfte Buchungen teilen sich Trackingnummer +
+ * Etiketten und wandern gemeinsam durch die Versand-/Abhol-Statuskette weiter
+ * (Dashboard-Aufgaben-Widget).
+ */
+function LinkedBookingsSection({ booking, onLinked }: { booking: BookingDetail; onLinked: () => void }) {
+  const [siblings, setSiblings] = useState<ShipmentGroupMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [migrationPending, setMigrationPending] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [query, setQuery] = useState('');
+  const [candidates, setCandidates] = useState<ShipmentGroupCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/link-shipment`);
+      const data = await res.json();
+      if (data.migration_pending) { setMigrationPending(true); setSiblings([]); return; }
+      setSiblings(data.siblings ?? []);
+    } catch { /* still — Verknüpfungen sind ein Zusatzfeature */ }
+    finally { setLoading(false); }
+  }, [booking.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!showSearch || query.trim().length < 2) { setCandidates([]); return; }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/admin/booking/${booking.id}/link-shipment?q=${encodeURIComponent(query.trim())}`);
+        const data = await res.json();
+        setCandidates(data.candidates ?? []);
+      } catch { /* ignore */ }
+      finally { setSearching(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, showSearch, booking.id]);
+
+  async function link(targetId: string) {
+    setLinkingId(targetId); setErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/link-shipment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_id: targetId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErr(data.error || 'Verknüpfen fehlgeschlagen.'); return; }
+      setSiblings(data.siblings ?? []);
+      setShowSearch(false); setQuery(''); setCandidates([]);
+      onLinked();
+    } catch { setErr('Netzwerkfehler.'); }
+    finally { setLinkingId(null); }
+  }
+
+  async function unlink() {
+    setUnlinking(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/link-shipment`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { setErr(data.error || 'Lösen fehlgeschlagen.'); return; }
+      setSiblings([]);
+      onLinked();
+    } catch { setErr('Netzwerkfehler.'); }
+    finally { setUnlinking(false); }
+  }
+
+  if (migrationPending) return null;
+
+  return (
+    <Section title="Verknüpfte Bestellungen (gemeinsamer Versand)">
+      <p className="text-xs font-body text-brand-muted mb-3">
+        Mehrere Bestellungen desselben Kunden, die in einem Paket verschickt werden, können verknüpft werden — sie teilen sich dann Trackingnummer, Etiketten und Retoure und wandern im Dashboard-Aufgaben-Widget gemeinsam weiter.
+      </p>
+      {loading ? (
+        <p className="text-sm font-body text-brand-muted">Lädt…</p>
+      ) : (
+        <>
+          {siblings.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {siblings.map((s) => {
+                const cfg = STATUS_CONFIG[s.status] || { label: s.status, color: '#64748b', bg: '#64748b14' };
+                return (
+                  <Link
+                    key={s.id}
+                    href={`/admin/buchungen/${s.id}`}
+                    className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-brand-border hover:border-accent-cyan transition-colors"
+                  >
+                    <span className="text-sm font-heading font-semibold text-brand-black">{s.customer_name || 'Kunde'}</span>
+                    <span className="text-xs font-body text-brand-muted">{s.product_name || 'Buchung'}</span>
+                    {s.rental_from && s.rental_to && (
+                      <span className="text-xs font-body text-brand-muted">{isoToDE(s.rental_from)}–{isoToDE(s.rental_to)}</span>
+                    )}
+                    <span
+                      className="ml-auto px-2 py-0.5 rounded-full text-[11px] font-heading font-semibold"
+                      style={{ color: cfg.color, background: cfg.bg }}
+                    >
+                      {cfg.label}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          {err && <p className="text-xs font-body text-red-600 mb-2">{err}</p>}
+          {!showSearch ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowSearch(true)}
+                className="px-3 py-1.5 text-xs font-heading font-semibold bg-accent-cyan/10 text-accent-cyan rounded-btn hover:bg-accent-cyan/20 transition-colors"
+              >
+                {siblings.length > 0 ? '+ Weitere Bestellung verknüpfen' : '+ Bestellung verknüpfen'}
+              </button>
+              {siblings.length > 0 && (
+                <button
+                  onClick={unlink}
+                  disabled={unlinking}
+                  className="px-3 py-1.5 text-xs font-heading font-semibold bg-red-50 text-red-600 rounded-btn hover:bg-red-100 transition-colors disabled:opacity-40"
+                >
+                  {unlinking ? 'Löse…' : 'Diese Buchung aus der Verknüpfung lösen'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Kunde, E-Mail, Produkt oder Buchungsnummer…"
+                  className="flex-1 min-w-0 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                />
+                <button
+                  onClick={() => { setShowSearch(false); setQuery(''); setCandidates([]); }}
+                  className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
+                >
+                  Abbrechen
+                </button>
+              </div>
+              {searching && <p className="text-xs font-body text-brand-muted mt-2">Suche…</p>}
+              {!searching && query.trim().length >= 2 && candidates.length === 0 && (
+                <p className="text-xs font-body text-brand-muted mt-2">Keine Treffer.</p>
+              )}
+              {candidates.length > 0 && (
+                <div className="mt-2 space-y-1.5 max-h-64 overflow-y-auto">
+                  {candidates.map((c) => {
+                    const cfg = STATUS_CONFIG[c.status] || { label: c.status, color: '#64748b', bg: '#64748b14' };
+                    return (
+                      <div key={c.id} className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-brand-border">
+                        <div className="min-w-0">
+                          <p className="text-sm font-heading font-semibold text-brand-black truncate">{c.customer_name || c.customer_email || c.id}</p>
+                          <p className="text-xs font-body text-brand-muted truncate">{c.product_name || 'Buchung'} · {c.id}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-heading font-semibold" style={{ color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
+                        <button
+                          onClick={() => link(c.id)}
+                          disabled={linkingId === c.id}
+                          className="ml-auto px-2.5 py-1 text-xs font-heading font-semibold bg-accent-cyan text-white rounded-btn hover:bg-accent-cyan/80 disabled:opacity-40"
+                        >
+                          {linkingId === c.id ? '…' : 'Verknüpfen'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   );
 }

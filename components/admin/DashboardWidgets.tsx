@@ -632,6 +632,8 @@ interface QueueBooking {
   tracking_url?: string | null;
   return_label_url?: string | null;
   return_tracking_url?: string | null;
+  /** Verknüpfte Bestellungen (gemeinsamer Versand/Retoure) — siehe lib/shipment-group.ts. */
+  shipment_group_id?: string | null;
   // Status-Übersicht (Dashboard-Aufgaben-Widget)
   verified?: boolean;
   contract_signed?: boolean;
@@ -863,6 +865,25 @@ export function ActionQueueWidget({ data, loading }: {
     coord: { id: c.id, type: c.type },
   }));
 
+  // Verknüpfte Bestellungen (gemeinsamer Versand/Retoure): pro Buchung die
+  // Liste der anderen Mitglieder ihrer shipment_group_id ermitteln — für den
+  // "🔗 verknüpft"-Hinweis und um sie beim Abhaken gemeinsam auszublenden.
+  const groupSiblings = new Map<string, string[]>();
+  {
+    const byGroup = new Map<string, string[]>();
+    for (const b of data?.items ?? []) {
+      if (!b.shipment_group_id) continue;
+      const arr = byGroup.get(b.shipment_group_id) ?? [];
+      arr.push(b.id);
+      byGroup.set(b.shipment_group_id, arr);
+    }
+    for (const ids of byGroup.values()) {
+      for (const id of ids) {
+        groupSiblings.set(id, ids.filter((x) => x !== id));
+      }
+    }
+  }
+
   const bookingRows: QueueRow[] = (data?.items ?? []).flatMap((b) => {
     const out: QueueRow[] = [];
     const customerName = b.customer_name || 'Kunde';
@@ -878,6 +899,13 @@ export function ActionQueueWidget({ data, loading }: {
       else if (b.tracking_number) extraLinks.push({ label: '🚚 Sendung', href: '/admin/sendungen' });
       if (b.return_tracking_url) extraLinks.push({ label: '↩ Retoure', href: b.return_tracking_url, external: true });
       else if (b.return_label_url) extraLinks.push({ label: '↩ Retoure', href: '/admin/retouren' });
+    }
+    const siblings = groupSiblings.get(b.id) ?? [];
+    if (siblings.length > 0) {
+      extraLinks.push({
+        label: siblings.length === 1 ? '🔗 verknüpfte Bestellung' : `🔗 ${siblings.length} verknüpfte Bestellungen`,
+        href: `/admin/buchungen/${siblings[0]}`,
+      });
     }
 
     const action = queueActionForBooking(b);
@@ -937,12 +965,21 @@ export function ActionQueueWidget({ data, loading }: {
     setBusyId(bookingId);
     setErrorId(null);
     try {
-      // Setzt Status auf 'shipped' + verschickt die Versandbestaetigung an den Kunden.
+      // Setzt Status auf 'shipped' + verschickt die Versandbestaetigung an den
+      // Kunden. Verknuepfte Bestellungen (gemeinsamer Versand) zieht der
+      // Server serverseitig automatisch mit (lib/shipment-group.ts) — daher
+      // blenden wir sie hier ebenfalls optimistisch mit aus, statt auf den
+      // naechsten Reload zu warten.
       const res = await fetch(`/api/admin/booking/${bookingId}/mark-shipped`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error(await res.text());
-      setDoneIds((prev) => new Set(prev).add(bookingId));
+      const siblings = groupSiblings.get(bookingId) ?? [];
+      setDoneIds((prev) => {
+        const next = new Set(prev).add(bookingId);
+        for (const sib of siblings) { next.add(sib); next.add(`label-${sib}`); }
+        return next;
+      });
     } catch {
       setErrorId(bookingId);
     } finally {

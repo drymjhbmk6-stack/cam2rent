@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getSendcloudKeys } from '@/lib/env-mode';
 import { logAudit } from '@/lib/audit';
+import { propagateShipmentFields } from '@/lib/shipment-group';
 
 const SC_BASE = 'https://panel.sendcloud.sc/api/v2';
 
@@ -110,12 +111,17 @@ export async function POST(req: NextRequest) {
     // /api/admin/sendcloud-return ein NORMALES Sendcloud-Etikett mit
     // getauschten Adressen erzeugt (kein is_return-Aufpreis).
     const supabase = createServiceClient();
-    await supabase.from('bookings').update({
+    const outboundFields = {
       sendcloud_parcel_id: outParcel.id,
       tracking_number: outParcel.tracking_number ?? null,
       tracking_url: outParcel.tracking_url ?? null,
       label_url: outParcel.label?.label_printer ?? outParcel.label?.normal_printer?.[0] ?? null,
-    }).eq('id', bookingId);
+    };
+    await supabase.from('bookings').update(outboundFields).eq('id', bookingId);
+
+    // Verknüpfte Bestellungen (gemeinsamer Versand) bekommen dasselbe Etikett
+    // + dieselbe Trackingnummer — physisch ist es ein einziges Paket.
+    propagateShipmentFields(supabase, bookingId, outboundFields).catch(() => {});
 
     await logAudit({
       action: 'sendcloud.create_label',

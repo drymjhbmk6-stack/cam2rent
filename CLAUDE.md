@@ -1765,6 +1765,74 @@ Admin muss „Als versendet markieren"/„Zugestellt" nicht mehr von Hand klicke
      ```
      Ohne den Crontab-Eintrag passiert nichts (kein Auto-Statuswechsel).
 
+### Verknüpfte Bestellungen — gemeinsamer Versand/Retoure (Stand 2026-08-14)
+Mehrere Buchungen desselben Kunden, die in EINEM Paket verschickt werden
+(z.B. zwei separate Bestellungen desselben Kunden, vom Admin bewusst
+zusammen verpackt), können verknüpft werden. Verknüpfte Buchungen teilen
+sich Trackingnummer + Etiketten und wandern gemeinsam durch die Versand-/
+Abhol-Statuskette weiter — im Dashboard-Aufgaben-Widget wie im
+Alltagsbetrieb.
+- **Migration `supabase/supabase-bookings-shipment-group.sql`** (idempotent,
+  additiv): `bookings.shipment_group_id UUID NULL` + Partial-Index. Mehrere
+  Buchungen mit derselben `shipment_group_id` bilden einen „Versand-Verbund".
+  NULL = unverändertes Verhalten (Default).
+- **`lib/shipment-group.ts`** ist die zentrale Logik:
+  - `resolveShipmentGroupSiblingIds` / `loadShipmentGroupSiblings` — Gruppen-
+    Mitglieder einer Buchung auflösen (ohne sich selbst).
+  - `propagateShipmentFields(supabase, bookingId, fields)` — überträgt
+    beliebige Versandfelder (Trackingnummer/-URL/-Carrier, Retoure-Tracking,
+    Etikett-URLs) auf die restlichen Mitglieder. Best-effort, wirft nie.
+  - `propagateShipmentStatus(supabase, bookingId, status, extra?)` —
+    überträgt einen **logistischen** Statuswechsel (`preparing_shipment` /
+    `awaiting_pickup` / `shipped` / `picked_up` / `delivered`) auf die
+    restlichen Mitglieder. Nur **vorwärts** (kein Downgrade eines bereits
+    weiter fortgeschrittenen Mitglieds, per Rang-Vergleich), nur auf
+    Mitglieder **derselben Lieferart** (Versand↔Versand, Abholung↔Abholung),
+    und **nur** auf Mitglieder, die selbst schon mindestens `confirmed` sind
+    (eine offene Zahlung/Verifizierung wird nie übersprungen). Zieht bei
+    `shipped`/`picked_up` den Verbrauchsmaterial-Auto-Abzug pro betroffener
+    Buchung nach.
+  - **Bewusst NICHT propagiert:** `cancelled`/`completed`/`damaged` (eigene,
+    pro Buchung unterschiedliche Rechts-/Geld-Nebenwirkungen — Storno und die
+    Rückgabe-Prüfung mit Zustandskontrolle bleiben eine bewusste
+    Einzel-Entscheidung pro Buchung) sowie Versandbestätigungs-Mails (nur die
+    direkt bearbeitete Buchung verschickt ihre eigene Mail — sonst bekäme
+    derselbe Kunde zwei E-Mails für ein Paket).
+- **Verdrahtet in 7 Schreibpfaden:** `PATCH /api/admin/booking/[id]`
+  (Tracking-Edit, Retoure-Tracking-Edit, Status-Wechsel im Dropdown),
+  `POST /api/admin/booking/[id]/mark-shipped` (Dashboard-Aufgaben-Button),
+  `POST /api/admin/ship-booking` (Tracking+Status gleichzeitig),
+  `PATCH /api/admin/update-booking-status`,
+  `POST /api/admin/sendcloud` (Etikett erstellen — **der häufigste
+  Auslöser**: Trackingnummer + Etikett-URL werden sofort mitgespiegelt),
+  `POST /api/admin/return-label/[id]` (Retourlabel-Upload) und dem Cron
+  `sendcloud-status-sync` (automatischer `shipped`-/`delivered`-Flip anhand
+  des Sendcloud-Live-Status — der Hauptpfad im Alltag, läuft alle 10 Min).
+- **Admin-UI** (`/admin/buchungen/[id]`, Reiter „Versand & Rückgabe"): neue
+  Section „Verknüpfte Bestellungen (gemeinsamer Versand)" unter „Versand &
+  Tracking". Suche nach Kunde/E-Mail/Produkt/Buchungsnummer, „Verknüpfen"
+  merged zwei (auch bereits gruppierte) Cluster zu einer Gruppe und spiegelt
+  vorhandene Trackingdaten sofort. „Diese Buchung aus der Verknüpfung lösen"
+  trennt nur die aktuell geöffnete Buchung ab (Rest der Gruppe bleibt
+  verknüpft); bleibt nur noch 1 Mitglied übrig, wird die Gruppe automatisch
+  aufgelöst.
+- **API** `GET/POST/DELETE /api/admin/booking/[id]/link-shipment` (Permission
+  über den bestehenden Prefix `/api/admin/booking` → `tagesgeschaeft`). GET
+  liefert Gruppenmitglieder + (bei `?q=`) Suchkandidaten. POST `{target_id}`
+  verknüpft + merged bestehende Gruppen. DELETE löst die aufrufende Buchung.
+  Terminal-Buchungen (`cancelled`/`completed`/`returned`) können nicht neu
+  verknüpft werden. Audit `booking.link_shipment` / `booking.unlink_shipment`.
+- **Dashboard-Aufgaben-Widget:** Buchungskarten mit Gruppen-Mitgliedern
+  zeigen einen zusätzlichen Schnell-Link „🔗 verknüpfte Bestellung(en)" auf
+  die andere Buchung. Klick auf „🚚 Als versendet markieren" blendet die
+  verknüpften Mitglieder-Karten optimistisch mit aus (der Server hat sie via
+  `propagateShipmentStatus` ohnehin schon mitgezogen) — sie „wandern"
+  sichtbar gemeinsam weiter, ohne dass der Admin sie einzeln abhaken muss.
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-shipment-group.sql`
+  ausführen. Ohne sie ist das Feature inaktiv (GET liefert
+  `migration_pending`, die UI-Section blendet sich aus, POST/DELETE liefern
+  503) — der restliche Versand-/Buchungsflow läuft unverändert weiter.
+
 ### Paketverfolgung — Live-Sendungsstatus DHL/DPD (Stand 2026-06-09)
 Eigene Admin-Übersicht `/admin/sendungen` („Paketverfolgung", Sidebar-Gruppe
 „Tagesgeschäft" nach „Versand & Rückgabe") zeigt **alle aktiven Sendungen mit

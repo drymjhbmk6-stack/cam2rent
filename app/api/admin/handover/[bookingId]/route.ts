@@ -6,6 +6,7 @@ import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 import { getClientIp } from '@/lib/rate-limit';
 import { applyScannedUnits, parseScannedUnits } from '@/lib/scan-substitutions';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentStatus } from '@/lib/shipment-group';
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -245,6 +246,8 @@ export async function POST(
   // auf picked_up geflippt ist (fire-and-forget, idempotent pro Buchung).
   if (statusUpdated) {
     deductConsumablesForBooking(supabase, bookingId).catch(() => {});
+    // Verknüpfte Bestellungen (gemeinsame Abholung) ziehen mit.
+    propagateShipmentStatus(supabase, bookingId, 'picked_up').catch(() => {});
   }
 
   // Audit-Log (Admin-User wird im Helper auto-resolved)

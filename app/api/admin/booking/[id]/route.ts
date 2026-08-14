@@ -27,6 +27,7 @@ import { createCancellationCreditNote, renderCancellationBelegPdf } from '@/lib/
 import { computeCancellationSuggestion, refundBelowSuggestion, normalizeCancellationReason } from '@/data/cancellation';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentFields, propagateShipmentStatus } from '@/lib/shipment-group';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -2092,6 +2093,35 @@ export async function PATCH(
   // Verbrauchsmaterial-Auto-Abzug bei Versand/Abholung (idempotent pro Buchung).
   if (status === 'shipped' || status === 'picked_up') {
     deductConsumablesForBooking(supabase, id).catch(() => {});
+  }
+
+  // Verknüpfte Bestellungen (gemeinsamer Versand/Retoure, "shipment_group_id")
+  // ziehen mit: Trackingdaten + logistischer Status wandern auf die anderen
+  // Mitglieder des Verbunds mit — non-blocking, best-effort.
+  if (
+    'tracking_number' in updates ||
+    'tracking_carrier' in updates ||
+    'tracking_url' in updates
+  ) {
+    propagateShipmentFields(supabase, id, {
+      tracking_number: updates.tracking_number,
+      tracking_carrier: updates.tracking_carrier,
+      tracking_url: updates.tracking_url,
+    }).catch(() => {});
+  }
+  if (
+    'return_tracking_number' in updates ||
+    'return_tracking_carrier' in updates ||
+    'return_tracking_url' in updates
+  ) {
+    propagateShipmentFields(supabase, id, {
+      return_tracking_number: updates.return_tracking_number,
+      return_tracking_carrier: updates.return_tracking_carrier,
+      return_tracking_url: updates.return_tracking_url,
+    }).catch(() => {});
+  }
+  if (status) {
+    propagateShipmentStatus(supabase, id, status).catch(() => {});
   }
 
   // Versand-Mail mit korrigiertem Tracking-Link an den Kunden (non-blocking).

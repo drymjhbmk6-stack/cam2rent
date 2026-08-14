@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { sendShippingConfirmation } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentStatus } from '@/lib/shipment-group';
 
 /**
  * POST /api/admin/booking/[id]/mark-shipped
@@ -83,6 +84,9 @@ export async function POST(
 
   // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent pro Buchung).
   deductConsumablesForBooking(supabase, id).catch(() => {});
+
+  // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit.
+  propagateShipmentStatus(supabase, id, 'shipped', { shipped_at: new Date().toISOString() }).catch(() => {});
 
   // Versandbestaetigung an den Kunden (fire-and-forget). Tracking wird genutzt,
   // falls vorhanden — sonst sendet die Mail ohne Tracking-Block.

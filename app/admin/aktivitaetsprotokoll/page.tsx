@@ -28,6 +28,8 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.delete': 'Buchung endgültig gelöscht',
   'booking.email_updated': 'Kunden-E-Mail geändert',
   'booking.tracking_update': 'Tracking-Daten geändert',
+  'booking.link_shipment': 'Mit Bestellung für gemeinsamen Versand verknüpft',
+  'booking.unlink_shipment': 'Versand-Verknüpfung gelöst',
   'booking.coordination_done': 'Abhol-/Rückgabetermin vereinbart',
   'booking.reset_contract': 'Mietvertrag zurückgesetzt (Neu-Unterschrift)',
   'booking.lock_contract': 'Mietvertrag freigegeben („Alles okay", endgültig)',

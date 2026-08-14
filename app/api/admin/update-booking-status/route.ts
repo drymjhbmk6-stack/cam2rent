@@ -4,6 +4,7 @@ import { sendReviewRequest } from '@/lib/email';
 import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 import { logAudit } from '@/lib/audit';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
+import { propagateShipmentStatus } from '@/lib/shipment-group';
 
 /**
  * PATCH /api/admin/update-booking-status
@@ -55,6 +56,10 @@ export async function PATCH(req: NextRequest) {
   if (status === 'shipped' || status === 'picked_up') {
     deductConsumablesForBooking(supabase, bookingId).catch(() => {});
   }
+
+  // Verknüpfte Bestellungen (gemeinsamer Versand/Retoure) ziehen mit.
+  const shippedAt = status === 'shipped' ? { shipped_at: new Date().toISOString() } : {};
+  propagateShipmentStatus(supabase, bookingId, status, shippedAt).catch(() => {});
 
   // Nach Abschluss: Abschluss-Bestätigung ("alles in Ordnung" + Kundenmaterial),
   // non-blocking. Dedup im Helper verhindert Doppel-Mail mit dem Retouren-Pfad.
