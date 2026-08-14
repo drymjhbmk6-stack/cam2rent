@@ -897,6 +897,16 @@ dabei **wieder für andere Kunden buchbar** (Inventar-Freigabe).
   `rental_agreements`-Zeile löschen → `generateContractPDF`/`storeContract` für
   den neuen Zeitraum (neuer Hash) → `sendPostponementConfirmation` (mode `date`)
   + Admin-Notification. „Auf unbestimmte Zeit" ist Kunden NICHT erlaubt.
+  **Auch bei `status='postponed'` nutzbar (Stand 2026-08-14):** Wurde die
+  Buchung vom Admin auf unbestimmte Zeit verlegt, darf der Kunde selbst den
+  neuen konkreten Termin wählen (`canPostpone()` in `/konto/buchungen` +
+  Server-Gate erlauben `status==='confirmed' || status==='postponed'`). Die
+  Versand-/Abhol-Fristprüfung (`shipIso <= todayIso`) entfällt in diesem Fall
+  — der alte `rental_from` ist bei einer unbestimmten Verlegung ohnehin stale
+  (liegt ggf. Wochen in der Vergangenheit). `postpone_count`/`contract_locked`
+  bleiben als Schranken bestehen. Button-Label wechselt zu „Neuen Termin
+  wählen". `applyPostponeDateMove` reaktiviert `postponed`→`confirmed`
+  bereits unabhängig vom Aufrufer (Admin/Kunde) — keine Änderung dort nötig.
 - **Admin-Endpoint `POST /api/admin/booking/[id]/postpone`** (Permission via
   Prefix `/api/admin/booking` → `tagesgeschaeft`), keine Zeit-/Einmal-Limits:
   - `mode='date'`: `applyPostponeDateMove` (Reaktivierung aus `postponed` →
