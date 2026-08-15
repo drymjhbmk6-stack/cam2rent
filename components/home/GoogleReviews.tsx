@@ -85,9 +85,8 @@ function timeAgo(dateStr: string): string {
 }
 
 // Fallback-Links — Server liefert idealerweise einen funktionierenden
-// writeReviewUrl mit aktueller Place-ID, GBP-Tracking-Parameter werden
-// weggelassen weil sie bei Nicht-Owner zu Fehler-Seiten fuehren.
-const FALLBACK_WRITE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE';
+// writeReviewUrl (Admin-Override via admin_settings.google_review_url).
+const FALLBACK_WRITE_REVIEW_URL = 'https://g.page/r/CZZcnk78sBAREAE/review';
 const REVIEWS_VIEW_URL = 'https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE';
 
 export default function GoogleReviews() {

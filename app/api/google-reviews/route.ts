@@ -39,11 +39,10 @@ interface CachedData {
 let apiCache: CachedData | null = null;
 const CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 Stunden
 
-/** Default-URL zum Bewerten — Place-ID aus Env, ohne GBP-Tracking-Parameter
- *  (die fuehren bei Nicht-Owner zu Fehler-Seiten). */
-function defaultWriteReviewUrl(placeId: string | undefined): string {
-  if (!placeId) return 'https://search.google.com/local/writereview';
-  return `https://search.google.com/local/writereview?placeid=${encodeURIComponent(placeId)}`;
+/** Default-URL zum Bewerten — bestätigter funktionierender g.page-Kurzlink,
+ *  greift wenn kein Admin-Override in admin_settings.google_review_url gesetzt ist. */
+function defaultWriteReviewUrl(): string {
+  return 'https://g.page/r/CZZcnk78sBAREAE/review';
 }
 
 /** Laedt den Admin-Override fuer den "Bewertung schreiben"-Link (defensiv). */
@@ -98,7 +97,7 @@ export async function GET(req: Request) {
   const debug = searchParams.get('debug') === '1';
 
   const placeId = process.env.GOOGLE_PLACE_ID;
-  const writeReviewUrl = (await loadWriteReviewUrl()) ?? defaultWriteReviewUrl(placeId);
+  const writeReviewUrl = (await loadWriteReviewUrl()) ?? defaultWriteReviewUrl();
 
   // Manuelle Reviews IMMER frisch laden (kein Cache).
   const manualReviews = await loadManualReviews();

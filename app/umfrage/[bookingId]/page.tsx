@@ -3,10 +3,9 @@
 import { useState, use, useEffect } from 'react';
 import Link from 'next/link';
 
-// Google-Bewertungs-URL (Place-ID gleiche wie unter /admin/einstellungen und
+// Google-Bewertungs-URL (gleicher Link wie unter /admin/einstellungen und
 // auf der Startseite — siehe components/home/GoogleReviews.tsx + Umfrage-Cron).
-const GOOGLE_REVIEW_URL =
-  'https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE';
+const GOOGLE_REVIEW_URL = 'https://g.page/r/CZZcnk78sBAREAE/review';
 
 type Mode = 'choice' | 'rating' | 'reward';
 
