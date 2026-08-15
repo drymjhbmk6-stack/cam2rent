@@ -5313,6 +5313,20 @@ Jetzt wird **Seite 1** server-gerendert, sodass Titel + Teaser bereits im HTML s
 - **Features:** Profilbilder, relative Zeitangaben, Rating-Badge mit Link, CTA "Bewertung auf Google schreiben"
 - **Fallback:** Wenn API nicht erreichbar oder nicht konfiguriert → Sektion wird ausgeblendet
 - **Umfrage-Seite:** `/umfrage/[bookingId]` — bei Rating ≥ 4 wird Google Review CTA gezeigt
+- **„Bewertung schreiben"-Link vereinheitlicht (Stand 2026-08-15):** Die drei
+  hartcodierten Fallback-Links (Umfrage-Seite, Startseiten-Komponente,
+  API-Default) nutzten teils leicht abweichende Place-IDs
+  (`...ThCwEBE` vs. `...TvywEBE`, vermutlich ein Tippfehler) und waren nicht
+  konsistent verlässlich. Alle drei zeigen jetzt auf den vom Owner bestätigten
+  funktionierenden Kurzlink `https://g.page/r/CZZcnk78sBAREAE/review`
+  (`app/umfrage/[bookingId]/page.tsx`, `components/home/GoogleReviews.tsx` →
+  `FALLBACK_WRITE_REVIEW_URL`, `app/api/google-reviews/route.ts` →
+  `defaultWriteReviewUrl()`). Der Admin-Override `admin_settings.google_review_url`
+  (editierbar über `components/admin/ManualGoogleReviewsAdmin.tsx`) hat weiterhin
+  Vorrang und wirkt ohne Deploy — nur für die Startseite, nicht für die
+  Umfrage-Seite (dort ist der Link fest im Code). `REVIEWS_VIEW_URL` (Rating-
+  Badge-Link „alle Bewertungen ansehen") ist unverändert weiter Place-ID-basiert
+  (anderer Zweck als „Bewertung schreiben").
 
 ## Legal-Content-Management-System
 Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf, Haftungsbedingungen) über den Admin-Bereich. Jede Änderung erzeugt eine neue, unveränderliche Version.
