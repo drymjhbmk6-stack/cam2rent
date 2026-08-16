@@ -3,6 +3,7 @@ import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 import { findContentDuplicate, persistDuplicateWarning, type DuplicateMatch } from '@/lib/buchhaltung/duplicate-check';
 import { normalizeCurrency, fetchEurRate } from '@/lib/buchhaltung/currency';
+import { reconcileOcrLineAmount, describeOcrTotalMismatch, stripOcrMismatchNote } from '@/lib/buchhaltung/ocr-reconcile';
 
 /**
  * OCR-Logik fuer einen einzelnen Beleg, herausgezogen aus der Route, damit
@@ -240,38 +241,68 @@ export async function runOcrForBeleg(
     await supabase.from('beleg_positionen').delete().eq('beleg_id', belegId);
   }
 
-  // Positionen anlegen
-  const newPositions = invoice.items.map((it, i) => ({
-    ...sanitizePosition({
-      reihenfolge: i,
-      bezeichnung: it.description,
-      menge: it.quantity,
-      einzelpreis_netto: (Number(it.unit_price_net) || 0) * convFactor,
-      mwst_satz: it.tax_rate,
-      ki_vorschlag: {
-        klassifizierung: it.suggested_classification === 'asset' ? 'afa'
-          : it.suggested_classification === 'gwg' ? 'gwg'
-          : it.suggested_classification === 'consumable' ? 'verbrauch'
-          : 'ausgabe',
-        begruendung: 'OCR-Vorschlag',
-        confidence: it.confidence,
-        art: it.suggested_kind === 'rental_camera' ? 'kamera'
-          : it.suggested_kind === 'rental_accessory' ? 'zubehoer'
-          : it.suggested_kind === 'office_equipment' ? 'buero'
-          : it.suggested_kind === 'tool' ? 'werkzeug' : 'sonstiges',
-        nutzungsdauer_monate: it.suggested_useful_life_months,
-        kategorie: it.suggested_category,
-      },
-    }),
-    beleg_id: belegId,
-  }));
+  // Positionen anlegen. Menge/Einzelpreis werden zuerst gegen den von Claude
+  // unabhaengig abgelesenen line_total_net reconciled (siehe ocr-reconcile.ts)
+  // — schuetzt gegen Faelle, in denen eine Klammer-Zahl aus einem Rabatt-/
+  // Beschreibungstext (z.B. "across 18 prices") faelschlich als quantity
+  // gelandet ist und quantity*unit_price_net dadurch stark abweicht.
+  const newPositions = invoice.items.map((it, i) => {
+    const reconciled = reconcileOcrLineAmount({
+      quantity: it.quantity,
+      unit_price_net: it.unit_price_net,
+      line_total_net: it.line_total_net,
+    });
+    return {
+      ...sanitizePosition({
+        reihenfolge: i,
+        bezeichnung: it.description,
+        menge: reconciled.menge,
+        einzelpreis_netto: reconciled.einzelpreis_netto * convFactor,
+        mwst_satz: it.tax_rate,
+        ki_vorschlag: {
+          klassifizierung: it.suggested_classification === 'asset' ? 'afa'
+            : it.suggested_classification === 'gwg' ? 'gwg'
+            : it.suggested_classification === 'consumable' ? 'verbrauch'
+            : 'ausgabe',
+          begruendung: 'OCR-Vorschlag',
+          confidence: it.confidence,
+          art: it.suggested_kind === 'rental_camera' ? 'kamera'
+            : it.suggested_kind === 'rental_accessory' ? 'zubehoer'
+            : it.suggested_kind === 'office_equipment' ? 'buero'
+            : it.suggested_kind === 'tool' ? 'werkzeug' : 'sonstiges',
+          nutzungsdauer_monate: it.suggested_useful_life_months,
+          kategorie: it.suggested_category,
+        },
+      }),
+      beleg_id: belegId,
+    };
+  });
 
   if (newPositions.length > 0) {
     const { error: insErr } = await supabase.from('beleg_positionen').insert(newPositions);
     if (insErr) return fail(500, insErr.message);
   }
 
-  await recomputeBelegSummen(supabase, belegId);
+  const { summe_brutto: recomputedBrutto } = await recomputeBelegSummen(supabase, belegId);
+
+  // Sicherheitsnetz: Positionen-Summe gegen den auf der Rechnung selbst
+  // ausgewiesenen Gesamtbetrag pruefen (nach EUR-Umrechnung). Auch mit der
+  // Reconciliation oben + der geschaerften Prompt-Anleitung kann die KI bei
+  // ungewoehnlichen Layouts danebenliegen — dann bekommt der Admin einen
+  // sichtbaren Hinweis in den Beleg-Notizen statt stillschweigend falscher
+  // Zahlen. Alte automatische Hinweise werden vorher entfernt (idempotent,
+  // handschriftliche Notizen bleiben unangetastet).
+  {
+    const { data: belegForNotiz } = await supabase.from('belege').select('notizen').eq('id', belegId).maybeSingle();
+    const baseNotizen = stripOcrMismatchNote((belegForNotiz as { notizen: string | null } | null)?.notizen ?? null);
+    const expectedBrutto = Number(invoice.totals?.gross) > 0 ? Number(invoice.totals.gross) * convFactor : NaN;
+    const warning = describeOcrTotalMismatch(recomputedBrutto, expectedBrutto);
+    const finalNotizen = [baseNotizen, warning].filter(Boolean).join('\n').trim() || null;
+    const previousNotizen = (belegForNotiz as { notizen: string | null } | null)?.notizen ?? null;
+    if (finalNotizen !== previousNotizen) {
+      await supabase.from('belege').update({ notizen: finalNotizen }).eq('id', belegId);
+    }
+  }
 
   // Fremdwaehrungs-Metadaten am Beleg speichern (bzw. bei EUR wieder leeren,
   // damit ein Re-OCR eines korrigierten Belegs den Banner entfernt).

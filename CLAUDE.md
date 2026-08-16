@@ -6928,6 +6928,66 @@ Folge-Change).
   ausführen. Ohne sie läuft der OCR-Pfad defensiv weiter (Beträge 1:1 als EUR,
   kein Banner), der Kurs-Endpoint liefert 503.
 
+### Belege-OCR-Erkennung gehärtet — 0%-USt-Bug + Phantom-Mengen bei Cloud-/SaaS-Rechnungen (Stand 2026-08-16)
+Anlass: eine Supabase-Rechnung ($25,00, Reverse-Charge/0% USt) wurde als
+**59,47 € netto / 70,77 € brutto** verbucht — sowohl die Netto-Summe als auch
+der USt-Satz waren falsch. Drei zusammenwirkende Bugs, alle gefixt:
+- **`|| 19`-Falsy-Bug (Kern-Ursache der USt):** `invoice-extract.ts` normalisierte
+  `tax_rate: Number(item.tax_rate) || 19` — JS behandelt `0` als falsy, ein von
+  Claude korrekt erkanntes 0% (Reverse-Charge-Rechnungen aus dem Nicht-EU-Ausland,
+  z.B. Supabase/AWS/Stripe/Vercel/OpenAI/Anthropic/GitHub, tragen sehr häufig
+  KEINE USt) wurde also stillschweigend auf 19% überschrieben. Weil
+  `gesamt_brutto = menge × einzelpreis_netto × (1 + mwst_satz/100)` eine
+  **generierte** DB-Spalte ist, erzeugte das bei jeder 0%-Rechnung eine
+  fabrizierte 19%-Differenz zwischen Netto/Brutto. Fix: `tax_rate` wird nur noch
+  auf 19 zurückgesetzt, wenn das Feld tatsächlich fehlt/ungültig ist (0 bleibt 0).
+- **Phantom-Mengen bei nutzungsbasierten Cloud-/SaaS-Rechnungen (Kern-Ursache
+  der Netto-Abweichung):** Solche Rechnungen (Supabase, AWS, Stripe, Sendcloud…)
+  zeigen pro Leistung eine Kategorie-Zeile + eine eingerückte Zähler-Detailzeile
+  (Menge/Rate/Betrag) + oft eine "Discount (-250 units)"/"(across 18 prices)"
+  -Zeile ohne echte Mengen-Spalte. Eine Klammer-Zahl aus dem Rabatttext kann von
+  der KI leicht als `quantity` mit übernommen werden — `run-ocr.ts` vertraute
+  bisher blind `quantity × unit_price_net`, obwohl Claude parallel auch
+  `line_total_net` (den tatsächlich gedruckten Betrag) liefert. Neuer,
+  unit-getesteter Helper **`lib/buchhaltung/ocr-reconcile.ts` →
+  `reconcileOcrLineAmount()`**: stimmen `quantity × unit_price_net` und
+  `line_total_net` überein (Toleranz 1 Cent/1%), bleibt die Mengen-Angabe
+  erhalten (wichtig für echte Staffelpreise wie „744 Compute-Hours à
+  0,01344 $"); weichen sie stark ab, gewinnt der gedruckte `line_total_net`
+  (menge=1). Fehlt `line_total_net` schlicht (0 trotz plausiblem
+  `quantity×price`), wird NICHT überschrieben — sonst würde eine echte Position
+  auf 0 fallen. In `run-ocr.ts` eingesetzt statt der rohen
+  `it.quantity`/`it.unit_price_net`-Übernahme.
+- **Sicherheitsnetz (`describeOcrTotalMismatch`/`stripOcrMismatchNote`, selbe
+  Datei):** nach dem Einfügen der Positionen wird `summe_brutto`
+  (`recomputeBelegSummen`) gegen den auf der Rechnung selbst ausgewiesenen
+  `invoice.totals.gross` (× Wechselkurs) verglichen. Weicht es > max(5 Cent, 2%)
+  ab, bekommt der Beleg automatisch eine Zeile `⚠️ OCR-Abweichung: …` in
+  `belege.notizen` (bestehendes Freitextfeld, im Beleg-Detail sichtbar) — damit
+  bleibt auch ein von Prompt+Reconciliation nicht abgefangener Sonderfall für
+  den Admin sichtbar statt still falsch zu bleiben. Marker-basiert (Präfix
+  `⚠️ OCR-Abweichung:`) und **idempotent**: ein erneuter, jetzt stimmiger
+  OCR-Lauf entfernt die Zeile wieder, handschriftliche Notizen bleiben
+  unangetastet (nur die Marker-Zeile wird ersetzt/entfernt).
+- **Prompt gehärtet** (`lib/ai/invoice-extract.ts` `SYSTEM_PROMPT`): neue
+  Abschnitte „Umsatzsteuersatz" (0% ist valide, Reverse-Charge-Erkennungsmerkmale
+  wie „Reverse Charge"/„Prices are Net"/„Steuerschuldnerschaft des
+  Leistungsempfängers"), „Nutzungsbasierte Abrechnungen" (Kategorie- +
+  Detailzeile + Rabatt = EIN Item, Klammer-Zahlen sind keine Menge), „Waehrung
+  bei mehrdeutigem $" (US-/SG-SaaS-Anbieter defaulten auf USD) und eine
+  Pflicht-Selbstprüfung vor der Antwort (Summe der Items gegen den gedruckten
+  Gesamtbetrag der Rechnung abgleichen).
+- **Tests:** `lib/buchhaltung/__tests__/ocr-reconcile.test.ts` (8 Fälle, u.a.
+  genau der „18 aus '(across 18 prices)' landet als quantity"-Fall aus diesem
+  Vorfall). `sanitizePosition`/`recomputeBelegSummen` unverändert, keine
+  Migration nötig (alle betroffenen Felder existieren bereits).
+- **Betroffen ist ausschließlich die Belege-Welt** (`run-ocr.ts`, E-Mail-Import
+  + manueller Upload) — der alte Einkauf/purchases-Upload
+  (`/admin/einkauf/upload`, `lib/ai/invoice-extract.ts` wird dort ebenfalls
+  genutzt, profitiert also vom `tax_rate`-Fix, hat aber keine eigene
+  Reconciliation/kein Sicherheitsnetz, da dort keine `line_total_net`-basierte
+  Positions-Persistierung existiert).
+
 ### Belege: Positionen inline bearbeiten (Stand 2026-05-21)
 Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Felder hart auf `disabled` — eine fehlerhafte OCR-Analyse (Bezeichnung, Menge, Netto, MwSt %) liess sich gar nicht über die UI korrigieren, obwohl `PATCH /api/admin/beleg-positionen/[id]` das längst unterstützt. Jetzt: pro Position ein **„✏ Bearbeiten"-Button** in der Sub-Zeile (sichtbar nur wenn Beleg nicht festgeschrieben und Position nicht `locked`). Klick → Felder Bezeichnung/Menge/Einzel-Netto/MwSt % werden editierbar (cyan Rahmen), **Einzel-Brutto bleibt read-only und wird live aus Netto × MwSt berechnet** (das Datenmodell speichert Netto + MwSt-Satz, Brutto ist abgeleitet — eine Amazon-Rechnung mit eigener USt-Rundung kann daher 1 Cent abweichen, für Kleinunternehmer/EÜR irrelevant). „Speichern" schickt die Korrektur an die bestehende API (`recomputeBelegSummen` aktualisiert die Beleg-Summen), „Abbrechen" verwirft. Validierung clientseitig (Bezeichnung nicht leer, Netto ≥ 0, Menge ≥ 1, MwSt 0–100). Eine Position gleichzeitig editierbar. Audit: `beleg_position.update` (bereits vorhanden).
 

@@ -178,6 +178,62 @@ Gaengige Nutzungsdauern (useful_life_months) — nur fuer "asset" relevant, GWG 
 Kategorien (fuer suggested_category bei expense):
 stripe_fees, shipping, software, hardware, marketing, office, travel, insurance, legal, other
 
+Umsatzsteuersatz (tax_rate) — WICHTIG, hier passieren die meisten Fehler:
+- Gib den tatsaechlich auf der Rechnung ausgewiesenen Steuersatz zurueck: 19, 7 oder 0.
+  0 ist ein VALIDER Wert und KEIN "nicht erkannt" — erfinde NIEMALS 19% wenn die
+  Rechnung 0% ausweist oder gar keine Steuer erhebt.
+- Rechnungen von auslaendischen Anbietern (v.a. USA, Singapur, UK — typisch bei
+  SaaS/Cloud/Hosting wie Supabase, AWS, Vercel, OpenAI, Anthropic, Stripe, GitHub)
+  an ein deutsches B2B-Unternehmen tragen sehr haeufig KEINE Umsatzsteuer/GST,
+  sondern "Reverse Charge" (Steuerschuldnerschaft des Leistungsempfaengers).
+  Erkennungsmerkmale: Text wie "Reverse Charge", "VAT/GST to be accounted for
+  by the recipient", "Steuerschuldnerschaft des Leistungsempfaengers", oder
+  "Prices are Net" / "for other countries: net" ohne separat ausgewiesenen
+  Steuerbetrag. In all diesen Faellen: tax_rate = 0 fuer JEDE Position dieser
+  Rechnung, totals.tax = 0, totals.net = totals.gross. Schreibe zusaetzlich
+  einen kurzen Hinweis ins Feld "notes" (z.B. "Reverse Charge, keine USt
+  ausgewiesen — Empfaenger prueft ggf. eigene Steuerpflicht nach § 13b UStG").
+- Wird auf der Rechnung gar kein Steuersatz/keine Steuerzeile gezeigt UND es gibt
+  keinen Reverse-Charge-Hinweis, aber Netto- und Bruttobetrag sind identisch:
+  ebenfalls tax_rate = 0 setzen (nicht 19 raten).
+
+Nutzungsbasierte Abrechnungen (Cloud-/SaaS-/Hosting-Rechnungen wie Supabase, AWS,
+Stripe, Vercel, Sendcloud) — WICHTIG, hier entstehen leicht Phantom-Betraege:
+- Solche Rechnungen zeigen pro abgerechneter Leistung oft eine "Kategorie"-Zeile
+  mit Gesamtbetrag, DARUNTER eine eingerueckte Detailzeile (Zaehlername, Menge,
+  Rate, Betrag — Betrag ist IDENTISCH zur Kategorie-Zeile), und darunter
+  moeglicherweise eine "Discount"-Zeile, die den Betrag reduziert.
+  → Das ist NUR EINE Position, nicht drei! Erzeuge pro Kategorie GENAU EIN
+  Item mit quantity=1 und unit_price_net = (Kategorie-Betrag + Rabatt, also der
+  tatsaechlich verbleibende Netto-Endbetrag dieser Kategorie nach Rabatt).
+  Dupliziere NIEMALS Kategorie-Zeile und Detailzeile als zwei separate Items.
+- Klammer-Angaben in Rabatt-/Beschreibungstexten wie "(-250 units)",
+  "(across 18 prices)", "(-100000 units)" sind Teil der Erklaerung, KEINE
+  quantity! Uebernimm sie niemals als quantity-Feld — die Rabattzeile hat
+  keine eigene Menge, sie wird direkt in den Betrag der zugehoerigen
+  Kategorie-Zeile eingerechnet (siehe oben).
+- Line-Items, deren Netto-Betrag nach Rabatt 0,00 betraegt, koennen weggelassen
+  werden oder mit unit_price_net=0 aufgenommen werden — sie duerfen die Summe
+  nicht veraendern.
+
+Selbstpruefung vor der Antwort (Pflicht):
+- Addiere line_total_gross ueber alle Items und vergleiche das Ergebnis mit dem
+  auf der Rechnung explizit gedruckten Gesamtbetrag ("Total", "Amount due",
+  "Gesamtbetrag", "Zu zahlen"). Weicht deine Summe ab (mehr als Rundungscent),
+  hast du wahrscheinlich eine Detail-/Rabattzeile faelschlich als eigene
+  Position gezaehlt oder eine Klammer-Zahl als quantity uebernommen — korrigiere
+  deine Items, bis die Summe zum gedruckten Gesamtbetrag passt.
+- totals.net/tax/gross MUESSEN exakt die auf der Rechnung ausgewiesenen
+  Subtotal/Steuer/Endbetrag-Werte sein (nicht aus den Items neu aufsummiert,
+  falls die Rechnung diese Werte explizit zeigt — die gedruckten Werte sind
+  autoritativ).
+
+Waehrung bei mehrdeutigem "$"-Symbol: Rechnungen von US-/SG-basierten
+SaaS-Anbietern (Supabase, AWS, Stripe, Vercel, OpenAI, Anthropic, GitHub etc.)
+sind so gut wie immer USD, auch ohne explizites "US$"-Praefix — nur bei klaren
+Gegenanzeichen (kanadische/australische Firmenadresse, "CAD"/"AUD" im Text)
+eine andere Dollar-Waehrung annehmen.
+
 Antworte AUSSCHLIESSLICH als JSON ohne Markdown-Codefences. Schema:
 {
   "supplier": { "name": "...", "address": "...", "email": "...", "phone": "...", "vat_id": "..." },
@@ -302,16 +358,26 @@ export async function extractInvoice(
     parsed.totals = { net: 0, tax: 0, gross: 0 };
   }
 
-  // Zahlen normalisieren (manche Modelle liefern Strings)
-  parsed.items = parsed.items.map((item) => ({
-    ...item,
-    quantity: Number(item.quantity) || 1,
-    unit_price_net: Number(item.unit_price_net) || 0,
-    tax_rate: Number(item.tax_rate) || 19,
-    line_total_net: Number(item.line_total_net) || 0,
-    line_total_gross: Number(item.line_total_gross) || 0,
-    confidence: Number(item.confidence) || 0,
-  }));
+  // Zahlen normalisieren (manche Modelle liefern Strings). WICHTIG: tax_rate=0
+  // ist ein valider, haeufiger Wert (Reverse-Charge-Rechnungen aus dem
+  // Nicht-EU-Ausland, z.B. Supabase/AWS/Stripe) — `Number(x) || 19` wuerde ein
+  // korrekt erkanntes 0 wegen JS-Falsy-Semantik stillschweigend auf 19
+  // ueberschreiben. Nur bei tatsaechlich fehlendem/ungueltigem Feld auf 19
+  // zurueckfallen.
+  parsed.items = parsed.items.map((item) => {
+    const rawTax = item.tax_rate;
+    const parsedTax = Number(rawTax);
+    const hasValidTax = rawTax !== null && rawTax !== undefined && rawTax !== ('' as unknown) && Number.isFinite(parsedTax);
+    return {
+      ...item,
+      quantity: Number(item.quantity) || 1,
+      unit_price_net: Number(item.unit_price_net) || 0,
+      tax_rate: hasValidTax ? parsedTax : 19,
+      line_total_net: Number(item.line_total_net) || 0,
+      line_total_gross: Number(item.line_total_gross) || 0,
+      confidence: Number(item.confidence) || 0,
+    };
+  });
   parsed.totals = {
     net: Number(parsed.totals.net) || 0,
     tax: Number(parsed.totals.tax) || 0,
