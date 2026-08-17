@@ -3303,6 +3303,64 @@ und trägt es ins „Gültig bis"-Feld ein (Tag-Ende). Rein client-seitig — ge
 wird weiterhin ein absolutes `valid_until`-ISO, **keine API-/Schema-Änderung**
 (`app/admin/gutscheine/page.tsx`).
 
+### Wertgutschein mit Restguthaben — Geschenkkarten-Modell (Stand 2026-08-17)
+Vorher wurde ein Festbetrags-Gutschein (`type='fixed'`) pro Bestellung auf den
+Bestellwert gedeckelt (`Math.min(value, baseAmount)`) — ein ungenutzter Rest
+verfiel ersatzlos (75-€-Gutschein, 40-€-Bestellung → 35 € waren weg). Jetzt
+kann der Admin einen Festbetrags-Gutschein optional als **Geschenkkarte mit
+Restguthaben** anlegen: der nicht ausgeschöpfte Betrag bleibt für die nächste
+Bestellung erhalten, bis das Guthaben aufgebraucht ist.
+- **Opt-in, nicht automatisch:** Aktiviert wird das Tracking nur explizit über
+  die Checkbox „Restguthaben (Geschenkkarte)" bei `type='fixed'` in
+  `/admin/gutscheine` — nicht automatisch für alle Festbetrags-Gutscheine.
+  Grund: geteilte Rabattcodes (ein Code, viele verschiedene Kunden, z.B. eine
+  „10 € off"-Aktion) sollen weiterhin ihr bisheriges Verhalten behalten (kein
+  gemeinsam geteilter Guthaben-Topf über mehrere fremde Kunden hinweg).
+- **DB:** Neue Spalte `coupons.remaining_value NUMERIC NULL`
+  (Migration `supabase/supabase-coupons-remaining-value.sql`, idempotent).
+  `NULL` = kein Guthaben-Tracking (altes Verhalten). Gesetzt (auch `0`) =
+  Geschenkkarten-Modus aktiv. `data/coupons.ts` → `isBalanceCoupon(coupon)` =
+  `type==='fixed' && remaining_value!=null`; `calcDiscount()` deckelt den
+  Rabatt bei aktivem Guthaben zusätzlich auf `remaining_value` statt `value`.
+- **Atomare Einlösung:** neue RPC `redeem_coupon_balance(p_code, p_amount)`
+  (`FOR UPDATE`-Lock, analog zu `increment_coupon_if_available`) zieht den
+  **tatsächlich verwendeten Betrag** vom Guthaben ab (`GREATEST(0, remaining −
+  amount)`, nie negativ) und erhöht `used_count` fürs Reporting. Wird in
+  `app/api/confirm-cart/route.ts` (Haupt-Checkout-Pfad) und im Stripe-Webhook
+  (`handleCartBooking`, Race-Recovery-Fallback) aufgerufen — jeweils mit dem
+  server-validierten, gegen den tatsächlich gezahlten Stripe-Betrag skalierten
+  Coupon-Anteil (`r_discountAmount` bzw. `sCouponDiscount`), nicht mit dem
+  ungeprüften Client-Wert. Der bestehende Floor-Check in `confirm-cart`
+  (Preis-Plausibilität) deckelt `validatedDiscountCents` bei Guthaben-Coupons
+  zusätzlich auf `remaining_value` — ein Kunde kann also serverseitig nie mehr
+  abziehen, als noch auf der Karte übrig ist.
+- **`once_per_customer` entfällt bei aktivem Guthaben** (in `validate-coupon`
+  UND im `confirm-cart`-Pre-Check) — der ganze Sinn einer Geschenkkarte ist die
+  Wiederverwendung über mehrere Bestellungen. Admin-UI deaktiviert die
+  „Einmal pro Kunde"-Checkbox entsprechend mit Hinweistext, sobald Restguthaben
+  aktiv ist. `max_uses`/`used_count` sind bei Guthaben-Coupons ebenfalls nicht
+  mehr die Gate-Quelle — maßgeblich ist ausschließlich `remaining_value > 0`.
+  `target_user_email` (Personalisierung) bleibt unverändert wirksam und
+  unabhängig vom Guthaben-Flag.
+- **Direkter Einzel-Buchungsflow (`/kameras/[slug]/buchen`) ist nicht
+  betroffen** — echte Gutschein-Codes sind (wie zuvor) nur im Warenkorb-
+  Checkout einlösbar; `confirm-booking` kennt nur den Aktions-Rabatt-Fallback
+  (`productDiscountLabel`), keinen User-Coupon.
+- **Admin-UI** (`/admin/gutscheine`): Checkbox „Restguthaben (Geschenkkarte)"
+  bei `type='fixed'` (setzt `remaining_value = value` beim Aktivieren, danach
+  frei editierbares Feld — z.B. für manuelles Aufladen/Korrigieren). Listen-
+  Zeile zeigt zusätzlichen Badge „Restguthaben: X € / Y €". Statistik „Im
+  Umlauf" wertet bei Guthaben-Coupons `remaining_value > 0` statt `max_uses`.
+- **Kunden-Checkout:** Nach Anwenden eines Guthaben-Gutscheins zeigt
+  `/checkout` einen Hinweis „Restguthaben nach dieser Bestellung: X €" bzw.
+  „Damit ist das Guthaben vollständig aufgebraucht."
+- **Go-Live TODO:** Migration `supabase/supabase-coupons-remaining-value.sql`
+  ausführen. Ohne sie läuft alles wie zuvor weiter (Checkbox speichert defensiv
+  nicht — POST/PUT retryen ohne die Spalte; Einlösung fällt in `confirm-cart`
+  nie auf die alte `increment_coupon_if_available`-RPC zurück, sondern meldet
+  bei fehlender RPC eine Admin-Notification zur manuellen Korrektur statt das
+  Guthaben stillschweigend falsch zu verbuchen).
+
 ### Aktion `not_combinable` — analog zu Coupons (Stand 2026-05-20)
 Aktionen in `admin_settings.product_discounts` (JSON-Array) haben jetzt ein optionales `not_combinable: boolean`-Feld. Default `false` — bestehende Aktionen verhalten sich wie bisher.
 

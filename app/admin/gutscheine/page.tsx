@@ -27,6 +27,8 @@ interface CouponRow {
   not_combinable: boolean;
   active: boolean;
   created_at: string;
+  /** Restguthaben in € — nur bei type='fixed', null = kein Guthaben-Tracking. */
+  remaining_value: number | null;
 }
 
 interface AccessoryOption { id: string; name: string; category: string; }
@@ -58,7 +60,7 @@ function emptyForm(): FormData {
     target_name: null, target_user_email: null,
     valid_from: null, valid_until: null, max_uses: null,
     min_order_value: null, once_per_customer: false, not_combinable: false,
-    active: true,
+    active: true, remaining_value: null,
   };
 }
 
@@ -236,6 +238,7 @@ export default function AdminGutscheinePage() {
       valid_from: c.valid_from, valid_until: c.valid_until,
       max_uses: c.max_uses, min_order_value: c.min_order_value,
       once_per_customer: c.once_per_customer, not_combinable: c.not_combinable, active: c.active,
+      remaining_value: c.remaining_value,
     });
   }
 
@@ -322,6 +325,42 @@ export default function AdminGutscheinePage() {
             </div>
           </div>
         </div>
+
+        {/* Restguthaben — nur bei Festbetrags-Gutscheinen */}
+        {form.type === 'fixed' && (
+          <div style={{ gridColumn: '1 / -1', background: 'var(--admin-bg)', borderRadius: 10, padding: 14, border: '1px solid var(--admin-border)' }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+              <input type="checkbox"
+                checked={form.remaining_value != null}
+                onChange={(e) => {
+                  setForm((f) => ({
+                    ...f,
+                    remaining_value: e.target.checked ? (f.value ?? 0) : null,
+                  }));
+                }}
+                style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2, flexShrink: 0 }}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Restguthaben (Geschenkkarte)</div>
+                <div style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
+                  Nicht ausgeschöpfter Betrag bleibt für die nächste Bestellung erhalten, statt zu verfallen. „Einmal pro Kunde“ wird dann ignoriert.
+                </div>
+              </div>
+            </label>
+            {form.remaining_value != null && (
+              <div style={{ marginTop: 12 }}>
+                <label style={S.label}>Aktuelles Restguthaben</label>
+                <div style={{ position: 'relative', maxWidth: 200 }}>
+                  <input type="number" min="0" step="0.5" inputMode="decimal"
+                    value={form.remaining_value}
+                    onChange={(e) => setForm((f) => ({ ...f, remaining_value: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                    style={{ ...S.input, width: '100%', paddingRight: 32 }} />
+                  <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--admin-text-dim)' }}>{'€'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Description */}
         <div style={{ gridColumn: '1 / -1' }}>
@@ -509,11 +548,14 @@ export default function AdminGutscheinePage() {
 
         {/* Restrictions — vertikal gestapelt fuer Mobile-Lesbarkeit */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.once_per_customer ?? false}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: form.remaining_value != null ? 'not-allowed' : 'pointer', opacity: form.remaining_value != null ? 0.5 : 1 }}>
+            <input type="checkbox" checked={form.remaining_value != null ? false : (form.once_per_customer ?? false)}
+              disabled={form.remaining_value != null}
               onChange={(e) => setForm((f) => ({ ...f, once_per_customer: e.target.checked }))}
               style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>Einmal pro Kunde</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text)' }}>
+              Einmal pro Kunde{form.remaining_value != null ? ' (bei Restguthaben ohne Wirkung)' : ''}
+            </span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.not_combinable ?? false}
@@ -587,6 +629,8 @@ export default function AdminGutscheinePage() {
         const isValid = (c: CouponRow) => {
           if (!c.active) return false;
           if (c.valid_until && new Date(c.valid_until) < now) return false;
+          // Restguthaben-Gutscheine: massgeblich ist das Guthaben, nicht max_uses.
+          if (c.remaining_value != null) return c.remaining_value > 0;
           if (c.max_uses && c.used_count >= c.max_uses) return false;
           return true;
         };
@@ -671,6 +715,12 @@ export default function AdminGutscheinePage() {
                         {badge.label}{badge.detail ? `: ${badge.detail}` : ''}
                       </span>
                     ))}
+                    {/* Restguthaben-Badge */}
+                    {c.remaining_value != null && (
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#0891b218', color: '#0891b2' }}>
+                        Restguthaben: {c.remaining_value.toFixed(2)} € / {c.value.toFixed(2)} €
+                      </span>
+                    )}
                     {/* Active dot */}
                     <button onClick={() => handleToggleActive(c)}
                       title={c.active ? 'Aktiv' : 'Inaktiv'}

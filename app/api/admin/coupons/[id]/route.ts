@@ -33,11 +33,31 @@ export async function PUT(
   if (body.max_uses !== undefined) updateData.max_uses = body.max_uses ? parseInt(body.max_uses) : null;
   if (body.min_order_value !== undefined) updateData.min_order_value = body.min_order_value ? parseFloat(body.min_order_value) : null;
   if (body.active !== undefined) updateData.active = body.active;
+  // Restguthaben (Geschenkkarten-Modell, data/coupons.ts isBalanceCoupon) gibt
+  // es nur für Festbetrags-Gutscheine. remaining_value:null deaktiviert das
+  // Tracking wieder (zurück auf altes "pro Bestellung gedeckelt"-Verhalten).
+  if (body.remaining_value !== undefined) {
+    updateData.remaining_value =
+      body.remaining_value != null && body.remaining_value !== ''
+        ? Math.max(0, parseFloat(body.remaining_value) || 0)
+        : null;
+  }
+  // Typwechsel auf 'percent' hat kein Restguthaben-Konzept — Wert leeren,
+  // damit kein verwaistes Guthaben an einem Prozent-Gutschein hängen bleibt.
+  if (updateData.type === 'percent') {
+    updateData.remaining_value = null;
+  }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('coupons')
     .update(updateData)
     .eq('id', id);
+  // Defensiv: Migration supabase-coupons-remaining-value.sql evtl. noch nicht
+  // ausgeführt — ohne die Spalte einmal erneut versuchen.
+  if (error && 'remaining_value' in updateData && /remaining_value|column|schema cache|PGRST/i.test(error.message)) {
+    delete updateData.remaining_value;
+    ({ error } = await supabase.from('coupons').update(updateData).eq('id', id));
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -64,8 +64,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Dieser Gutschein ist abgelaufen.' }, { status: 400 });
   }
 
-  // Check max uses
-  if (coupon.max_uses != null && coupon.used_count >= coupon.max_uses) {
+  // Wertgutschein mit Restguthaben (Geschenkkarten-Modell, siehe
+  // isBalanceCoupon): max_uses/used_count sind hier nicht die Wahrheit —
+  // massgeblich ist allein das verbleibende Guthaben.
+  const isBalance = coupon.type === 'fixed' && coupon.remaining_value != null;
+
+  if (isBalance) {
+    if (Number(coupon.remaining_value) <= 0) {
+      return NextResponse.json(
+        { error: 'Dieser Gutschein ist bereits vollständig eingelöst (kein Restguthaben mehr).' },
+        { status: 400 }
+      );
+    }
+  } else if (coupon.max_uses != null && coupon.used_count >= coupon.max_uses) {
+    // Check max uses
     return NextResponse.json({ error: 'Dieser Gutschein wurde bereits vollständig eingelöst.' }, { status: 400 });
   }
 
@@ -76,8 +88,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Check once per customer
-  if (coupon.once_per_customer && userEmail) {
+  // Check once per customer — entfällt bei Restguthaben: der Gutschein ist
+  // gerade dafür gedacht, über mehrere Bestellungen hinweg wiederverwendet
+  // zu werden, bis das Guthaben aufgebraucht ist.
+  if (!isBalance && coupon.once_per_customer && userEmail) {
     const { data: existing } = await supabase
       .from('bookings')
       .select('id')
@@ -110,6 +124,7 @@ export async function POST(req: NextRequest) {
     valid_until: coupon.valid_until,
     min_order_value: coupon.min_order_value,
     description: coupon.description,
+    remaining_value: coupon.remaining_value ?? null,
   };
   return NextResponse.json({ coupon: safeCoupon });
 }

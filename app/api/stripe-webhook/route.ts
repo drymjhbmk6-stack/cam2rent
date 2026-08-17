@@ -943,18 +943,33 @@ async function handleCartBooking(
     console.error('[Webhook] Cart-Rechnung-Anlage fehlgeschlagen:', err);
   }
 
-  // Coupon used_count erhoehen
+  // Coupon einloesen (used_count bzw. Restguthaben).
+  // Restguthaben-Gutscheine (Geschenkkarten-Modell, data/coupons.ts
+  // isBalanceCoupon) buchen den tatsaechlich verwendeten, gegen den
+  // Stripe-Betrag skalierten Coupon-Anteil (sCouponDiscount) vom
+  // Restguthaben ab, statt nur eine "Nutzung" zu zaehlen.
   if (couponCode) {
     const { data: couponRow } = await supabase
       .from('coupons')
-      .select('id, used_count')
+      .select('id, used_count, type, remaining_value')
       .ilike('code', couponCode)
       .maybeSingle();
     if (couponRow) {
-      await supabase
-        .from('coupons')
-        .update({ used_count: (couponRow.used_count ?? 0) + 1 })
-        .eq('id', couponRow.id);
+      const isBalance = couponRow.type === 'fixed' && couponRow.remaining_value != null;
+      if (isBalance) {
+        const { error: rpcErr } = await supabase.rpc('redeem_coupon_balance', {
+          p_code: couponCode,
+          p_amount: Math.max(0, sCouponDiscount),
+        });
+        if (rpcErr) {
+          console.error('[Webhook] redeem_coupon_balance fehlgeschlagen (Migration ausstehend?):', rpcErr);
+        }
+      } else {
+        await supabase
+          .from('coupons')
+          .update({ used_count: (couponRow.used_count ?? 0) + 1 })
+          .eq('id', couponRow.id);
+      }
     }
   }
 

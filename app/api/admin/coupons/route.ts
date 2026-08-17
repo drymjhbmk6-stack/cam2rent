@@ -52,12 +52,20 @@ export async function POST(req: NextRequest) {
     code, type, value, description, target_type,
     target_id, target_group_id, target_name, target_user_email,
     valid_from, valid_until, max_uses, min_order_value,
-    once_per_customer, not_combinable, active,
+    once_per_customer, not_combinable, active, remaining_value,
   } = body;
 
   if (!code || !type || value == null) {
     return NextResponse.json({ error: 'Code, Typ und Wert sind erforderlich.' }, { status: 400 });
   }
+
+  // Restguthaben (Geschenkkarten-Modell, data/coupons.ts isBalanceCoupon) gibt
+  // es nur für Festbetrags-Gutscheine — bei 'percent' gibt es keinen
+  // "Restwert" im gleichen Sinn.
+  const remainingValueToStore =
+    type === 'fixed' && remaining_value != null && remaining_value !== ''
+      ? Math.max(0, parseFloat(remaining_value) || 0)
+      : null;
 
   const supabase = createServiceClient();
 
@@ -72,28 +80,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ein Gutschein mit diesem Code existiert bereits.' }, { status: 409 });
   }
 
-  const { data, error } = await supabase
-    .from('coupons')
-    .insert({
-      code: code.trim().toUpperCase(),
-      type,
-      value: parseFloat(value) || 0,
-      description: description ?? '',
-      target_type: target_type ?? 'all',
-      target_id: target_id || null,
-      target_group_id: target_group_id || null,
-      target_name: target_name || null,
-      target_user_email: target_user_email || null,
-      once_per_customer: once_per_customer ?? false,
-      not_combinable: not_combinable ?? false,
-      valid_from: valid_from || null,
-      valid_until: valid_until || null,
-      max_uses: max_uses ? parseInt(max_uses) : null,
-      min_order_value: min_order_value ? parseFloat(min_order_value) : null,
-      active: active ?? true,
-    })
-    .select()
-    .single();
+  const insertRow: Record<string, unknown> = {
+    code: code.trim().toUpperCase(),
+    type,
+    value: parseFloat(value) || 0,
+    description: description ?? '',
+    target_type: target_type ?? 'all',
+    target_id: target_id || null,
+    target_group_id: target_group_id || null,
+    target_name: target_name || null,
+    target_user_email: target_user_email || null,
+    once_per_customer: once_per_customer ?? false,
+    not_combinable: not_combinable ?? false,
+    valid_from: valid_from || null,
+    valid_until: valid_until || null,
+    max_uses: max_uses ? parseInt(max_uses) : null,
+    min_order_value: min_order_value ? parseFloat(min_order_value) : null,
+    active: active ?? true,
+    remaining_value: remainingValueToStore,
+  };
+
+  let { data, error } = await supabase.from('coupons').insert(insertRow).select().single();
+  // Defensiv: Migration supabase-coupons-remaining-value.sql evtl. noch nicht
+  // ausgeführt — ohne die Spalte einmal ohne Restguthaben-Wert erneut versuchen.
+  if (error && remainingValueToStore != null && /remaining_value|column|schema cache|PGRST/i.test(error.message)) {
+    delete insertRow.remaining_value;
+    ({ data, error } = await supabase.from('coupons').insert(insertRow).select().single());
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

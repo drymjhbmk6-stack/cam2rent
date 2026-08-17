@@ -31,6 +31,25 @@ export interface Coupon {
   once_per_customer?: boolean;
   not_combinable?: boolean;
   active?: boolean;
+  /**
+   * Restguthaben in EUR für Festbetrags-Gutscheine (type='fixed').
+   * `null`/`undefined` = kein Guthaben-Tracking — der Gutschein wird pro
+   * Bestellung auf `value` gedeckelt, ein ungenutzter Rest verfällt (altes
+   * Verhalten). Gesetzt (auch 0) = der Gutschein ist eine Geschenkkarte:
+   * jede Einlösung zieht nur den tatsächlich verwendeten Betrag vom
+   * Restguthaben ab, der Rest bleibt für die nächste Bestellung erhalten.
+   */
+  remaining_value?: number | null;
+}
+
+/**
+ * true, wenn dieser Gutschein ein über mehrere Bestellungen hinweg
+ * aufbrauchbares Restguthaben führt (Geschenkkarten-Modell).
+ */
+export function isBalanceCoupon(
+  coupon: Pick<Coupon, 'type' | 'remaining_value'>
+): boolean {
+  return coupon.type === 'fixed' && coupon.remaining_value != null;
 }
 
 /**
@@ -41,10 +60,17 @@ export interface Coupon {
  *   - bei target_type 'group':     der Preis aller Zubehör der Gruppe
  *
  * Die Berechnung von baseAmount übernimmt der Aufrufer (checkout page).
+ *
+ * Bei einem Wertgutschein mit Restguthaben (siehe isBalanceCoupon) wird
+ * der Rabatt zusätzlich auf `remaining_value` gedeckelt — der Kunde kann
+ * nie mehr abziehen, als noch auf dem Gutschein übrig ist.
  */
 export function calcDiscount(coupon: Coupon, baseAmount: number): number {
   if (coupon.type === 'percent') {
     return Math.round(baseAmount * coupon.value) / 100;
   }
-  return Math.min(coupon.value, baseAmount);
+  const cap = isBalanceCoupon(coupon)
+    ? Math.max(0, Number(coupon.remaining_value))
+    : coupon.value;
+  return Math.min(cap, baseAmount);
 }

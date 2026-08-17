@@ -13,7 +13,7 @@ import { getStripePromise } from '@/lib/stripe-client';
 import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
-import { calcDiscount, type Coupon } from '@/data/coupons';
+import { calcDiscount, isBalanceCoupon, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
@@ -1327,6 +1327,13 @@ export default function CheckoutPage() {
                               )}{' '}
                               (−{fmt(couponDiscountAmount)})
                             </p>
+                            {isBalanceCoupon(appliedCoupon) && (
+                              <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">
+                                {Math.max(0, (appliedCoupon.remaining_value ?? 0) - couponDiscountAmount) > 0
+                                  ? `Restguthaben nach dieser Bestellung: ${fmt(Math.max(0, (appliedCoupon.remaining_value ?? 0) - couponDiscountAmount))} — bleibt für deine nächste Bestellung erhalten.`
+                                  : 'Damit ist das Guthaben dieses Gutscheins vollständig aufgebraucht.'}
+                              </p>
+                            )}
                           </div>
                           <button
                             onClick={() => setAppliedCoupon(null)}

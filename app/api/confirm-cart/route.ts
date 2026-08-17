@@ -539,7 +539,7 @@ export async function POST(req: NextRequest) {
           if (r_couponCode) {
             const { data: coupon } = await supabase
               .from('coupons')
-              .select('value, type, active, valid_from, valid_until, min_order_value')
+              .select('value, type, active, valid_from, valid_until, min_order_value, remaining_value')
               .ilike('code', r_couponCode)
               .maybeSingle();
             if (coupon) {
@@ -555,6 +555,16 @@ export async function POST(req: NextRequest) {
                 } else {
                   // 'fixed' = Festbetrag in EUR
                   validatedDiscountCents = Math.round((Number(coupon.value) || 0) * 100);
+                  // Wertgutschein mit Restguthaben (Geschenkkarten-Modell):
+                  // nie mehr abziehen als noch auf dem Gutschein übrig ist —
+                  // sonst würde die Buchung/Rechnung einen höheren Rabatt
+                  // zeigen als tatsächlich vom Guthaben abgebucht wird.
+                  if (coupon.remaining_value != null) {
+                    validatedDiscountCents = Math.min(
+                      validatedDiscountCents,
+                      Math.round(Math.max(0, Number(coupon.remaining_value)) * 100),
+                    );
+                  }
                 }
                 // Hard-Cap: ein Coupon darf nie mehr als 100% des Listenpreises ergeben
                 validatedDiscountCents = Math.max(0, Math.min(validatedDiscountCents, expectedMinCents));
@@ -1092,20 +1102,25 @@ export async function POST(req: NextRequest) {
       // einloesen, oder once_per_customer-Codes mit wechselnden Mail-Adressen
       // mehrfach nutzen.
       let allowRedeem = true;
+      // Wertgutschein mit Restguthaben (Geschenkkarten-Modell, data/coupons.ts
+      // isBalanceCoupon): once_per_customer entfällt, und die Einlösung unten
+      // zieht nur den tatsächlich verwendeten Betrag statt max_uses zu prüfen.
+      let isBalance = false;
       try {
         const { data: couponMeta } = await supabase
           .from('coupons')
-          .select('id, target_user_email, once_per_customer')
+          .select('id, target_user_email, once_per_customer, type, remaining_value')
           .ilike('code', r_couponCode)
           .maybeSingle();
         if (couponMeta) {
+          isBalance = couponMeta.type === 'fixed' && couponMeta.remaining_value != null;
           const targetEmail = (couponMeta.target_user_email ?? '').trim().toLowerCase();
           const buyerEmail = (r_email ?? '').trim().toLowerCase();
           if (targetEmail && targetEmail !== buyerEmail) {
             allowRedeem = false;
             console.warn('[confirm-cart] Coupon ist auf andere E-Mail registriert:', r_couponCode);
           }
-          if (allowRedeem && couponMeta.once_per_customer && (buyerEmail || r_userId)) {
+          if (allowRedeem && !isBalance && couponMeta.once_per_customer && (buyerEmail || r_userId)) {
             // Schon einmal von diesem Kunden genutzt?
             let usedQuery = supabase
               .from('bookings')
@@ -1146,27 +1161,59 @@ export async function POST(req: NextRequest) {
       }
       try {
         if (!allowRedeem) throw new Error('skip-rpc');
-        const { data: rpcData, error: rpcErr } = await supabase.rpc(
-          'increment_coupon_if_available',
-          { p_code: r_couponCode },
-        );
-        if (rpcErr) throw rpcErr;
-        const applied = Array.isArray(rpcData) ? rpcData[0]?.applied : rpcData?.applied;
-        if (!applied) {
-          // Gutschein war nicht (mehr) einlösbar — Zahlung ist aber schon durch.
-          // Keinen Fehler an den Kunden zurückgeben (Buchung normal weiter),
-          // sondern Admin informieren.
-          console.warn('[confirm-cart] Coupon-Einlösung fehlgeschlagen (Race oder aufgebraucht):', r_couponCode);
-          createAdminNotification(supabase, {
-            type: 'coupon_race',
-            title: 'Gutschein konnte nicht eingelöst werden',
-            message: `Gutschein "${r_couponCode}" war beim Einlösen nicht mehr verfügbar. Bitte manuell prüfen (Booking ${payment_intent_id}).`,
-          });
+        if (isBalance) {
+          // Restguthaben-Gutschein: nicht "eine Nutzung verbrauchen", sondern
+          // den tatsächlich vom Guthaben abgezogenen Betrag abbuchen —
+          // r_discountAmount ist an dieser Stelle bereits server-validiert
+          // und auf remaining_value gedeckelt (siehe Floor-Check oben).
+          const { data: rpcData, error: rpcErr } = await supabase.rpc(
+            'redeem_coupon_balance',
+            { p_code: r_couponCode, p_amount: Math.max(0, r_discountAmount ?? 0) },
+          );
+          if (rpcErr) throw rpcErr;
+          const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+          if (!row?.applied) {
+            console.warn('[confirm-cart] Restguthaben-Einlösung fehlgeschlagen (Race oder aufgebraucht):', r_couponCode);
+            createAdminNotification(supabase, {
+              type: 'coupon_race',
+              title: 'Restguthaben-Gutschein konnte nicht abgebucht werden',
+              message: `Gutschein "${r_couponCode}" hatte beim Einlösen kein Restguthaben mehr. Bitte manuell prüfen (Booking ${payment_intent_id}).`,
+            });
+          }
+        } else {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc(
+            'increment_coupon_if_available',
+            { p_code: r_couponCode },
+          );
+          if (rpcErr) throw rpcErr;
+          const applied = Array.isArray(rpcData) ? rpcData[0]?.applied : rpcData?.applied;
+          if (!applied) {
+            // Gutschein war nicht (mehr) einlösbar — Zahlung ist aber schon durch.
+            // Keinen Fehler an den Kunden zurückgeben (Buchung normal weiter),
+            // sondern Admin informieren.
+            console.warn('[confirm-cart] Coupon-Einlösung fehlgeschlagen (Race oder aufgebraucht):', r_couponCode);
+            createAdminNotification(supabase, {
+              type: 'coupon_race',
+              title: 'Gutschein konnte nicht eingelöst werden',
+              message: `Gutschein "${r_couponCode}" war beim Einlösen nicht mehr verfügbar. Bitte manuell prüfen (Booking ${payment_intent_id}).`,
+            });
+          }
         }
       } catch (rpcErr) {
         // skip-rpc kommt aus dem Pre-Check (siehe oben) — nicht als Fehler werten.
         if (rpcErr instanceof Error && rpcErr.message === 'skip-rpc') {
           // Bewusst nichts tun.
+        } else if (isBalance) {
+          // Kein sinnvoller Fallback für Restguthaben (ein flaches
+          // used_count++ würde die Semantik verfälschen) — vermutlich fehlt
+          // die Migration supabase-coupons-remaining-value.sql. Admin
+          // informieren statt den Betrag stillschweigend zu verlieren.
+          console.error('[confirm-cart] redeem_coupon_balance RPC fehlgeschlagen (Migration ausstehend?):', rpcErr);
+          createAdminNotification(supabase, {
+            type: 'coupon_race',
+            title: 'Restguthaben konnte nicht abgebucht werden',
+            message: `Gutschein "${r_couponCode}" — RPC redeem_coupon_balance fehlgeschlagen (evtl. fehlt die Migration). Restguthaben manuell in /admin/gutscheine korrigieren (Booking ${payment_intent_id}).`,
+          });
         } else {
           // Fallback: alte Logik (unsafer, aber rückwärtskompatibel)
           console.error('[confirm-cart] RPC fehlgeschlagen, nutze Fallback-Increment:', rpcErr);
