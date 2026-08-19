@@ -1618,12 +1618,13 @@ erzeugten weder ein PDF noch eine E-Mail.
     Sowohl die Kunden- als auch die interne Admin-Storno-Mail
     (`buildCancellationCustomerEmail`/`buildCancellationAdminEmail` in
     `lib/email.ts`) zeigen jetzt zusätzlich zu „Gebuchter Betrag" und
-    „Rückerstattung" eine eigene Zeile **„Einbehalten (X %) − Y,YY €"**
+    „Rückerstattung" eine eigene Zeile **„Einbehalten (Stornogebühr) − Y,YY €"**
     (`= Math.max(0, priceTotal − refundAmount)`), sobald etwas einbehalten
     wird — egal ob durch die AGB-Staffel, eine Kulanz-Teilerstattung oder die
-    neue „Voll, abzgl. Stripe-Gebühr"-Option. Bei vollem Refund (nichts
-    einbehalten) bleibt die Zeile ausgeblendet. Reine Anzeige-Ergänzung in den
-    zwei zentralen Builder-Funktionen — wirkt automatisch überall, wo
+    neue „Voll, abzgl. Stripe-Gebühr"-Option. Bewusst als Grund („Stornogebühr")
+    statt als reine Prozentzahl. Bei vollem Refund (nichts einbehalten) bleibt
+    die Zeile ausgeblendet. Reine Anzeige-Ergänzung in den zwei zentralen
+    Builder-Funktionen — wirkt automatisch überall, wo
     `sendCancellationConfirmation`/`buildCancellationCustomerEmail` gerufen
     wird (Storno-Dialog, Resend-Storno, Vorlagen-Vorschau). Die drei
     Auto-Storno-Crons (`verification-auto-cancel`/`contract-auto-cancel`/

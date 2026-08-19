@@ -677,11 +677,11 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
   // (nicht nur implizit über die Differenz Gebuchter Betrag ↔ Rückerstattung),
   // damit für den Kunden sofort erkennbar ist, was abgezogen wurde und warum
   // (z.B. AGB-Stornostaffel oder eine vom Admin einbehaltene Stripe-Gebühr).
+  // Bewusst als Grund ("Stornogebühr") statt als reine Prozentzahl.
   const withheldAmount = Math.max(0, Math.round((d.priceTotal - d.refundAmount) * 100) / 100);
-  const withheldPercent = d.priceTotal > 0 ? Math.round((withheldAmount / d.priceTotal) * 100) : 0;
   const withheldRow = withheldAmount > 0
     ? `<tr>
-        <td style="padding:6px 0;color:#6b7280;font-size:14px;">Einbehalten${withheldPercent > 0 ? ` (${withheldPercent} %)` : ''}</td>
+        <td style="padding:6px 0;color:#6b7280;font-size:14px;">Einbehalten (Stornogebühr)</td>
         <td style="padding:6px 0;text-align:right;font-size:14px;color:#6b7280;">− ${fmtEuro(withheldAmount)}</td>
        </tr>`
     : '';
@@ -841,7 +841,7 @@ export function buildCancellationAdminEmail(d: CancellationEmailData): { html: s
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${fmtEuro(d.priceTotal)}</td>
             </tr>
             ${withheldAmountAdmin > 0 ? `<tr>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Einbehalten</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Einbehalten (Stornogebühr)</td>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">− ${fmtEuro(withheldAmountAdmin)}</td>
             </tr>` : ''}
             <tr>
