@@ -1614,6 +1614,22 @@ erzeugten weder ein PDF noch eine E-Mail.
     „Teilbetrag" wählen). Keine Migration, keine Backend-Änderung an der
     Storno-Route nötig (der Endpoint liefert nur die Gebühr, das Modal rechnet
     weiterhin lokal und schickt am Ende nur `refund_amount` wie bisher).
+  - **Einbehaltener Betrag in der Storno-Mail immer transparent (Stand 2026-08-19):**
+    Sowohl die Kunden- als auch die interne Admin-Storno-Mail
+    (`buildCancellationCustomerEmail`/`buildCancellationAdminEmail` in
+    `lib/email.ts`) zeigen jetzt zusätzlich zu „Gebuchter Betrag" und
+    „Rückerstattung" eine eigene Zeile **„Einbehalten (X %) − Y,YY €"**
+    (`= Math.max(0, priceTotal − refundAmount)`), sobald etwas einbehalten
+    wird — egal ob durch die AGB-Staffel, eine Kulanz-Teilerstattung oder die
+    neue „Voll, abzgl. Stripe-Gebühr"-Option. Bei vollem Refund (nichts
+    einbehalten) bleibt die Zeile ausgeblendet. Reine Anzeige-Ergänzung in den
+    zwei zentralen Builder-Funktionen — wirkt automatisch überall, wo
+    `sendCancellationConfirmation`/`buildCancellationCustomerEmail` gerufen
+    wird (Storno-Dialog, Resend-Storno, Vorlagen-Vorschau). Die drei
+    Auto-Storno-Crons (`verification-auto-cancel`/`contract-auto-cancel`/
+    `awaiting-payment-cancel`) nutzen eigene inline Mail-Templates mit
+    ausschließlich 100 %/0 %-Erstattung (keine Teilbeträge) und wurden nicht
+    angefasst.
 - **Backend `PATCH /api/admin/booking/[id]`** (Storno-Branch, non-blocking
   Post-Processing): sanitisiert `refund_amount` (`max(0, min(price_total, …))`).
   Bei `> 0` und echtem `pi_`-PaymentIntent **und `stripe_refund !== false`** →

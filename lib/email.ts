@@ -673,6 +673,19 @@ export function buildAdminEmail(d: BookingEmailData): { html: string; subject: s
 export function buildCancellationCustomerEmail(d: CancellationEmailData): { html: string; subject: string } {
   const subject = `Stornierungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
+  // Transparenz: der einbehaltene Betrag wird IMMER explizit ausgewiesen
+  // (nicht nur implizit über die Differenz Gebuchter Betrag ↔ Rückerstattung),
+  // damit für den Kunden sofort erkennbar ist, was abgezogen wurde und warum
+  // (z.B. AGB-Stornostaffel oder eine vom Admin einbehaltene Stripe-Gebühr).
+  const withheldAmount = Math.max(0, Math.round((d.priceTotal - d.refundAmount) * 100) / 100);
+  const withheldPercent = d.priceTotal > 0 ? Math.round((withheldAmount / d.priceTotal) * 100) : 0;
+  const withheldRow = withheldAmount > 0
+    ? `<tr>
+        <td style="padding:6px 0;color:#6b7280;font-size:14px;">Einbehalten${withheldPercent > 0 ? ` (${withheldPercent} %)` : ''}</td>
+        <td style="padding:6px 0;text-align:right;font-size:14px;color:#6b7280;">− ${fmtEuro(withheldAmount)}</td>
+       </tr>`
+    : '';
+
   const refundRow = d.refundAmount > 0
     ? `<tr>
         <td style="padding:8px 0;font-size:15px;font-weight:700;color:#16a34a;">Rückerstattung</td>
@@ -747,6 +760,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
               <td style="padding:6px 0;color:#6b7280;font-size:14px;">Gebuchter Betrag</td>
               <td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.priceTotal)}</td>
             </tr>
+            ${withheldRow}
             <tr><td colspan="2" style="padding:2px 0;border-top:1px solid #e5e7eb;"></td></tr>
             ${refundRow}
           </table>
@@ -784,6 +798,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
 
 export function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; subject: string } {
   const subject = `Stornierung: ${d.bookingId} – ${h(d.productName)}`;
+  const withheldAmountAdmin = Math.max(0, Math.round((d.priceTotal - d.refundAmount) * 100) / 100);
 
   const html = `
 <!DOCTYPE html>
@@ -825,6 +840,10 @@ export function buildCancellationAdminEmail(d: CancellationEmailData): { html: s
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Gebuchter Betrag</td>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${fmtEuro(d.priceTotal)}</td>
             </tr>
+            ${withheldAmountAdmin > 0 ? `<tr>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Einbehalten</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">− ${fmtEuro(withheldAmountAdmin)}</td>
+            </tr>` : ''}
             <tr>
               <td style="padding:8px 0;font-size:14px;color:#6b7280;">Rückerstattung</td>
               <td style="padding:8px 0;font-size:15px;font-weight:700;color:${d.refundAmount > 0 ? '#16a34a' : '#dc2626'};">${d.refundAmount > 0 ? fmtEuro(d.refundAmount) + ` (${d.refundPercentage * 100} %)` : 'Keine'}</td>
