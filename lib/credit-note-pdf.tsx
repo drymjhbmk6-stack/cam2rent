@@ -248,13 +248,27 @@ export function CreditNotePDF({ data }: { data: CreditNotePdfData }) {
           <Text style={s.totalValue}>{neg(data.grossAmount)}</Text>
         </View>
 
-        {/* ── Tatsaechlich erstatteter Betrag (informativ) ── */}
-        {data.refundedAmount != null && (
-          <View style={s.sumRow} wrap={false}>
-            <Text style={s.sumLabel}>Davon erstattet:</Text>
-            <Text style={s.sumValue}>{fmtEuro(Math.abs(data.refundedAmount))}</Text>
-          </View>
-        )}
+        {/* ── Tatsaechlich erstatteter Betrag + einbehaltener Anteil ──
+            Schlüssige Rechnungslegung: Gutschriftbetrag = Davon erstattet +
+            Einbehalten (Stornogebühr) — kein unerklärter Differenzbetrag. */}
+        {data.refundedAmount != null && (() => {
+          const refunded = Math.max(0, Math.abs(data.refundedAmount));
+          const withheld = Math.max(0, Math.round((Math.abs(data.grossAmount) - refunded) * 100) / 100);
+          return (
+            <>
+              <View style={s.sumRow} wrap={false}>
+                <Text style={s.sumLabel}>Davon erstattet:</Text>
+                <Text style={s.sumValue}>{fmtEuro(refunded)}</Text>
+              </View>
+              {withheld > 0 ? (
+                <View style={s.sumRow} wrap={false}>
+                  <Text style={s.sumLabel}>Einbehalten (Stornogebühr):</Text>
+                  <Text style={s.sumValue}>{fmtEuro(withheld)}</Text>
+                </View>
+              ) : null}
+            </>
+          );
+        })()}
 
         {/* ── Steuer-Hinweis ── */}
         <Text style={{ fontSize: 9, color: C.grayMid, marginTop: 6 }}>
@@ -269,11 +283,12 @@ export function CreditNotePDF({ data }: { data: CreditNotePdfData }) {
           {(() => {
             const refunded = data.refundedAmount != null ? Math.abs(data.refundedAmount) : Math.abs(data.grossAmount);
             const full = Math.abs(data.grossAmount);
+            const withheld = Math.max(0, Math.round((full - refunded) * 100) / 100);
             if (refunded <= 0) {
               return 'Diese Buchung wurde storniert. Es erfolgt keine Rückzahlung dieses Betrags.';
             }
-            if (refunded + 0.005 < full) {
-              return `Diese Buchung wurde storniert. Davon wurde ein Betrag von ${fmtEuro(refunded)} auf das ursprüngliche Zahlungsmittel zurückerstattet.`;
+            if (withheld > 0) {
+              return `Diese Buchung wurde storniert. Davon wurde ein Betrag von ${fmtEuro(refunded)} auf das ursprüngliche Zahlungsmittel zurückerstattet; ${fmtEuro(withheld)} wurden als Stornogebühr einbehalten.`;
             }
             return `Der Betrag von ${fmtEuro(refunded)} wurde vollständig auf das ursprüngliche Zahlungsmittel zurückerstattet.`;
           })()}

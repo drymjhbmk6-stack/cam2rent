@@ -1631,6 +1631,23 @@ erzeugten weder ein PDF noch eine E-Mail.
     `awaiting-payment-cancel`) nutzen eigene inline Mail-Templates mit
     ausschließlich 100 %/0 %-Erstattung (keine Teilbeträge) und wurden nicht
     angefasst.
+  - **Stornierungsbeleg-PDF + Gutschrift-Mail zeigen dieselbe Aufschlüsselung
+    (Stand 2026-08-19):** `lib/credit-note-pdf.tsx` (`CreditNotePDF`) rechnet
+    zusätzlich zur bestehenden Zeile „Davon erstattet" den einbehaltenen Anteil
+    (`grossAmount − refundedAmount`) aus und zeigt ihn — sofern > 0 — als eigene
+    Zeile **„Einbehalten (Stornogebühr)"** direkt darunter, sowie im
+    abschließenden Fließtext ausformuliert. **`Gutschriftbetrag` bleibt
+    unverändert der volle Stornobetrag** (GoBD-Reversal der Originalrechnung,
+    siehe „Wichtig: Stornobetrag (Beleg) und Rückerstattung (Stripe) sind
+    getrennt" weiter oben) — nur die Aufschlüsselung darunter macht jetzt
+    schlüssig sichtbar, dass `Davon erstattet + Einbehalten (Stornogebühr) =
+    Gutschriftbetrag` ist, statt eine unerklärte Differenz stehen zu lassen.
+    Gleiche Formulierung + Berechnung zusätzlich im `refundLine`-Satz der
+    separaten Gutschrift-Mail (`sendCreditNote` in `lib/email.ts`, emailType
+    `credit_note` — eigenständiger Pfad neben der Storno-Bestätigungsmail,
+    genutzt vom Gutschriften-Tab-Approve und `createCancellationCreditNote`).
+    Reine Rendering-Ergänzung in beiden Funktionen — keine neue Datenspalte,
+    kein API-Change; `refundedAmount`/`grossAmount` gab es schon vorher.
 - **Backend `PATCH /api/admin/booking/[id]`** (Storno-Branch, non-blocking
   Post-Processing): sanitisiert `refund_amount` (`max(0, min(price_total, …))`).
   Bei `> 0` und echtem `pi_`-PaymentIntent **und `stripe_refund !== false`** →
