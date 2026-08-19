@@ -1592,6 +1592,28 @@ erzeugten weder ein PDF noch eine E-Mail.
   bereits manuell/Kulanz erstattet) + Checkbox **„E-Mail an Kunden senden"**
   (Default an). `handleCancel` schickt zusätzlich `refund_amount` (Zahl),
   `stripe_refund` (bool) + `send_email` (bool) im PATCH-Body.
+  - **Radio „Voll, abzgl. Stripe-Gebühr" (Stand 2026-08-19):** Vierte Option
+    neben Keine/Voll/Teilbetrag, nur sichtbar bei echter Stripe-Zahlung
+    (`payment_intent_id` beginnt mit `pi_`). Für Kulanz-Stornos, bei denen der
+    Admin die Stripe-Transaktionsgebühr **einbehalten** will (Stripe erstattet
+    seine Gebühr bei einem Refund nicht an den Händler zurück — ein Voll-Refund
+    würde die Gebühr also zusätzlich zum Umsatzausfall kosten). Beim
+    Modal-Öffnen lädt `fetchCancelStripeFee()` die tatsächliche Gebühr über den
+    neuen Endpoint **`GET /api/admin/booking/[id]/stripe-fee`** (live via
+    `stripe.paymentIntents.retrieve` → `charges.retrieve(latest_charge,
+    {expand:['balance_transaction']})`, gleiches Muster wie
+    `lib/buchhaltung/stripe-sync.ts`; Fallback auf den gecachten Wert aus
+    `stripe_transactions.fee`, falls der Live-Call scheitert). Label zeigt die
+    Gebühr + den daraus resultierenden Erstattungsbetrag live
+    („Voll, abzgl. Stripe-Gebühr (−X,XX €) = Y,YY €"); Refund-Wert = `Math.max(0,
+    price_total − fee)` in `cancelRefundValue()`. Die AGB-Vorschlags-/
+    Begründungspflicht-Logik greift unverändert (Betrag liegt i. d. R. über dem
+    AGB-Vorschlag, da nur die Gebühr abgezogen wird). Ist die Gebühr nicht
+    ermittelbar, zeigt das Label „nicht ermittelbar" und der Wert fällt defensiv
+    auf den vollen Betrag zurück (Admin sieht das am Label und kann stattdessen
+    „Teilbetrag" wählen). Keine Migration, keine Backend-Änderung an der
+    Storno-Route nötig (der Endpoint liefert nur die Gebühr, das Modal rechnet
+    weiterhin lokal und schickt am Ende nur `refund_amount` wie bisher).
 - **Backend `PATCH /api/admin/booking/[id]`** (Storno-Branch, non-blocking
   Post-Processing): sanitisiert `refund_amount` (`max(0, min(price_total, …))`).
   Bei `> 0` und echtem `pi_`-PaymentIntent **und `stripe_refund !== false`** →

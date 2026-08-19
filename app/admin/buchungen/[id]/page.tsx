@@ -267,8 +267,12 @@ export default function BuchungDetailPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonCategory, setCancelReasonCategory] = useState<CancellationReasonCategory>('customer');
   const [cancelDeviationReason, setCancelDeviationReason] = useState('');
-  const [cancelRefundMode, setCancelRefundMode] = useState<'none' | 'full' | 'partial'>('none');
+  const [cancelRefundMode, setCancelRefundMode] = useState<'none' | 'full' | 'partial' | 'full_minus_fee'>('none');
   const [cancelRefundAmount, setCancelRefundAmount] = useState(0);
+  // Live-Stripe-Gebühr der Buchungszahlung — für die Storno-Option "Voll,
+  // abzgl. Stripe-Gebühr" (Kulanz-Storno ohne die Gebühr zusätzlich zu verlieren).
+  const [cancelStripeFee, setCancelStripeFee] = useState<number | null>(null);
+  const [cancelStripeFeeLoading, setCancelStripeFeeLoading] = useState(false);
   const [cancelStripeRefund, setCancelStripeRefund] = useState(true);
   const [cancelSendEmail, setCancelSendEmail] = useState(true);
   const [resendStornoBusy, setResendStornoBusy] = useState(false);
@@ -715,9 +719,48 @@ export default function BuchungDetailPage() {
   function cancelRefundValue(): number {
     if (!booking) return 0;
     const total = booking.price_total ?? 0;
-    return cancelRefundMode === 'full' ? total
-      : cancelRefundMode === 'partial' ? Math.max(0, Math.min(total, cancelRefundAmount))
-      : 0;
+    if (cancelRefundMode === 'full') return total;
+    if (cancelRefundMode === 'partial') return Math.max(0, Math.min(total, cancelRefundAmount));
+    if (cancelRefundMode === 'full_minus_fee') return Math.max(0, Math.min(total, total - (cancelStripeFee ?? 0)));
+    return 0;
+  }
+
+  /** Live-Stripe-Gebühr der Buchungszahlung nachladen (für "Voll, abzgl. Stripe-Gebühr"). */
+  async function fetchCancelStripeFee() {
+    if (!booking?.payment_intent_id?.startsWith('pi_')) { setCancelStripeFee(null); return; }
+    setCancelStripeFeeLoading(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/stripe-fee`);
+      const d = await res.json().catch(() => ({}));
+      setCancelStripeFee(d?.available ? Number(d.fee) || 0 : null);
+    } catch {
+      setCancelStripeFee(null);
+    } finally {
+      setCancelStripeFeeLoading(false);
+    }
+  }
+
+  /** Auswahl-Optionen des Storno-Rückerstattungs-Radios (inkl. Stripe-Gebühr-Variante). */
+  function cancelRefundOptions(): { v: 'none' | 'full' | 'partial' | 'full_minus_fee'; label: string }[] {
+    const total = booking?.price_total ?? 0;
+    const opts: { v: 'none' | 'full' | 'partial' | 'full_minus_fee'; label: string }[] = [
+      { v: 'none', label: 'Keine Rückerstattung' },
+      { v: 'full', label: `Voller Betrag (${fmtEuro(total)})` },
+    ];
+    // Nur anbieten, wenn eine echte Stripe-Zahlung hinterlegt ist — die Gebühr
+    // lässt sich sonst nicht ermitteln (manuelle/PENDING-Buchungen).
+    if (booking?.payment_intent_id?.startsWith('pi_')) {
+      opts.push({
+        v: 'full_minus_fee',
+        label: cancelStripeFeeLoading
+          ? 'Voll, abzgl. Stripe-Gebühr (wird geladen…)'
+          : cancelStripeFee != null
+            ? `Voll, abzgl. Stripe-Gebühr (−${fmtEuro(cancelStripeFee)}) = ${fmtEuro(Math.max(0, total - cancelStripeFee))}`
+            : 'Voll, abzgl. Stripe-Gebühr (nicht ermittelbar)',
+      });
+    }
+    opts.push({ v: 'partial', label: 'Teilbetrag' });
+    return opts;
   }
 
   /** true → eingegebene Erstattung liegt unter dem AGB-Vorschlag (Begründung Pflicht). */
@@ -733,6 +776,8 @@ export default function BuchungDetailPage() {
     setCancelDeviationReason('');
     setCancelStripeRefund(true);
     setCancelSendEmail(true);
+    setCancelStripeFee(null);
+    fetchCancelStripeFee();
     const sugg = booking
       ? computeCancellationSuggestion({
           priceTotal: booking.price_total ?? 0,
@@ -803,6 +848,7 @@ export default function BuchungDetailPage() {
       setCancelDeviationReason('');
       setCancelRefundMode('none');
       setCancelRefundAmount(0);
+      setCancelStripeFee(null);
       setCancelStripeRefund(true);
       setCancelSendEmail(true);
     } catch { toastError('Netzwerkfehler.'); }
@@ -2344,11 +2390,7 @@ export default function BuchungDetailPage() {
               {/* Rückerstattung */}
               <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mt-4 mb-2">Rückerstattung</label>
               <div className="space-y-1.5">
-                {([
-                  { v: 'none', label: 'Keine Rückerstattung' },
-                  { v: 'full', label: `Voller Betrag (${fmtEuro(booking.price_total ?? 0)})` },
-                  { v: 'partial', label: 'Teilbetrag' },
-                ] as const).map((opt) => (
+                {cancelRefundOptions().map((opt) => (
                   <label key={opt.v} className="flex items-center gap-2 text-sm font-body text-brand-black dark:text-slate-200 cursor-pointer">
                     <input
                       type="radio"
@@ -2361,6 +2403,11 @@ export default function BuchungDetailPage() {
                   </label>
                 ))}
               </div>
+              {cancelRefundMode === 'full_minus_fee' && (
+                <p className="text-xs text-brand-muted mt-1">
+                  Stripe erstattet seine Transaktionsgebühr bei einer Rückerstattung nicht — dieser Betrag lässt sie bei euch.
+                </p>
+              )}
               {cancelRefundMode === 'partial' && (
                 <div className="mt-2">
                   <PriceInput
@@ -2423,7 +2470,7 @@ export default function BuchungDetailPage() {
               </label>
 
               <div className="flex justify-end gap-2 mt-5">
-                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelReasonCategory('customer'); setCancelDeviationReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelStripeRefund(true); setCancelSendEmail(true); }}
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); setCancelReasonCategory('customer'); setCancelDeviationReason(''); setCancelRefundMode('none'); setCancelRefundAmount(0); setCancelStripeFee(null); setCancelStripeRefund(true); setCancelSendEmail(true); }}
                   className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                   Abbrechen
                 </button>
