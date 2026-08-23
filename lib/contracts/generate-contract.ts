@@ -10,6 +10,9 @@ import { getInventarWbwAverageByLegacyAccessoryIds, getInventarWbwAverageByLegac
 import { resolveBookingCameras, type BookingCamera } from '@/lib/booking-cameras';
 import { verifyAccessoryPrice } from '@/lib/booking/verify-accessory-price';
 import { computeLiabilityMaxAmount } from '@/lib/contracts/legal-snapshot-utils';
+import { getPriceForDays } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
+import { distributeAmount } from '@/lib/cart-period-groups';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -465,6 +468,52 @@ async function loadCustomParagraphs(): Promise<{ title: string; text: string }[]
   return null;
 }
 
+/** Namens-Normalisierung fuer den Katalog-Match (wie im Buchhaltungs-Dashboard). */
+function normCamName(n: string): string {
+  return n.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Verteilt den Gesamt-Mietpreis auf die einzelnen Kamera-Positionen des
+ * Vertrags — gewichtet nach dem Katalogpreis des jeweiligen Modells fuer die
+ * gebuchte Mietdauer.
+ *
+ * Warum: Frueher trug Position 1 den kompletten Mietpreis und alle weiteren
+ * Kameras standen mit 0,00 EUR im Vertrag. Die Summe stimmte, aber es las sich,
+ * als waeren die zusaetzlichen Kameras kostenlos.
+ *
+ * Ohne Katalog-Treffer (unbekanntes Modell) faellt `distributeAmount` auf eine
+ * gleichmaessige Verteilung zurueck. Der Rundungsrest landet in der letzten
+ * Zeile, damit die Summe der Positionen EXAKT dem Gesamt-Mietpreis entspricht.
+ */
+async function splitRentalPriceByCamera(
+  cameras: Pick<BookingCamera, 'product_id' | 'product_name'>[],
+  rentalDays: number,
+  totalRentalPrice: number,
+  fallbackProductId: string | null,
+): Promise<number[]> {
+  if (cameras.length === 0) return [];
+  if (cameras.length === 1) return [Math.round(totalRentalPrice * 100) / 100];
+
+  let weights: number[] = cameras.map(() => 0);
+  try {
+    const products = await getProducts();
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const byName = new Map(products.map((p) => [normCamName(p.name), p]));
+    weights = cameras.map((c) => {
+      const prod =
+        (c.product_id ? byId.get(c.product_id) : undefined) ??
+        (c.product_name ? byName.get(normCamName(c.product_name)) : undefined) ??
+        (fallbackProductId ? byId.get(fallbackProductId) : undefined);
+      const price = prod ? getPriceForDays(prod, Math.max(1, rentalDays)) : 0;
+      return price > 0 ? price : 0;
+    });
+  } catch {
+    // Katalog nicht ladbar -> gleichmaessige Verteilung (weights bleiben 0).
+  }
+  return distributeAmount(totalRentalPrice, weights);
+}
+
 export async function generateContractPDF(opts: {
   bookingId: string;
   bookingNumber: string;
@@ -659,6 +708,16 @@ export async function generateContractPDF(opts: {
           // Seriennummer + eigenem Wiederbeschaffungswert (Asset → Produkt-
           // Schnitt → Kautions-Floor). Gemischte Modelle korrekt.
           const perCamFloor = depositFloor / Math.max(1, bkCameras.length);
+          // Mietpreis je Position statt "alles auf Zeile 1": frueher stand der
+          // gesamte Mietpreis in Position 1 und Kamera 2..n erschienen mit
+          // 0,00 EUR — die Summe stimmte, der Vertrag las sich aber, als waeren
+          // die weiteren Kameras kostenlos. Gewichtung nach Katalogpreis je
+          // Modell (gleiche Logik wie die Umsatz-Verteilung im
+          // Buchhaltungs-Dashboard), Rest-Cent auf die letzte Zeile, damit die
+          // Summe EXAKT opts.priceRental bleibt.
+          const camPrices = await splitRentalPriceByCamera(
+            bkCameras, opts.rentalDays, opts.priceRental, resolveProductId,
+          );
           camLines = await Promise.all(
             bkCameras.map(async (c, i) => {
               const av = await loadAssetCurrentValue(
@@ -669,7 +728,7 @@ export async function generateContractPDF(opts: {
                 bezeichnung: c.product_name,
                 seriennr: await resolveSerial(c.unit_id),
                 tage: opts.rentalDays,
-                preis: i === 0 ? opts.priceRental : 0,
+                preis: camPrices[i],
                 wiederbeschaffungswert: Math.max(av ?? 0, perCamFloor),
               };
             }),
@@ -686,13 +745,18 @@ export async function generateContractPDF(opts: {
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean);
-          camLines = (cameraNames.length > 0 ? cameraNames : [opts.productName]).map(
+          const legacyNames = cameraNames.length > 0 ? cameraNames : [opts.productName];
+          const legacyPrices = await splitRentalPriceByCamera(
+            legacyNames.map((nm) => ({ product_id: null, product_name: nm, unit_id: null })),
+            opts.rentalDays, opts.priceRental, resolveProductId,
+          );
+          camLines = legacyNames.map(
             (nm, i) => ({
               position: i + 1,
               bezeichnung: nm,
               seriennr: i === 0 ? effectiveSerial : '',
               tage: opts.rentalDays,
-              preis: i === 0 ? opts.priceRental : 0,
+              preis: legacyPrices[i],
               wiederbeschaffungswert,
             }),
           );

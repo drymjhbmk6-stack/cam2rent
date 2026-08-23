@@ -25,6 +25,8 @@ import ExpressSignup from '@/components/checkout/ExpressSignup';
 import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 import { useAllowedCountries } from '@/lib/use-allowed-countries';
+import { groupByPeriod } from '@/lib/cart-period-groups';
+import { haftungShortLabel } from '@/lib/haftung-labels';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
 import { cancellationSummaryLine } from '@/lib/cancellation-text';
@@ -472,20 +474,16 @@ export default function CheckoutPage() {
     if (hydrated && itemCount === 0) router.replace('/warenkorb');
   }, [hydrated, itemCount, router]);
 
-  // Artikel nach Mietzeitraum gruppieren
-  const periodGroups = useMemo(() => {
-    const groups: Record<string, typeof items> = {};
-    for (const item of items) {
-      const key = `${item.rentalFrom}_${item.rentalTo}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    }
-    return Object.entries(groups).map(([key, groupItems]) => {
-      const [from, to] = key.split('_');
-      return { from, to, items: groupItems, key };
-    });
-  }, [items]);
+  // Artikel zu je einer kuenftigen Buchung gruppieren (Zeitraum + Haftung).
+  // Geteilte Logik mit warenkorb, confirm-cart und dem Stripe-Webhook.
+  const periodGroups = useMemo(() => groupByPeriod(items), [items]);
   const hasMultiplePeriods = periodGroups.length > 1;
+  // Unterscheiden sich Gruppen NUR im Haftungsschutz, waere der Zeitraum allein
+  // als Ueberschrift mehrdeutig — dann die Haftung mit ausweisen.
+  const showHaftungInGroupHeader = useMemo(() => {
+    const periods = new Set(periodGroups.map((g) => `${g.rentalFrom}_${g.rentalTo}`));
+    return periods.size < periodGroups.length;
+  }, [periodGroups]);
 
   // ── Auto-discount calculations ──────────────────────────────────────────────
 
@@ -799,7 +797,26 @@ export default function CheckoutPage() {
   // Vertrags-Vorschau (das rechtsverbindliche PDF wird pro Buchung serverseitig
   // in confirm-cart aus den echten Daten erzeugt).
   const contractSummary = useMemo(() => {
-    const productNames = Array.from(new Set(items.map((i) => i.productName))).join(', ');
+    const toDEDate = (iso?: string) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return d ? `${d}.${m}.${y}` : iso;
+    };
+    // Bei mehreren Mietzeitraeumen jede Kamera MIT ihrem eigenen Zeitraum
+    // ausweisen. Vorher wurden nur die Namen aufgelistet und darueber ein
+    // einziger Zeitraum (fruehestes Start- bis spaetestes Enddatum) angezeigt —
+    // fuer den Kunden sah es so aus, als liefen alle Kameras ueber die gesamte
+    // Spanne. Die rechtsverbindlichen PDFs entstehen ohnehin PRO Buchung mit
+    // dem jeweils eigenen Zeitraum (serverseitig in confirm-cart).
+    const groups = groupByPeriod(items);
+    const productNames = groups.length > 1
+      ? groups
+          .map((g) => {
+            const names = Array.from(new Set(g.items.map((i) => i.productName))).join(', ');
+            return `${names} (${toDEDate(g.rentalFrom)}–${toDEDate(g.rentalTo)})`;
+          })
+          .join(' · ')
+      : Array.from(new Set(items.map((i) => i.productName))).join(', ');
     const accNames = Array.from(new Set(
       items.flatMap((i) => (i.accessories ?? []).map(
         (accId) => ALL_ACCESSORIES.find((a) => a.id === accId)?.name ?? accId,
@@ -955,7 +972,8 @@ export default function CheckoutPage() {
                               Buchung {gi + 1}
                             </span>
                             <span className="text-[10px] text-brand-muted dark:text-gray-500">
-                              {group.from} bis {group.to}
+                              {group.rentalFrom} bis {group.rentalTo}
+                              {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`}
                             </span>
                           </div>
                         )}
@@ -1576,6 +1594,22 @@ export default function CheckoutPage() {
               </button>
             </div>
             <div className="p-4">
+              {hasMultiplePeriods && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                  <p className="text-sm text-amber-900 dark:text-amber-200 font-body leading-relaxed">
+                    <strong>Hinweis:</strong> Deine Bestellung enthält {periodGroups.length} verschiedene
+                    Mietzeiträume. Es werden {periodGroups.length} separate Buchungen mit je eigenem
+                    Mietvertrag erstellt — die Vorschau fasst sie hier nur zusammen.
+                  </p>
+                  <ul className="mt-2 space-y-0.5">
+                    {periodGroups.map((g, gi) => (
+                      <li key={g.key} className="text-xs text-amber-800 dark:text-amber-300">
+                        {gi + 1}. {g.items.map((i) => i.productName).join(', ')} · {g.rentalFrom} bis {g.rentalTo}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <SignatureStep
                 customerName={`${firstName} ${lastName}`.trim() || user?.user_metadata?.full_name || user?.email || ''}
                 customerEmail={email || user?.email || ''}

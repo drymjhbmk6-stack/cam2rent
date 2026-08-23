@@ -632,6 +632,7 @@ export default function ManualBookingPage() {
 
       // Alle Produkte zusammenfassen als EINE Buchung
       const productNames: string[] = [];
+      const cameraPicks: { product_id: string; product_name: string; qty: number }[] = [];
       const allAccessories: string[] = [];
       const allNotes: string[] = [];
       let totalRental = 0;
@@ -658,6 +659,11 @@ export default function ManualBookingPage() {
         for (let q = 0; q < sp.qty; q++) {
           productNames.push(p?.name ?? sp.id);
         }
+        // Strukturierte Kamera-Liste: der Komma-String allein verliert die
+        // product_id jeder weiteren Position — der Server klebte dann allen
+        // Namen dieselbe (erste) product_id an und reservierte bei gemischten
+        // Modellen N Exemplare desselben Produkts.
+        cameraPicks.push({ product_id: sp.id, product_name: p?.name ?? sp.id, qty: sp.qty });
         totalRental += pPrice * sp.qty;
         totalAcc += (pAccPrice + pSetPrice) * sp.qty;
         totalHaftung += pHaftungPrice * sp.qty;
@@ -685,6 +691,7 @@ export default function ManualBookingPage() {
         body: JSON.stringify({
           product_id: selectedProducts[0].id,
           product_name: productNames.join(', '),
+          cameras: cameraPicks,
           rental_from: rentalFrom,
           rental_to: rentalTo,
           days,

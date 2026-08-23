@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
-import { generateBookingId } from '@/lib/booking-id';
+import { generateBookingId, incrementBookingIdSuffix } from '@/lib/booking-id';
 import type { CartItem } from '@/components/CartProvider';
 import {
   sendBookingConfirmation,
@@ -20,6 +20,7 @@ import {
 } from '@/lib/booking/resolve-addresses';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
+import { groupByPeriod, groupPaymentIntentId, distributeAmount } from '@/lib/cart-period-groups';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -166,18 +167,28 @@ export async function POST(req: NextRequest) {
     const supabase = createServiceClient();
 
     // Idempotenz: Prüfen ob Buchung bereits existiert.
-    // payment_intent_id wird in handleSingleBooking/handleCartBooking exakt
-    // als intent.id gespeichert — daher reicht ein Equality-Check.
-    const { data: existing } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('payment_intent_id', intent.id)
-      .limit(1)
-      .maybeSingle();
+    // Einzelbuchungen speichern payment_intent_id exakt als intent.id — dort
+    // reicht ein Equality-Check.
+    //
+    // Beim Warenkorb NICHT frueh aussteigen: eine Bestellung mit mehreren
+    // Mietzeitraeumen besteht aus MEHREREN Buchungen (Gruppe 0 = intent.id,
+    // danach _g2, _g3 ...). Hat confirm-cart nur einen Teil davon angelegt und
+    // ist dann abgebrochen, wuerde ein Equality-Treffer auf Gruppe 0 die
+    // fehlenden Gruppen fuer immer verhindern. handleCartBooking ist selbst
+    // idempotent (ueberspringt je Gruppe bei 23505) und entscheidet das
+    // deshalb pro Gruppe.
+    if (meta.booking_type !== 'cart') {
+      const { data: existing } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('payment_intent_id', intent.id)
+        .limit(1)
+        .maybeSingle();
 
-    if (existing) {
-      // Buchung existiert bereits — alles gut
-      return NextResponse.json({ received: true, already_exists: true });
+      if (existing) {
+        // Buchung existiert bereits — alles gut
+        return NextResponse.json({ received: true, already_exists: true });
+      }
     }
 
     // Steuerkonfiguration laden
@@ -739,43 +750,28 @@ async function handleCartBooking(
     invoiceOverride = resolveInvoiceAddress(profileRow, ctxBillingAddress ? { name: (ctx.billingName as string) ?? null, address: ctxBillingAddress } : null);
   }
 
-  // EINE Buchung für den gesamten Warenkorb. Tester-User → separater
-  // Counter-Pool (siehe handleSingleBooking).
+  // ── EINE Buchung PRO Zeitraum-/Haftungs-Gruppe ───────────────────────────
+  // Frueher legte der Webhook den GESAMTEN Warenkorb als EINE Buchung an und
+  // nahm Zeitraum, product_id, days und haftung aus items[0]. Bei zwei Kameras
+  // mit unterschiedlichen Mietzeitraeumen entstand so eine Buchung mit nur
+  // EINEM Zeitraum — inklusive falschem Mietvertrag und falscher
+  // Exemplar-Reservierung (Kamera 2 wurde im Zeitraum von Kamera 1 geblockt,
+  // ihr echter Zeitraum blieb frei -> Ueberbuchungsrisiko).
+  //
+  // Jetzt spiegelt der Webhook exakt confirm-cart: dieselbe Gruppierung
+  // (lib/cart-period-groups) und dieselbe payment_intent_id-Konvention
+  // (Gruppe 0 = intent.id, danach _g2, _g3 ...). Dadurch kollidieren beide
+  // Schreibpfade bei einem Race sauber am Unique-Index, statt Duplikate oder
+  // fehlende Gruppen zu erzeugen.
   const isTesterCart = intent.metadata?.tester === '1';
   const testModeForIdCart = isTesterCart || (await isTestMode());
-  const bookingId = await generateBookingId({ isTest: testModeForIdCart });
-  const firstItem = items[0];
-  const productName = items.length === 1
-    ? firstItem.productName
-    : items.map((it) => it.productName).join(', ');
 
-  // Zubehoer + Set qty-aware aggregieren (siehe confirm-cart fuer Details).
-  type AccItem = { accessory_id: string; qty: number };
-  const aggMap = new Map<string, number>();
-  for (const it of items) {
-    if (Array.isArray(it.accessoryItems) && it.accessoryItems.length > 0) {
-      for (const ai of it.accessoryItems as AccItem[]) {
-        if (!ai?.accessory_id) continue;
-        const q = typeof ai.qty === 'number' && ai.qty > 0 ? Math.floor(ai.qty) : 1;
-        aggMap.set(ai.accessory_id, (aggMap.get(ai.accessory_id) ?? 0) + q);
-      }
-    } else {
-      for (const id of it.accessories ?? []) {
-        if (!id) continue;
-        aggMap.set(id, (aggMap.get(id) ?? 0) + 1);
-      }
-    }
-  }
-  const cartAccessoryItems: AccItem[] = [...aggMap.entries()]
-    .map(([accessory_id, qty]) => ({ accessory_id, qty }));
-  const allAccessories = itemsToLegacyIds(cartAccessoryItems);
+  const periodGroups = groupByPeriod(items);
 
-  // is_test tester-bewusst setzen (siehe handleSingleBooking) — sonst blockiert
-  // eine vom Webhook-Race angelegte Tester-Cart-Buchung den Live-Kalender.
-  // testModeForIdCart = isTesterCart || isTestMode().
-  // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles auflösen
-  // (maßgeblich). Sie ersetzt Mengen-/Frühbucher-/Treuerabatt. Basis = Miete +
-  // Zubehör + Haftung (= Warenwert, konsistent zur Checkout-Anzeige).
+  // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles aufloesen
+  // (massgeblich). Sie ersetzt Mengen-/Fruehbucher-/Treuerabatt. Basis =
+  // Miete + Zubehoer + Haftung (= Warenwert, konsistent zur Checkout-Anzeige).
+  const cartBase = items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0);
   let cartSpecial = 0;
   if (userId) {
     try {
@@ -788,19 +784,13 @@ async function handleCartBooking(
         percent: (spRow as { special_discount_percent?: number | null } | null)?.special_discount_percent ?? null,
         validUntil: (spRow as { special_discount_valid_until?: string | null } | null)?.special_discount_valid_until ?? null,
       });
-      if (spPct > 0) {
-        const base = items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0);
-        cartSpecial = Math.round(base * spPct) / 100;
-      }
+      if (spPct > 0) cartSpecial = Math.round(cartBase * spPct) / 100;
     } catch { /* defensiv: Migration evtl. nicht durch */ }
   }
   const cartSpecialActive = cartSpecial > 0;
 
   // H-7: Rabatte gegen den von Stripe signierten Gesamtbetrag skalieren —
-  // analog confirm-cart (Stripe ist Source of Truth). So summieren die
-  // persistierten Rabatt-Felder immer exakt zum tatsaechlich gezahlten Betrag,
-  // egal ob confirm-cart oder der Webhook die Buchung zuerst schreibt.
-  const cartBase = items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0);
+  // analog confirm-cart (Stripe ist Source of Truth).
   const paidEurosCart = intent.amount / 100;
   const effectiveDiscount = Math.max(0, Math.round((cartBase + shippingPrice - paidEurosCart) * 100) / 100);
   const bodyDiscountSum =
@@ -815,65 +805,255 @@ async function handleCartBooking(
   const sEarlyBirdDiscount = cartSpecialActive ? 0 : Math.round(earlyBirdDiscount * discScale * 100) / 100;
   const sLoyaltyDiscount = cartSpecialActive ? 0 : Math.round(loyaltyDiscount * discScale * 100) / 100;
   const sSpecialDiscount = cartSpecialActive ? Math.round(cartSpecial * discScale * 100) / 100 : 0;
-  const sDiscountAmount = sCouponDiscount + sProductDiscount;
 
-  const cartInsert: Record<string, unknown> = {
-    id: bookingId,
-    payment_intent_id: intent.id,
-    is_test: testModeForIdCart,
-    product_id: firstItem.productId,
-    product_name: productName,
-    rental_from: firstItem.rentalFrom,
-    rental_to: firstItem.rentalTo,
-    days: firstItem.days,
-    delivery_mode: deliveryMode,
-    shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-    shipping_price: shippingPrice,
-    haftung: firstItem.haftung,
-    accessories: allAccessories,
-    accessory_items: cartAccessoryItems.length > 0 ? cartAccessoryItems : null,
-    price_rental: items.reduce((s, it) => s + it.priceRental, 0),
-    price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-    price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
-    price_total: intent.amount / 100,
-    deposit: items.reduce((s, it) => s + it.deposit, 0),
-    status: 'confirmed',
-    user_id: userId,
-    customer_email: customerEmail,
-    customer_name: customerName,
-    shipping_address: shippingAddress,
-    ...(invoiceOverride
-      ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
-      : {}),
-    // Echter Gutschein-Code hat Vorrang; sonst der Aktionsname (z.B.
-    // "Sommer25"), damit die Rechnung die Rabatt-Zeile korrekt beschriftet.
-    coupon_code: couponCode || productDiscountLabel || null,
-    // H-7: skalierter Coupon + Produktaktion (analog confirm-cart groupDiscount).
-    discount_amount: sDiscountAmount,
-    duration_discount: sDurationDiscount,
-    loyalty_discount: sLoyaltyDiscount,
-    // Frühbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(sEarlyBirdDiscount > 0 ? { early_bird_discount: sEarlyBirdDiscount } : {}),
-    // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
-    ...(cartSpecialActive ? { special_discount: sSpecialDiscount } : {}),
-    // § 356 Abs. 4 BGB — Zustimmung (Zeitstempel + IP aus dem Checkout-Kontext).
-    ...(earlyServiceConsentAt
-      ? { early_service_consent_at: earlyServiceConsentAt, early_service_consent_ip: earlyServiceConsentIp }
-      : {}),
-  };
+  // Aufteilung auf die Gruppen. Gewicht = Warenwert der Gruppe. Der Versand
+  // wurde EINMAL fuer den ganzen Warenkorb kassiert (ctx.shippingPrice) und
+  // wird deshalb verteilt, nicht je Gruppe neu berechnet. Rundungsreste landen
+  // jeweils in der letzten Gruppe -> die Summen bleiben exakt.
+  const groupSubtotals = periodGroups.map((g) =>
+    g.items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0),
+  );
+  const groupShippings = distributeAmount(shippingPrice, groupSubtotals);
+  const groupBaseTotals = groupSubtotals.map((sub, i) => sub + groupShippings[i]);
+  const groupTotals = distributeAmount(paidEurosCart, groupBaseTotals);
+  const gCoupon = distributeAmount(sCouponDiscount, groupSubtotals);
+  const gProduct = distributeAmount(sProductDiscount, groupSubtotals);
+  const gDuration = distributeAmount(sDurationDiscount, groupSubtotals);
+  const gEarlyBird = distributeAmount(sEarlyBirdDiscount, groupSubtotals);
+  const gLoyalty = distributeAmount(sLoyaltyDiscount, groupSubtotals);
+  const gSpecial = distributeAmount(sSpecialDiscount, groupSubtotals);
+  const gEffectiveDiscount = distributeAmount(effectiveDiscount, groupSubtotals);
 
-  let { error } = await supabase.from('bookings').insert(cartInsert);
-  if (error && sEarlyBirdDiscount > 0 && /early_bird_discount|column|schema cache|PGRST/i.test(error.message)) {
-    delete cartInsert.early_bird_discount;
-    ({ error } = await supabase.from('bookings').insert(cartInsert));
+  type AccItem = { accessory_id: string; qty: number };
+  const createdBookingIds: string[] = [];
+
+  for (let gi = 0; gi < periodGroups.length; gi++) {
+    const group = periodGroups[gi];
+    const groupItems = group.items;
+    const firstItem = groupItems[0];
+    const piId = groupPaymentIntentId(intent.id, gi);
+    let bookingId = await generateBookingId({ isTest: testModeForIdCart });
+    const productName = groupItems.length === 1
+      ? firstItem.productName
+      : groupItems.map((it) => it.productName).join(', ');
+
+    // Zubehoer + Set qty-aware aggregieren (siehe confirm-cart fuer Details).
+    const aggMap = new Map<string, number>();
+    for (const it of groupItems) {
+      if (Array.isArray(it.accessoryItems) && it.accessoryItems.length > 0) {
+        for (const ai of it.accessoryItems as AccItem[]) {
+          if (!ai?.accessory_id) continue;
+          const q = typeof ai.qty === 'number' && ai.qty > 0 ? Math.floor(ai.qty) : 1;
+          aggMap.set(ai.accessory_id, (aggMap.get(ai.accessory_id) ?? 0) + q);
+        }
+      } else {
+        for (const id of it.accessories ?? []) {
+          if (!id) continue;
+          aggMap.set(id, (aggMap.get(id) ?? 0) + 1);
+        }
+      }
+    }
+    const groupAccessoryItems: AccItem[] = [...aggMap.entries()]
+      .map(([accessory_id, qty]) => ({ accessory_id, qty }));
+    const allAccessories = itemsToLegacyIds(groupAccessoryItems);
+
+    const groupShipping = groupShippings[gi];
+    const groupTotal = Math.max(0, groupTotals[gi]);
+    const groupSpecialActive = cartSpecialActive && gSpecial[gi] > 0;
+
+    const cartInsert: Record<string, unknown> = {
+      id: bookingId,
+      payment_intent_id: piId,
+      is_test: testModeForIdCart,
+      product_id: firstItem.productId,
+      product_name: productName,
+      rental_from: firstItem.rentalFrom,
+      rental_to: firstItem.rentalTo,
+      days: firstItem.days,
+      delivery_mode: deliveryMode,
+      shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
+      shipping_price: groupShipping,
+      haftung: group.haftung,
+      accessories: allAccessories,
+      accessory_items: groupAccessoryItems.length > 0 ? groupAccessoryItems : null,
+      price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+      price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+      price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+      price_total: groupTotal,
+      deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+      status: 'confirmed',
+      user_id: userId,
+      customer_email: customerEmail,
+      customer_name: customerName,
+      shipping_address: shippingAddress,
+      ...(invoiceOverride
+        ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
+        : {}),
+      // Echter Gutschein-Code hat Vorrang; sonst der Aktionsname (z.B.
+      // "Sommer25"), damit die Rechnung die Rabatt-Zeile korrekt beschriftet.
+      coupon_code: couponCode || productDiscountLabel || null,
+      // H-7: skalierter Coupon + Produktaktion (analog confirm-cart groupDiscount).
+      discount_amount: Math.round((gCoupon[gi] + gProduct[gi]) * 100) / 100,
+      duration_discount: gDuration[gi],
+      loyalty_discount: gLoyalty[gi],
+      // Fruehbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
+      ...(gEarlyBird[gi] > 0 ? { early_bird_discount: gEarlyBird[gi] } : {}),
+      // Sonderkondition — eigene Spalte (Migration ausstehend → Retry ohne sie).
+      ...(groupSpecialActive ? { special_discount: gSpecial[gi] } : {}),
+      // § 356 Abs. 4 BGB — Zustimmung (Zeitstempel + IP aus dem Checkout-Kontext).
+      ...(earlyServiceConsentAt
+        ? { early_service_consent_at: earlyServiceConsentAt, early_service_consent_ip: earlyServiceConsentIp }
+        : {}),
+    };
+
+    // Insert mit denselben Absicherungen wie confirm-cart:
+    //  - fehlende Migrations-Spalten -> einmal ohne sie erneut versuchen
+    //  - 23505 auf der BUCHUNGSNUMMER -> lokal weiterzaehlen (paralleler
+    //    Aufrufer in derselben Sekunde)
+    //  - 23505 auf payment_intent_id -> confirm-cart war schneller, Gruppe
+    //    ist bereits angelegt: ueberspringen, aber die RESTLICHEN Gruppen
+    //    weiter versuchen (frueher brach hier alles ab)
+    let insertError: { code?: string; message?: string } | null = null;
+    let piConflict = false;
+    let droppedEarlyBird = false;
+    let droppedSpecial = false;
+    const MAX_ID_COLLISION_RETRIES = 30;
+    for (let idAttempt = 0; idAttempt < MAX_ID_COLLISION_RETRIES; idAttempt++) {
+      const { error: insErr } = await supabase.from('bookings').insert(cartInsert);
+      if (!insErr) { insertError = null; break; }
+
+      if (!droppedEarlyBird && cartInsert.early_bird_discount !== undefined
+          && /early_bird_discount/i.test(insErr.message ?? '')
+          && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+        droppedEarlyBird = true;
+        delete cartInsert.early_bird_discount;
+        continue;
+      }
+      if (!droppedSpecial && cartInsert.special_discount !== undefined
+          && /special_discount/i.test(insErr.message ?? '')
+          && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+        droppedSpecial = true;
+        delete cartInsert.special_discount;
+        continue;
+      }
+      if (insErr.code !== '23505') { insertError = insErr; break; }
+
+      // Postgres nennt den verletzten Index im Fehlertext:
+      //   "bookings_pkey" / "bookings_id_key"  -> Buchungsnummer-Kollision
+      //   "bookings_payment_intent_id_key"     -> Gruppe existiert schon
+      const msg = insErr.message ?? '';
+      const idConflict = /pkey|bookings_id_key/i.test(msg) && !/payment_intent/i.test(msg);
+      if (!idConflict) { piConflict = true; break; }
+
+      const next = incrementBookingIdSuffix(bookingId);
+      if (next === bookingId) { insertError = insErr; break; }
+      console.warn(`[Webhook] Buchungsnummer ${bookingId} kollidiert, probiere ${next}.`);
+      bookingId = next;
+      cartInsert.id = next;
+    }
+
+    if (piConflict) {
+      console.log(`[Webhook] Gruppe ${gi + 1}/${periodGroups.length} existiert bereits (${piId}) — uebersprungen.`);
+      continue;
+    }
+    if (insertError) {
+      console.error(`[Webhook] Cart-Buchung ${bookingId} (Gruppe ${gi + 1}) Fehler:`, insertError);
+      continue;
+    }
+    createdBookingIds.push(bookingId);
+
+    // Unit zuweisen — mit dem Zeitraum DIESER Gruppe (fruehher: immer der von
+    // items[0], wodurch Kamera 2 im falschen Zeitraum reserviert wurde).
+    if (firstItem.productId && firstItem.rentalFrom && firstItem.rentalTo) {
+      try {
+        await assignCamerasToBooking(
+          bookingId,
+          groupItems.map((it) => ({
+            product_id: it.productId,
+            product_name: it.productName,
+            qty: 1,
+          })),
+          firstItem.rentalFrom,
+          firstItem.rentalTo,
+        );
+      } catch (e) {
+        console.error('[Webhook] camera-assign cart failed', bookingId, e);
+      }
+    }
+
+    // Zubehoer-Exemplare zuweisen (non-blocking)
+    if (groupAccessoryItems.length > 0 && firstItem.rentalFrom && firstItem.rentalTo) {
+      try {
+        await assignAccessoryUnitsToBooking(bookingId, groupAccessoryItems, firstItem.rentalFrom, firstItem.rentalTo);
+      } catch (e) {
+        console.error('[Webhook] accessory-unit-assign cart failed', bookingId, e);
+      }
+    }
+
+    console.log(`[Webhook] Cart-Buchung ${bookingId} (Gruppe ${gi + 1}/${periodGroups.length}) nachgeholt.`);
+
+    // invoices-Row anlegen (non-blocking)
+    try {
+      const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
+      await storeInvoiceForBooking(supabase, {
+        id: bookingId,
+        customer_email: customerEmail,
+        customer_name: customerName,
+        price_total: groupTotal,
+        price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        shipping_price: groupShipping,
+        // H-7: effektiver Rabatt-Anteil dieser Gruppe, analog confirm-cart.
+        discount_amount: gEffectiveDiscount[gi],
+        coupon_code: couponCode || null,
+        payment_intent_id: piId,
+        status: 'confirmed',
+        is_test: testModeForIdCart,
+        created_at: new Date().toISOString(),
+      }, { taxMode: txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung', taxRate: parseFloat(txMap['tax_rate'] || '19') });
+    } catch (err) {
+      console.error('[Webhook] Cart-Rechnung-Anlage fehlgeschlagen:', err);
+    }
+
+    // Admin-Notification schicken — so weiss der Admin sofort dass eine
+    // Buchung reingekommen ist, auch wenn der Client-Redirect scheiterte.
+    // Kunden-Bestaetigungs-E-Mail SCHICKT DER WEBHOOK NICHT — das macht
+    // confirm-cart, weil nur dort die contractSignature verfuegbar ist und
+    // der Mietvertrag mit in die E-Mail gepackt werden muss. Sonst bekaeme
+    // der Kunde eine Bestaetigungs-E-Mail ohne Vertrag (Webhook war
+    // schneller als confirm-cart), und der PDF-Anhang fehlt dauerhaft.
+    if (customerEmail) {
+      const emailData: BookingEmailData = {
+        bookingId,
+        customerName,
+        customerEmail,
+        productName,
+        rentalFrom: firstItem.rentalFrom,
+        rentalTo: firstItem.rentalTo,
+        days: firstItem.days,
+        deliveryMode: deliveryMode as 'versand' | 'abholung',
+        shippingMethod,
+        haftung: group.haftung,
+        accessories: allAccessories,
+        priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        priceTotal: groupTotal,
+        deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+        shippingPrice: groupShipping,
+        taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+        taxRate: parseFloat(txMap['tax_rate'] || '19'),
+        ustId: txMap['ust_id'] || '',
+      };
+      sendAdminNotification(emailData).catch((err) => console.error('[Webhook] Admin-Email-Fehler:', err));
+    }
   }
-  if (error && cartSpecialActive && /special_discount|column|schema cache|PGRST/i.test(error.message)) {
-    delete cartInsert.special_discount;
-    ({ error } = await supabase.from('bookings').insert(cartInsert));
-  }
 
-  if (error) {
-    console.error(`[Webhook] Cart-Buchung ${bookingId} Fehler:`, error);
+  if (createdBookingIds.length === 0) {
+    // Nichts angelegt (alles schon vorhanden oder alles fehlgeschlagen) —
+    // Kontext stehen lassen, damit confirm-cart ihn noch nutzen kann.
+    console.log(`[Webhook] Cart ${intent.id}: keine neue Buchung angelegt.`);
     return;
   }
 
@@ -881,69 +1061,17 @@ async function handleCartBooking(
   // Bewusst die UNskalierten ctx-Werte (inkl. productDiscount) — so wird eine
   // echte Abweichung (manipulierte Metadata) erkannt; die oben persistierten
   // Rabatte sind gegen Stripe skaliert und wuerden die Abweichung sonst verstecken.
+  // Cart-weit, einmal — referenziert die erste angelegte Buchung.
   const expectedSumCents = Math.round(
     (cartBase +
       shippingPrice -
       discountAmount -
       (cartSpecialActive ? cartSpecial : productDiscount + durationDiscount + earlyBirdDiscount + loyaltyDiscount)) * 100,
   );
-  await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
+  await verifyAmountConsistency(supabase, createdBookingIds[0], intent.id, expectedSumCents, intent.amount);
 
-  // Unit zuweisen (fuer Asset-Zeitwert im Vertrag)
-  if (firstItem.productId && firstItem.rentalFrom && firstItem.rentalTo) {
-    try {
-      await assignCamerasToBooking(
-        bookingId,
-        items.map((it) => ({
-          product_id: it.productId,
-          product_name: it.productName,
-          qty: 1,
-        })),
-        firstItem.rentalFrom,
-        firstItem.rentalTo,
-      );
-    } catch (e) {
-      console.error('[Webhook] camera-assign cart failed', bookingId, e);
-    }
-  }
-
-  // Zubehoer-Exemplare zuweisen (non-blocking)
-  if (cartAccessoryItems.length > 0 && firstItem.rentalFrom && firstItem.rentalTo) {
-    try {
-      await assignAccessoryUnitsToBooking(bookingId, cartAccessoryItems, firstItem.rentalFrom, firstItem.rentalTo);
-    } catch (e) {
-      console.error('[Webhook] accessory-unit-assign cart failed', bookingId, e);
-    }
-  }
-
-  console.log(`[Webhook] Cart-Buchung ${bookingId} nachgeholt.`);
-
-  // invoices-Row anlegen (non-blocking)
-  try {
-    const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
-    await storeInvoiceForBooking(supabase, {
-      id: bookingId,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      price_total: intent.amount / 100,
-      price_rental: items.reduce((s, it) => s + it.priceRental, 0),
-      price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-      price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
-      shipping_price: shippingPrice,
-      // H-7: effektiver Gesamtrabatt (base + Versand − gezahlt), analog
-      // confirm-cart — statt nur des rohen Coupon-Betrags.
-      discount_amount: effectiveDiscount,
-      coupon_code: couponCode || null,
-      payment_intent_id: intent.id,
-      status: 'confirmed',
-      is_test: testModeForIdCart,
-      created_at: new Date().toISOString(),
-    }, { taxMode: txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung', taxRate: parseFloat(txMap['tax_rate'] || '19') });
-  } catch (err) {
-    console.error('[Webhook] Cart-Rechnung-Anlage fehlgeschlagen:', err);
-  }
-
-  // Coupon einloesen (used_count bzw. Restguthaben).
+  // Coupon einloesen (used_count bzw. Restguthaben) — EINMAL pro Warenkorb,
+  // nicht pro Gruppe: der Gutschein gilt fuer die gesamte Bestellung.
   // Restguthaben-Gutscheine (Geschenkkarten-Modell, data/coupons.ts
   // isBalanceCoupon) buchen den tatsaechlich verwendeten, gegen den
   // Stripe-Betrag skalierten Coupon-Anteil (sCouponDiscount) vom
@@ -973,7 +1101,8 @@ async function handleCartBooking(
     }
   }
 
-  // User booking_count erhoehen
+  // User booking_count erhoehen — um die Anzahl tatsaechlich angelegter
+  // Buchungen (bei mehreren Mietzeitraeumen sind es mehrere).
   if (userId) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -983,49 +1112,21 @@ async function handleCartBooking(
     if (profile) {
       await supabase
         .from('profiles')
-        .update({ booking_count: (profile.booking_count ?? 0) + 1 })
+        .update({ booking_count: (profile.booking_count ?? 0) + createdBookingIds.length })
         .eq('id', userId);
     }
   }
 
-  // Admin-Notification schicken — so weiss der Admin sofort dass eine
-  // Buchung reingekommen ist, auch wenn der Client-Redirect scheiterte.
-  // Kunden-Bestaetigungs-E-Mail SCHICKT DER WEBHOOK NICHT — das macht
-  // confirm-cart, weil nur dort die contractSignature verfuegbar ist und
-  // der Mietvertrag mit in die E-Mail gepackt werden muss. Sonst bekaeme
-  // der Kunde eine Bestaetigungs-E-Mail ohne Vertrag (Webhook war
-  // schneller als confirm-cart), und der PDF-Anhang fehlt dauerhaft.
-  if (customerEmail) {
-    const emailData: BookingEmailData = {
-      bookingId,
-      customerName,
-      customerEmail,
-      productName,
-      rentalFrom: firstItem.rentalFrom,
-      rentalTo: firstItem.rentalTo,
-      days: firstItem.days,
-      deliveryMode: deliveryMode as 'versand' | 'abholung',
-      shippingMethod,
-      haftung: firstItem.haftung,
-      accessories: allAccessories,
-      priceRental: items.reduce((s, it) => s + it.priceRental, 0),
-      priceAccessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-      priceHaftung: items.reduce((s, it) => s + it.priceHaftung, 0),
-      priceTotal: intent.amount / 100,
-      deposit: items.reduce((s, it) => s + it.deposit, 0),
-      shippingPrice,
-      taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-      taxRate: parseFloat(txMap['tax_rate'] || '19'),
-      ustId: txMap['ust_id'] || '',
-    };
-    sendAdminNotification(emailData).catch((err) => console.error('[Webhook] Admin-Email-Fehler:', err));
-  }
-
-  // Checkout-Kontext aufraeumen
-  Promise.resolve(
-    supabase
-      .from('admin_settings')
-      .delete()
-      .eq('key', `checkout_${intent.id}`)
-  ).catch(() => {});
+  // Checkout-Kontext BEWUSST stehen lassen — aufgeraeumt wird er von
+  // confirm-cart, das als letztes laeuft.
+  //
+  // Frueher loeschte der Webhook ihn hier. Da er den Browser haeufig ueberholt
+  // (PayPal/SEPA/3DS-Redirect), riss das confirm-cart den durablen
+  // Signatur-Fallback weg: die Unterschrift liegt im Browser nur im
+  // sessionStorage, ueberlebt den Stripe-Redirect nicht zuverlaessig und war
+  // dann NUR noch hier im Kontext vorhanden. Ergebnis: Buchung dauerhaft
+  // contract_signed=false und kein Mietvertrag, obwohl der Kunde unterschrieben
+  // hat. Nebeneffekt: der Kontext bleibt als Nachweis erhalten, womit sich eine
+  // Bestellung nachtraeglich gegen die urspruenglich gewaehlten Mietzeitraeume
+  // pruefen laesst.
 }

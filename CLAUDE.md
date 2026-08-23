@@ -686,6 +686,123 @@ GoBD-sicher). Dockt an das bestehende IMAP-Polling + die
   Auto-Festschreiben, Auto-Apply der Klassifizierung.
 - **Go-Live TODO:** siehe „Noch offen".
 
+### Mehrere Mietzeiträume: eine Buchung PRO Zeitraum (Bugfix, Stand 2026-08-23)
+**Kundenmeldung:** zwei Kameras mit zwei unterschiedlichen Mietzeiträumen gebucht —
+Buchung UND Mietvertrag zeigten nur EINEN Zeitraum für beide Kameras. Bestätigt und
+behoben.
+
+**Ursache 1 — Stripe-Webhook kannte keine Gruppierung.** `handleCartBooking`
+(`app/api/stripe-webhook/route.ts`) legte den **gesamten** Warenkorb als EINE Buchung an
+(`// EINE Buchung für den gesamten Warenkorb`) und nahm `rental_from`/`rental_to`/`days`/
+`haftung`/`product_id` aus `items[0]`, während die Preise über **alle** Positionen
+summiert wurden. Der Webhook gewinnt das Rennen gegen `confirm-cart` regelmäßig bei
+**PayPal/SEPA/3DS** (Redirect dauert) oder wenn der Kunde den Tab vor
+`/buchung-bestaetigt` schließt. Folgeschäden: falscher Mietvertrag (das PDF entsteht aus
+der Buchungszeile), falsche Bestätigungsmail und **falsche Exemplar-Reservierung** —
+`assignCamerasToBooking` bekam für alle Kameras den Zeitraum von Position 1, Kamera 2 war
+in ihrem echten Zeitraum weiterhin frei buchbar (Überbuchungsrisiko).
+
+**Ursache 2 — `confirm-cart` zementierte es.** Zwei Stellen nahmen an, eine bereits
+vorhandene Buchung bedeute „alles ist angelegt": der frühe Idempotenz-Ausstieg prüfte nur
+`existingRows.length > 0`, und der `23505`-Zweig verließ die Gruppen-Schleife mit `break`
+(Kommentar: „da der Webhook bereits alle Buchungen angelegt hat" — falsch, es war genau
+eine). Gruppe 2..n entstand dadurch nie.
+
+**Datenmodell (unverändert, zur Einordnung):** `bookings.rental_from`/`rental_to` sind
+skalare Spalten, `bookings.cameras` trägt pro Kamera nur `{product_id, product_name,
+unit_id}` — **kein** Zeitraum. Zwei Zeiträume in EINER Buchung sind schema-technisch
+unmöglich; mehrere Zeiträume ⇒ mehrere Buchungen. Genau das verspricht der Warenkorb
+auch („N separate Buchungen").
+
+**Fix:**
+- **Neu `lib/cart-period-groups.ts`** — EINE Gruppierung für alle vier Stellen
+  (`/warenkorb`, `/checkout`, `confirm-cart`, `stripe-webhook`); vorher hatte jede ihre
+  eigene Kopie und der Webhook gar keine. Enthält `groupByPeriod`, `periodGroupKey`,
+  `groupPaymentIntentId` (Gruppe 0 = `intent.id`, danach `_g2`, `_g3` … — beide
+  Schreibpfade MÜSSEN dieselbe Konvention nutzen, sonst entstehen Duplikate statt
+  sauberer Unique-Index-Kollisionen), `distributeAmount` (proportionale Verteilung,
+  Rundungsrest in die letzte Gruppe → Summen bleiben exakt) und den geteilten Typ
+  `CheckoutContext`.
+- **Gruppenschlüssel = `rentalFrom_rentalTo_haftung`.** `bookings.haftung` ist ebenfalls
+  EINE Spalte — zwei Kameras im selben Zeitraum mit unterschiedlichem Haftungsschutz
+  wurden vorher zu einer Buchung verschmolzen, die nur die Haftung des ersten Items trug,
+  während `price_haftung` die Summe war. **Folge: gleicher Zeitraum + unterschiedliche
+  Haftung ergeben jetzt zwei Buchungen** (gleicher Zeitraum + gleiche Haftung bleibt
+  unverändert eine). Warenkorb/Checkout weisen die Haftung im Gruppen-Header aus, sobald
+  sich zwei Gruppen nur darin unterscheiden.
+- **Webhook** loopt jetzt über die Gruppen und spiegelt `confirm-cart` (eigene
+  Buchungsnummer, `piId` je Gruppe, Preise/Rabatte/Versand anteilig, Kamera- und
+  Zubehör-Zuweisung mit dem **Gruppen**-Zeitraum, `invoices`-Row + Admin-Mail je Gruppe;
+  Coupon-Einlösung + `booking_count` bleiben cart-weit, `booking_count` += Anzahl
+  Gruppen). Bei `23505` wird unterschieden: Buchungsnummer-Kollision → weiterzählen
+  (`incrementBookingIdSuffix`, wie confirm-cart), `payment_intent_id`-Kollision → Gruppe
+  überspringen, restliche Gruppen weiter anlegen.
+- **Top-Level-Idempotenz im Webhook** greift nur noch für **Einzelbuchungen**. Bei
+  `booking_type === 'cart'` wäre ein Equality-Treffer auf Gruppe 0 fatal (hätte
+  confirm-cart nur einen Teil angelegt, entstünden die fehlenden Gruppen nie);
+  `handleCartBooking` ist selbst pro Gruppe idempotent.
+- **`confirm-cart`** prüft jetzt **Vollständigkeit** (`existingRows.length >=
+  expectedGroupCount`) statt „irgendeine Zeile existiert" und legt fehlende Gruppen nach;
+  der `23505`-`break` wurde zu `continue` (nur die kollidierende Gruppe wird übersprungen,
+  bewusst **nicht** in `freshlyInsertedIds` → keine Doppel-Mail).
+- **Schutz gegen Altbestand:** Trägt eine vorhandene Sammel-Buchung mit blanker
+  `payment_intent_id` MEHR Kameras als Gruppe 0 (= vor dem Fix kollabiert), legt
+  `confirm-cart` **nichts** nach (sonst stünde Kamera 2 doppelt im System), sondern
+  meldet den Fall per `payment_failed`-Notification mit Deep-Link zur Buchung. Die
+  Aufteilung berührt Rechnung, Vertrag und Exemplar-Reservierung und bleibt Admin-Sache.
+- **Checkout-Kontext wird vom Webhook NICHT mehr gelöscht** (nur noch von `confirm-cart`,
+  das zuletzt läuft). Der Webhook überholt den Browser häufig und riss damit den durablen
+  Signatur-Fallback weg → Buchung dauerhaft `contract_signed=false` ohne Mietvertrag.
+  Nebeneffekt: `admin_settings.checkout_<pi>` bleibt als Nachweis der ursprünglich
+  gewählten Mietzeiträume erhalten.
+
+**Mitgefixte Nebenbefunde:**
+- **Versand n× statt 1×:** Der Checkout kassiert Versand EINMAL auf `cartTotal`,
+  `confirm-cart` rechnete ihn **pro Gruppe** neu (Gratis-Schwelle griff auf der kleineren
+  Gruppensumme evtl. nicht mehr) → aufgeblähtes `effectiveDiscount`, verzerrte
+  `shipping_price`/`discount_amount`. Jetzt wird der kassierte Betrag mit
+  `distributeAmount` verteilt (Webhook nutzt `ctx.shippingPrice`); der Mail-/Vertrags-
+  Fallback nimmt denselben Anteil statt neu zu rechnen.
+- **`manual-booking` klebte allen Kameranamen dieselbe `product_id` an** → bei gemischten
+  Modellen wurden N Exemplare desselben Produkts reserviert. `/admin/buchungen/neu` sendet
+  jetzt zusätzlich `cameras: [{product_id, product_name, qty}]` (die Daten lagen in
+  `selectedProducts` bereits vor), die Route bevorzugt sie; **Fallback auf den
+  Komma-Split** für Altaufrufer.
+- **Vertrag wies Kamera 2..n mit 0,00 € aus** (`preis: i === 0 ? priceRental : 0` in
+  beiden Zweigen). Neuer Helper `splitRentalPriceByCamera` in
+  `lib/contracts/generate-contract.ts` verteilt den Mietpreis nach **Katalogpreis je
+  Modell** (`getPriceForDays`, gleiche Gewichtung wie die Umsatzverteilung im
+  Buchhaltungs-Dashboard), Rest-Cent auf die letzte Zeile → Σ Positionen == `priceRental`.
+  Ohne Katalog-Treffer gleichmäßige Verteilung.
+- **Vertrags-Vorschau im Checkout** kollabierte auf frühestes Start-/spätestes Enddatum.
+  Jetzt wird bei mehreren Gruppen jede Kamera **mit ihrem eigenen Zeitraum** benannt, plus
+  amber Hinweis im Signatur-Modal („N separate Buchungen mit je eigenem Mietvertrag").
+- **Dedupliziert:** `haftungOptionLabel` liegt jetzt in `lib/haftung-labels.ts`
+  (vorher lokale Kopie in `confirm-cart`); der Checkout-Kontext wird in `confirm-cart`
+  einmal geladen und gecacht statt zweimal gelesen.
+
+**Keine Migration nötig.** Tests: `lib/__tests__/cart-period-groups.test.ts` (12 Tests —
+Gruppentrennung, Haftungs-Trennung, Reihenfolge, `_g`-Konvention, Summen-Exaktheit der
+Verteilung).
+
+**Altfälle finden** (vor dem Fix entstandene Sammel-Buchungen):
+```sql
+SELECT id, payment_intent_id, product_name, rental_from, rental_to, created_at
+FROM bookings
+WHERE product_name LIKE '%,%'
+  AND payment_intent_id LIKE 'pi_%'
+  AND payment_intent_id NOT LIKE '%\_g%'
+  AND is_test = false
+ORDER BY created_at DESC;
+```
+Pro Treffer den Original-Warenkorb gegenprüfen:
+```sql
+SELECT value FROM admin_settings WHERE key = 'checkout_' || '<pi_…>';
+```
+Enthält `value.items` mehrere `rentalFrom/rentalTo`-Paare → betroffen. Korrektur
+**manuell** im Admin (zweite Buchung anlegen, Vertrag über „Mietvertrag zurücksetzen" neu
+unterschreiben lassen) — bewusst keine automatische Migration.
+
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
 - **Sets gefiltert** nach `product_ids` (Kamera-Kompatibilität) — nur passende Sets werden angezeigt

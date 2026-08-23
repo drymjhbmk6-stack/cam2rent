@@ -7,6 +7,8 @@ import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
 import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
+import { groupByPeriod } from '@/lib/cart-period-groups';
+import { haftungShortLabel } from '@/lib/haftung-labels';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
@@ -94,21 +96,18 @@ export default function WarenkorbPage() {
     ? 'Abholung vor Ort'
     : `Hin- und Rückversand (${cartShippingMethod === 'express' ? 'Express' : 'Standard'})`;
 
-  // Artikel nach Mietzeitraum gruppieren
-  const periodGroups = useMemo(() => {
-    const groups: Record<string, typeof items> = {};
-    for (const item of items) {
-      const key = `${item.rentalFrom}_${item.rentalTo}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    }
-    return Object.entries(groups).map(([key, groupItems]) => {
-      const [from, to] = key.split('_');
-      const groupTotal = groupItems.reduce((s, i) => s + i.subtotal, 0);
-      return { from, to, items: groupItems, key, total: groupTotal };
-    });
-  }, [items]);
+  // Artikel zu je einer kuenftigen Buchung gruppieren (Zeitraum + Haftung).
+  // Geteilte Logik mit checkout, confirm-cart und dem Stripe-Webhook, damit die
+  // hier angezeigte Anzahl exakt der Anzahl tatsaechlich angelegter Buchungen
+  // entspricht.
+  const periodGroups = useMemo(() => groupByPeriod(items), [items]);
   const hasMultiplePeriods = periodGroups.length > 1;
+  // Unterscheiden sich zwei Gruppen NUR im Haftungsschutz, waere der Zeitraum
+  // allein als Ueberschrift mehrdeutig — dann die Haftung mit ausweisen.
+  const showHaftungInGroupHeader = useMemo(() => {
+    const periods = new Set(periodGroups.map((g) => `${g.rentalFrom}_${g.rentalTo}`));
+    return periods.size < periodGroups.length;
+  }, [periodGroups]);
 
   const handleCheckout = () => {
     if (hasMultiplePeriods) {
@@ -198,7 +197,9 @@ export default function WarenkorbPage() {
                       Buchung {gi + 1}
                     </span>
                     <span className="text-xs text-brand-muted dark:text-gray-500">
-                      {fmtDate(group.from)} – {fmtDate(group.to)} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
+                      {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)}
+                    {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
+                      {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`}
                     </span>
                   </div>
                 )}
@@ -321,7 +322,8 @@ export default function WarenkorbPage() {
                   periodGroups.map((group, gi) => (
                     <div key={group.key}>
                       <p className="text-[10px] font-heading font-bold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-1 mt-2 first:mt-0">
-                        Buchung {gi + 1} · {fmtDate(group.from)} – {fmtDate(group.to)}
+                        Buchung {gi + 1} · {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)}
+                        {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`}
                       </p>
                       {group.items.map((item) => (
                         <div key={item.id} className="flex justify-between text-sm">
@@ -441,7 +443,7 @@ export default function WarenkorbPage() {
                     {group.items.map((it) => it.productName).join(', ')}
                   </span>
                   <span className="text-brand-muted dark:text-gray-500 text-xs ml-auto flex-shrink-0">
-                    {fmtDate(group.from)} – {fmtDate(group.to)}
+                    {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)}
                   </span>
                 </div>
               ))}

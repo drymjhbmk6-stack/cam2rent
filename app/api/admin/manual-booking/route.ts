@@ -145,13 +145,30 @@ export async function POST(req: NextRequest) {
     // Komma-Liste sein). Eine vom Admin manuell gewählte unit_id wird als
     // erste Kamera vorbelegt, restliche Slots werden automatisch gefüllt.
     {
+      // Bevorzugt die strukturierte Kamera-Liste aus dem Admin-Formular: nur
+      // sie kennt die echte product_id JEDER Position. Der Komma-String
+      // (product_name) traegt nur Namen — frueher bekam dadurch jeder Name
+      // dieselbe (erste) product_id angeklebt, sodass bei gemischten Modellen
+      // N Exemplare desselben Produkts reserviert wurden.
+      // Fallback auf den Komma-Split fuer Aufrufer ohne das neue Feld.
+      const camsBody = Array.isArray(body.cameras) ? body.cameras : null;
+      const structuredCams = (camsBody ?? [])
+        .map((c: { product_id?: unknown; product_name?: unknown; qty?: unknown }) => ({
+          product_id: typeof c?.product_id === 'string' ? c.product_id : '',
+          product_name: typeof c?.product_name === 'string' ? c.product_name : '',
+          qty: typeof c?.qty === 'number' && c.qty > 0 ? Math.floor(c.qty) : 1,
+        }))
+        .filter((c: { product_id: string }) => c.product_id.length > 0);
+
       const camNames = String(product_name || '')
         .split(',')
         .map((s: string) => s.trim())
         .filter((s: string) => s.length > 0);
-      const desiredCams = (camNames.length > 0 ? camNames : [String(product_name || '')]).map(
-        (n: string) => ({ product_id, product_name: n, qty: 1 }),
-      );
+      const desiredCams = structuredCams.length > 0
+        ? structuredCams
+        : (camNames.length > 0 ? camNames : [String(product_name || '')]).map(
+            (n: string) => ({ product_id, product_name: n, qty: 1 }),
+          );
       if (body.unit_id) {
         const skel = buildCameraSkeleton(desiredCams);
         if (skel[0]) skel[0].unit_id = body.unit_id;

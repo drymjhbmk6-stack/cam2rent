@@ -5,6 +5,8 @@ import { generateBookingId, incrementBookingIdSuffix } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
+import { groupByPeriod, groupPaymentIntentId, distributeAmount, type CheckoutContext } from '@/lib/cart-period-groups';
+import { haftungOptionLabel } from '@/lib/haftung-labels';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
@@ -36,20 +38,6 @@ import {
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
- * H-12 (2026-08-01): Mappt den DB-/Cart-Haftungswert
- * ('standard' | 'premium' | 'none') auf das Anzeige-Label für den Mietvertrag,
- * damit die Haftungsoption NICHT aus dem Preis geraten wird (Basis ≥15 Tage
- * kostet ≥25 € und wurde sonst fälschlich "Premium"). Unbekannt → undefined →
- * generateContractPDF nutzt seine Preis-Heuristik als Fallback.
- */
-function haftungOptionLabel(h: string | null | undefined): string | undefined {
-  if (h === 'premium') return 'Premium-Haftungsschutz';
-  if (h === 'none') return 'Ohne Haftungsschutz';
-  if (h === 'standard') return 'Basis-Haftungsschutz';
-  return undefined;
-}
-
-/**
  * H-2 (2026-08-01): pro frisch angelegter Buchung die TATSÄCHLICH persistierten
  * (Stripe-abgeleiteten) Geldwerte festhalten, damit der after()-Block für
  * E-Mail UND Mietvertrag exakt den gezahlten Betrag verwendet — statt eines
@@ -66,20 +54,6 @@ type GroupPersisted = {
   discountAmount: number;
   haftung: string | null | undefined;
 };
-
-/**
- * Gruppiert Cart-Items nach Mietzeitraum.
- * Gibt ein Array von Gruppen zurück, jede mit eigenem Zeitraum und Items.
- */
-function groupByPeriod(items: CartItem[]) {
-  const groups: Record<string, CartItem[]> = {};
-  for (const item of items) {
-    const key = `${item.rentalFrom}_${item.rentalTo}`;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(item);
-  }
-  return Object.values(groups);
-}
 
 /**
  * POST /api/confirm-cart
@@ -207,28 +181,91 @@ export async function POST(req: NextRequest) {
     // (admin_settings.checkout_<pi>) mitgespeichert. Fehlt sie im Request-Body,
     // holen wir sie von dort — sonst bliebe die Buchung dauerhaft
     // contract_signed=false, obwohl der Kunde unterschrieben hat.
-    if (!contractSignature?.agreedToTerms || !contractSignature?.signerName) {
+    // Der Checkout-Kontext wird an mehreren Stellen gebraucht (Signatur-Fallback,
+    // erwartete Gruppen-Anzahl, Item-Fallback). Einmal laden, dann cachen.
+    let ctxCache: CheckoutContext | null | undefined;
+    const loadCheckoutCtx = async (): Promise<CheckoutContext | null> => {
+      if (ctxCache !== undefined) return ctxCache;
+      ctxCache = null;
       try {
-        const { data: sigCtx } = await supabase
+        const { data: ctxRow } = await supabase
           .from('admin_settings')
           .select('value')
           .eq('key', `checkout_${payment_intent_id}`)
           .maybeSingle();
-        if (sigCtx?.value) {
-          const parsedCtx = typeof sigCtx.value === 'string' ? JSON.parse(sigCtx.value) : sigCtx.value;
-          const s = parsedCtx?.contractSignature;
-          if (s?.agreedToTerms && s?.signerName && (s.signatureMethod === 'canvas' || s.signatureMethod === 'typed')) {
-            contractSignature = s;
-          }
+        if (ctxRow?.value) {
+          ctxCache = (typeof ctxRow.value === 'string'
+            ? JSON.parse(ctxRow.value)
+            : ctxRow.value) as CheckoutContext;
         }
-      } catch { /* best-effort — sessionStorage-Body bleibt der Primaerpfad */ }
+      } catch { /* best-effort — Aufrufer haben eigene Fallbacks */ }
+      return ctxCache;
+    };
+
+    if (!contractSignature?.agreedToTerms || !contractSignature?.signerName) {
+      const parsedCtx = await loadCheckoutCtx();
+      const s = (parsedCtx?.contractSignature ?? null) as typeof contractSignature;
+      if (s?.agreedToTerms && s?.signerName && (s.signatureMethod === 'canvas' || s.signatureMethod === 'typed')) {
+        contractSignature = s;
+      }
     }
 
     const { data: existingRows } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, payment_intent_id, product_name')
       .like('payment_intent_id', `${payment_intent_id}%`);
     const bookingsAlreadyExist = (existingRows?.length ?? 0) > 0;
+
+    // Wie viele Buchungen MUSS dieser Checkout am Ende haben? (= Anzahl der
+    // Zeitraum-/Haftungs-Gruppen). Ohne diese Zahl konnte eine einzige bereits
+    // vorhandene Zeile den idempotenten Kurzschluss ausloesen — und wenn der
+    // Stripe-Webhook den gesamten Warenkorb vorher als EINE Buchung angelegt
+    // hatte, entstanden die restlichen Gruppen nie. Zwei Kameras mit zwei
+    // Zeitraeumen landeten so in einer Buchung mit nur einem Zeitraum.
+    const itemsForCount = (items?.length
+      ? items
+      : (((await loadCheckoutCtx())?.items ?? []) as CartItem[]));
+    const expectedGroups = groupByPeriod(itemsForCount);
+    const expectedGroupCount = Math.max(1, expectedGroups.length);
+    let bookingsComplete = (existingRows?.length ?? 0) >= expectedGroupCount;
+
+    // Schutz gegen Alt-Buchungen aus der Zeit VOR dem Webhook-Fix: damals legte
+    // der Webhook den gesamten Warenkorb als EINE Buchung an, die alle Kameras
+    // trug. Wuerden wir hier die "fehlenden" Gruppen nachlegen, stuende Kamera 2
+    // doppelt im System (einmal in der Sammel-Buchung, einmal neu). Solche
+    // Faelle werden deshalb NICHT automatisch ergaenzt, sondern gemeldet — die
+    // Aufteilung beruehrt Rechnung, Vertrag und Exemplar-Reservierung und
+    // gehoert in die Hand des Admins.
+    if (!bookingsComplete && existingRows && existingRows.length > 0) {
+      const groupZeroCameraCount = expectedGroups[0]?.items.length ?? 1;
+      const collapsed = existingRows.find((r) => {
+        if (r.payment_intent_id !== payment_intent_id) return false;
+        const camCount = String(r.product_name ?? '').split(',').filter((n) => n.trim()).length;
+        return camCount > groupZeroCameraCount;
+      });
+      if (collapsed) {
+        console.error(
+          `[confirm-cart] Sammel-Buchung ${collapsed.id} traegt mehr Kameras als Gruppe 0 — ` +
+          `fehlende Gruppen werden NICHT automatisch angelegt (Doppelbuchung vermeiden).`,
+        );
+        bookingsComplete = true; // idempotenter Pfad statt Nachlegen
+        after(async () => {
+          try {
+            await createAdminNotification(supabase, {
+              type: 'payment_failed',
+              title: `Buchung pruefen: mehrere Mietzeitraeume in einer Buchung (${collapsed.id})`,
+              message:
+                `Der Warenkorb zu ${payment_intent_id} enthaelt ${expectedGroupCount} Mietzeitraeume, ` +
+                `es existiert aber nur die Sammel-Buchung ${collapsed.id}. Sie traegt alle Kameras, ` +
+                `aber nur einen Zeitraum. Bitte manuell aufteilen (Alt-Fall vor dem Webhook-Fix).`,
+              link: `/admin/buchungen/${collapsed.id}`,
+            });
+          } catch (e) {
+            console.error('[confirm-cart] Notification fuer Sammel-Buchung fehlgeschlagen:', e);
+          }
+        });
+      }
+    }
 
     if (intent.status !== 'succeeded' && !bookingsAlreadyExist) {
       return NextResponse.json(
@@ -248,11 +285,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (existingRows && existingRows.length > 0) {
-      // Buchungen existieren bereits — Vertrag und Follow-up-Mail laufen jetzt in
-      // after(). Auf Hetzner Coolify (Docker, langlaufender Prozess) garantiert
-      // next/after die Ausführung nach der Response. Damit antwortet die Route
-      // sofort statt 2-4 s synchron auf PDF + Storage zu warten.
+    if (existingRows && existingRows.length > 0 && bookingsComplete) {
+      // ALLE erwarteten Buchungen existieren bereits — Vertrag und Follow-up-Mail
+      // laufen jetzt in after(). Auf Hetzner Coolify (Docker, langlaufender
+      // Prozess) garantiert next/after die Ausführung nach der Response. Damit
+      // antwortet die Route sofort statt 2-4 s synchron auf PDF + Storage zu warten.
+      //
+      // Sind es WENIGER als erwartet (typisch: der Webhook hat den Warenkorb als
+      // eine Buchung angelegt), faellt der Code bewusst durch in den normalen
+      // Pfad unten und legt die fehlenden Gruppen nach.
       console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ipFromHelper = getClientIp(req);
@@ -439,16 +480,11 @@ export async function POST(req: NextRequest) {
       (typeof intent.metadata?.pre_booking_id === 'string' && intent.metadata.pre_booking_id) || null;
 
     if (!r_items?.length) {
-      const { data: ctxRow } = await supabase
-        .from('admin_settings')
-        .select('value')
-        .eq('key', `checkout_${payment_intent_id}`)
-        .maybeSingle();
-
-      if (ctxRow?.value) {
+      // Gecachter Kontext (wurde fuer Signatur-Fallback + Gruppen-Anzahl bereits geladen)
+      const ctx = await loadCheckoutCtx();
+      if (ctx) {
         try {
-          const ctx = typeof ctxRow.value === 'string' ? JSON.parse(ctxRow.value) : ctxRow.value;
-          r_items = ctx.items ?? [];
+          r_items = (ctx.items ?? []) as CartItem[];
           r_name = ctx.customerName ?? r_name;
           r_email = ctx.customerEmail ?? r_email;
           // Stripe-Metadata-user_id hat Vorrang vor checkout-context, damit
@@ -717,15 +753,30 @@ export async function POST(req: NextRequest) {
     // H-2: persistierte Geldwerte pro (finaler) Buchungs-ID für den after()-Block.
     const groupPersisted = new Map<string, GroupPersisted>();
 
-    // Versand pro Gruppe vorab berechnen, damit wir den Anteil-Faktor
-    // (subtotal+shipping pro Gruppe / Gesamt) kennen, ueber den intent.amount
-    // proportional auf die Gruppen verteilt wird.
+    // Versand EINMAL auf den GESAMTEN Warenkorb — exakt so, wie der Checkout
+    // ihn berechnet (app/checkout/page.tsx: calcShipping(cartTotal, ...)) und
+    // Stripe ihn kassiert hat. Frueher rechnete jede Gruppe ihren Versand neu
+    // auf der kleineren Gruppen-Summe: bei mehreren Zeitraeumen entstanden so
+    // n Versandzeilen (Gratis-Schwelle griff evtl. nicht mehr), obwohl der
+    // Kunde nur 1x Versand bezahlt hat. Das blaehte `effectiveDiscount` auf und
+    // verzerrte shipping_price/discount_amount in der Buchhaltung.
+    const cartShipping = calcShipping(
+      totalCartSubtotal,
+      r_shippingMethod as ShippingMethod,
+      r_deliveryMode as 'versand' | 'abholung',
+      shippingCfg,
+      r_country,
+    ).price;
+    const groupSubtotals = periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0));
+    // Rundungsrest landet in der letzten Gruppe -> Summe bleibt exakt.
+    const groupShippings = distributeAmount(cartShipping, groupSubtotals);
+
     type GroupCalc = { subtotal: number; shipping: number; baseTotal: number };
-    const groupCalcs: GroupCalc[] = periodGroups.map((g) => {
-      const sub = g.reduce((s, it) => s + it.subtotal, 0);
-      const sh = calcShipping(sub, r_shippingMethod as ShippingMethod, r_deliveryMode as 'versand' | 'abholung', shippingCfg, r_country).price;
-      return { subtotal: sub, shipping: sh, baseTotal: sub + sh };
-    });
+    const groupCalcs: GroupCalc[] = periodGroups.map((_g, i) => ({
+      subtotal: groupSubtotals[i],
+      shipping: groupShippings[i],
+      baseTotal: groupSubtotals[i] + groupShippings[i],
+    }));
     const sumGroupBaseTotals = groupCalcs.reduce((s, g) => s + g.baseTotal, 0) || 1;
     const paidEuros = intent.amount / 100;
 
@@ -737,7 +788,8 @@ export async function POST(req: NextRequest) {
     const testMode = isTesterBooking || (await isTestMode());
 
     for (let gi = 0; gi < periodGroups.length; gi++) {
-      const groupItems = periodGroups[gi];
+      const group = periodGroups[gi];
+      const groupItems = group.items;
       const firstItem = groupItems[0];
       const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
@@ -847,7 +899,7 @@ export async function POST(req: NextRequest) {
       const allAccessories = itemsToLegacyIds(groupAccessoryItems);
 
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
-      const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
+      const piId = groupPaymentIntentId(payment_intent_id, gi);
 
       // Server-seitige Plausibilitaets-Pruefung der Zubehoer-Preise.
       // Faengt Frontend-Bugs ab (z.B. Cross-Product-Leak), bei denen ein
@@ -891,7 +943,7 @@ export async function POST(req: NextRequest) {
         delivery_mode: r_deliveryMode,
         shipping_method: r_deliveryMode === 'versand' ? r_shippingMethod : null,
         shipping_price: groupShipping,
-        haftung: firstItem.haftung,
+        haftung: group.haftung,
         accessories: allAccessories,
         accessory_items: groupAccessoryItems.length > 0 ? groupAccessoryItems : null,
         price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
@@ -996,20 +1048,24 @@ export async function POST(req: NextRequest) {
         // Jetzt: idempotent durchziehen — Booking-IDs aus DB ziehen, normaler
         // Erfolgs-Pfad geht weiter (After-Hook erzeugt fehlende Vertraege).
         if (error.code === '23505') {
-          console.warn(`[confirm-cart] Webhook-Race: ${bookingId} bereits in DB. Setze idempotent fort.`);
-          // Existing-Row(s) holen + Loop verlassen, damit der Erfolgs-Pfad
-          // (Vertrag-After-Hook + Confirmation-Mail) trotzdem laeuft.
-          const { data: existingBookings } = await supabase
+          console.warn(`[confirm-cart] Webhook-Race: ${bookingId} bereits in DB. Ueberspringe diese Gruppe.`);
+          // NUR die kollidierende Gruppe uebernehmen und weitermachen.
+          // Frueher wurde hier die ganze Schleife mit `break` verlassen, in der
+          // Annahme "der Webhook hat bereits ALLE Buchungen angelegt". Das war
+          // falsch: der Webhook legte den gesamten Warenkorb als EINE Buchung
+          // an — Gruppe 2..n entstand dadurch nie, und zwei Kameras mit
+          // unterschiedlichen Zeitraeumen landeten in einer Buchung mit nur
+          // einem Zeitraum.
+          const { data: existingForGroup } = await supabase
             .from('bookings')
             .select('id')
-            .like('payment_intent_id', `${payment_intent_id}%`);
-          const existingIds = (existingBookings ?? []).map((r) => r.id);
-          if (existingIds.length > 0) {
-            // Bekannte IDs uebernehmen + Loop fruehzeitig beenden, da der
-            // Webhook bereits alle Buchungen angelegt hat.
-            bookingIds.length = 0;
-            bookingIds.push(...existingIds);
-            break;
+            .eq('payment_intent_id', piId)
+            .maybeSingle();
+          if (existingForGroup?.id) {
+            // Fremd angelegte Buchung uebernehmen — NICHT in freshlyInsertedIds,
+            // damit der after()-Block dafuer keine zweite Mail verschickt.
+            bookingIds[gi] = existingForGroup.id;
+            continue;
           }
         }
         console.error(`Error saving booking ${bookingId}:`, error);
@@ -1086,7 +1142,7 @@ export async function POST(req: NextRequest) {
         shipping: groupShipping,
         deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
         discountAmount: effectiveDiscount,
-        haftung: firstItem.haftung,
+        haftung: group.haftung,
       });
     }
 
@@ -1335,7 +1391,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 9. Suspicious Detection (für erste Buchung)
-    const firstGroupItems = periodGroups[0];
+    const firstGroupItems = periodGroups[0].items;
     detectSuspicious(supabase, {
       userId: r_userId || null,
       priceTotal: intent.amount / 100,
@@ -1393,10 +1449,10 @@ export async function POST(req: NextRequest) {
        after(async () => {
          try {
            const { buildPaymentDescription } = await import('@/lib/stripe');
-           const firstItem = periodGroups[0]?.[0];
-           const productName = periodGroups[0]?.length === 1
+           const firstItem = periodGroups[0]?.items[0];
+           const productName = periodGroups[0]?.items.length === 1
              ? firstItem?.productName
-             : (firstItem?.productName ?? '') + (periodGroups[0]?.length > 1 ? ` + ${periodGroups[0].length - 1} weitere` : '');
+             : (firstItem?.productName ?? '') + (periodGroups[0]?.items.length > 1 ? ` + ${periodGroups[0].items.length - 1} weitere` : '');
            const desc = buildPaymentDescription({
              bookingId: bookingIds[0],
              productName,
@@ -1421,7 +1477,7 @@ export async function POST(req: NextRequest) {
               console.log(`[confirm-cart] Mail-Skip: ${bookingIds[gi]} wurde nicht von diesem Request angelegt (Webhook oder parallel-Call hat schon).`);
               continue;
             }
-            const groupItems = periodGroups[gi];
+            const groupItems = periodGroups[gi].items;
             const firstItem = groupItems[0];
             const productName = groupItems.length === 1
               ? firstItem.productName
@@ -1437,15 +1493,10 @@ export async function POST(req: NextRequest) {
             const persisted = groupPersisted.get(bookingIds[gi]);
             const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
             const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-            const emailShipping = persisted
-              ? persisted.shipping
-              : calcShipping(
-                  groupSubtotal,
-                  r_shippingMethod as ShippingMethod,
-                  r_deliveryMode as 'versand' | 'abholung',
-                  shippingCfg,
-                  r_country
-                ).price;
+            // Fallback nutzt denselben verteilten Versandanteil wie der Insert
+            // (NICHT calcShipping auf der Gruppen-Summe) — sonst weicht der
+            // Betrag im Mietvertrag vom persistierten shipping_price ab.
+            const emailShipping = persisted ? persisted.shipping : (groupShippings[gi] ?? 0);
             const groupTotal = persisted
               ? persisted.priceTotal
               : groupSubtotal
