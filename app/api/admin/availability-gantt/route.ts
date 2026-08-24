@@ -120,10 +120,14 @@ export async function GET(req: NextRequest) {
       .select('product_id, start_date, end_date, reason')
       .lte('start_date', lastDay)
       .gte('end_date', firstDay),
+    // WICHTIG: KEIN `.eq('available', true)`-Filter mehr. Set-Bestandteile sind
+    // teils set-intern und/oder nicht einzeln buchbar (`available=false`) — sie
+    // fehlten sonst in der Antwort und die Set-Zeile haette sie faelschlich als
+    // „fehlt" gemeldet (gleicher Fehlalarm-Typ wie der Set-Teil-Fix 2026-05-25).
+    // Der Zubehoer-Tab filtert `available` jetzt im Frontend.
     supabase
       .from('accessories')
       .select('id, name, category, available_qty, available, sort_order, compatible_product_ids')
-      .eq('available', true)
       .order('sort_order', { ascending: true }),
     supabase
       .from('sets')
@@ -436,6 +440,9 @@ export async function GET(req: NextRequest) {
       name: acc.name,
       category: acc.category,
       available_qty: acc.available_qty,
+      // Frontend-Filter fuer den Zubehoer-Tab (zeigt weiterhin nur buchbares
+      // Zubehoer); die Set-Berechnung nutzt die volle Liste.
+      available: acc.available !== false,
       compatible_product_ids: accCompatIds,
       compatible_product_names: accCompatNames,
       bookings: relevantBookings.map((b) => ({

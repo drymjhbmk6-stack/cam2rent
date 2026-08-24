@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { Modal } from '@/components/admin/ui/Modal';
+import { fmtDateWeekday } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
@@ -67,6 +69,9 @@ interface GanttAccessory {
   name: string;
   category: string;
   available_qty: number;
+  /** false = nicht einzeln buchbar (z.B. set-internes Zubehoer). Der
+   *  Zubehoer-Tab blendet diese aus; die Set-Berechnung braucht sie. */
+  available?: boolean;
   /** product_ids dieser Kameras, mit denen das Zubehoer kompatibel ist.
    *  Leeres Array = mit allen Kameras kompatibel. */
   compatible_product_ids?: string[];
@@ -94,6 +99,38 @@ interface GanttSet {
   product_ids?: string[];
   product_names?: string[];
   bookings: GanttSimpleBooking[];
+}
+
+/** Ein Bestandteil eines Sets an einem konkreten Tag. */
+interface SetComponentInfo {
+  accessoryId: string;
+  name: string;
+  /** Wie viele Stueck das Set von diesem Teil braucht. */
+  needed: number;
+  /** Wie viele Stueck an dem Tag frei sind (Gesamtbestand minus Belegung). */
+  free: number;
+  /** Wie viele Stueck an dem Tag durch Buchungen belegt sind. */
+  used: number;
+  /** Gesamtbestand des Teils. */
+  total: number;
+  /** true = Teil konnte nicht aufgeloest werden → Bestand unbekannt, gilt
+   *  bewusst NICHT als „fehlt" (kein Fehlalarm bei Datenluecken). */
+  unknown: boolean;
+  /** Buchungen, die dieses Teil an dem Tag belegen (fuer das Detail-Fenster). */
+  blockingBookings: GanttSimpleBooking[];
+}
+
+interface SetCellInfo {
+  /** Wie viele komplette Sets aus dem freien Bestand noch baubar sind.
+   *  null = kein Bestandteil aufloesbar → keine Aussage moeglich. */
+  buildable: number | null;
+  /** Bestandteile, von denen zu wenige frei sind (= kein weiteres Set baubar). */
+  missing: SetComponentInfo[];
+  /** Bestandteile, die MEHR belegt sind als vorhanden — echte Ueberbuchung:
+   *  die bereits bestehenden Buchungen koennen nicht bedient werden. */
+  overbooked: SetComponentInfo[];
+  /** Alle Bestandteile (fuer das Detail-Fenster). */
+  components: SetComponentInfo[];
 }
 
 type DayCellType =
@@ -149,6 +186,28 @@ function getBookingSpan(b: GanttBooking, buf: BufferDays): { start: string; end:
   return { start, end };
 }
 
+/**
+ * Gepufferte Spanne einer Zubehoer-/Set-Buchung als YYYY-MM-DD-Strings.
+ * Bewusst OHNE Override-Datumsfelder: die Gantt-API liefert `ship_date_override`
+ * / `return_due_date_override` nur fuer Kamera-Buchungen mit (Zubehoer-/Set-
+ * Overlays haben sie nicht) — identisch zum bisherigen Verhalten.
+ */
+function getSimpleBookingSpan(b: GanttSimpleBooking, buf: BufferDays): { start: string; end: string } {
+  const bMode = b.delivery_mode ?? 'versand';
+  const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+  const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+  // WICHTIG `setUTCDate` statt `setDate`: `new Date('YYYY-MM-DD')` ist
+  // UTC-Mitternacht. Lokale Tagesarithmetik darauf verschiebt das Ergebnis um
+  // einen Tag, sobald die Spanne ueber eine Sommer-/Winterzeit-Umstellung
+  // laeuft (z.B. rental_from 26.10. minus 2 Puffertage ergab den 23.10. statt
+  // den 24.10.) — der Puffer war dann einen Tag zu frueh als belegt markiert.
+  const from = new Date(b.rental_from);
+  from.setUTCDate(from.getUTCDate() - before);
+  const to = new Date(b.rental_to);
+  to.setUTCDate(to.getUTCDate() + after);
+  return { start: from.toISOString().split('T')[0], end: to.toISOString().split('T')[0] };
+}
+
 /* ─── Haupt-Komponente ──────────────────────────────────────────────────── */
 
 export default function AdminVerfuegbarkeitPage() {
@@ -174,6 +233,8 @@ export default function AdminVerfuegbarkeitPage() {
   const [ganttData, setGanttData] = useState<GanttData | null>(() => getCached<GanttData>(GANTT_CACHE_KEY) ?? null);
   const [ganttLoading, setGanttLoading] = useState(() => getCached<GanttData>(GANTT_CACHE_KEY) === undefined);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
+  // Detail-Fenster: alle Bestandteile eines Sets an einem konkreten Tag.
+  const [setModal, setSetModal] = useState<{ set: GanttSet; dateStr: string } | null>(null);
 
   // Zeitraum berechnen
   const { rangeFrom, rangeTo } = useMemo(() => {
@@ -503,16 +564,8 @@ export default function AdminVerfuegbarkeitPage() {
 
     const matchedBookings: GanttSimpleBooking[] = [];
     for (const b of acc.bookings) {
-      const bMode = b.delivery_mode ?? 'versand';
-      const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-      const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
-      const fromDate = new Date(b.rental_from);
-      const toDate = new Date(b.rental_to);
-      fromDate.setDate(fromDate.getDate() - before);
-      toDate.setDate(toDate.getDate() + after);
-      const effFrom = fromDate.toISOString().split('T')[0];
-      const effTo = toDate.toISOString().split('T')[0];
-      if (effFrom <= dateStr && effTo >= dateStr) matchedBookings.push(b);
+      const { start, end } = getSimpleBookingSpan(b, buf);
+      if (start <= dateStr && end >= dateStr) matchedBookings.push(b);
     }
 
     // qty-aware: eine Buchung kann mehrere Exemplare belegen (Mengen-/
@@ -525,6 +578,108 @@ export default function AdminVerfuegbarkeitPage() {
     if (isPast && count === 0) type = 'past';
     return { type, count, total: acc.available_qty, bookings: matchedBookings };
   }
+
+  /* ─── Set-Verfuegbarkeit: kann das Set an einem Tag gebaut werden? ──────
+   * Ein Set ist nur so verfuegbar wie sein knappstes Bestandteil. Die
+   * Set-Zeile im Kalender war bisher blind dafuer (nur „gebucht ja/nein") —
+   * ein gruenes Set konnte in Wahrheit unbaubar sein, weil z.B. die Karte
+   * durch andere Buchungen weg war. Die Buchungen pro Zubehoer sind in der
+   * Gantt-Antwort bereits qty-aware UND set-aufgeloest (Route: `addAcc`),
+   * also die richtige Grundlage.
+   */
+
+  // Zubehoer-Lookup (enthaelt auch set-internes Zubehoer, siehe Route).
+  const accById = useMemo(() => {
+    const m = new Map<string, GanttAccessory>();
+    for (const a of ganttData?.accessories ?? []) m.set(a.id, a);
+    return m;
+  }, [ganttData]);
+
+  // Belegung pro Zubehoer und Tag EINMAL vorberechnen. Sonst waere die
+  // Set-Zelle O(Sets × Tage × Teile × Buchungen) — bei ~270 Tagen spuerbar.
+  const accUsageByDay = useMemo(() => {
+    const usage = new Map<string, Map<string, number>>();
+    if (!ganttData) return usage;
+    const buf = ganttData.bufferDays;
+    for (const acc of ganttData.accessories) {
+      if (!acc.bookings || acc.bookings.length === 0) continue;
+      const perDay = new Map<string, number>();
+      for (const b of acc.bookings) {
+        const { start, end } = getSimpleBookingSpan(b, buf);
+        // Auf den geladenen Zeitraum klemmen — Buchungen ragen darueber hinaus.
+        const startStr = start < rangeFrom ? rangeFrom : start;
+        const endStr = end > rangeTo ? rangeTo : end;
+        if (startStr > endStr) continue;
+        const qty = b.qty ?? 1;
+        const cur = new Date(startStr);
+        for (let guard = 0; guard < 800; guard++) {
+          const ds = cur.toISOString().split('T')[0];
+          if (ds > endStr) break;
+          perDay.set(ds, (perDay.get(ds) ?? 0) + qty);
+          cur.setUTCDate(cur.getUTCDate() + 1); // UTC — siehe getSimpleBookingSpan
+        }
+      }
+      usage.set(acc.id, perDay);
+    }
+    return usage;
+  }, [ganttData, rangeFrom, rangeTo]);
+
+  // Set-Zellinfo: wie viele komplette Sets sind an dem Tag noch baubar und
+  // welche Bestandteile fehlen?
+  const getSetCellInfo = useCallback((set: GanttSet, dateStr: string, withBookings = false): SetCellInfo => {
+    const rawItems = Array.isArray(set.accessory_items) ? set.accessory_items : [];
+    const buf = ganttData?.bufferDays;
+    const components: SetComponentInfo[] = [];
+    let buildable: number | null = null;
+
+    // Mengen pro accessory_id zusammenfassen — ein Set kann dasselbe Teil in
+    // mehreren Eintraegen fuehren; einzeln geprueft waere der Bedarf zu
+    // optimistisch (jeder Eintrag rechnete gegen den vollen freien Bestand).
+    // Gleiche Aggregation wie `addAcc` in der Gantt-Route.
+    const neededById = new Map<string, number>();
+    for (const item of rawItems) {
+      if (!item?.accessory_id) continue;
+      const q = typeof item.qty === 'number' && item.qty > 0 ? Math.floor(item.qty) : 1;
+      neededById.set(item.accessory_id, (neededById.get(item.accessory_id) ?? 0) + q);
+    }
+
+    for (const [accessoryId, needed] of neededById) {
+      const acc = accById.get(accessoryId);
+
+      // Teil nicht aufloesbar (geloescht / Datenluecke) → „unbekannt", NICHT
+      // „fehlt". Ein Fehlalarm waere schlimmer als eine fehlende Warnung.
+      if (!acc) {
+        components.push({
+          accessoryId, name: accessoryId,
+          needed, free: 0, used: 0, total: 0, unknown: true, blockingBookings: [],
+        });
+        continue;
+      }
+
+      const total = acc.available_qty ?? 0;
+      const used = accUsageByDay.get(acc.id)?.get(dateStr) ?? 0;
+      const free = Math.max(0, total - used);
+      // Die belegenden Buchungen braucht nur das Detail-Fenster. Im Kalender
+      // (Sets × Tage Zellen) waere der Filter ueber alle Buchungen zu teuer.
+      const blockingBookings = withBookings && used > 0 && buf
+        ? acc.bookings.filter((b) => {
+            const { start, end } = getSimpleBookingSpan(b, buf);
+            return start <= dateStr && end >= dateStr;
+          })
+        : [];
+
+      components.push({ accessoryId: acc.id, name: acc.name, needed, free, used, total, unknown: false, blockingBookings });
+      const possible = Math.floor(free / needed);
+      buildable = buildable === null ? possible : Math.min(buildable, possible);
+    }
+
+    return {
+      buildable,
+      missing: components.filter((c) => !c.unknown && c.free < c.needed),
+      overbooked: components.filter((c) => !c.unknown && c.used > c.total),
+      components,
+    };
+  }, [accById, accUsageByDay, ganttData]);
 
   // Gefilterte Sets/Zubehoer nach Kamera-Auswahl.
   // - Sets: matcht ueber `product_ids` (Sets ohne Kamera-Zuordnung fallen raus,
@@ -539,15 +694,23 @@ export default function AdminVerfuegbarkeitPage() {
     );
   }, [ganttData, cameraFilter]);
 
+  // Der Zubehoer-Tab zeigt weiterhin NUR einzeln buchbares Zubehoer. Die
+  // Gantt-Route liefert seit der Set-Verfuegbarkeit auch set-internes Zubehoer
+  // (available=false) mit — das wird hier ausgefiltert, damit der Tab
+  // unveraendert bleibt.
+  const bookableAccessories = useMemo(
+    () => (ganttData?.accessories ?? []).filter((a) => a.available !== false),
+    [ganttData],
+  );
+
   const filteredAccessories = useMemo(() => {
-    if (!ganttData) return [];
-    if (!cameraFilter) return ganttData.accessories;
-    return ganttData.accessories.filter((a) => {
+    if (!cameraFilter) return bookableAccessories;
+    return bookableAccessories.filter((a) => {
       const ids = a.compatible_product_ids;
       if (!Array.isArray(ids) || ids.length === 0) return true; // alle Kameras kompatibel
       return ids.includes(cameraFilter);
     });
-  }, [ganttData, cameraFilter]);
+  }, [bookableAccessories, cameraFilter]);
 
   // Mehrfach-Auswahl umschalten (Chip an/aus).
   function toggleFilter(setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) {
@@ -566,9 +729,9 @@ export default function AdminVerfuegbarkeitPage() {
   );
   const accCategoryOptions = useMemo(() => {
     const s = new Set<string>();
-    for (const a of ganttData?.accessories ?? []) if (a.category) s.add(a.category);
+    for (const a of bookableAccessories) if (a.category) s.add(a.category);
     return [...s].sort((a, b) => a.localeCompare(b, 'de'));
-  }, [ganttData]);
+  }, [bookableAccessories]);
   const setBadgeOptions = useMemo(() => {
     const s = new Set<string>();
     for (const x of ganttData?.sets ?? []) if (x.badge) s.add(x.badge);
@@ -978,7 +1141,7 @@ export default function AdminVerfuegbarkeitPage() {
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
               Lade Verfügbarkeit…
             </div>
-          ) : !ganttData || ganttData.accessories.length === 0 ? (
+          ) : !ganttData || bookableAccessories.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>Kein Zubehör vorhanden.</p>
           ) : visibleAccessories.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: 'var(--admin-text-dim)' }}>
@@ -1131,8 +1294,11 @@ export default function AdminVerfuegbarkeitPage() {
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: 'var(--admin-text-2)' }}>
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei (Zahl = baubare Sets)</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7f1d1d' }} /> Zubehör fehlt</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8', boxShadow: 'inset 0 0 0 2px #ef4444' }} /> Überbucht (Bestand reicht nicht)</span>
+                <span style={{ color: 'var(--admin-text-dim)' }}>Klick auf einen Tag zeigt alle Bestandteile.</span>
               </div>
 
               {/* EIN gemeinsamer Kalender für ALLE Sets. Eine Zeile pro Set,
@@ -1227,30 +1393,77 @@ export default function AdminVerfuegbarkeitPage() {
                           let isBooked = false;
                           const matchedBookings: GanttSimpleBooking[] = [];
                           for (const b of s.bookings) {
-                            const bMode = b.delivery_mode ?? 'versand';
-                            const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
-                            const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
-                            const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
-                            const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
-                            if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
+                            const { start, end } = getSimpleBookingSpan(b, ganttData.bufferDays);
+                            if (start <= d.dateStr && end >= d.dateStr) {
                               isBooked = true;
                               matchedBookings.push(b);
                             }
                           }
-                          const bg = isPast && !isBooked ? '#1e293b' : isBooked ? (isPast ? '#1e3a5f' : '#1d4ed8') : '#065f46';
-                          const color = isPast && !isBooked ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
+
+                          // Zubehoer-Deckung des Sets an diesem Tag (nur fuer
+                          // die Zukunft — Vergangenes bleibt neutral grau).
+                          const setInfo = isPast ? null : getSetCellInfo(s, d.dateStr);
+                          // Freie Zelle: rot, sobald kein KOMPLETTES Set mehr
+                          // baubar ist (Bestandteil reicht nicht) → nicht mehr
+                          // verkaufbar.
+                          const hasMissing = (setInfo?.missing.length ?? 0) > 0;
+                          // Gebuchte Zelle: roter Rahmen NUR bei echter
+                          // Ueberbuchung (mehr belegt als vorhanden). „Kein
+                          // weiteres Set frei" ist bei Bestand 1 der Normalfall
+                          // und waere als Dauer-Warnung nur Rauschen.
+                          const isOverbooked = (setInfo?.overbooked.length ?? 0) > 0;
+
+                          const bg = isPast && !isBooked ? '#1e293b'
+                            : isBooked ? (isPast ? '#1e3a5f' : '#1d4ed8')
+                            : hasMissing ? '#7f1d1d'
+                            : '#065f46';
+                          const color = isPast && !isBooked ? '#475569'
+                            : isBooked ? '#ffffff'
+                            : hasMissing ? '#fecaca'
+                            : '#6ee7b7';
+
+                          // Ringe kombinieren, damit der Heute-Ring erhalten bleibt.
+                          const rings: string[] = [];
+                          if (isBooked && isOverbooked) rings.push('inset 0 0 0 2px #ef4444');
+                          if (d.isToday) rings.push('inset 0 0 0 1.5px #f59e0b');
+
+                          let cellText = '';
+                          if (!isPast) {
+                            if (isBooked) cellText = `${isOverbooked ? '⚠' : ''}${matchedBookings.length}`;
+                            else if (hasMissing) cellText = '0';
+                            else if (setInfo && setInfo.buildable !== null) cellText = String(setInfo.buildable);
+                          }
+
                           return (
                             <td key={d.dateStr} className="px-0 py-0.5 text-center"
                               onMouseEnter={(e) => {
-                                if (isPast || !isBooked) { setTooltip(null); return; }
+                                if (isPast) { setTooltip(null); return; }
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                const names = matchedBookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
-                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${s.name}\n${names}` });
+                                const lines: string[] = [s.name];
+                                if (isBooked) {
+                                  lines.push(matchedBookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', '));
+                                }
+                                if (setInfo && isOverbooked) {
+                                  lines.push('⚠ Überbucht — Bestand reicht nicht:');
+                                  for (const m of setInfo.overbooked) {
+                                    lines.push(`• ${m.name} — ${m.used} belegt, nur ${m.total} vorhanden`);
+                                  }
+                                } else if (setInfo && hasMissing) {
+                                  lines.push(isBooked ? 'Kein weiteres Set verfügbar:' : '⚠ Zubehör fehlt:');
+                                  for (const m of setInfo.missing) {
+                                    lines.push(`• ${m.name} — ${m.needed} benötigt, ${m.free} frei`);
+                                  }
+                                } else if (setInfo && setInfo.buildable !== null) {
+                                  lines.push(`${setInfo.buildable} ${setInfo.buildable === 1 ? 'Set' : 'Sets'} ${isBooked ? 'zusätzlich ' : ''}baubar`);
+                                }
+                                lines.push('Klicken für Details');
+                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: lines.join('\n') });
                               }}
                               onMouseLeave={() => setTooltip(null)}
-                              style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                              onClick={() => { setTooltip(null); setSetModal({ set: s, dateStr: d.dateStr }); }}
+                              style={{ background: bg, color, cursor: 'pointer', boxShadow: rings.length > 0 ? rings.join(', ') : 'none' }}>
                               <div className="text-[9px] leading-tight font-semibold">
-                                {!isPast && isBooked ? matchedBookings.length.toString() : ''}
+                                {cellText}
                               </div>
                             </td>
                           );
@@ -1266,6 +1479,109 @@ export default function AdminVerfuegbarkeitPage() {
           )}
         </>
       )}
+
+      {/* Detail-Fenster: alle Bestandteile eines Sets an einem Tag */}
+      {setModal && (() => {
+        const info = getSetCellInfo(setModal.set, setModal.dateStr, true);
+        const missingCount = info.missing.length;
+        const overbookedCount = info.overbooked.length;
+        return (
+          <Modal
+            open
+            onClose={() => setSetModal(null)}
+            title={`${setModal.set.name} — ${fmtDateWeekday(setModal.dateStr)}`}
+            maxWidth={620}
+          >
+            {/* Kopfzeile: Ueberbuchung > ausverkauft > verfuegbar */}
+            {overbookedCount > 0 ? (
+              <div style={{ background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(220,38,38,0.6)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#f87171', fontSize: 14 }}>
+                  ⚠ Überbucht — bestehende Buchungen nicht gedeckt
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  {overbookedCount === 1
+                    ? 'Von einem Bestandteil sind mehr Stücke belegt als vorhanden.'
+                    : `Von ${overbookedCount} Bestandteilen sind mehr Stücke belegt als vorhanden.`}
+                </div>
+              </div>
+            ) : missingCount > 0 ? (
+              <div style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.45)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#f87171', fontSize: 14 }}>
+                  ✕ Kein komplettes Set mehr verfügbar
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  {missingCount === 1 ? 'Ein Bestandteil reicht nicht' : `${missingCount} Bestandteile reichen nicht`}
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.45)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#34d399', fontSize: 14 }}>
+                  ✓ Set vollständig verfügbar
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  {info.buildable !== null
+                    ? `${info.buildable} ${info.buildable === 1 ? 'komplettes Set' : 'komplette Sets'} aus dem freien Bestand baubar`
+                    : 'Keine Bestandteile hinterlegt'}
+                </div>
+              </div>
+            )}
+
+            {info.components.length === 0 ? (
+              <p className="font-body" style={{ color: 'var(--admin-text-dim)', fontSize: 13 }}>
+                Für dieses Set ist kein Zubehör hinterlegt.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {info.components.map((c) => {
+                  const isMissing = !c.unknown && c.free < c.needed;
+                  const border = c.unknown ? 'var(--admin-border)' : isMissing ? 'rgba(220,38,38,0.45)' : 'rgba(16,185,129,0.35)';
+                  const bg = c.unknown ? 'transparent' : isMissing ? 'rgba(220,38,38,0.08)' : 'rgba(16,185,129,0.07)';
+                  return (
+                    <div key={c.accessoryId} style={{ border: `1px solid ${border}`, background: bg, borderRadius: 9, padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                        <div className="font-heading font-semibold" style={{ fontSize: 13, color: 'var(--admin-text)' }}>
+                          <span style={{ color: c.unknown ? 'var(--admin-muted)' : isMissing ? '#f87171' : '#34d399', marginRight: 6 }}>
+                            {c.unknown ? '?' : isMissing ? '✕' : '✓'}
+                          </span>
+                          {c.name}
+                        </div>
+                        <div className="font-body whitespace-nowrap" style={{ fontSize: 12, color: c.unknown ? 'var(--admin-muted)' : isMissing ? '#f87171' : 'var(--admin-text-2)' }}>
+                          {c.unknown
+                            ? 'Bestand unbekannt'
+                            : c.used > c.total
+                              ? `${c.needed}× benötigt · ${c.used} belegt bei nur ${c.total} vorhanden`
+                              : `${c.needed}× benötigt · ${c.free} von ${c.total} frei`}
+                        </div>
+                      </div>
+                      {isMissing && c.blockingBookings.length > 0 && (
+                        <div className="font-body" style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 5 }}>
+                          Belegt durch:{' '}
+                          {c.blockingBookings.map((b, i) => (
+                            <span key={b.id}>
+                              {i > 0 && ', '}
+                              <a href={`/admin/buchungen/${b.id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ color: 'var(--admin-accent)', textDecoration: 'underline' }}>
+                                {b.status === 'awaiting_payment' ? '⏳ ' : ''}{b.customer_name || b.id}
+                              </a>
+                              {(b.qty ?? 1) > 1 ? ` (${b.qty}×)` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {c.unknown && (
+                        <div className="font-body" style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 5 }}>
+                          Dieses Teil konnte nicht aufgelöst werden (gelöscht oder nicht mehr im Katalog) und wird
+                          bei der Verfügbarkeit nicht mitgerechnet.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
 
       {/* Tooltip */}
       {tooltip && (

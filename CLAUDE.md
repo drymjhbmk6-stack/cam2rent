@@ -2919,6 +2919,52 @@ Ergänzung zum Punkt oben: die Bestandteile-Box in der Übergabe (`/admin/buchun
   - Zeigt Belegung als "X/Y" (z.B. "3/10" belegt von gesamt)
   - Grün=alle frei, Gold=teilweise belegt, Blau=ausgebucht
   - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
+- **Sets-Tab: Zubehör-Deckung sichtbar — rot bei fehlenden Bestandteilen (Stand 2026-08-24):**
+  Eine Set-Zeile war bisher blind für ihre Bestandteile: sie zeigte nur „gebucht ja/nein".
+  Ein grünes Set konnte in Wahrheit unbaubar sein, weil z.B. die Speicherkarte durch
+  andere Buchungen weg war — der Admin merkte es erst beim Packen. Jetzt rechnet der
+  Sets-Tab pro Tag durch, ob **alle** Bestandteile in ausreichender Menge frei sind
+  (dieselbe Idee wie das Basis-Set-Gate im Kunden-Wizard, nur im Kalender).
+  - **Farben:** grün = Set komplett baubar (Zahl in der Zelle = **wie viele komplette
+    Sets** aus dem freien Bestand noch baubar sind) · **rot (`#7f1d1d`)** = mindestens ein
+    Bestandteil reicht nicht, kein komplettes Set mehr verfügbar (Zelle zeigt `0`) ·
+    blau = Set selbst gebucht (unverändert, Zahl = Anzahl Set-Buchungen).
+  - **Roter Rahmen auf blauen Zellen = ECHTE ÜBERBUCHUNG** (`used > total` bei einem
+    Bestandteil), **nicht** „kein weiteres Set frei". Bewusst so: bei Bestand 1 wäre
+    „kein weiteres Set frei" an jedem gebuchten Tag der Normalfall → der Rahmen wäre
+    Dauer-Rauschen statt Alarm. Der Heute-Ring bleibt daneben erhalten (beide
+    `boxShadow`-Ringe werden kombiniert, nicht überschrieben).
+  - **Hover** zeigt die fehlenden bzw. überbuchten Teile mit `benötigt / frei`;
+    **Klick auf eine Zelle** öffnet ein Detail-Fenster (`components/admin/ui/Modal.tsx`)
+    mit **allen** Bestandteilen: grün ✓ mit `N× benötigt · X von Y frei`, rot ✕ bei
+    fehlenden Teilen inkl. der belegenden Buchungen (verlinkt auf `/admin/buchungen/[id]`).
+  - **Datenbasis:** `ganttData.accessories[].bookings[]` ist bereits **qty-aware und
+    set-aufgelöst** (Route-Helper `addAcc`) — also die korrekte Grundlage. Neu
+    vorberechnet wird `accUsageByDay` (Map `accessoryId → dateStr → belegt`), sonst wäre
+    die Zelle O(Sets × Tage × Teile × Buchungen). Die belegenden Buchungen werden nur
+    fürs Modal aufgelöst (`getSetCellInfo(set, date, withBookings)`).
+  - **⚠️ `available`-Filter ist von der Route ins Frontend gewandert:**
+    `GET /api/admin/availability-gantt` lädt `accessories` **ohne**
+    `.eq('available', true)` (Set-Bestandteile sind oft set-intern/nicht einzeln
+    buchbar und hätten sonst gefehlt → Fehlalarm „fehlt", gleicher Typ wie der
+    Set-Teil-Fix 2026-05-25) und liefert stattdessen ein `available`-Flag pro Zubehör.
+    Der **Zubehör-Tab** filtert es über `bookableAccessories` wieder heraus und zeigt
+    unverändert nur buchbares Zubehör (auch Kategorie-Chips + Leer-Zustand hängen daran).
+  - **Nicht auflösbare Bestandteile** (gelöscht / Datenlücke) gelten als **„unbekannt"**,
+    NICHT als fehlend — kein Fehlalarm; im Modal grau mit Hinweis, aus `buildable`
+    ausgenommen. Mehrfach-Einträge derselben `accessory_id` werden aufsummiert (wie
+    `addAcc`), sonst wäre der Bedarf zu optimistisch. Upgrade-Gruppen (64 GB vs. 512 GB)
+    sind bewusst NICHT berücksichtigt — der Kalender zeigt die Grund-Zusammensetzung.
+  - **DST-Off-by-one mitgefixt:** die Puffer-Spanne einer Zubehör-/Set-Buchung lag in
+    drei Kopien inline im Code und rechnete mit `setDate()` (lokale Zeit) auf einem
+    UTC-Mitternacht-Datum. Lief die Spanne über eine Sommer-/Winterzeit-Umstellung, kippte
+    das Ergebnis um einen Tag (`rental_from` 26.10. − 2 Puffertage ergab den **23.10.**
+    statt den 24.10. → ein Tag zu viel als belegt markiert). Jetzt EIN Modul-Helper
+    `getSimpleBookingSpan()` mit `setUTCDate` — zeitzonenunabhängig, genutzt von
+    `getAccCellInfo`, `accUsageByDay` und der Set-Zelle. ⚠️ Die **Kamera**-Variante
+    `getBookingSpan()` (Kameras-Tab, mit Override-Feldern) hat denselben Off-by-one noch
+    — bewusst nicht mitgeändert (anderer Tab, eigenes Risiko), offener Folge-Change.
+
 - **Sets-Tab: EIN gemeinsamer Kalender (Stand 2026-06-14):** Analog zum Zubehör-Tab — eine einzige Tabelle, eine Zeile pro Set, gemeinsamer Datums-Header + ein Scrollbalken. Badge + Kamera-Pills in der linken Sticky-Spalte.
   - **Nach Kamera gruppiert (Stand 2026-06-14):** Sets werden wie der Kameras-Tab über `<tbody>`-Gruppenköpfe pro Kamera gruppiert (`groupedSets`-Memo aus `s.product_names`, Gruppen-Reihenfolge folgt `shopProducts`). Ein Set mit mehreren Kameras erscheint in jeder passenden Gruppe; Sets ohne Kamera-Zuordnung kommen ans Ende („Ohne Kamera-Zuordnung"). Pro (Gruppe, Set) eigener Pill-Aufklapp-State (Key `${group.label}-${s.id}`). Reine Anzeige-Gruppierung.
   - Grün=frei, Blau=gebucht (mit Anzahl)
