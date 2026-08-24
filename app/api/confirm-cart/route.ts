@@ -1462,13 +1462,17 @@ export async function POST(req: NextRequest) {
       after(async () => {
         try {
           for (let gi = 0; gi < periodGroups.length; gi++) {
-            // Doppel-Mail-Schutz: ueberspringen, wenn diese Buchung NICHT von
-            // diesem Request frisch eingefuegt wurde (Vuln-17-Recovery-Pfad).
-            // Sonst schicken Webhook/parallel-Call + dieser Call jeweils 1+1.
-            if (!freshlyInsertedIds.has(bookingIds[gi])) {
-              console.log(`[confirm-cart] Mail-Skip: ${bookingIds[gi]} wurde nicht von diesem Request angelegt (Webhook oder parallel-Call hat schon).`);
-              continue;
-            }
+            // Doppel-Mail-Schutz: die BESTAETIGUNGS-MAIL geht nur fuer Buchungen
+            // raus, die dieser Request frisch eingefuegt hat (Vuln-17-Recovery-
+            // Pfad). Sonst schicken Webhook/parallel-Call + dieser Call je 1+1.
+            //
+            // Der MIETVERTRAG haengt bewusst NICHT an diesem Flag: legt der
+            // Stripe-Webhook im Race eine der Zeitraum-/Haftungs-Gruppen zuerst
+            // an, erzeugt er dafuer KEINEN Vertrag (nur hier liegt die
+            // contractSignature vor). Ein `continue` an dieser Stelle liess die
+            // Buchung deshalb dauerhaft ohne Vertrag zurueck. Der Mail-Skip
+            // greift jetzt erst unmittelbar vor dem Versand (siehe unten).
+            const isFresh = freshlyInsertedIds.has(bookingIds[gi]);
             const groupItems = periodGroups[gi].items;
             const firstItem = groupItems[0];
             const productName = groupItems.length === 1
@@ -1499,11 +1503,15 @@ export async function POST(req: NextRequest) {
                 - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
                 + emailShipping;
 
-            // Seriennummer laden falls Unit zugeordnet
+            // Seriennummer laden falls Unit zugeordnet. `contract_signed` gleich
+            // mit laden, damit ein bereits erzeugter Vertrag nicht doppelt
+            // entsteht (gleiche Bedingung wie der Idempotenz-Block weiter oben).
             let serialNumber = '';
             let bookingUnitId: string | null = null;
+            let alreadySigned = false;
             try {
-              const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingIds[gi]).maybeSingle();
+              const { data: bkRow } = await supabase.from('bookings').select('unit_id, contract_signed').eq('id', bookingIds[gi]).maybeSingle();
+              alreadySigned = bkRow?.contract_signed === true;
               if (bkRow?.unit_id) {
                 bookingUnitId = bkRow.unit_id;
                 const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
@@ -1511,9 +1519,9 @@ export async function POST(req: NextRequest) {
               }
             } catch { /* ignore */ }
 
-            // Vertrag generieren wenn Signatur vorhanden
+            // Vertrag generieren wenn Signatur vorhanden und noch keiner da ist
             let contractPdfBuffer: Buffer | undefined;
-            if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+            if (!alreadySigned && contractSignature?.agreedToTerms && contractSignature?.signerName) {
               try {
                 const result = await generateContractPDF({
                   bookingId: bookingIds[gi],
@@ -1556,6 +1564,13 @@ export async function POST(req: NextRequest) {
               } catch (err) {
                 console.error('Contract generation error:', err);
               }
+            }
+
+            // Ab hier nur noch der Mailversand — Doppel-Mail-Schutz (siehe oben).
+            // Der Vertrag ist zu diesem Zeitpunkt bereits geprueft/erzeugt.
+            if (!isFresh) {
+              console.log(`[confirm-cart] Mail-Skip: ${bookingIds[gi]} wurde nicht von diesem Request angelegt (Webhook oder parallel-Call hat schon).`);
+              continue;
             }
 
             const emailData: BookingEmailData = {

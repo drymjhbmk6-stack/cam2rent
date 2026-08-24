@@ -735,6 +735,18 @@ async function handleCartBooking(
   const earlyServiceConsentAt = (ctx.earlyServiceConsentAt as string) ?? null;
   const earlyServiceConsentIp = (ctx.earlyServiceConsentIp as string) ?? null;
 
+  // Signatur aus dem durablen Checkout-Kontext (geschrieben von checkout-intent).
+  // Der Webhook erzeugt selbst KEIN Vertrags-PDF — das macht confirm-cart, weil
+  // dort die Bestaetigungsmail den Anhang braucht. Die Felder werden aber an der
+  // Buchung persistiert, damit der Admin-Recovery-Pfad ("Vertrag aus Signatur
+  // regenerieren") auch dann greift, wenn confirm-cart nie laeuft.
+  const ctxSignature = (ctx.contractSignature ?? null) as {
+    signerName?: string;
+    signatureDataUrl?: string;
+  } | null;
+  const ctxSignerName = typeof ctxSignature?.signerName === 'string' ? ctxSignature.signerName : '';
+  const ctxSignatureUrl = typeof ctxSignature?.signatureDataUrl === 'string' ? ctxSignature.signatureDataUrl : '';
+
   // Liefer- + Rechnungsadresse: Per-Order-Eingabe aus dem Checkout-Kontext (ctx)
   // hat Vorrang, sonst die abweichenden Profil-Standards bzw. Hauptadresse.
   const ctxShipping = ctx.street
@@ -936,6 +948,9 @@ async function handleCartBooking(
       ...(earlyServiceConsentAt
         ? { early_service_consent_at: earlyServiceConsentAt, early_service_consent_ip: earlyServiceConsentIp }
         : {}),
+      // Signatur mitschreiben (s. oben) — analog confirm-cart.
+      ...(ctxSignerName ? { contract_signer_name: ctxSignerName } : {}),
+      ...(ctxSignatureUrl ? { contract_signature_url: ctxSignatureUrl } : {}),
     };
 
     // Insert mit denselben Absicherungen wie confirm-cart:
@@ -949,6 +964,7 @@ async function handleCartBooking(
     let piConflict = false;
     let droppedEarlyBird = false;
     let droppedSpecial = false;
+    let droppedSignature = false;
     const MAX_ID_COLLISION_RETRIES = 30;
     for (let idAttempt = 0; idAttempt < MAX_ID_COLLISION_RETRIES; idAttempt++) {
       const { error: insErr } = await supabase.from('bookings').insert(cartInsert);
@@ -966,6 +982,14 @@ async function handleCartBooking(
           && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
         droppedSpecial = true;
         delete cartInsert.special_discount;
+        continue;
+      }
+      if (!droppedSignature && (cartInsert.contract_signer_name !== undefined || cartInsert.contract_signature_url !== undefined)
+          && /contract_signer_name|contract_signature_url/i.test(insErr.message ?? '')
+          && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+        droppedSignature = true;
+        delete cartInsert.contract_signer_name;
+        delete cartInsert.contract_signature_url;
         continue;
       }
       if (insErr.code !== '23505') { insertError = insErr; break; }

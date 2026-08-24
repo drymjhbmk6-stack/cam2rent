@@ -889,6 +889,47 @@ regenerierbar.
   stand. Vorher meldete das Neu-Unterschreiben „alreadySigned"-Erfolg, aber die
   Buchung blieb für immer „nicht unterschrieben".
 
+### Vertrag fehlte bei EINER von mehreren Cart-Buchungen — gefixt (Stand 2026-08-24)
+**Kundenfall:** 3 Kameras, ein Zeitraum, aber **zwei Haftungsstufen** → wie
+vorgesehen zwei Buchungen (Gruppenschlüssel `rentalFrom_rentalTo_haftung`, siehe
+„Mehrere Mietzeiträume"). Der Kunde hat **einmal** unterschrieben — eine der beiden
+Buchungen blieb trotzdem dauerhaft `contract_signed=false` ohne PDF.
+
+**Ursache:** In `app/api/confirm-cart/route.ts` lag die Vertragserzeugung im selben
+`after()`-Block wie der Mailversand, hinter dem gemeinsamen `continue` des
+Doppel-Mail-Schutzes (`if (!freshlyInsertedIds.has(...)) continue;`, Fix 2026-05-27).
+Gewinnt der Stripe-Webhook das Rennen und legt **eine** der Gruppen zuerst an
+(PayPal/SEPA/3DS, langsamer Redirect), steht sie nicht in `freshlyInsertedIds`:
+`bookingsComplete` ist dann `false` (1 von 2), der frühe Idempotenz-Block, der
+Verträge nachzieht, greift **nicht**, der Normalpfad legt nur die fehlende Gruppe
+nach — und der `continue` übersprang für die Webhook-Gruppe auch den Vertrag. Der
+Webhook selbst erzeugt bewusst **keinen** Vertrag (nur `confirm-cart` hat die
+`contractSignature`, und die Bestätigungsmail braucht das PDF als Anhang).
+
+**Fix 1 (Kern, `confirm-cart`):** Der `continue` ist durch ein Flag
+`const isFresh = freshlyInsertedIds.has(bookingIds[gi])` ersetzt und wandert
+unmittelbar **vor den Mailversand**. Der Vertrag wird damit für **jede** Gruppe
+erzeugt, der Doppel-Mail-Schutz bleibt unverändert. Idempotenz: die ohnehin
+vorhandene Query lädt jetzt `unit_id, contract_signed`; der Vertragsblock läuft nur
+bei `!alreadySigned` (gleiche Bedingung wie der frühe Idempotenz-Block). Für
+Webhook-Gruppen bleibt die Bestätigungsmail aus — die hat der Webhook schon
+verschickt (nur ohne PDF-Anhang); der Vertrag hängt danach an der Buchung.
+
+**Fix 2 (Absicherung, `stripe-webhook`):** `handleCartBooking` liest
+`ctx.contractSignature` aus dem durablen Checkout-Kontext (den es ohnehin lädt) und
+schreibt `contract_signer_name`/`contract_signature_url` beim Insert mit — analog
+`confirm-cart`. Damit greift der Admin-Recovery-Button **„Vertrag aus Signatur
+regenerieren"** (`/api/admin/booking/[id]/regenerate-contract`) auch dann, wenn
+`confirm-cart` gar nicht mehr läuft (Tab geschlossen). Defensiver Insert-Retry
+ohne die beiden Spalten (Muster `early_bird_discount`/`special_discount`).
+
+**Diagnose bei Altfällen:** Hat die vertragslose Buchung `contract_signer_name`
+gesetzt → PDF-Crash, der Regenerieren-Button hilft. Ist das Feld leer → dieser
+Webhook-Race, der Kunde muss neu unterschreiben (`/konto/buchungen`) bzw. am
+Tablet über `/admin/buchungen/[id]/vertrag-unterschreiben`.
+
+**Keine Migration.** Reiner Reihenfolge-Fix + zwei zusätzlich persistierte Felder.
+
 ### Mietvertrag zurücksetzen → Kunde unterschreibt neu (Stand 2026-06-14)
 Hintergrund: vereinzelt wurde ein Vertrags-PDF **ohne** Unterschrift erzeugt
 (PDF-/Signatur-Glitch). Der Admin kann den Vertrag jetzt komplett zurücksetzen,
