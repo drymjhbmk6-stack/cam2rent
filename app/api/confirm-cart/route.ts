@@ -4,8 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId, incrementBookingIdSuffix } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
-import { calcShipping } from '@/data/shipping';
-import { groupByPeriod, groupPaymentIntentId, distributeAmount, type CheckoutContext } from '@/lib/cart-period-groups';
+import { groupByPeriod, groupPaymentIntentId, distributeAmount, shippingPerGroup, type CheckoutContext } from '@/lib/cart-period-groups';
 import { haftungOptionLabel } from '@/lib/haftung-labels';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
@@ -753,23 +752,20 @@ export async function POST(req: NextRequest) {
     // H-2: persistierte Geldwerte pro (finaler) Buchungs-ID für den after()-Block.
     const groupPersisted = new Map<string, GroupPersisted>();
 
-    // Versand EINMAL auf den GESAMTEN Warenkorb — exakt so, wie der Checkout
-    // ihn berechnet (app/checkout/page.tsx: calcShipping(cartTotal, ...)) und
-    // Stripe ihn kassiert hat. Frueher rechnete jede Gruppe ihren Versand neu
-    // auf der kleineren Gruppen-Summe: bei mehreren Zeitraeumen entstanden so
-    // n Versandzeilen (Gratis-Schwelle griff evtl. nicht mehr), obwohl der
-    // Kunde nur 1x Versand bezahlt hat. Das blaehte `effectiveDiscount` auf und
-    // verzerrte shipping_price/discount_amount in der Buchhaltung.
-    const cartShipping = calcShipping(
-      totalCartSubtotal,
+    // Versand PRO Gruppe — exakt so, wie der Checkout ihn berechnet
+    // (shippingPerGroup) und Stripe ihn kassiert hat. Jede Gruppe wird eine
+    // eigene Buchung und damit ein eigenes Paket (raus + zurueck), deshalb
+    // greift die Gratis-Schwelle je Buchung statt auf dem Gesamtwert.
+    // Client und Server MUESSEN hier dieselbe Funktion nutzen, sonst traegt die
+    // Buchung einen anderen Versand als kassiert wurde.
+    const groupSubtotals = periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0));
+    const groupShippings = shippingPerGroup(
+      groupSubtotals,
       r_shippingMethod as ShippingMethod,
       r_deliveryMode as 'versand' | 'abholung',
       shippingCfg,
       r_country,
-    ).price;
-    const groupSubtotals = periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0));
-    // Rundungsrest landet in der letzten Gruppe -> Summe bleibt exakt.
-    const groupShippings = distributeAmount(cartShipping, groupSubtotals);
+    ).perGroup;
 
     type GroupCalc = { subtotal: number; shipping: number; baseTotal: number };
     const groupCalcs: GroupCalc[] = periodGroups.map((_g, i) => ({
@@ -777,8 +773,13 @@ export async function POST(req: NextRequest) {
       shipping: groupShippings[i],
       baseTotal: groupSubtotals[i] + groupShippings[i],
     }));
-    const sumGroupBaseTotals = groupCalcs.reduce((s, g) => s + g.baseTotal, 0) || 1;
     const paidEuros = intent.amount / 100;
+    // STRIPE IST SOURCE OF TRUTH: der gezahlte Gesamtbetrag wird proportional
+    // zum Gruppen-Warenwert (inkl. Versand) verteilt, Rundungsrest in die letzte
+    // Gruppe -> Summe der price_total entspricht exakt intent.amount.
+    // Dieselbe Funktion nutzt der Stripe-Webhook, damit beide Schreibpfade
+    // identische Betraege erzeugen.
+    const groupTotals = distributeAmount(paidEuros, groupCalcs.map((g) => g.baseTotal));
 
     // is_test einmal vorab berechnen — Tester-User behalten ihre is_test=true
     // Buchungen auch im Live-Modus, damit Reports und Berichte sie ausschliessen.
@@ -803,16 +804,7 @@ export async function POST(req: NextRequest) {
       // auseinanderlaufen (z.B. Body sagt productDiscount=7,50 EUR aber Stripe
       // hat 15 EUR abgebucht) → DB zeigte 11 EUR, Stripe-Charge 15 EUR, Kunde
       // verwirrt. Jetzt: price_total = anteiliger Stripe-Betrag.
-      let groupTotal: number;
-      if (gi === periodGroups.length - 1) {
-        // Letzte Gruppe bekommt den Rest (Rundungs-Cent landen hier)
-        const prevSum = groupCalcs
-          .slice(0, gi)
-          .reduce((s, gc) => s + Math.round(paidEuros * (gc.baseTotal / sumGroupBaseTotals) * 100) / 100, 0);
-        groupTotal = Math.max(0, Math.round((paidEuros - prevSum) * 100) / 100);
-      } else {
-        groupTotal = Math.max(0, Math.round(paidEuros * (groupBaseTotal / sumGroupBaseTotals) * 100) / 100);
-      }
+      const groupTotal = Math.max(0, groupTotals[gi]);
       // Effektiver Rabatt = base - gezahlt (= das, was tatsaechlich abgezogen wurde)
       const effectiveDiscount = Math.max(0, Math.round((groupBaseTotal - groupTotal) * 100) / 100);
 
@@ -1493,9 +1485,9 @@ export async function POST(req: NextRequest) {
             const persisted = groupPersisted.get(bookingIds[gi]);
             const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
             const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-            // Fallback nutzt denselben verteilten Versandanteil wie der Insert
-            // (NICHT calcShipping auf der Gruppen-Summe) — sonst weicht der
-            // Betrag im Mietvertrag vom persistierten shipping_price ab.
+            // Fallback nutzt exakt denselben Gruppen-Versand wie der Insert —
+            // sonst weicht der Betrag im Mietvertrag vom persistierten
+            // shipping_price ab.
             const emailShipping = persisted ? persisted.shipping : (groupShippings[gi] ?? 0);
             const groupTotal = persisted
               ? persisted.priceTotal

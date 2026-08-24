@@ -1,3 +1,5 @@
+import { calcShipping, type ShippingConfig, type ShippingMethod } from '@/data/shipping';
+
 /**
  * Gruppierung von Warenkorb-Positionen für den Checkout.
  *
@@ -112,6 +114,49 @@ export function distributeAmount(total: number, weights: number[]): number[] {
   // Letzte Gruppe bekommt den Rest (Rundungs-Cent).
   out.push(Math.round((total - assigned) * 100) / 100);
   return out;
+}
+
+
+/**
+ * Versandkosten PRO Zeitraum-Gruppe.
+ *
+ * Jede Gruppe wird eine eigene Buchung mit eigener Rechnung und eigenem Vertrag —
+ * und physisch ein eigenes Paket (raus UND zurueck). Deshalb wird der Versand je
+ * Gruppe bewertet, nicht einmal ueber den gesamten Warenkorb:
+ *
+ *   - Gruppe >= Gratis-Schwelle  -> 0 EUR
+ *   - Gruppe <  Gratis-Schwelle  -> Standardpreis
+ *   - beide Gruppen darunter     -> zweimal Versand
+ *   - Express                    -> nie gratis, also je Gruppe einmal
+ *   - Abholung                   -> immer 0 EUR
+ *
+ * Vorher lief `calcShipping` einmal auf dem Gesamtwert: zwei Kameras a 45 EUR in
+ * verschiedenen Zeitraeumen lagen zusammen ueber der 50-EUR-Schwelle und fuhren
+ * gratis — obwohl cam2rent zwei Pakete plus zwei Retouren zu tragen hatte.
+ *
+ * Gratis-Schwelle, Express-Sonderregel und Versandzonen bleiben unveraendert in
+ * `calcShipping` (data/shipping.ts) — hier wird sie nur je Gruppe angewandt.
+ *
+ * WICHTIG: Client (Warenkorb + Checkout) und beide Schreibpfade (confirm-cart +
+ * Stripe-Webhook) MUESSEN diese Funktion nutzen. Sonst zeigt der Checkout einen
+ * anderen Versand als die Buchungen tragen.
+ *
+ * @param groupSubtotals Warenwert je Gruppe (Miete + Zubehoer + Haftung), VOR
+ *   Rabatten — die Gratis-Schwelle wird bewusst auf den Originalwert geprueft
+ *   (kundenfreundlich, wie bisher).
+ */
+export function shippingPerGroup(
+  groupSubtotals: number[],
+  method: ShippingMethod,
+  deliveryMode: 'versand' | 'abholung',
+  config: ShippingConfig,
+  country?: string | null,
+): { perGroup: number[]; total: number } {
+  const perGroup = groupSubtotals.map(
+    (sub) => calcShipping(sub, method, deliveryMode, config, country).price,
+  );
+  const total = Math.round(perGroup.reduce((s, p) => s + p, 0) * 100) / 100;
+  return { perGroup, total };
 }
 
 /**

@@ -4,8 +4,10 @@ import {
   periodGroupKey,
   groupPaymentIntentId,
   distributeAmount,
+  shippingPerGroup,
   type PeriodGroupable,
 } from '../cart-period-groups';
+import type { ShippingConfig } from '@/data/shipping';
 
 /** Minimaler Warenkorb-Eintrag mit Kennung, um Gruppen-Inhalte zu prüfen. */
 type Item = PeriodGroupable & { name: string };
@@ -111,5 +113,65 @@ describe('distributeAmount', () => {
   it('gibt bei einer Gruppe den vollen Betrag', () => {
     expect(distributeAmount(49.9, [1])).toEqual([49.9]);
     expect(distributeAmount(0, [])).toEqual([]);
+  });
+});
+
+describe('shippingPerGroup', () => {
+  // Gleiche Werte wie data/shipping.ts (shippingConfig) — der Admin kann sie
+  // aendern, die Regeln bleiben.
+  const cfg: ShippingConfig = {
+    freeShippingThreshold: 50,
+    standardPrice: 5.99,
+    expressPrice: 12.99,
+  };
+
+  it('zwei Gruppen unter der Schwelle -> ZWEIMAL Versand', () => {
+    // Kernfall: 2x45 EUR waren zusammen ueber 50 EUR und fuhren frueher gratis,
+    // obwohl zwei Pakete rausgehen.
+    const r = shippingPerGroup([45, 45], 'standard', 'versand', cfg);
+    expect(r.perGroup).toEqual([5.99, 5.99]);
+    expect(r.total).toBe(11.98);
+  });
+
+  it('je Gruppe getrennt bewertet — eine gratis, eine kostenpflichtig', () => {
+    const r = shippingPerGroup([120, 30], 'standard', 'versand', cfg);
+    expect(r.perGroup).toEqual([0, 5.99]);
+    expect(r.total).toBe(5.99);
+  });
+
+  it('eine Gruppe ueber der Schwelle -> gratis (unveraendert)', () => {
+    const r = shippingPerGroup([90], 'standard', 'versand', cfg);
+    expect(r.perGroup).toEqual([0]);
+    expect(r.total).toBe(0);
+  });
+
+  it('Schwelle greift ab genau dem Grenzwert', () => {
+    expect(shippingPerGroup([50], 'standard', 'versand', cfg).perGroup).toEqual([0]);
+    expect(shippingPerGroup([49.99], 'standard', 'versand', cfg).perGroup).toEqual([5.99]);
+  });
+
+  it('Express ist nie gratis — zwei Gruppen kosten zweimal', () => {
+    const r = shippingPerGroup([200, 200], 'express', 'versand', cfg);
+    expect(r.perGroup).toEqual([12.99, 12.99]);
+    expect(r.total).toBe(25.98);
+  });
+
+  it('Abholung immer 0 EUR', () => {
+    const r = shippingPerGroup([10, 20, 30], 'standard', 'abholung', cfg);
+    expect(r.perGroup).toEqual([0, 0, 0]);
+    expect(r.total).toBe(0);
+  });
+
+  it('total ist immer die exakte Summe von perGroup', () => {
+    for (const subs of [[10, 20], [45, 45, 45], [1, 999], [12.5, 37.49]]) {
+      for (const m of ['standard', 'express'] as const) {
+        const r = shippingPerGroup(subs, m, 'versand', cfg);
+        expect(r.total).toBeCloseTo(r.perGroup.reduce((s, p) => s + p, 0), 10);
+      }
+    }
+  });
+
+  it('leerer Warenkorb -> keine Gruppen, 0 EUR', () => {
+    expect(shippingPerGroup([], 'standard', 'versand', cfg)).toEqual({ perGroup: [], total: 0 });
   });
 });

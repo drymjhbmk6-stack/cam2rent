@@ -12,7 +12,8 @@ import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
-import { getActiveSpecialDiscountPercent } from '@/lib/price-config';
+import { getActiveSpecialDiscountPercent, DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
+import type { ShippingMethod } from '@/data/shipping';
 import {
   loadProfileAddressRow,
   resolveShippingAddress,
@@ -20,7 +21,7 @@ import {
 } from '@/lib/booking/resolve-addresses';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
-import { groupByPeriod, groupPaymentIntentId, distributeAmount } from '@/lib/cart-period-groups';
+import { groupByPeriod, groupPaymentIntentId, distributeAmount, shippingPerGroup } from '@/lib/cart-period-groups';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -768,6 +769,24 @@ async function handleCartBooking(
 
   const periodGroups = groupByPeriod(items);
 
+  // Versand-Config aus der DB (Gratis-Schwelle, Preise, Zonen) — dieselbe
+  // Quelle, die der Checkout ueber /api/prices liest. Faellt defensiv auf die
+  // Standardwerte zurueck.
+  let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
+  try {
+    const { data: shipRow } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'shipping')
+      .maybeSingle();
+    if (shipRow?.value && typeof shipRow.value === 'object') {
+      shippingCfg = shipRow.value as ShippingPriceConfig;
+    }
+  } catch { /* defensiv: Standardwerte */ }
+  const ctxCountry = typeof ctx.country === 'string' && ctx.country.trim()
+    ? ctx.country.trim().toUpperCase()
+    : 'DE';
+
   // Sonderkondition (Kunden-Rabatt) serverseitig aus profiles aufloesen
   // (massgeblich). Sie ersetzt Mengen-/Fruehbucher-/Treuerabatt. Basis =
   // Miete + Zubehoer + Haftung (= Warenwert, konsistent zur Checkout-Anzeige).
@@ -806,14 +825,27 @@ async function handleCartBooking(
   const sLoyaltyDiscount = cartSpecialActive ? 0 : Math.round(loyaltyDiscount * discScale * 100) / 100;
   const sSpecialDiscount = cartSpecialActive ? Math.round(cartSpecial * discScale * 100) / 100 : 0;
 
-  // Aufteilung auf die Gruppen. Gewicht = Warenwert der Gruppe. Der Versand
-  // wurde EINMAL fuer den ganzen Warenkorb kassiert (ctx.shippingPrice) und
-  // wird deshalb verteilt, nicht je Gruppe neu berechnet. Rundungsreste landen
-  // jeweils in der letzten Gruppe -> die Summen bleiben exakt.
+  // Aufteilung auf die Gruppen. Gewicht = Warenwert der Gruppe.
+  //
+  // Versand wird PRO Gruppe berechnet (nicht verteilt): jede Gruppe ist eine
+  // eigene Buchung und damit ein eigenes Paket (raus + zurueck), die
+  // Gratis-Schwelle greift je Buchung. Identische Funktion wie im Checkout
+  // (shippingPerGroup) und in confirm-cart — die Summe entspricht damit dem
+  // kassierten `ctx.shippingPrice`.
+  //
+  // price_total wird dagegen weiterhin VERTEILT: massgeblich ist der von Stripe
+  // signierte Gesamtbetrag, der auf die Gruppen aufgeteilt werden muss.
+  // Rundungsreste landen jeweils in der letzten Gruppe -> Summen bleiben exakt.
   const groupSubtotals = periodGroups.map((g) =>
     g.items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0),
   );
-  const groupShippings = distributeAmount(shippingPrice, groupSubtotals);
+  const groupShippings = shippingPerGroup(
+    groupSubtotals,
+    shippingMethod as ShippingMethod,
+    deliveryMode as 'versand' | 'abholung',
+    shippingCfg,
+    ctxCountry,
+  ).perGroup;
   const groupBaseTotals = groupSubtotals.map((sub, i) => sub + groupShippings[i]);
   const groupTotals = distributeAmount(paidEurosCart, groupBaseTotals);
   const gCoupon = distributeAmount(sCouponDiscount, groupSubtotals);

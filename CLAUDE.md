@@ -757,12 +757,11 @@ auch („N separate Buchungen").
   gewählten Mietzeiträume erhalten.
 
 **Mitgefixte Nebenbefunde:**
-- **Versand n× statt 1×:** Der Checkout kassiert Versand EINMAL auf `cartTotal`,
-  `confirm-cart` rechnete ihn **pro Gruppe** neu (Gratis-Schwelle griff auf der kleineren
-  Gruppensumme evtl. nicht mehr) → aufgeblähtes `effectiveDiscount`, verzerrte
-  `shipping_price`/`discount_amount`. Jetzt wird der kassierte Betrag mit
-  `distributeAmount` verteilt (Webhook nutzt `ctx.shippingPrice`); der Mail-/Vertrags-
-  Fallback nimmt denselben Anteil statt neu zu rechnen.
+- **Versand-Berechnung war zwischen Checkout und DB inkonsistent:** Der Checkout
+  kassierte Versand EINMAL auf `cartTotal`, `confirm-cart` rechnete ihn **pro Gruppe**
+  neu → aufgeblähtes `effectiveDiscount`, verzerrte `shipping_price`/`discount_amount`.
+  Siehe eigener Abschnitt „Versand pro Mietzeitraum" unten — dort ist beides
+  vereinheitlicht.
 - **`manual-booking` klebte allen Kameranamen dieselbe `product_id` an** → bei gemischten
   Modellen wurden N Exemplare desselben Produkts reserviert. `/admin/buchungen/neu` sendet
   jetzt zusätzlich `cameras: [{product_id, product_name, qty}]` (die Daten lagen in
@@ -781,9 +780,43 @@ auch („N separate Buchungen").
   (vorher lokale Kopie in `confirm-cart`); der Checkout-Kontext wird in `confirm-cart`
   einmal geladen und gecacht statt zweimal gelesen.
 
-**Keine Migration nötig.** Tests: `lib/__tests__/cart-period-groups.test.ts` (12 Tests —
+### Versand pro Mietzeitraum (Stand 2026-08-23)
+**Regel:** Der Versand wird **je Zeitraum-Gruppe** bewertet, nicht einmal über den
+gesamten Warenkorb. Denn jede Gruppe wird eine eigene Buchung — und damit ein eigenes
+Paket (raus **und** zurück).
+
+- Gruppe ≥ Gratis-Schwelle (Default 50 €) → **gratis**
+- Gruppe < Schwelle → Standardpreis (Default 5,99 €)
+- **beide** Gruppen darunter → **zweimal** Versand
+- **Identischer Zeitraum** (= eine Gruppe) → wie bisher **gemeinsam** bewertet, ein Versand
+- **Express** (12,99 €, nie gratis) → bei zwei Gruppen **zweimal**
+- Abholung → immer 0 €
+
+**Vorher:** `calcShipping(cartTotal, …)` einmal auf den Gesamtwert. Zwei Kameras à 45 €
+in verschiedenen Zeiträumen lagen zusammen über 50 € und fuhren **gratis** — obwohl
+cam2rent zwei Pakete plus zwei Retouren zu tragen hatte. ⚠️ **Das verteuert solche
+Bestellungen bewusst** (2 × 5,99 € statt 0 €; Express 25,98 € statt 12,99 €). Der Kunde
+sieht den Betrag im Warenkorb und im Checkout je Buchung aufgeschlüsselt, bevor er zahlt.
+
+**Umsetzung —** `shippingPerGroup(groupSubtotals, method, deliveryMode, config, country)`
+in `lib/cart-period-groups.ts`. Ruft je Gruppe das bestehende `calcShipping()`
+(`data/shipping.ts`) auf → Gratis-Schwelle, Express-Sonderregel und Versandzonen bleiben
+die eine Quelle. Bewertet wird der **Original**-Warenwert je Gruppe (vor Rabatten,
+kundenfreundlich wie bisher).
+
+⚠️ **Alle vier Stellen MÜSSEN diese Funktion nutzen** — sonst trägt die Buchung einen
+anderen Versand als kassiert wurde: `app/warenkorb/page.tsx`, `app/checkout/page.tsx`
+(bestimmt den per Stripe kassierten Betrag), `app/api/confirm-cart/route.ts`,
+`app/api/stripe-webhook/route.ts` (lädt `admin_config.shipping` dafür jetzt selbst).
+
+**`distributeAmount` bleibt für `price_total`:** Der von Stripe signierte Gesamtbetrag
+wird proportional zum Gruppen-Warenwert (inkl. Versand) verteilt, Rundungsrest in die
+letzte Gruppe. Beide Schreibpfade nutzen dieselbe Funktion (die frühere Inline-Kopie in
+`confirm-cart` ist dadurch entfallen).
+
+**Keine Migration nötig.** Tests: `lib/__tests__/cart-period-groups.test.ts` (20 Tests —
 Gruppentrennung, Haftungs-Trennung, Reihenfolge, `_g`-Konvention, Summen-Exaktheit der
-Verteilung).
+Verteilung, Versand je Gruppe inkl. Gratis-Schwelle/Express/Abholung).
 
 **Altfälle finden** (vor dem Fix entstandene Sammel-Buchungen):
 ```sql

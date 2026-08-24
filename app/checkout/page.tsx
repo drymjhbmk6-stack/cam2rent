@@ -14,7 +14,7 @@ import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
 import { calcDiscount, isBalanceCoupon, type Coupon } from '@/data/coupons';
-import { calcShipping, shippingConfig } from '@/data/shipping';
+import { shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, EarlyBirdDiscount, ProductDiscount } from '@/lib/price-config';
 import { calcDurationDiscount, calcLoyaltyDiscount, calcEarlyBirdDiscount, weeksUntil, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, hasActiveNotCombinableDiscount, getActiveSpecialDiscountPercent } from '@/lib/price-config';
@@ -25,7 +25,7 @@ import ExpressSignup from '@/components/checkout/ExpressSignup';
 import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 import { useAllowedCountries } from '@/lib/use-allowed-countries';
-import { groupByPeriod } from '@/lib/cart-period-groups';
+import { groupByPeriod, shippingPerGroup } from '@/lib/cart-period-groups';
 import { haftungShortLabel } from '@/lib/haftung-labels';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
@@ -657,9 +657,23 @@ export default function CheckoutPage() {
     cartTotal,
   );
   const discountedSubtotal = cartTotal - totalDiscount;
-  // Versand wird auf ORIGINAL-Warenwert geprüft (vor Rabatten) — kundenfreundlich
-  const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping, deliveryMode === 'versand' ? country : undefined);
-  const finalShipping = shippingOnOriginal.price;
+  // Versand PRO Zeitraum-Gruppe: jede Gruppe wird eine eigene Buchung und damit
+  // ein eigenes Paket (raus + zurueck). Die Gratis-Schwelle greift deshalb je
+  // Buchung, nicht auf dem Gesamtwert — sonst fuhren zwei Kameras a 45 EUR in
+  // verschiedenen Zeitraeumen gratis, obwohl zwei Sendungen anfallen.
+  // Geprueft wird weiter auf dem ORIGINAL-Warenwert (vor Rabatten) —
+  // kundenfreundlich, wie bisher.
+  const shippingSplit = useMemo(
+    () => shippingPerGroup(
+      periodGroups.map((g) => g.items.reduce((sum, it) => sum + it.subtotal, 0)),
+      shippingMethod,
+      deliveryMode,
+      dynShipping,
+      deliveryMode === 'versand' ? country : undefined,
+    ),
+    [periodGroups, shippingMethod, deliveryMode, dynShipping, country],
+  );
+  const finalShipping = shippingSplit.total;
   const total = discountedSubtotal + finalShipping;
 
   // Haftung wird in der Bestellaufstellung separat ausgewiesen, damit Kunden
@@ -1036,6 +1050,22 @@ export default function CheckoutPage() {
                         <span className="text-status-success font-semibold">Kostenlos</span>
                       </div>
                     ) : null}
+                    {/* Mehrere Zeitraeume = mehrere Sendungen: Versand je Buchung */}
+                    {/* aufschluesseln, damit der Betrag nachvollziehbar bleibt. */}
+                    {hasMultiplePeriods && deliveryMode === 'versand' && (
+                      <div className="pl-3 space-y-0.5">
+                        {periodGroups.map((group, gi) => (
+                          <div key={group.key} className="flex justify-between text-[11px]">
+                            <span className="text-brand-muted dark:text-gray-500 truncate pr-2">
+                              Buchung {gi + 1} · {group.rentalFrom} bis {group.rentalTo}
+                            </span>
+                            <span className="text-brand-muted dark:text-gray-500 flex-shrink-0">
+                              {shippingSplit.perGroup[gi] > 0 ? fmt(shippingSplit.perGroup[gi]) : 'Kostenlos'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex justify-between pt-2 border-t border-brand-border dark:border-white/10">
                       <span className="font-heading font-bold text-brand-black dark:text-white">Gesamt</span>
                       <span className="font-heading font-bold text-lg text-brand-black dark:text-white">{fmt(total)}</span>

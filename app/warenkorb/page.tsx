@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
-import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
+import { shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
 import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
-import { groupByPeriod } from '@/lib/cart-period-groups';
+import { groupByPeriod, shippingPerGroup } from '@/lib/cart-period-groups';
 import { haftungShortLabel } from '@/lib/haftung-labels';
 
 export default function WarenkorbPage() {
@@ -46,9 +46,34 @@ export default function WarenkorbPage() {
     return versandItems.every((it) => it.shippingMethod === 'express') ? 'express' : 'standard';
   }, [items, cartDeliveryMode]);
 
+  // Artikel zu je einer kuenftigen Buchung gruppieren (Zeitraum + Haftung).
+  // Geteilte Logik mit checkout, confirm-cart und dem Stripe-Webhook, damit die
+  // hier angezeigte Anzahl exakt der Anzahl tatsaechlich angelegter Buchungen
+  // entspricht.
+  const periodGroups = useMemo(() => groupByPeriod(items), [items]);
+  const hasMultiplePeriods = periodGroups.length > 1;
+  // Unterscheiden sich zwei Gruppen NUR im Haftungsschutz, waere der Zeitraum
+  // allein als Ueberschrift mehrdeutig — dann die Haftung mit ausweisen.
+  const showHaftungInGroupHeader = useMemo(() => {
+    const periods = new Set(periodGroups.map((g) => `${g.rentalFrom}_${g.rentalTo}`));
+    return periods.size < periodGroups.length;
+  }, [periodGroups]);
+
+  // Versand PRO Gruppe: jede Gruppe wird eine eigene Buchung und damit ein
+  // eigenes Paket (raus + zurueck). Die Gratis-Schwelle greift deshalb je
+  // Buchung, nicht auf dem Gesamtwert — sonst fuhren zwei Kameras a 45 EUR in
+  // verschiedenen Zeitraeumen gratis, obwohl zwei Sendungen anfallen.
+  const groupSubtotals = useMemo(
+    () => periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0)),
+    [periodGroups],
+  );
+  const shippingSplit = useMemo(
+    () => shippingPerGroup(groupSubtotals, cartShippingMethod, cartDeliveryMode, dynShipping),
+    [groupSubtotals, cartShippingMethod, cartDeliveryMode, dynShipping],
+  );
   const shipping = useMemo(
-    () => calcShipping(cartTotal, cartShippingMethod, cartDeliveryMode, dynShipping),
-    [cartTotal, dynShipping, cartShippingMethod, cartDeliveryMode],
+    () => ({ price: shippingSplit.total, isFree: shippingSplit.total === 0 }),
+    [shippingSplit],
   );
 
   // Aktionsrabatte (z.B. Release50) hier ebenfalls anwenden — analog Checkout.
@@ -95,19 +120,6 @@ export default function WarenkorbPage() {
   const shippingLabel = cartDeliveryMode === 'abholung'
     ? 'Abholung vor Ort'
     : `Hin- und Rückversand (${cartShippingMethod === 'express' ? 'Express' : 'Standard'})`;
-
-  // Artikel zu je einer kuenftigen Buchung gruppieren (Zeitraum + Haftung).
-  // Geteilte Logik mit checkout, confirm-cart und dem Stripe-Webhook, damit die
-  // hier angezeigte Anzahl exakt der Anzahl tatsaechlich angelegter Buchungen
-  // entspricht.
-  const periodGroups = useMemo(() => groupByPeriod(items), [items]);
-  const hasMultiplePeriods = periodGroups.length > 1;
-  // Unterscheiden sich zwei Gruppen NUR im Haftungsschutz, waere der Zeitraum
-  // allein als Ueberschrift mehrdeutig — dann die Haftung mit ausweisen.
-  const showHaftungInGroupHeader = useMemo(() => {
-    const periods = new Set(periodGroups.map((g) => `${g.rentalFrom}_${g.rentalTo}`));
-    return periods.size < periodGroups.length;
-  }, [periodGroups]);
 
   const handleCheckout = () => {
     if (hasMultiplePeriods) {
@@ -197,8 +209,7 @@ export default function WarenkorbPage() {
                       Buchung {gi + 1}
                     </span>
                     <span className="text-xs text-brand-muted dark:text-gray-500">
-                      {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)}
-                    {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
+                      {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
                       {showHaftungInGroupHeader && ` · ${haftungShortLabel(group.haftung)}`}
                     </span>
                   </div>
@@ -380,6 +391,22 @@ export default function WarenkorbPage() {
                         : fmtEuro(shipping.price)}
                   </span>
                 </div>
+                {/* Bei mehreren Zeitraeumen faellt Versand je Buchung an — hier */}
+                {/* aufschluesseln, damit der Betrag nachvollziehbar bleibt. */}
+                {hasMultiplePeriods && cartDeliveryMode === 'versand' && (
+                  <div className="pl-3 space-y-0.5">
+                    {periodGroups.map((group, gi) => (
+                      <div key={group.key} className="flex justify-between items-baseline gap-2 text-[11px]">
+                        <span className="text-brand-muted dark:text-gray-500 truncate pr-2">
+                          Buchung {gi + 1} · {fmtDate(group.rentalFrom)} – {fmtDate(group.rentalTo)}
+                        </span>
+                        <span className="text-brand-muted dark:text-gray-500 whitespace-nowrap flex-shrink-0">
+                          {shippingSplit.perGroup[gi] > 0 ? fmtEuro(shippingSplit.perGroup[gi]) : 'Gratis'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex justify-between items-baseline gap-2 pt-2 border-t border-brand-border dark:border-white/10">
                   <span className="font-heading font-semibold text-brand-black dark:text-white">
                     Gesamt
@@ -449,7 +476,9 @@ export default function WarenkorbPage() {
               ))}
             </div>
             <p className="font-body text-xs text-brand-muted dark:text-gray-500 mb-5">
-              Du bezahlst am Ende trotzdem nur einmal.
+              Du bezahlst in einem Vorgang — jede Buchung bekommt aber ihre eigene
+              Rechnung und ihren eigenen Mietvertrag. Da jeder Zeitraum separat
+              versendet wird, fällt der Versand je Buchung an.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setShowDateModal(false)}
