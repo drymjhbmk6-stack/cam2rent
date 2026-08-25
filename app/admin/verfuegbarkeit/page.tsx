@@ -7,6 +7,12 @@ import { Modal } from '@/components/admin/ui/Modal';
 import { fmtDateShort, fmtDateWeekday } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
+import {
+  computeEffectiveBookingSpan,
+  markerForDay,
+  type LogisticsMarkerKind,
+} from '@/lib/booking-buffer';
+import { getBerlinDateKey } from '@/lib/timezone';
 
 const GANTT_CACHE_KEY = 'admin:availability-gantt';
 
@@ -31,6 +37,13 @@ interface GanttBooking {
   /** Individuelle Override-Datumsfelder (haben Vorrang vor bufferDays). */
   ship_date_override?: string | null;
   return_due_date_override?: string | null;
+  /**
+   * Ist-Logistik als fertige Tagesstrings (YYYY-MM-DD, Berlin) — serverseitig
+   * abgeleitet, damit die Zeitzone des Admin-Browsers keine Rolle spielt.
+   */
+  actual_dispatch_date?: string | null;
+  actual_delivery_date?: string | null;
+  actual_return_date?: string | null;
 }
 
 interface GanttBlocked {
@@ -144,6 +157,9 @@ type DayCellType =
   | 'buffer-rueck'
   | 'buffer-rueck-pending'
   | 'buffer-rueck-reserved'
+  // Ist-Logistik: Tage, die es im reinen Plan gar nicht gaebe.
+  | 'actual-hin-early'
+  | 'actual-rueck-overdue'
   | 'maintenance'
   | 'retired'
   | 'blocked'
@@ -153,7 +169,33 @@ interface DayCellInfo {
   type: DayCellType;
   booking?: GanttBooking;
   bufferLabel?: string;
+  /**
+   * Zweiter visueller Kanal (unterer Balken + Symbol) fuer Abweichungen, die
+   * INNERHALB der Plan-Spanne liegen. Bewusst getrennt vom Zell-Typ, damit
+   * nicht jede Markierung mit pending/reserved durchkombiniert werden muss.
+   */
+  marker?: LogisticsMarkerKind;
+  /** Ist-Tag, auf den sich der Marker bezieht (fuer den Tooltip). */
+  markerDate?: string | null;
 }
+
+/** Farbe des Marker-Balkens je Abweichungs-Art. */
+const MARKER_COLORS: Record<LogisticsMarkerKind, string> = {
+  'early-dispatch': '#fbbf24',
+  'late-dispatch': '#fb923c',
+  'early-delivery': '#a3e635',
+  'early-return': '#34d399',
+  'overdue-return': '#fb7185',
+};
+
+/** Kurzsymbol des Markers in der Zelle. */
+const MARKER_SYMBOLS: Record<LogisticsMarkerKind, string> = {
+  'early-dispatch': '▼▼',
+  'late-dispatch': '⏱',
+  'early-delivery': '⇣',
+  'early-return': '⇡',
+  'overdue-return': '!',
+};
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -161,29 +203,36 @@ const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli
 type Tab = 'kameras' | 'sets' | 'zubehoer';
 
 // Gepufferte Gesamtspanne einer Buchung [Versand/Abholung … Rückversand/Rückgabe]
-// als YYYY-MM-DD-Strings. Override-Datum hat Vorrang vor bufferDays.
-function getBookingSpan(b: GanttBooking, buf: BufferDays): { start: string; end: string } {
-  const bMode = b.delivery_mode ?? 'versand';
-  const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-  const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+// als YYYY-MM-DD-Strings — inklusive Ist-Logistik: eine frueher abgegebene
+// Sendung dehnt die Spanne nach vorne aus, eine ueberfaellige Rueckgabe nach
+// hinten. Verkuerzt wird nie (Kern-Invariante). Nutzt denselben Helper wie
+// Kunden-Kalender und Ueberbuchungssperre, damit alle drei identisch rechnen.
+function getBookingSpanFull(b: GanttBooking, buf: BufferDays, today: string) {
+  return computeEffectiveBookingSpan(
+    {
+      rental_from: b.rental_from,
+      rental_to: b.rental_to,
+      delivery_mode: b.delivery_mode,
+      status: b.status,
+      ship_date_override: b.ship_date_override ?? null,
+      return_due_date_override: b.return_due_date_override ?? null,
+      actual_dispatch_at: b.actual_dispatch_date ?? null,
+      actual_delivery_at: b.actual_delivery_date ?? null,
+      actual_return_at: b.actual_return_date ?? null,
+    },
+    buf,
+    { today },
+  );
+}
 
-  let start: string;
-  if (b.ship_date_override) {
-    start = b.ship_date_override.slice(0, 10);
-  } else {
-    const d = new Date(b.rental_from);
-    d.setDate(d.getDate() - before);
-    start = d.toISOString().split('T')[0];
-  }
-  let end: string;
-  if (b.return_due_date_override) {
-    end = b.return_due_date_override.slice(0, 10);
-  } else {
-    const d = new Date(b.rental_to);
-    d.setDate(d.getDate() + after);
-    end = d.toISOString().split('T')[0];
-  }
-  return { start, end };
+/** Nur die effektive Spanne (fuer Lane-Packing und Ueberlappungs-Checks). */
+function getBookingSpan(
+  b: GanttBooking,
+  buf: BufferDays,
+  today: string,
+): { start: string; end: string } {
+  const e = getBookingSpanFull(b, buf, today);
+  return { start: e.start, end: e.end };
 }
 
 /**
@@ -233,6 +282,8 @@ export default function AdminVerfuegbarkeitPage() {
   const [ganttData, setGanttData] = useState<GanttData | null>(() => getCached<GanttData>(GANTT_CACHE_KEY) ?? null);
   const [ganttLoading, setGanttLoading] = useState(() => getCached<GanttData>(GANTT_CACHE_KEY) === undefined);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
+  // Referenztag fuer die Ist-Logistik (ueberfaellige Rueckgaben dehnen bis heute).
+  const todayKey = useMemo(() => getBerlinDateKey(new Date()), []);
   // Detail-Fenster: alle Bestandteile eines Sets an einem konkreten Tag.
   const [setModal, setSetModal] = useState<{ set: GanttSet; dateStr: string } | null>(null);
   // Detail-Fenster: Belegung eines Zubehoerteils an einem konkreten Tag.
@@ -394,7 +445,7 @@ export default function AdminVerfuegbarkeitPage() {
       for (const b of product.bookings) {
         if (!b.unit_id) continue;
         pushBooking(b.unit_id, b);
-        (occupied[b.unit_id] ||= []).push(getBookingSpan(b, buf));
+        (occupied[b.unit_id] ||= []).push(getBookingSpan(b, buf, todayKey));
       }
 
       // Unzugeordnete Einträge der Reihe nach (nach Mietbeginn) auf die erste
@@ -408,7 +459,7 @@ export default function AdminVerfuegbarkeitPage() {
         .slice()
         .sort((a, b) => (a.rental_from < b.rental_from ? -1 : a.rental_from > b.rental_from ? 1 : 0));
       for (const b of unassigned) {
-        const span = getBookingSpan(b, buf);
+        const span = getBookingSpan(b, buf, todayKey);
         let placed = false;
         for (const u of usableUnits) {
           const occ = (occupied[u.id] ||= []);
@@ -426,7 +477,7 @@ export default function AdminVerfuegbarkeitPage() {
       result.set(product.id, { byUnit, leftovers });
     }
     return result;
-  }, [ganttData]);
+  }, [ganttData, todayKey]);
 
   // Kameras mit Seriennummern (erscheinen als Zeilen im gemeinsamen Kalender)
   // bzw. ohne (werden nur als Hinweis unter dem Kalender gelistet).
@@ -477,21 +528,60 @@ export default function AdminVerfuegbarkeitPage() {
 
   function matchBookingDay(b: GanttBooking, dateStr: string, buf: BufferDays): DayCellInfo | null {
     const bMode = b.delivery_mode ?? 'versand';
-    const { start: bufStartStr, end: bufEndStr } = getBookingSpan(b, buf);
+    const eff = getBookingSpanFull(b, buf, todayKey);
+    const { start: bufStartStr, end: bufEndStr, plannedStart, plannedEnd } = eff;
 
     const isReserved = b.status === 'reserved';
     const isPending = b.status === 'awaiting_payment' || b.status === 'pending_verification';
+    // Reservierungen und unbezahlte Buchungen haben nie Ist-Daten — der Guard
+    // macht die Nicht-Regression fuer diese Faelle explizit.
+    const plain = !isReserved && !isPending;
 
+    // Zweiter Kanal: Abweichungen INNERHALB der Plan-Spanne (unterer Balken).
+    const mk = plain
+      ? markerForDay(eff.markers, dateStr, ['late-dispatch', 'early-delivery', 'early-return'])
+      : null;
+    const withMarker = (info: DayCellInfo): DayCellInfo =>
+      mk ? { ...info, marker: mk.kind, markerDate: mk.from } : info;
+
+    // Priorisierung unveraendert: Miete → Hin-Puffer → Rueck-Puffer.
     if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
-      return { type: isReserved ? 'reserved' : isPending ? 'booked-pending' : 'booked', booking: b };
+      return withMarker({
+        type: isReserved ? 'reserved' : isPending ? 'booked-pending' : 'booked',
+        booking: b,
+      });
     }
     if (dateStr >= bufStartStr && dateStr < b.rental_from) {
       const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
-      return { type: isReserved ? 'buffer-hin-reserved' : isPending ? 'buffer-hin-pending' : 'buffer-hin', booking: b, bufferLabel: label };
+      // Tage, die es im reinen Plan gar nicht gaebe: frueher rausgegangen.
+      if (plain && dateStr < plannedStart) {
+        return withMarker({
+          type: 'actual-hin-early',
+          booking: b,
+          bufferLabel: bMode === 'abholung' ? 'Frühere Übergabe' : 'Früher rausgegangen',
+        });
+      }
+      return withMarker({
+        type: isReserved ? 'buffer-hin-reserved' : isPending ? 'buffer-hin-pending' : 'buffer-hin',
+        booking: b,
+        bufferLabel: label,
+      });
     }
     if (dateStr > b.rental_to && dateStr <= bufEndStr) {
       const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
-      return { type: isReserved ? 'buffer-rueck-reserved' : isPending ? 'buffer-rueck-pending' : 'buffer-rueck', booking: b, bufferLabel: label };
+      // Soll-Rueckgabe ueberschritten und nichts eingetroffen.
+      if (plain && dateStr > plannedEnd && !eff.actualReturnDate) {
+        return withMarker({
+          type: 'actual-rueck-overdue',
+          booking: b,
+          bufferLabel: 'Rückgabe überfällig',
+        });
+      }
+      return withMarker({
+        type: isReserved ? 'buffer-rueck-reserved' : isPending ? 'buffer-rueck-pending' : 'buffer-rueck',
+        booking: b,
+        bufferLabel: label,
+      });
     }
     return null;
   }
@@ -510,6 +600,8 @@ export default function AdminVerfuegbarkeitPage() {
         case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
         case 'buffer-rueck-pending': return { background: '#5b21b6', color: '#ddd6fe' }; // Lila (Rückversand, Zahlung offen)
         case 'buffer-rueck-reserved': return { background: '#164e63', color: '#cffafe' }; // Cyan (Rückversand, reserviert)
+        case 'actual-hin-early': return { background: '#854d0e', color: '#fde68a' };  // Dunkles Gold — frueher rausgegangen
+        case 'actual-rueck-overdue': return { background: '#9f1239', color: '#fecdd3' }; // Rosé — Rueckgabe ueberfaellig
         case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
         case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
         case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
@@ -517,16 +609,23 @@ export default function AdminVerfuegbarkeitPage() {
         default: return {};
       }
     })();
+    // Ist-Logistik-Marker als dritter, unabhaengiger Kanal: unterer Balken.
+    // Bewusst weder `outline` (belegt durch Test-Buchungen) noch `boxShadow`
+    // (belegt durch "heute") — so bleiben alle drei kombinierbar.
+    const withMarker: React.CSSProperties = info.marker
+      ? { ...base, borderBottom: `3px solid ${MARKER_COLORS[info.marker]}` }
+      : base;
+
     // Test-Buchungen visuell markieren: pinker outline + diagonales Streifen-Overlay.
     if (info.booking?.is_test) {
       return {
-        ...base,
+        ...withMarker,
         outline: '2px dashed #ec4899',
         outlineOffset: '-2px',
         backgroundImage: `${base.background ? '' : ''}repeating-linear-gradient(45deg, transparent 0 6px, rgba(236,72,153,0.18) 6px 12px)`,
       };
     }
-    return base;
+    return withMarker;
   }
 
   function handleCellHover(e: React.MouseEvent, info: DayCellInfo, dateStr: string) {
@@ -554,6 +653,29 @@ export default function AdminVerfuegbarkeitPage() {
       content = 'Wartung';
     } else if (info.type === 'blocked') {
       content = `Gesperrt am ${fmtDate(dateStr)}`;
+    }
+
+    // Ist-Logistik im Klartext anhaengen — der Admin soll ohne Umweg sehen,
+    // warum der Kalender vom Plan abweicht.
+    const b = info.booking;
+    if (b) {
+      const extra: string[] = [];
+      if (info.type === 'actual-hin-early' && b.actual_dispatch_date) {
+        extra.push(`▼▼ Tatsächlich raus: ${fmtDate(b.actual_dispatch_date)} (früher als geplant)`);
+      }
+      if (info.type === 'actual-rueck-overdue') {
+        extra.push('▲! Rückgabe überfällig — nichts eingetroffen');
+      }
+      if (info.marker === 'late-dispatch' && b.actual_dispatch_date) {
+        extra.push(`⏱ Tatsächlich abgegeben: ${fmtDate(b.actual_dispatch_date)} (später als geplant — Blockzeit unverändert)`);
+      }
+      if (info.marker === 'early-delivery' && b.actual_delivery_date) {
+        extra.push(`⇣ Beim Kunden zugestellt: ${fmtDate(b.actual_delivery_date)} (vor Mietbeginn)`);
+      }
+      if (info.marker === 'early-return' && b.actual_return_date) {
+        extra.push(`⇡ Rückpaket eingetroffen: ${fmtDate(b.actual_return_date)} — Rückgabe-Prüfung offen`);
+      }
+      if (extra.length > 0) content = `${content}\n\n${extra.join('\n')}`;
     }
 
     setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content });
@@ -992,6 +1114,16 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#374151' }} /> Ausgemustert</span>
               </div>
 
+              {/* Legende: tatsächlicher Paketlauf (weicht vom geplanten Puffer ab) */}
+              <div className="flex flex-wrap gap-4 text-[11px] font-body mb-3" style={{ color: 'var(--admin-text-dim)' }}>
+                <span className="font-semibold" style={{ color: 'var(--admin-text-2)' }}>Tatsächlicher Paketlauf:</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#854d0e' }} /> ▼▼ Früher rausgegangen</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#9f1239' }} /> ▲! Rückgabe überfällig</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['late-dispatch']}` }} /> ⏱ Später abgegeben</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['early-delivery']}` }} /> ⇣ Früh zugestellt</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['early-return']}` }} /> ⇡ Rückpaket da, Prüfung offen</span>
+              </div>
+
               {/* EIN gemeinsamer Kalender für ALLE Kameras. Jede Zeile = ein
                   physisches Exemplar (Seriennummer), gruppiert nach Modell.
                   Eine Buchung belegt nur so viele Zeilen wie Kameras sie
@@ -1122,6 +1254,11 @@ export default function AdminVerfuegbarkeitPage() {
                                       )}
                                       {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending' || info.type === 'buffer-hin-reserved') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
                                       {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending' || info.type === 'buffer-rueck-reserved') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
+                                      {info.type === 'actual-hin-early' && <span style={{ fontSize: '8px' }}>▼▼ FRÜH</span>}
+                                      {info.type === 'actual-rueck-overdue' && <span style={{ fontSize: '8px' }}>▲! ÜBER</span>}
+                                      {info.marker && info.type !== 'actual-hin-early' && info.type !== 'actual-rueck-overdue' && (
+                                        <span style={{ fontSize: '8px' }}> {MARKER_SYMBOLS[info.marker]}</span>
+                                      )}
                                       {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
                                     </div>
                                   </td>

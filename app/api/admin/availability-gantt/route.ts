@@ -3,8 +3,16 @@ import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { resolveProdukteIdMap, loadInventarUnitsForProdukteBulk } from '@/lib/legacy-bridge';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
-import { loadBufferDays } from '@/lib/booking-buffer';
+import { loadBufferDays, isMissingLogisticsColumn } from '@/lib/booking-buffer';
+import { getBerlinDateKey } from '@/lib/timezone';
 import { normalizeReservationItems } from '@/lib/reservation-holds';
+
+/** Timestamp → Kalendertag in Berlin-Zeit (YYYY-MM-DD), null wenn leer/ungueltig. */
+function berlinDayOrNull(value?: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : getBerlinDateKey(d);
+}
 
 /**
  * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
@@ -92,6 +100,10 @@ export async function GET(req: NextRequest) {
     is_test?: boolean | null;
     ship_date_override?: string | null;
     return_due_date_override?: string | null;
+    actual_dispatch_at?: string | null;
+    actual_delivery_at?: string | null;
+    actual_return_at?: string | null;
+    return_arrived_at?: string | null;
   };
   type BookingsQResult = { data: BookingRow[] | null; error: { message: string } | null };
   const bookingsBaseCols = 'id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test';
@@ -109,11 +121,27 @@ export async function GET(req: NextRequest) {
   const [products, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
     getProducts(),
     (async (): Promise<BookingsQResult> => {
-      const r = await runBookings(`${bookingsBaseCols}, ship_date_override, return_due_date_override`);
-      if (r.error && /ship_date_override|return_due_date_override/i.test(r.error.message || '')) {
+      // Dreistufig: voll → ohne Ist-Logistik → ohne Ist-Logistik + Overrides.
+      const withAll = await runBookings(
+        `${bookingsBaseCols}, ship_date_override, return_due_date_override, actual_dispatch_at, actual_delivery_at, actual_return_at, return_arrived_at`,
+      );
+      if (!withAll.error) return withAll;
+
+      if (isMissingLogisticsColumn(withAll.error.message)) {
+        const withOverrides = await runBookings(
+          `${bookingsBaseCols}, ship_date_override, return_due_date_override`,
+        );
+        if (!withOverrides.error) return withOverrides;
+        if (/ship_date_override|return_due_date_override/i.test(withOverrides.error.message || '')) {
+          return runBookings(bookingsBaseCols);
+        }
+        return withOverrides;
+      }
+
+      if (/ship_date_override|return_due_date_override/i.test(withAll.error.message || '')) {
         return runBookings(bookingsBaseCols);
       }
-      return r;
+      return withAll;
     })(),
     supabase
       .from('product_blocked_dates')
@@ -215,6 +243,8 @@ export async function GET(req: NextRequest) {
     id: string; rental_from: string; rental_to: string; customer_name: string;
     delivery_mode: string; status: string; unit_id: string | null; is_test: boolean;
     ship_date_override: string | null; return_due_date_override: string | null;
+    actual_dispatch_date: string | null; actual_delivery_date: string | null;
+    actual_return_date: string | null;
   };
   const reservationsByProduct: Record<string, ReservationOverlay[]> = {};
   try {
@@ -246,6 +276,10 @@ export async function GET(req: NextRequest) {
               is_test: (r.is_test as boolean | null) ?? false,
               ship_date_override: null,
               return_due_date_override: null,
+              // Reservierungen sind reine Plan-Objekte ohne Paketlauf.
+              actual_dispatch_date: null,
+              actual_delivery_date: null,
+              actual_return_date: null,
             });
           }
         }
@@ -310,6 +344,14 @@ export async function GET(req: NextRequest) {
           // Frontend nutzt sie in der Puffer-Visualisierung mit Vorrang vor bufferDays.
           ship_date_override: (b as { ship_date_override?: string | null }).ship_date_override ?? null,
           return_due_date_override: (b as { return_due_date_override?: string | null }).return_due_date_override ?? null,
+          // Ist-Logistik als FERTIGE Tagesstrings (YYYY-MM-DD, Berlin-Zeit).
+          // Bewusst serverseitig abgeleitet: die Gantt-Seite ist eine
+          // Client-Komponente — ein Admin in einer anderen Zeitzone wuerde
+          // sonst falsche Tage sehen.
+          actual_dispatch_date: berlinDayOrNull(b.actual_dispatch_at),
+          actual_delivery_date: berlinDayOrNull(b.actual_delivery_at),
+          actual_return_date:
+            berlinDayOrNull(b.actual_return_at) ?? berlinDayOrNull(b.return_arrived_at),
         })),
         // Reservierungen (Status 'reserved') als Pseudo-Buchungen anhängen.
         ...(reservationsByProduct[p.id] ?? []),
