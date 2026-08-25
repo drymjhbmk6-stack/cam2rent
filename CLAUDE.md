@@ -566,6 +566,27 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   Reply-Route, nur für E-Mail-Konversationen. Vorschau-State wird beim
   Konversationswechsel zurückgesetzt. Reine Anzeige — POST-Reply-Pfad
   unverändert.
+- **Antworten lesbar formatiert — Mehrzeilen-Eingabe + Absätze (Stand 2026-08-25):**
+  Das Antwortfeld in `/admin/nachrichten` war ein einzeiliges `<input>` — der
+  Admin konnte gar keine Umbrüche tippen, und `sendInboundReply` machte aus dem
+  Text stumpf `\n → <br>`. Ergebnis: jede Antwort kam beim Kunden als eine
+  Textwand an (Angebots-Blöcke ohne Einrückung, keine Absätze). Jetzt:
+  - **UI:** `<textarea>` statt `<input>`, wächst mit dem Text (max. ~240 px, dann
+    scrollt es) und wird nach dem Senden per `replyRef` wieder klein gesetzt.
+    **Enter = neue Zeile**, **Strg/⌘ + Enter (oder Button) = senden** (vorher
+    schickte Enter sofort ab) — Hinweiszeile unter dem Feld erklärt das.
+    Button-Reihe auf `alignItems:'flex-end'`, damit Senden-/Vorschau-Button bei
+    mehrzeiligem Feld unten bleiben.
+  - **Mail-HTML:** neuer Export `formatPlainTextBody(body)` in `lib/email.ts` —
+    **Leerzeile = neuer Absatz** (`<p style="margin:0 0 14px">`), einzelner
+    Umbruch = `<br>`, führende Leerzeichen bleiben als `&nbsp;` erhalten
+    (eingerückte Angebots-/Preis-Blöcke aus dem Preisrechner behalten ihre Form),
+    `http(s)`-Links werden klickbar (Satzzeichen am Ende bleiben außerhalb des
+    Links). Escaping (`h()`) passiert **vor** dem Verlinken → XSS-sicher.
+    Genutzt in `sendInboundReply` (echte E-Mail-Antwort + „Neue Nachricht" an
+    Gäste); die Live-Vorschau zeigt dasselbe Ergebnis, weil sie über
+    `renderEmailPreview(sendInboundReply, …)` läuft. Keine Migration, kein
+    API-Change.
 - **„Neue Nachricht"-Button (Stand 2026-06-22):** Button oben rechts im Header
   von `/admin/nachrichten` öffnet ein Compose-Modal (`ComposeModal` lokal in
   `app/admin/nachrichten/page.tsx`): Kunde aus der Liste suchen/wählen (lädt

@@ -61,6 +61,7 @@ export default function AdminNachrichtenPage() {
   const [sending, setSending] = useState(false);
   const [filter, setFilter] = usePersistentState<FilterType>('admin:nachrichten:filter', 'all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -163,6 +164,8 @@ export default function AdminNachrichtenPage() {
           { id: data.message_id, sender_type: 'admin', body: replyText, read: false, created_at: new Date().toISOString() },
         ]);
         setReplyText('');
+        // Mitgewachsenes Eingabefeld wieder auf Ausgangshoehe zuruecksetzen
+        if (replyRef.current) replyRef.current.style.height = 'auto';
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
@@ -667,7 +670,7 @@ export default function AdminNachrichtenPage() {
                       />
                     </div>
                   )}
-                  <div style={{ padding: '12px 20px', display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ padding: '12px 20px', display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                     {convInfo.source === 'email' && (
                       <button
                         onClick={() => setShowPreview((v) => !v)}
@@ -684,13 +687,27 @@ export default function AdminNachrichtenPage() {
                         </svg>
                       </button>
                     )}
-                    <input
-                      type="text"
-                      placeholder={convInfo.source === 'email' ? 'E-Mail-Antwort schreiben...' : 'Antwort schreiben...'}
+                    <textarea
+                      ref={replyRef}
+                      placeholder={convInfo.source === 'email' ? 'E-Mail-Antwort schreiben… (Enter = neue Zeile, Leerzeile = neuer Absatz)' : 'Antwort schreiben…'}
                       value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleReply()}
-                      style={inputStyle}
+                      onChange={(e) => {
+                        setReplyText(e.target.value);
+                        // Feld waechst mit dem Text (max. ~10 Zeilen), danach scrollt es.
+                        const el = e.target;
+                        el.style.height = 'auto';
+                        el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        // Enter macht eine neue Zeile (laengere E-Mails schreiben),
+                        // Strg/Cmd+Enter verschickt.
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          handleReply();
+                        }
+                      }}
+                      rows={2}
+                      style={{ ...inputStyle, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, minHeight: 44, maxHeight: 240, overflowY: 'auto' }}
                       maxLength={5000}
                     />
                     <button
@@ -707,6 +724,9 @@ export default function AdminNachrichtenPage() {
                       </svg>
                     </button>
                   </div>
+                  <p style={{ margin: '0 20px 12px', fontSize: 11, color: 'var(--admin-muted-2)' }}>
+                    Enter = neue Zeile · leere Zeile = neuer Absatz · Strg/⌘ + Enter oder Button = senden
+                  </p>
                 </div>
               )}
             </>

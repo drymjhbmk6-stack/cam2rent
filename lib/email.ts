@@ -1662,6 +1662,36 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
 }
 
 /**
+ * Wandelt vom Admin getippten Klartext in sauberes E-Mail-HTML um.
+ * - Leerzeile = neuer Absatz (mit Abstand), einzelner Umbruch = <br>
+ * - Führende Leerzeichen bleiben erhalten (eingerückte Angebots-Blöcke)
+ * - http(s)-Links werden klickbar
+ * Escaping passiert VOR dem Verlinken, der Text bleibt also XSS-sicher.
+ */
+export function formatPlainTextBody(body: string): string {
+  const normalized = (body ?? '').replace(/\r\n?/g, '\n');
+  const blocks = normalized.split(/\n{2,}/).filter((b) => b.trim() !== '');
+  if (blocks.length === 0) return '';
+
+  return blocks
+    .map((block, i) => {
+      const escaped = h(block.replace(/\s+$/, ''));
+      const linked = escaped.replace(/https?:\/\/[^\s<]+/g, (match) => {
+        const trail = match.match(/[.,;:!?)\]]+$/)?.[0] ?? '';
+        const url = trail ? match.slice(0, match.length - trail.length) : match;
+        return `<a href="${url}" style="color:#0e7490;text-decoration:underline;">${url}</a>${trail}`;
+      });
+      const lines = linked.split('\n').map((line) => {
+        const indent = line.match(/^ +/)?.[0];
+        return indent ? '&nbsp;'.repeat(indent.length) + line.slice(indent.length) : line;
+      });
+      const margin = i === blocks.length - 1 ? '0' : '0 0 14px';
+      return `<p style="margin:${margin};">${lines.join('<br>')}</p>`;
+    })
+    .join('');
+}
+
+/**
  * Antwort des Admins auf eine per E-Mail eingegangene Kundenanfrage.
  * Geht als ECHTE E-Mail raus (im Gegensatz zu sendNewMessageNotificationToCustomer,
  * das nur "du hast eine neue Nachricht, logg dich ein" verschickt).
@@ -1686,7 +1716,7 @@ export async function sendInboundReply(data: {
   const cleanSubject = stripSubject(data.subject) || '(kein Betreff)';
   const prefixRe = data.prefixRe !== false;
   const subject = !prefixRe || /^re:/i.test(cleanSubject) ? cleanSubject : `Re: ${cleanSubject}`;
-  const safeBody = h(data.body).replace(/\n/g, '<br>');
+  const safeBody = formatPlainTextBody(data.body) || '&nbsp;';
 
   const html = `<!DOCTYPE html>
 <html lang="de">
