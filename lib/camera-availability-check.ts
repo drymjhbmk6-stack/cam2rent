@@ -3,11 +3,13 @@ import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import {
   loadBufferDays,
-  computeShipDate,
-  computeReturnDueDate,
-  toIsoDate,
+  computeEffectiveBookingSpan,
+  isoAddDays,
+  isMissingLogisticsColumn,
+  LOGISTICS_ACTUAL_COLUMNS,
   type BufferDays,
 } from '@/lib/booking-buffer';
+import { getBerlinDateKey } from '@/lib/timezone';
 import { isTestMode } from '@/lib/env-mode';
 import { getProductById, getProducts } from '@/lib/get-products';
 import { loadActiveHoldsForProduct, holdsToBlockedDayCount } from '@/lib/cart-holds';
@@ -37,12 +39,6 @@ export interface AvailabilityConflict {
   day: string;
   available: number;
   totalStock: number;
-}
-
-function isoAddDays(iso: string, n: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + n);
-  return toIsoDate(d);
 }
 
 export async function findCameraOverbookingConflict(
@@ -130,8 +126,9 @@ export async function findCameraOverbookingConflict(
   const extFrom = isoAddDays(rentalFrom, -margin);
   const extTo = isoAddDays(rentalTo, margin);
 
-  const selBase = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
-  const sel = `${selBase}, ship_date_override, return_due_date_override`;
+  const selBase = 'id, status, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
+  const selOverrides = `${selBase}, ship_date_override, return_due_date_override`;
+  const sel = `${selOverrides}, ${LOGISTICS_ACTUAL_COLUMNS}`;
 
   type Row = Record<string, unknown>;
   type QResult = { data: Row[] | null; error: { message: string } | null };
@@ -179,7 +176,15 @@ export async function findCameraOverbookingConflict(
 
   let [r1, r2, r3] = await Promise.all([buildQ1(sel), buildQ2(sel), buildQ3(sel)]);
 
-  // Override-Spalten fehlen (Migration nicht durch) → ohne sie neu fragen.
+  // Migrationen fehlen (nicht durch) → betroffene Spaltengruppe droppen.
+  // Dreistufig: voll → ohne Ist-Logistik → ohne Ist-Logistik + Overrides.
+  if (r1.error && isMissingLogisticsColumn(r1.error.message)) {
+    [r1, r2, r3] = await Promise.all([
+      buildQ1(selOverrides),
+      buildQ2(selOverrides),
+      buildQ3(selOverrides),
+    ]);
+  }
   if (r1.error && /ship_date_override|return_due_date_override/i.test(r1.error.message || '')) {
     [r1, r2, r3] = await Promise.all([buildQ1(selBase), buildQ2(selBase), buildQ3(selBase)]);
   }
@@ -229,20 +234,28 @@ export async function findCameraOverbookingConflict(
   // Belegte Einheiten pro angefragtem Tag zaehlen. Bestehende Buchungen
   // belegen die Kamera physisch ueber [ship .. return] (inkl. ihrer eigenen
   // Puffer / Override-Termine).
+  // Referenztag fuer die Ist-Logistik (ueberfaellige Rueckgabe dehnt bis heute).
+  const todayKey = getBerlinDateKey(new Date());
+
   for (let cur = rentalFrom; cur <= rentalTo; cur = isoAddDays(cur, 1)) {
     let bookedCount = 0;
     for (const bRaw of bookings) {
       const b = bRaw as {
+        status?: string | null;
         rental_from: string;
         rental_to: string;
         delivery_mode?: string;
         ship_date_override?: string | null;
         return_due_date_override?: string | null;
+        actual_dispatch_at?: string | null;
+        actual_delivery_at?: string | null;
+        actual_return_at?: string | null;
+        return_arrived_at?: string | null;
       };
-      const bMode = b.delivery_mode ?? 'versand';
-      const effFrom = toIsoDate(computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null));
-      const effTo = toIsoDate(computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null));
-      if (effFrom <= cur && effTo >= cur) {
+      // Muss BITGLEICH zum Kunden-Kalender rechnen — sonst winkt die harte
+      // Sperre einen Tag durch, den der Kalender als belegt zeigt (oder umgekehrt).
+      const eff = computeEffectiveBookingSpan(b, buf, { today: todayKey });
+      if (eff.start <= cur && eff.end >= cur) {
         // Zuordnung pro Produkt primaer ueber den NAMEN (korrigiert gemischte
         // Legacy-Buchungen, deren Kameras alle dieselbe product_id tragen),
         // Fallback product_id.

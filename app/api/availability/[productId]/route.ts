@@ -8,11 +8,13 @@ import { isTestMode } from '@/lib/env-mode';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { getHoldBlockedDays } from '@/lib/cart-holds';
 import { getReservationCameraBlockedDays } from '@/lib/reservation-holds';
+import { getBerlinDateKey } from '@/lib/timezone';
 import {
   loadBufferDays,
-  computeShipDate,
-  computeReturnDueDate,
+  computeEffectiveBookingSpan,
   getEffectiveLeadDays,
+  isMissingLogisticsColumn,
+  LOGISTICS_ACTUAL_COLUMNS,
   type BufferDays,
 } from '@/lib/booking-buffer';
 
@@ -120,8 +122,9 @@ export async function GET(
     viewerUserId = null;
   }
 
-  const selBase = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
-  const sel = `${selBase}, ship_date_override, return_due_date_override`;
+  const selBase = 'id, status, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
+  const selOverrides = `${selBase}, ship_date_override, return_due_date_override`;
+  const sel = `${selOverrides}, ${LOGISTICS_ACTUAL_COLUMNS}`;
 
   // (a) Legacy + Gleichmodell-Mehrkamera: product_id == productId.
   // (b) Gemischte Modelle: Buchung trägt productId nur in cameras[] (ihr
@@ -172,9 +175,16 @@ export async function GET(
 
   let [r1, r2, r3] = await Promise.all([buildQ1(sel), buildQ2(sel), buildQ3(sel)]);
 
-  // Migration supabase-bookings-shipping-overrides.sql noch nicht durch →
-  // Override-Spalten droppen und neu fragen. Verhalten dann wie vorher
-  // (nur globale Default-Puffer).
+  // Migrationen noch nicht durch → betroffene Spaltengruppe droppen und neu
+  // fragen. Dreistufig: voll → ohne Ist-Logistik → ohne Ist-Logistik+Overrides.
+  // Verhalten faellt dann exakt auf den vorherigen Stand zurueck.
+  if (r1.error && isMissingLogisticsColumn(r1.error.message)) {
+    [r1, r2, r3] = await Promise.all([
+      buildQ1(selOverrides),
+      buildQ2(selOverrides),
+      buildQ3(selOverrides),
+    ]);
+  }
   if (r1.error && /ship_date_override|return_due_date_override/i.test(r1.error.message || '')) {
     [r1, r2, r3] = await Promise.all([buildQ1(selBase), buildQ2(selBase), buildQ3(selBase)]);
   }
@@ -240,6 +250,8 @@ export async function GET(
   // ── Pro Tag berechnen ──────────────────────────────────────────────────────
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Referenztag fuer die Ist-Logistik (ueberfaellige Rueckgabe dehnt bis heute).
+  const todayKey = getBerlinDateKey(new Date());
 
   const days: {
     date: string;
@@ -268,27 +280,30 @@ export async function GET(
     if (bookings) {
       for (const bRaw of bookings) {
         const b = bRaw as {
+          status?: string | null;
           rental_from: string; rental_to: string;
           delivery_mode?: string; product_name?: string;
           product_id?: string; unit_id?: string; cameras?: unknown;
           ship_date_override?: string | null;
           return_due_date_override?: string | null;
+          actual_dispatch_at?: string | null;
+          actual_delivery_at?: string | null;
+          actual_return_at?: string | null;
+          return_arrived_at?: string | null;
         };
-        const bMode = b.delivery_mode ?? 'versand';
 
-        // Effektiver Zeitraum: Override hat Vorrang vor globalen Puffern.
+        // Effektiver Zeitraum: Plan (Puffer bzw. Override) PLUS tatsaechlicher
+        // Paketlauf. Ein frueher abgegebenes Paket dehnt die Spanne nach vorne,
+        // eine ueberfaellige Rueckgabe nach hinten — verkuerzt wird nie.
         // Plus Viewer-Puffer (hypothetische neue Buchung braucht Versand vor
         // dieser Buchung + Rueckgabe-Puffer nach dieser Buchung).
-        const bShip = computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null);
-        const bReturn = computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null);
-        const bFrom = new Date(bShip);
-        const bTo = new Date(bReturn);
-        bFrom.setDate(bFrom.getDate() - viewerAfter);
-        bTo.setDate(bTo.getDate() + viewerBefore);
-        // toIsoDate-aequivalent inline (Local-Date statt UTC-Shift)
-        const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const effFrom = fmtD(bFrom);
-        const effTo = fmtD(bTo);
+        const eff = computeEffectiveBookingSpan(b, buf, { today: todayKey });
+        const bFrom = new Date(`${eff.start}T00:00:00Z`);
+        const bTo = new Date(`${eff.end}T00:00:00Z`);
+        bFrom.setUTCDate(bFrom.getUTCDate() - viewerAfter);
+        bTo.setUTCDate(bTo.getUTCDate() + viewerBefore);
+        const effFrom = bFrom.toISOString().slice(0, 10);
+        const effTo = bTo.toISOString().slice(0, 10);
 
         if (effFrom <= dateStr && effTo >= dateStr) {
           // Eine Buchung belegt so viele Einheiten DIESES Produkts wie sie
