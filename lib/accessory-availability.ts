@@ -1,20 +1,18 @@
 import { createServiceClient } from '@/lib/supabase';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
-import { toIsoDate } from '@/lib/booking-buffer';
+import {
+  toIsoDate,
+  loadBufferDays,
+  computeEffectiveBookingSpan,
+  computeShipDate,
+  computeReturnDueDate,
+  isMissingLogisticsColumn,
+  DEFAULT_BUFFER,
+  type BufferDays,
+} from '@/lib/booking-buffer';
+import { getBerlinDateKey } from '@/lib/timezone';
 import { loadActiveReservations } from '@/lib/reservation-holds';
-
-interface BufferDays {
-  versand_before: number;
-  versand_after: number;
-  abholung_before: number;
-  abholung_after: number;
-}
-
-const DEFAULT_BUFFER: BufferDays = {
-  versand_before: 2, versand_after: 2,
-  abholung_before: 0, abholung_after: 1,
-};
 
 interface AccessoryItemLite {
   accessory_id: string;
@@ -28,6 +26,13 @@ interface ReservingBooking {
   rental_from: string;
   rental_to: string;
   delivery_mode: string | null;
+  status?: string | null;
+  ship_date_override?: string | null;
+  return_due_date_override?: string | null;
+  actual_dispatch_at?: string | null;
+  actual_delivery_at?: string | null;
+  actual_return_at?: string | null;
+  return_arrived_at?: string | null;
 }
 
 export interface AccessoryAvailabilityRow {
@@ -87,16 +92,9 @@ export async function computeAccessoryAvailability(opts: {
 
   const supabase = createServiceClient();
 
-  // 1. Puffer-Tage laden
-  const { data: bufferSetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'booking_buffer_days')
-    .maybeSingle();
-
-  const buffer: BufferDays = bufferSetting?.value
-    ? (typeof bufferSetting.value === 'string' ? JSON.parse(bufferSetting.value) : bufferSetting.value)
-    : DEFAULT_BUFFER;
+  // 1. Puffer-Tage laden — zentral, damit Kamera- und Zubehoer-Verfuegbarkeit
+  // garantiert dieselben Werte nutzen (frueher eine lokale Kopie hier).
+  const buffer: BufferDays = await loadBufferDays(supabase, DEFAULT_BUFFER);
 
   // 2. Effektiven Zeitraum mit Puffer berechnen
   const beforeDays = deliveryMode === 'abholung' ? buffer.abholung_before : buffer.versand_before;
@@ -179,18 +177,34 @@ export async function computeAccessoryAvailability(opts: {
 
   // 5. Überlappende Buchungen laden
   const globalTest = await isTestMode();
-  let bookingsQuery = supabase
-    .from('bookings')
-    .select('id, accessories, accessory_items, accessory_unit_ids, rental_from, rental_to, delivery_mode')
-    .in('status', [...RESERVING_BOOKING_STATUSES])
-    .or('accessories.neq.{},accessory_items.not.is.null,accessory_unit_ids.neq.{}');
-  if (!globalTest) {
-    bookingsQuery = bookingsQuery.not('is_test', 'is', true);
+  const bkSelBase =
+    'id, status, accessories, accessory_items, accessory_unit_ids, rental_from, rental_to, delivery_mode';
+  const bkSelOverrides = `${bkSelBase}, ship_date_override, return_due_date_override`;
+  const bkSelFull = `${bkSelOverrides}, actual_dispatch_at, actual_delivery_at, actual_return_at, return_arrived_at`;
+
+  const runBookings = (cols: string) => {
+    let q = supabase
+      .from('bookings')
+      .select(cols)
+      .in('status', [...RESERVING_BOOKING_STATUSES])
+      .or('accessories.neq.{},accessory_items.not.is.null,accessory_unit_ids.neq.{}');
+    if (!globalTest) q = q.not('is_test', 'is', true);
+    if (excludeBookingId) q = q.neq('id', excludeBookingId);
+    return q.returns<ReservingBooking[]>();
+  };
+
+  // Dreistufig: voll → ohne Ist-Logistik → ohne Ist-Logistik + Overrides.
+  let bkRes = await runBookings(bkSelFull);
+  if (bkRes.error && isMissingLogisticsColumn(bkRes.error.message)) {
+    bkRes = await runBookings(bkSelOverrides);
   }
-  if (excludeBookingId) {
-    bookingsQuery = bookingsQuery.neq('id', excludeBookingId);
+  if (
+    bkRes.error &&
+    /ship_date_override|return_due_date_override/i.test(bkRes.error.message || '')
+  ) {
+    bkRes = await runBookings(bkSelBase);
   }
-  const { data: bookings } = await bookingsQuery.returns<ReservingBooking[]>();
+  const bookings = bkRes.data;
 
   // 6. Unit→Accessory-Mapping vorab laden
   const allUnitIds = new Set<string>();
@@ -266,20 +280,16 @@ export async function computeAccessoryAvailability(opts: {
   // 6. Pro Zubehör: wie viele sind im Zeitraum gebucht?
   const bookedCounts = new Map<string, number>();
 
+  const todayKey = getBerlinDateKey(new Date());
+
   for (const booking of bookings ?? []) {
-    const bMode = booking.delivery_mode ?? 'versand';
-    const bBefore = bMode === 'abholung' ? buffer.abholung_before : buffer.versand_before;
-    const bAfter = bMode === 'abholung' ? buffer.abholung_after : buffer.versand_after;
+    // Gleiche Rechnung wie Kamera-Verfuegbarkeit und Ueberbuchungssperre:
+    // Plan (Puffer/Override) plus tatsaechlicher Paketlauf. Frueher wurden hier
+    // sogar die Override-Termine ignoriert — ein vorgezogener Versandtag blockte
+    // die Kamera, aber nicht die Speicherkarte im selben Paket.
+    const eff = computeEffectiveBookingSpan(booking, buffer, { today: todayKey });
 
-    const bFrom = new Date(booking.rental_from);
-    const bTo = new Date(booking.rental_to);
-    bFrom.setDate(bFrom.getDate() - bBefore);
-    bTo.setDate(bTo.getDate() + bAfter);
-
-    const bookingBufferedFrom = toIsoDate(bFrom);
-    const bookingBufferedTo = toIsoDate(bTo);
-
-    if (!(bufferedFrom <= bookingBufferedTo && bufferedTo >= bookingBufferedFrom)) {
+    if (!(bufferedFrom <= eff.end && bufferedTo >= eff.start)) {
       continue;
     }
 
@@ -375,15 +385,15 @@ export async function computeAccessoryAvailability(opts: {
     globalTest,
   });
   for (const r of reservations) {
-    const rMode = r.deliveryMode;
-    const rBefore = rMode === 'abholung' ? buffer.abholung_before : buffer.versand_before;
-    const rAfter = rMode === 'abholung' ? buffer.abholung_after : buffer.versand_after;
-    const rFrom = new Date(r.rentalFrom);
-    const rTo = new Date(r.rentalTo);
-    rFrom.setDate(rFrom.getDate() - rBefore);
-    rTo.setDate(rTo.getDate() + rAfter);
-    const rBufferedFrom = toIsoDate(rFrom);
-    const rBufferedTo = toIsoDate(rTo);
+    // 48h-Reservierungen sind reine PLAN-Objekte ohne Paketlauf — hier gibt es
+    // bewusst keine Ist-Logistik, nur die Puffer-Rechnung (gleiches gilt fuer
+    // die Warenkorb-Holds in lib/cart-holds.ts).
+    const rBufferedFrom = toIsoDate(
+      computeShipDate(r.rentalFrom, r.deliveryMode, buffer, null),
+    );
+    const rBufferedTo = toIsoDate(
+      computeReturnDueDate(r.rentalTo, r.deliveryMode, buffer, null),
+    );
     if (!(bufferedFrom <= rBufferedTo && bufferedTo >= rBufferedFrom)) continue;
 
     // Alle Zubehoer-Items aller Zeilen aufsummieren, dann wie eine Buchung
