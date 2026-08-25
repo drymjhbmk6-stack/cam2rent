@@ -212,10 +212,30 @@ export async function POST(
     },
   };
 
-  const { error: updateError } = await supabase
+  // Ist-Zeitpunkt der Uebergabe gleich mitschreiben — BEWUSST vor dem
+  // Status-Flip: der steht unter einem Status-Guard und kann fehlschlagen,
+  // waehrend die Kamera trotzdem physisch beim Kunden ist. `actual_dispatch_at`
+  // ist kein Status-Zeitstempel, sondern der lieferartuebergreifende Fakt
+  // "Geraet hat das Lager verlassen" (bei Versand die Carrier-Annahme) und
+  // speist die Ist-Logistik im Verfuegbarkeits-Kalender.
+  const baseUpdate: Record<string, unknown> = { handover_data: handoverData };
+  let { error: updateError } = await supabase
     .from('bookings')
-    .update({ handover_data: handoverData })
+    .update({
+      ...baseUpdate,
+      actual_dispatch_at: now,
+      actual_dispatch_source: 'handover',
+    })
     .eq('id', bookingId);
+
+  // Defensiv: Migration `supabase-bookings-logistics-actuals.sql` noch nicht
+  // ausgefuehrt → einmalig ohne die Ist-Felder wiederholen.
+  if (updateError && /actual_dispatch_(at|source)/i.test(updateError.message || '')) {
+    ({ error: updateError } = await supabase
+      .from('bookings')
+      .update(baseUpdate)
+      .eq('id', bookingId));
+  }
 
   if (updateError) {
     console.error('[handover/save] DB-Update fehlgeschlagen:', updateError);

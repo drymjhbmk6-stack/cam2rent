@@ -1,4 +1,5 @@
 import { getSendcloudKeys } from '@/lib/env-mode';
+import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 /**
  * Live-Sendungsstatus von Sendcloud (DHL/DPD-Pakete, die ueber Sendcloud
@@ -23,6 +24,12 @@ export interface ParcelStatus {
   isReturn?: boolean;
   /** true = aus Cache, sonst frisch von Sendcloud */
   cached?: boolean;
+  /** Anlage des Parcels bei Sendcloud (UTC-ISO) — schwaechster Zeit-Anhalt. */
+  createdAt?: string | null;
+  /** Voranmeldung beim Carrier (UTC-ISO). */
+  announcedAt?: string | null;
+  /** Letzte Statusaenderung (UTC-ISO) — bester Anhalt fuer den Ist-Zeitpunkt. */
+  updatedAt?: string | null;
 }
 
 // Kurzlebiger In-Memory-Cache, damit ein Seiten-Reload nicht erneut N
@@ -74,6 +81,43 @@ interface SendcloudParcel {
   tracking_number?: string;
   tracking_url?: string;
   is_return?: boolean;
+  date_created?: string;
+  date_updated?: string;
+  date_announced?: string;
+}
+
+/**
+ * Sendcloud liefert seine Datumsfelder als `DD-MM-YYYY HH:mm:ss` OHNE Offset
+ * (in der Zeitzone des Sendcloud-Accounts). `new Date()` parst das nicht
+ * zuverlaessig — je nach Runtime kommt `Invalid Date` oder eine
+ * US-Fehlinterpretation (Monat/Tag vertauscht) heraus. Deshalb ein eigener
+ * Parser, der den naiven Wert als Berlin-Zeit interpretiert.
+ *
+ * Zweiter Zweig: echte ISO-Strings mit Offset/Z werden direkt uebernommen.
+ * Alles andere → null (der Aufrufer faellt dann auf die Erkennungszeit zurueck).
+ */
+export function parseSendcloudDate(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  // DD-MM-YYYY HH:mm[:ss] (Sendcloud-Standard, ohne Offset)
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2})/);
+  if (m) {
+    return berlinLocalInputToUTC(`${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}`);
+  }
+
+  // ISO mit Offset oder Z
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && /(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  // ISO ohne Offset → als Berlin-Zeit interpretieren
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/);
+  if (iso) return berlinLocalInputToUTC(`${iso[1]}T${iso[2]}:${iso[3]}`);
+
+  return null;
 }
 
 function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
@@ -89,6 +133,9 @@ function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
     trackingNumber: p.tracking_number ?? null,
     trackingUrl: p.tracking_url ?? null,
     isReturn: !!p.is_return,
+    createdAt: parseSendcloudDate(p.date_created),
+    announcedAt: parseSendcloudDate(p.date_announced),
+    updatedAt: parseSendcloudDate(p.date_updated),
   };
 }
 

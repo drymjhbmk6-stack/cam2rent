@@ -67,6 +67,9 @@ type BookingRow = {
   tracking_url: string | null;
   tracking_carrier?: string | null;
   return_arrived_at?: string | null;
+  actual_dispatch_at?: string | null;
+  actual_delivery_at?: string | null;
+  actual_return_at?: string | null;
 };
 
 function carrierFromCode(code: string | null | undefined): string | null {
@@ -86,8 +89,41 @@ function pickBest(parcels: ParcelStatus[]): ParcelStatus | null {
   );
 }
 
+/**
+ * Ist-Zeitpunkt der Abgabe. `date_updated` ist nur dann die Abgabezeit, wenn das
+ * Paket noch unterwegs ist — bei einem bereits zugestellten Paket waere es die
+ * Zustellzeit. Reihenfolge: transit-updated → announced → created → Erkennungszeit.
+ */
+function pickDispatchTs(
+  outbound: ParcelStatus[],
+  nowIso: string,
+): { at: string; source: string } {
+  const moving = outbound.find((p) => p.category === 'transit' && p.updatedAt);
+  if (moving?.updatedAt) return { at: moving.updatedAt, source: 'sendcloud_updated' };
+
+  const announced = outbound.find((p) => p.announcedAt)?.announcedAt;
+  if (announced) return { at: announced, source: 'sendcloud_announced' };
+
+  const created = outbound.find((p) => p.createdAt)?.createdAt;
+  if (created) return { at: created, source: 'sendcloud_created' };
+
+  return { at: nowIso, source: 'detected' };
+}
+
+/** Ist-Zeitpunkt der Zustellung (Hinversand beim Kunden bzw. Retoure bei uns). */
+function pickDeliveredTs(
+  parcels: ParcelStatus[],
+  nowIso: string,
+): { at: string; source: string } {
+  const d = parcels.find((p) => p.category === 'delivered' && p.updatedAt);
+  if (d?.updatedAt) return { at: d.updatedAt, source: 'sendcloud_updated' };
+  return { at: nowIso, source: 'detected' };
+}
+
 const isMissingReturnCol = (msg?: string | null) =>
   /return_arrived_at/i.test(msg || '');
+const isMissingActualsCol = (msg?: string | null) =>
+  /actual_(dispatch|delivery|return)_(at|source)/i.test(msg || '');
 const isMissingCarrierCol = (msg?: string | null) =>
   /tracking_carrier/i.test(msg || '');
 
@@ -106,15 +142,23 @@ export async function GET(req: NextRequest) {
     const testMode = await isTestMode();
     const now = new Date().toISOString();
 
-    const baseCols =
-      'id, status, delivery_mode, customer_email, customer_name, product_name, rental_from, rental_to, tracking_number, tracking_url, tracking_carrier, return_arrived_at';
-
     // Versand-Buchungen, die noch "in Bewegung" sein koennen. completed/
     // returned/cancelled sind fertig und fallen raus.
     const activeStatuses = ['confirmed', 'preparing_shipment', 'shipped', 'delivered'];
 
     let hasReturnCol = true;
     let hasCarrierCol = true;
+    let hasActualsCols = true;
+    const buildCols = () =>
+      [
+        'id, status, delivery_mode, customer_email, customer_name, product_name, rental_from, rental_to, tracking_number, tracking_url',
+        hasCarrierCol ? 'tracking_carrier' : null,
+        hasReturnCol ? 'return_arrived_at' : null,
+        hasActualsCols ? 'actual_dispatch_at, actual_delivery_at, actual_return_at' : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+
     const loadBookings = (cols: string) =>
       supabase
         .from('bookings')
@@ -125,20 +169,28 @@ export async function GET(req: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(MAX_BOOKINGS);
 
-    let { data: rows, error } = await loadBookings(baseCols);
+    let { data: rows, error } = await loadBookings(buildCols());
 
-    // Defensiv: return_arrived_at- und/oder tracking_carrier-Migration fehlt.
-    if (error && (isMissingReturnCol(error.message) || isMissingCarrierCol(error.message))) {
-      hasReturnCol = !isMissingReturnCol(error.message);
-      hasCarrierCol = !isMissingCarrierCol(error.message);
-      const cols = [
-        'id, status, delivery_mode, customer_email, customer_name, product_name, rental_from, rental_to, tracking_number, tracking_url',
-        hasCarrierCol ? 'tracking_carrier' : null,
-        hasReturnCol ? 'return_arrived_at' : null,
-      ]
-        .filter(Boolean)
-        .join(', ');
-      ({ data: rows, error } = await loadBookings(cols));
+    // Defensiv: eine der drei optionalen Migrationen fehlt. Pro Runde die
+    // betroffene Spaltengruppe abschalten und erneut laden. Aus den Flags folgt
+    // zugleich, welche Spalten die UPDATEs unten schreiben duerfen — Supabase
+    // bricht auch bei UPDATE auf unbekannte Spalten hart ab.
+    for (let attempt = 0; attempt < 3 && error; attempt++) {
+      let changed = false;
+      if (hasActualsCols && isMissingActualsCol(error.message)) {
+        hasActualsCols = false;
+        changed = true;
+      }
+      if (hasReturnCol && isMissingReturnCol(error.message)) {
+        hasReturnCol = false;
+        changed = true;
+      }
+      if (hasCarrierCol && isMissingCarrierCol(error.message)) {
+        hasCarrierCol = false;
+        changed = true;
+      }
+      if (!changed) break;
+      ({ data: rows, error } = await loadBookings(buildCols()));
     }
 
     if (error) {
@@ -155,6 +207,9 @@ export async function GET(req: NextRequest) {
     let shipped = 0;
     let delivered = 0;
     let returnArrived = 0;
+    let dispatchSet = 0;
+    let deliverySet = 0;
+    let returnSet = 0;
     let checked = 0;
     const errors: string[] = [];
 
@@ -175,6 +230,14 @@ export async function GET(req: NextRequest) {
       if ((curStatus === 'confirmed' || curStatus === 'preparing_shipment') && outMoved) {
         const best = pickBest(outbound);
         const upd: Record<string, unknown> = { status: 'shipped', shipped_at: now };
+        // Ist-Zeitpunkt der Abgabe reist im SELBEN atomaren Statement mit —
+        // kein zusaetzlicher Roundtrip, kein neues Race.
+        const dispatchTs =
+          hasActualsCols && !b.actual_dispatch_at ? pickDispatchTs(outbound, now) : null;
+        if (dispatchTs) {
+          upd.actual_dispatch_at = dispatchTs.at;
+          upd.actual_dispatch_source = dispatchTs.source;
+        }
         // Tracking nachtragen, falls die Buchung noch keins hat (z.B. Etikett
         // direkt im Sendcloud-Panel erstellt) — damit die Mail den Link hat.
         if (!b.tracking_number && best?.trackingNumber) {
@@ -202,8 +265,21 @@ export async function GET(req: NextRequest) {
           // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent).
           deductConsumablesForBooking(supabase, b.id).catch(() => {});
 
+          if (dispatchTs) dispatchSet++;
+
           // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit.
-          propagateShipmentStatus(supabase, b.id, 'shipped', { shipped_at: now }).catch(() => {});
+          // Bewusst ueber `propagateShipmentStatus` (hat Lieferart- + Rang-Guard)
+          // statt `propagateShipmentFields` — letzteres wuerde einen eigenen,
+          // frueheren Ist-Zeitstempel eines Geschwisters ueberschreiben.
+          propagateShipmentStatus(supabase, b.id, 'shipped', {
+            shipped_at: now,
+            ...(dispatchTs
+              ? {
+                  actual_dispatch_at: dispatchTs.at,
+                  actual_dispatch_source: dispatchTs.source,
+                }
+              : {}),
+          }).catch(() => {});
 
           const trackingNumber = b.tracking_number || best?.trackingNumber || '';
           const trackingUrl = b.tracking_url || best?.trackingUrl || '';
@@ -235,9 +311,17 @@ export async function GET(req: NextRequest) {
 
       // ── Hinversand: shipped → delivered ─────────────────────────────
       if (curStatus === 'shipped' && outDelivered) {
+        const deliveryTs =
+          hasActualsCols && !b.actual_delivery_at ? pickDeliveredTs(outbound, now) : null;
+        const updDel: Record<string, unknown> = { status: 'delivered' };
+        if (deliveryTs) {
+          updDel.actual_delivery_at = deliveryTs.at;
+          updDel.actual_delivery_source = deliveryTs.source;
+        }
+
         const claim = await supabase
           .from('bookings')
-          .update({ status: 'delivered' })
+          .update(updDel)
           .eq('id', b.id)
           .eq('status', 'shipped')
           .select('id')
@@ -245,8 +329,19 @@ export async function GET(req: NextRequest) {
         if (!claim.error && claim.data) {
           curStatus = 'delivered';
           delivered++;
+          if (deliveryTs) deliverySet++;
           // Verknüpfte Bestellungen (gemeinsamer Versand) ziehen mit.
-          propagateShipmentStatus(supabase, b.id, 'delivered').catch(() => {});
+          propagateShipmentStatus(
+            supabase,
+            b.id,
+            'delivered',
+            deliveryTs
+              ? {
+                  actual_delivery_at: deliveryTs.at,
+                  actual_delivery_source: deliveryTs.source,
+                }
+              : {},
+          ).catch(() => {});
           await logAudit({
             action: 'booking.delivered',
             entityType: 'booking',
@@ -259,15 +354,23 @@ export async function GET(req: NextRequest) {
 
       // ── Retoure: Rueckpaket bei cam2rent eingetroffen ───────────────
       if (hasReturnCol && retDelivered && !b.return_arrived_at) {
+        const returnTs = pickDeliveredTs(returns, now);
+        const updRet: Record<string, unknown> = { return_arrived_at: now };
+        if (hasActualsCols) {
+          updRet.actual_return_at = returnTs.at;
+          updRet.actual_return_source = returnTs.source;
+        }
+
         const claim = await supabase
           .from('bookings')
-          .update({ return_arrived_at: now })
+          .update(updRet)
           .eq('id', b.id)
           .is('return_arrived_at', null)
           .select('id')
           .maybeSingle();
         if (!claim.error && claim.data) {
           returnArrived++;
+          if (hasActualsCols) returnSet++;
           try {
             await createAdminNotification(supabase, {
               type: 'return_arrived',
@@ -280,13 +383,70 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+
+      // ── Ist-Zeitstempel nachtragen ─────────────────────────────────────
+      // Entkoppelt von den Statuswechseln, damit auch Buchungen erfasst werden,
+      // die schon vor dem Deploy versendet oder manuell auf `shipped` gesetzt
+      // wurden — dort greifen die Uebergaenge oben nicht mehr. Jeder Claim ist
+      // ueber `.is(<spalte>, null)` idempotent: der erste erkannte Zeitpunkt
+      // gewinnt, spaetere Laeufe ueberschreiben ihn nicht.
+      if (hasActualsCols) {
+        if (!b.actual_dispatch_at && outMoved && curStatus !== 'confirmed') {
+          const ts = pickDispatchTs(outbound, now);
+          const c = await supabase
+            .from('bookings')
+            .update({ actual_dispatch_at: ts.at, actual_dispatch_source: ts.source })
+            .eq('id', b.id)
+            .is('actual_dispatch_at', null)
+            .select('id')
+            .maybeSingle();
+          if (!c.error && c.data) dispatchSet++;
+        }
+
+        if (!b.actual_delivery_at && outDelivered) {
+          const ts = pickDeliveredTs(outbound, now);
+          const c = await supabase
+            .from('bookings')
+            .update({ actual_delivery_at: ts.at, actual_delivery_source: ts.source })
+            .eq('id', b.id)
+            .is('actual_delivery_at', null)
+            .select('id')
+            .maybeSingle();
+          if (!c.error && c.data) deliverySet++;
+        }
+
+        // Altbestand: `return_arrived_at` war die Erkennungszeit vor Einfuehrung
+        // der Ist-Spalten. Uebernehmen, ohne die Notification erneut auszuloesen.
+        if (hasReturnCol && b.return_arrived_at && !b.actual_return_at) {
+          const c = await supabase
+            .from('bookings')
+            .update({
+              actual_return_at: b.return_arrived_at,
+              actual_return_source: 'legacy_detected',
+            })
+            .eq('id', b.id)
+            .is('actual_return_at', null)
+            .select('id')
+            .maybeSingle();
+          if (!c.error && c.data) returnSet++;
+        }
+      }
     }
 
     return NextResponse.json({
       ok: true,
       checked,
       has_return_col: hasReturnCol,
-      summary: { shipped, delivered, return_arrived: returnArrived, errors: errors.length },
+      has_actuals_cols: hasActualsCols,
+      summary: {
+        shipped,
+        delivered,
+        return_arrived: returnArrived,
+        dispatch_set: dispatchSet,
+        delivery_set: deliverySet,
+        return_set: returnSet,
+        errors: errors.length,
+      },
       errors: errors.slice(0, 20),
     });
   } finally {

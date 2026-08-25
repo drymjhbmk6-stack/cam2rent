@@ -67,17 +67,32 @@ export async function POST(req: NextRequest) {
       ? (auditStr ? `${notes}\n\nRückgabe-Prüfung: ${auditStr}` : notes)
       : (auditStr ? `Rückgabe-Prüfung: ${auditStr}` : null);
 
+    const returnedAt = new Date().toISOString();
+    const baseUpdate: Record<string, unknown> = {
+      status: newStatus,
+      returned_at: returnedAt,
+      return_condition: condition,
+      return_notes: finalNotes,
+    };
+
     const { error: updateErr } = await supabase
       .from('bookings')
-      .update({
-        status: newStatus,
-        returned_at: new Date().toISOString(),
-        return_condition: condition,
-        return_notes: finalNotes,
-      })
+      .update(baseUpdate)
       .eq('id', bookingId);
 
     if (updateErr) throw updateErr;
+
+    // Ist-Zeitpunkt der Rueckgabe fuer die Ist-Logistik im Kalender. Eigener,
+    // idempotenter Claim: `.is(..., null)` sorgt dafuer, dass ein bereits vom
+    // Sendcloud-Cron erfasster (frueherer, genauerer) Paket-Eingang NICHT
+    // ueberschrieben wird. Bei Abholung ist das hier die einzige Quelle.
+    // Best-effort — fehlt die Migration, schlaegt es still fehl.
+    await supabase
+      .from('bookings')
+      .update({ actual_return_at: returnedAt, actual_return_source: 'return_check' })
+      .eq('id', bookingId)
+      .is('actual_return_at', null)
+      .then(undefined, () => undefined);
 
     // 1a.1 Zubehoer-Exemplare nur bei "completed" zurueck auf 'available' setzen.
     // Bei 'damaged' bleibt der Status auf 'rented' -- der Admin muss einzeln im

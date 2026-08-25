@@ -18,7 +18,8 @@
  */
 
 import type { createServiceClient } from '@/lib/supabase';
-import { getBerlinHour } from '@/lib/timezone';
+import { getBerlinDateKey, getBerlinHour } from '@/lib/timezone';
+import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 
 type SB = ReturnType<typeof createServiceClient>;
 
@@ -197,4 +198,200 @@ export function sanitizeOverrideDate(input: unknown): string | null {
     throw new Error('Datum ausserhalb des erlaubten Bereichs.');
   }
   return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+/* ─── Ist-Logistik: tatsaechlicher Verlauf statt reiner Planung ──────────── */
+
+/**
+ * Tage zu einem YYYY-MM-DD-String addieren. UTC-verankert und damit DST-immun:
+ * `new Date('YYYY-MM-DD')` ist UTC-Mitternacht, lokale Tagesarithmetik darauf
+ * verschiebt das Ergebnis um einen Tag, sobald die Spanne ueber eine Sommer-/
+ * Winterzeit-Umstellung laeuft.
+ */
+export function isoAddDays(iso: string, n: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  if (isNaN(d.getTime())) return iso.slice(0, 10);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Timestamp (oder YYYY-MM-DD) → Kalendertag in Berlin-Zeit. */
+function toBerlinDay(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  // Reines Datum ohne Uhrzeit: unveraendert uebernehmen (keine TZ-Umrechnung).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return getBerlinDateKey(d);
+}
+
+/** Buchungsfelder, die der Ist-Logistik-Helper auswertet. Alle Ist-Felder optional. */
+export interface BookingLogisticsInput {
+  rental_from: string;
+  rental_to: string;
+  delivery_mode?: string | null;
+  status?: string | null;
+  ship_date_override?: string | null;
+  return_due_date_override?: string | null;
+  /** Geraet hat das Lager verlassen (Carrier-Annahme bzw. Uebergabe). */
+  actual_dispatch_at?: string | null;
+  /** Paket beim Kunden zugestellt. */
+  actual_delivery_at?: string | null;
+  /** Rueckpaket eingetroffen bzw. Kamera zurueck. */
+  actual_return_at?: string | null;
+  /** Legacy-Fallback (Erkennungszeit des Retoure-Crons). */
+  return_arrived_at?: string | null;
+}
+
+export type LogisticsMarkerKind =
+  | 'early-dispatch'
+  | 'late-dispatch'
+  | 'early-delivery'
+  | 'early-return'
+  | 'overdue-return';
+
+export interface LogisticsMarker {
+  kind: LogisticsMarkerKind;
+  /** Erster Tag des Segments (YYYY-MM-DD, inklusive). */
+  from: string;
+  /** Letzter Tag des Segments (YYYY-MM-DD, inklusive). */
+  to: string;
+}
+
+export interface EffectiveBookingSpan {
+  /** Geplanter Versand-/Uebergabetag (Puffer bzw. Override). */
+  plannedStart: string;
+  /** Geplanter Rueckgabe-Soll-Tag. */
+  plannedEnd: string;
+  /** Effektiver Blockbeginn — nie spaeter als `plannedStart`. */
+  start: string;
+  /** Effektives Blockende — nie frueher als `plannedEnd`. */
+  end: string;
+  actualDispatchDate: string | null;
+  actualDeliveryDate: string | null;
+  actualReturnDate: string | null;
+  markers: LogisticsMarker[];
+}
+
+/**
+ * Effektive Blockspanne einer Buchung aus Plan + tatsaechlichem Verlauf.
+ *
+ * KERN-INVARIANTE: Der tatsaechliche Verlauf darf die Spanne nur AUSDEHNEN,
+ * nie verkuerzen. Verkuerzt wird ausschliesslich dadurch, dass die Buchung die
+ * reservierenden Status verlaesst (= Rueckgabe-Pruefung abgeschlossen).
+ *
+ * Sind keine Ist-Felder gesetzt (Migration nicht ausgefuehrt, Fremdversand ohne
+ * Sendcloud, Aufrufer laedt sie nicht), ist das Ergebnis identisch zur bisherigen
+ * `computeShipDate`/`computeReturnDueDate`-Rechnung — `markers` bleibt leer.
+ *
+ * @param opts.today       Referenztag (YYYY-MM-DD, Berlin). Default: heute.
+ * @param opts.applyOverdue Ueberfaellige Rueckgabe dehnt die Spanne bis `today`
+ *                          aus (Default true). Fuer rein planende Ansichten
+ *                          (Auftragskalender) auf false setzen.
+ */
+export function computeEffectiveBookingSpan(
+  b: BookingLogisticsInput,
+  buf: BufferDays,
+  opts?: { today?: string; applyOverdue?: boolean },
+): EffectiveBookingSpan {
+  const mode = b.delivery_mode ?? 'versand';
+  const plannedStart = toIsoDate(
+    computeShipDate(b.rental_from, mode, buf, b.ship_date_override ?? null),
+  );
+  const plannedEnd = toIsoDate(
+    computeReturnDueDate(b.rental_to, mode, buf, b.return_due_date_override ?? null),
+  );
+
+  const actualDispatchDate = toBerlinDay(b.actual_dispatch_at);
+  const actualDeliveryDate = toBerlinDay(b.actual_delivery_at);
+  // Legacy-Fallback: vor der Migration hielt `return_arrived_at` die Info.
+  const actualReturnDate = toBerlinDay(b.actual_return_at) ?? toBerlinDay(b.return_arrived_at);
+
+  const rentalFrom = b.rental_from.slice(0, 10);
+  const today = opts?.today ?? getBerlinDateKey(new Date());
+  const applyOverdue = opts?.applyOverdue !== false;
+  // Ohne Status (z.B. Reservierungs-Pseudo-Buchungen) konservativ als "blockt noch"
+  // behandeln — verkuerzen darf der Helper ohnehin nie.
+  const stillReserving =
+    !b.status || (RESERVING_BOOKING_STATUSES as readonly string[]).includes(b.status);
+
+  // ── Spanne: ausschliesslich ausdehnen ──────────────────────────────────
+  let start = plannedStart;
+  if (actualDispatchDate && actualDispatchDate < start) start = actualDispatchDate;
+
+  let end = plannedEnd;
+  if (actualReturnDate && actualReturnDate > end) end = actualReturnDate;
+  const overdue =
+    applyOverdue && stillReserving && !actualReturnDate && today > plannedEnd;
+  if (overdue && today > end) end = today;
+
+  // ── Markierungs-Segmente ───────────────────────────────────────────────
+  const markers: LogisticsMarker[] = [];
+
+  if (actualDispatchDate && actualDispatchDate < plannedStart) {
+    // Zusaetzliche Tage, die durch die fruehere Abgabe dazugekommen sind.
+    markers.push({
+      kind: 'early-dispatch',
+      from: actualDispatchDate,
+      to: isoAddDays(plannedStart, -1),
+    });
+  } else if (actualDispatchDate && actualDispatchDate > plannedStart) {
+    // Spaeter abgegeben: Spanne bleibt unveraendert, nur der Ist-Tag wird markiert.
+    markers.push({ kind: 'late-dispatch', from: actualDispatchDate, to: actualDispatchDate });
+  }
+
+  if (actualDeliveryDate && actualDeliveryDate < rentalFrom) {
+    // Kunde hat das Geraet vor Mietbeginn — bleibt blockiert, wird markiert.
+    markers.push({
+      kind: 'early-delivery',
+      from: actualDeliveryDate,
+      to: isoAddDays(rentalFrom, -1),
+    });
+  }
+
+  if (actualReturnDate && actualReturnDate <= plannedEnd && stillReserving) {
+    // Rueckpaket ist da, Pruefung steht aus → NICHT freigeben, nur markieren.
+    markers.push({ kind: 'early-return', from: actualReturnDate, to: plannedEnd });
+  }
+
+  if (overdue) {
+    markers.push({ kind: 'overdue-return', from: isoAddDays(plannedEnd, 1), to: today });
+  }
+
+  return {
+    plannedStart,
+    plannedEnd,
+    start,
+    end,
+    actualDispatchDate,
+    actualDeliveryDate,
+    actualReturnDate,
+    markers,
+  };
+}
+
+/** Findet den Marker, der einen bestimmten Tag abdeckt (erster Treffer gewinnt). */
+export function markerForDay(
+  markers: LogisticsMarker[],
+  dateStr: string,
+  only?: LogisticsMarkerKind[],
+): LogisticsMarker | null {
+  for (const m of markers) {
+    if (only && !only.includes(m.kind)) continue;
+    if (dateStr >= m.from && dateStr <= m.to) return m;
+  }
+  return null;
+}
+
+/** Spalten, die die Lese-Pfade fuer die Ist-Logistik zusaetzlich selektieren. */
+export const LOGISTICS_ACTUAL_COLUMNS =
+  'actual_dispatch_at, actual_delivery_at, actual_return_at, return_arrived_at';
+
+/** Erkennt, ob ein Supabase-Fehler an den (noch) fehlenden Ist-Spalten liegt. */
+export function isMissingLogisticsColumn(message?: string | null): boolean {
+  return /actual_dispatch_at|actual_delivery_at|actual_return_at|return_arrived_at/i.test(
+    message || '',
+  );
 }
