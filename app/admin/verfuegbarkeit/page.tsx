@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { Modal } from '@/components/admin/ui/Modal';
-import { fmtDateWeekday } from '@/lib/format-utils';
+import { fmtDateShort, fmtDateWeekday } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 
@@ -235,6 +235,8 @@ export default function AdminVerfuegbarkeitPage() {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   // Detail-Fenster: alle Bestandteile eines Sets an einem konkreten Tag.
   const [setModal, setSetModal] = useState<{ set: GanttSet; dateStr: string } | null>(null);
+  // Detail-Fenster: Belegung eines Zubehoerteils an einem konkreten Tag.
+  const [accModal, setAccModal] = useState<{ acc: GanttAccessory; dateStr: string } | null>(null);
 
   // Zeitraum berechnen
   const { rangeFrom, rangeTo } = useMemo(() => {
@@ -558,7 +560,9 @@ export default function AdminVerfuegbarkeitPage() {
   }
 
   // Zubehör-Zellinfo
-  function getAccCellInfo(acc: GanttAccessory, dateStr: string, buf: BufferDays): { type: string; count: number; total: number; bookings: GanttSimpleBooking[] } {
+  function getAccCellInfo(acc: GanttAccessory, dateStr: string, buf: BufferDays): {
+    type: string; count: number; total: number; free: number; overbooked: boolean; bookings: GanttSimpleBooking[];
+  } {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const isPast = new Date(dateStr) < today;
 
@@ -571,12 +575,15 @@ export default function AdminVerfuegbarkeitPage() {
     // qty-aware: eine Buchung kann mehrere Exemplare belegen (Mengen-/
     // Multi-Kamera-Buchung). Fallback 1 fuer Legacy-/Set-Eintraege ohne qty.
     const count = matchedBookings.reduce((sum, b) => sum + (b.qty ?? 1), 0);
-    const free = acc.available_qty - count;
+    const total = acc.available_qty;
+    // free bewusst NICHT auf 0 geklemmt — ein negativer Wert IST die Information
+    // (mehr belegt als vorhanden = jemand kann nicht beliefert werden).
+    const free = total - count;
     let type = 'free';
-    if (free <= 0) type = 'booked';
+    if (free <= 0) type = 'soldout';
     else if (count > 0) type = 'partial';
     if (isPast && count === 0) type = 'past';
-    return { type, count, total: acc.available_qty, bookings: matchedBookings };
+    return { type, count, total, free, overbooked: count > total, bookings: matchedBookings };
   }
 
   /* ─── Set-Verfuegbarkeit: kann das Set an einem Tag gebaut werden? ──────
@@ -623,6 +630,30 @@ export default function AdminVerfuegbarkeitPage() {
     }
     return usage;
   }, [ganttData, rangeFrom, rangeTo]);
+
+  // Umkehrung von sets[].accessory_items: in welchen Sets steckt ein Zubehoer
+  // (und mit welcher Stueckzahl)? Fuer das Zubehoer-Detailfenster — zeigt, welche
+  // Sets betroffen sind, wenn ein Teil knapp wird.
+  const setsByAccessory = useMemo(() => {
+    const m = new Map<string, { setId: string; setName: string; needed: number; productNames: string[] }[]>();
+    for (const set of ganttData?.sets ?? []) {
+      const items = Array.isArray(set.accessory_items) ? set.accessory_items : [];
+      // Mengen aufsummieren — ein Set kann dasselbe Teil mehrfach fuehren
+      // (gleiche Aggregation wie in getSetCellInfo / `addAcc` in der Route).
+      const neededById = new Map<string, number>();
+      for (const item of items) {
+        if (!item?.accessory_id) continue;
+        const q = typeof item.qty === 'number' && item.qty > 0 ? Math.floor(item.qty) : 1;
+        neededById.set(item.accessory_id, (neededById.get(item.accessory_id) ?? 0) + q);
+      }
+      for (const [accId, needed] of neededById) {
+        const list = m.get(accId) ?? [];
+        list.push({ setId: set.id, setName: set.name, needed, productNames: set.product_names ?? [] });
+        m.set(accId, list);
+      }
+    }
+    return m;
+  }, [ganttData]);
 
   // Set-Zellinfo: wie viele komplette Sets sind an dem Tag noch baubar und
   // welche Bestandteile fehlen?
@@ -1153,7 +1184,9 @@ export default function AdminVerfuegbarkeitPage() {
               <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: 'var(--admin-text-2)' }}>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Alle frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Teilweise belegt</span>
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Ausgebucht</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7f1d1d' }} /> Ausgebucht</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7f1d1d', boxShadow: 'inset 0 0 0 2px #ef4444' }} /> Überbucht (mehr belegt als vorhanden)</span>
+                <span style={{ color: 'var(--admin-text-dim)' }}>Klick auf einen Tag zeigt Details.</span>
               </div>
 
               {/* EIN gemeinsamer Kalender für ALLES Zubehör. Eine Zeile pro
@@ -1232,28 +1265,54 @@ export default function AdminVerfuegbarkeitPage() {
                         </td>
                         {days.map((d) => {
                           const info = getAccCellInfo(acc, d.dateStr, ganttData.bufferDays);
+                          // Farbschema wie im Sets-Tab: rot = nichts mehr frei,
+                          // roter Rahmen = echte Ueberbuchung (mehr belegt als
+                          // vorhanden). Blau entfaellt hier — „ausgebucht" und
+                          // „ueberbucht" waren vorher optisch nicht zu trennen.
                           const bg = info.type === 'past' ? '#1e293b'
-                            : info.type === 'booked' ? '#1d4ed8'
+                            : info.type === 'soldout' ? '#7f1d1d'
                             : info.count > 0 ? '#a16207'
                             : '#065f46';
                           const color = info.type === 'past' ? '#475569'
-                            : info.type === 'booked' ? '#ffffff'
+                            : info.type === 'soldout' ? '#fecaca'
                             : info.count > 0 ? '#fef3c7'
                             : '#6ee7b7';
+
+                          // Ringe kombinieren, damit der Heute-Ring erhalten bleibt.
+                          const rings: string[] = [];
+                          if (info.type !== 'past' && info.overbooked) rings.push('inset 0 0 0 2px #ef4444');
+                          if (d.isToday) rings.push('inset 0 0 0 1.5px #f59e0b');
+
                           return (
                             <td key={d.dateStr} className="px-0 py-0.5 text-center"
                               onMouseEnter={(e) => {
-                                if (info.type === 'past' || info.count === 0) { setTooltip(null); return; }
+                                if (info.type === 'past') { setTooltip(null); return; }
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                const names = info.bookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
+                                const lines: string[] = [acc.name];
+                                if (info.overbooked) {
+                                  lines.push(`⚠ Überbucht — ${info.count} belegt bei nur ${info.total} vorhanden`);
+                                } else if (info.total === 0) {
+                                  lines.push('Kein Bestand hinterlegt');
+                                } else if (info.type === 'soldout') {
+                                  lines.push(`Ausgebucht — 0 von ${info.total} frei`);
+                                } else if (info.count > 0) {
+                                  lines.push(`${info.count} von ${info.total} belegt`);
+                                } else {
+                                  lines.push(`Alle ${info.total} frei`);
+                                }
                                 const pendingCount = info.bookings.reduce((n, b) => n + (b.status === 'awaiting_payment' ? (b.qty ?? 1) : 0), 0);
-                                const pendingLine = pendingCount > 0 ? `\n${pendingCount} davon Zahlung ausstehend` : '';
-                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${acc.name}\n${info.count} von ${info.total} belegt${pendingLine}\n${names}` });
+                                if (pendingCount > 0) lines.push(`${pendingCount} davon Zahlung ausstehend`);
+                                if (info.bookings.length > 0) {
+                                  lines.push(info.bookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', '));
+                                }
+                                lines.push('Klicken für Details');
+                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: lines.join('\n') });
                               }}
                               onMouseLeave={() => setTooltip(null)}
-                              style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                              onClick={() => { setTooltip(null); setAccModal({ acc, dateStr: d.dateStr }); }}
+                              style={{ background: bg, color, cursor: 'pointer', boxShadow: rings.length > 0 ? rings.join(', ') : 'none' }}>
                               <div className="text-[9px] leading-tight font-semibold">
-                                {info.type !== 'past' && info.count > 0 ? `${info.count}/${info.total}` : ''}
+                                {info.type !== 'past' && info.count > 0 ? `${info.overbooked ? '⚠' : ''}${info.count}/${info.total}` : ''}
                               </div>
                             </td>
                           );
@@ -1577,6 +1636,126 @@ export default function AdminVerfuegbarkeitPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {/* Detail-Fenster: Belegung eines Zubehoerteils an einem Tag */}
+      {accModal && ganttData && (() => {
+        const info = getAccCellInfo(accModal.acc, accModal.dateStr, ganttData.bufferDays);
+        const inSets = setsByAccessory.get(accModal.acc.id) ?? [];
+        const compatNames = accModal.acc.compatible_product_names ?? [];
+        return (
+          <Modal
+            open
+            onClose={() => setAccModal(null)}
+            title={`${accModal.acc.name} — ${fmtDateWeekday(accModal.dateStr)}`}
+            maxWidth={620}
+          >
+            {/* Bestandsübersicht */}
+            {info.overbooked ? (
+              <div style={{ background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(220,38,38,0.6)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#f87171', fontSize: 14 }}>
+                  ⚠ Überbucht — {info.count} belegt bei nur {info.total} vorhanden
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  {info.count - info.total} {info.count - info.total === 1 ? 'Stück kann' : 'Stück können'} nicht geliefert werden.
+                </div>
+              </div>
+            ) : info.total === 0 ? (
+              <div style={{ background: 'rgba(148,163,184,0.10)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: 'var(--admin-muted)', fontSize: 14 }}>
+                  Kein Bestand hinterlegt
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  Für dieses Zubehör ist keine verfügbare Menge erfasst — es gilt überall als nicht verfügbar.
+                </div>
+              </div>
+            ) : info.type === 'soldout' ? (
+              <div style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.45)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#f87171', fontSize: 14 }}>
+                  ✕ Ausgebucht — nichts mehr frei
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  Alle {info.total} Stück sind an diesem Tag belegt.
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.45)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: '#34d399', fontSize: 14 }}>
+                  ✓ {info.free} von {info.total} frei
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  {info.count === 0 ? 'An diesem Tag nichts belegt.' : `${info.count} Stück belegt.`}
+                </div>
+              </div>
+            )}
+
+            <div className="font-body" style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginBottom: 16 }}>
+              {accModal.acc.category}
+              {' · '}
+              {compatNames.length > 0 ? `Passt zu: ${compatNames.join(', ')}` : 'Passt zu allen Kameras'}
+            </div>
+
+            {/* Belegende Buchungen */}
+            <div className="font-heading font-bold" style={{ fontSize: 12, color: 'var(--admin-text-2)', marginBottom: 6 }}>
+              Belegt durch
+            </div>
+            {info.bookings.length === 0 ? (
+              <p className="font-body" style={{ color: 'var(--admin-text-dim)', fontSize: 13, marginBottom: 16 }}>
+                An diesem Tag belegt keine Buchung dieses Zubehör.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {info.bookings.map((b) => (
+                  <div key={b.id} style={{ border: '1px solid var(--admin-border)', borderRadius: 9, padding: '8px 10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                      <a href={`/admin/buchungen/${b.id}`} target="_blank" rel="noopener noreferrer"
+                        className="font-heading font-semibold"
+                        style={{ fontSize: 13, color: 'var(--admin-accent)', textDecoration: 'underline' }}>
+                        {b.status === 'awaiting_payment' ? '⏳ ' : ''}{b.customer_name || b.id}
+                      </a>
+                      <span className="font-body whitespace-nowrap" style={{ fontSize: 12, color: 'var(--admin-text-2)' }}>
+                        {(b.qty ?? 1) > 1 ? `${b.qty}× belegt` : '1× belegt'}
+                      </span>
+                    </div>
+                    <div className="font-body" style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 3 }}>
+                      {fmtDateShort(b.rental_from)} – {fmtDateShort(b.rental_to)}
+                      {b.delivery_mode === 'abholung' ? ' · Abholung' : ' · Versand'}
+                      {b.status === 'awaiting_payment' ? ' · Zahlung ausstehend' : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* In welchen Sets steckt das Teil? */}
+            <div className="font-heading font-bold" style={{ fontSize: 12, color: 'var(--admin-text-2)', marginBottom: 6 }}>
+              Teil dieser Sets
+            </div>
+            {inSets.length === 0 ? (
+              <p className="font-body" style={{ color: 'var(--admin-text-dim)', fontSize: 13 }}>
+                Dieses Zubehör ist in keinem Set enthalten.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {inSets.map((entry) => (
+                  <div key={entry.setId} style={{ border: '1px solid var(--admin-border)', borderRadius: 9, padding: '7px 10px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                    <div className="font-heading font-semibold" style={{ fontSize: 13, color: 'var(--admin-text)' }}>
+                      {entry.setName}
+                      {entry.productNames.length > 0 && (
+                        <span className="font-body" style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginLeft: 6 }}>
+                          {entry.productNames.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-body whitespace-nowrap" style={{ fontSize: 12, color: 'var(--admin-text-2)' }}>
+                      {entry.needed}× pro Set
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </Modal>

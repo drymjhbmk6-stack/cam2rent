@@ -2956,6 +2956,41 @@ Ergänzung zum Punkt oben: die Bestandteile-Box in der Übergabe (`/admin/buchun
   - Klick auf gebuchte Zelle → öffnet `/admin/buchungen/[id]` in neuem Tab
   - **Unzugeordnete Buchungen belegen nur EINE Unit-Zeile (Fix Stand 2026-06-12):** Eine Buchung ohne `unit_id` (kein konkretes Exemplar reserviert) wurde vorher im `getCellInfo`-Fallback auf **alle** Seriennummer-Zeilen gemalt → eine Einzel-Buchung sah aus wie „beide Kameras belegt", obwohl der Kunden-Kalender korrekt „1 von 2 frei" zeigte. Jetzt: neuer `useMemo` `cameraAssignment` in `app/admin/verfuegbarkeit/page.tsx` verteilt unzugeordnete Buchungs-Overlays per **Greedy-Interval-Packing** (gepufferte Spanne via neuem Helper `getBookingSpan`, gleiche Idee wie `findFreeUnit`) auf konkrete freie Unit-Zeilen — jeder Eintrag belegt genau **eine** Zeile. `getCellInfo` liest nur noch `cameraAssignment.byUnit.get(unit.id)`; der All-Zeilen-Fallback greift ausschließlich für echte Überbuchungen (`leftovers`, keine freie Zeile gefunden). Reine Frontend-Anzeige — kein Backend-/DB-Change. Backend (`availability-gantt`-Route) splittet Multi-Kamera-Buchungen weiterhin in einen Overlay-Eintrag pro Kamera; der Kunden-Kalender zählt unverändert.
   - **Gemischte Multi-Kamera-Buchungen aufs richtige Modell (Fix Stand 2026-06-14):** Eine Buchung mit mehreren **verschiedenen** Modellen (z.B. „OSMO Action 5 Pro , DJI Osmo Nano 128 GB") wurde **komplett auf die OSMO-Zeilen** gemalt — die Nano blieb leer. Ursache: ist `bookings.cameras` NULL (Multi-Kamera-Migration `supabase-bookings-cameras.sql` noch nicht durch — siehe „Noch offen"), faellt `resolveBookingCameras` auf den `product_name`-Komma-Split zurueck und gibt **allen** Kameras die EINE Legacy-`product_id` der Buchung. Fix per **Namens-Zuordnung** (kein Migrations-/Backfill-Bedarf): die `availability-gantt`-Route mappt jede Kamera per Modellname (`pidByName`, case-insensitive normalisiert) aufs richtige Produkt, Fallback auf die Resolver-/Buchungs-`product_id`. Gleichmodell-Mehrkamera (2× OSMO) + Einzelbuchungen unveraendert. **Kunden-Live-Kalender** (`/api/availability/[productId]`) hat denselben Fix: neue Query (c) laedt gemischte Legacy-Buchungen per `product_name`-ilike (sonst wird die Nano-Buchung fuer den Nano-Kalender nie geladen → ueberbuchbar), und die Zaehlung nutzt `cameraBelongsToThisProduct` (Name vor `product_id`). **Hinweis:** Packliste/WBW/Schaden lesen Mischmodelle erst nach der Migration korrekt — die beiden Kalender-Fixes sind Laufzeit-Korrekturen nur fuer die Anzeige/Verfuegbarkeit.
+- **Zubehör-Tab: Überbuchung sichtbar + Klick-Detailfenster (Stand 2026-08-24):**
+  Gegenstück zur Set-Deckung (siehe oben) — der Zubehör-Tab hatte zwei Lücken:
+  (a) `getAccCellInfo` setzte bei `free <= 0` pauschal `type='booked'` (blau), eine
+  **echte Überbuchung** (3 belegt bei 2 vorhanden = jemand kann nicht beliefert werden)
+  sah damit exakt aus wie „exakt ausgebucht"; (b) es gab keinen Weg von der Zelle zur
+  Buchung (Hover zeigte nur Namen, ohne Menge/Zeitraum/Link).
+  - **Farben jetzt wie im Sets-Tab:** grün = alle frei · amber `#a16207` = teilweise
+    belegt (unverändert) · **rot `#7f1d1d` = nichts mehr frei** (vorher blau) ·
+    **roter Rahmen `#ef4444` + ⚠ = echte Überbuchung** (`count > total`). **Blau
+    entfällt im Zubehör-Tab damit ganz.** Der Heute-Ring wird mit dem Überbuchungs-Ring
+    kombiniert (beide `boxShadow` komma-getrennt), nicht überschrieben.
+  - `getAccCellInfo` liefert zusätzlich `free` (**bewusst nicht auf 0 geklemmt** — der
+    negative Wert IST die Information) und `overbooked`; `type` wurde von `'booked'` auf
+    **`'soldout'`** umbenannt (die Funktion wird nur vom Zubehör-Tab genutzt; die
+    `'booked'`-Werte in `getCellInfo`/`DayCellType` gehören zum **Kameras**-Tab und
+    sind unberührt). Zähl-/Pufferlogik unverändert (qty-aware, `getSimpleBookingSpan`).
+  - **Hover** bricht nicht mehr bei `count === 0` ab (freie Zellen zeigten vorher nichts):
+    Überbucht / Ausgebucht / „X von Y belegt" / „Alle N frei", plus Pending-Zeile und
+    „Klicken für Details". Sonderfall `total === 0` → „Kein Bestand hinterlegt" (sonst
+    stünde dort das irreführende „Ausgebucht — 0 von 0 frei").
+  - **Klick öffnet ein Detail-Fenster** (`components/admin/ui/Modal.tsx`) mit drei
+    Blöcken: **Bestandsübersicht** (rot bei Überbuchung/ausgebucht, grau bei Bestand 0,
+    sonst grün „X von Y frei" + Kategorie + kompatible Kameras) · **Belegt durch**
+    (jede Buchung mit Kunde als Link auf `/admin/buchungen/[id]`, Menge `N×`,
+    Mietzeitraum, Versand/Abholung, ⏳ bei `awaiting_payment`) · **Teil dieser Sets**
+    (neues `setsByAccessory`-Memo = Umkehrung von `sets[].accessory_items`, Mengen pro
+    `accessory_id` aufsummiert wie in `getSetCellInfo`/`addAcc`).
+  - **Beide Tabs zählen garantiert gleich:** Zubehör-Tab filtert pro Zelle über
+    `acc.bookings`, Sets-Tab liest die vorberechnete `accUsageByDay`-Map — beide über
+    denselben `getSimpleBookingSpan`-Helper und dieselbe `qty ?? 1`-Summe. Ein
+    Überbuchungs-Alarm im Sets-Tab hat also immer sein Gegenstück im Zubehör-Tab
+    (über 8560 Tage/40 Szenarien gegengeprüft). **Bewusst KEIN** Umbau von
+    `getAccCellInfo` auf `accUsageByDay` — zwei parallele Zählwege auf einer Quelle
+    könnten divergieren, und der Tab lief seit jeher mit der Pro-Zelle-Filterung.
+
 - **Zubehör-Tab: EIN gemeinsamer Kalender (Stand 2026-06-14):** Eine einzige durchgehende Tabelle statt Karte+Tabelle pro Zubehör — eine Zeile pro Zubehörteil, gemeinsamer Monats-/KW-/Tages-Header + ein Scrollbalken. Metadaten (Bestand, Kategorie, kompatible Kameras) in der linken Sticky-Spalte. Belegungs-Logik unverändert.
   - Zeigt Belegung als "X/Y" (z.B. "3/10" belegt von gesamt)
   - Grün=alle frei, Gold=teilweise belegt, Blau=ausgebucht
