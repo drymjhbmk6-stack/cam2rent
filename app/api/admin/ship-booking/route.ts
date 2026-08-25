@@ -92,6 +92,18 @@ export async function POST(req: NextRequest) {
       updateError = retry.error;
     }
 
+    // Ist-Zeitpunkt der Abgabe fuer die Ist-Logistik im Kalender. Eigener,
+    // idempotenter Claim: `.is(..., null)` laesst einen bereits vom
+    // Sendcloud-Cron erfassten (genaueren) Carrier-Zeitpunkt unangetastet.
+    // Deckt vor allem Fremdversand ohne Sendcloud ab. Best-effort — fehlt die
+    // Migration, schlaegt es still fehl.
+    await supabase
+      .from('bookings')
+      .update({ actual_dispatch_at: new Date().toISOString(), actual_dispatch_source: 'manual' })
+      .eq('id', bookingId)
+      .is('actual_dispatch_at', null)
+      .then(undefined, () => undefined);
+
     if (updateError) {
       console.error('Supabase update error:', updateError);
       return NextResponse.json(

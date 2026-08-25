@@ -82,6 +82,16 @@ export async function POST(
     );
   }
 
+  // Ist-Zeitpunkt der Abgabe fuer die Ist-Logistik im Kalender. Idempotent
+  // ueber `.is(..., null)`, damit ein bereits vom Sendcloud-Cron erfasster
+  // (genauerer) Carrier-Zeitpunkt nicht ueberschrieben wird. Best-effort.
+  await supabase
+    .from('bookings')
+    .update({ actual_dispatch_at: new Date().toISOString(), actual_dispatch_source: 'manual' })
+    .eq('id', id)
+    .is('actual_dispatch_at', null)
+    .then(undefined, () => undefined);
+
   // Verbrauchsmaterial-Auto-Abzug (fire-and-forget, idempotent pro Buchung).
   deductConsumablesForBooking(supabase, id).catch(() => {});
 

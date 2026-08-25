@@ -51,6 +51,11 @@ interface FulfillmentBooking {
   return_label_url?: string | null;
   /** Override pro Buchung (NULL = aus rental_to + buffer berechnen). */
   return_due_date_override?: string | null;
+  /** Ist-Logistik: tatsaechlicher Paketlauf (Sendcloud bzw. Uebergabe). */
+  actual_dispatch_at?: string | null;
+  actual_delivery_at?: string | null;
+  actual_return_at?: string | null;
+  return_arrived_at?: string | null;
   ship_date_override?: string | null;
 }
 
@@ -613,6 +618,11 @@ function ShipDateCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buff
       <p style={{ fontSize: 11, color: 'var(--admin-text-dim)', marginTop: 2 }}>
         Mietbeginn {fmtDate(booking.rental_from)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
       </p>
+      {booking.actual_dispatch_at && (
+        <p style={{ fontSize: 11, color: '#fbbf24', marginTop: 2, fontWeight: 600 }}>
+          ▼ Tatsächlich raus am {fmtDate(booking.actual_dispatch_at)}
+        </p>
+      )}
       <span
         style={{
           display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 6,
@@ -628,6 +638,7 @@ function ShipDateCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buff
 function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buffer }) {
   const due = returnDueDate(booking.rental_to, booking.delivery_mode, buf, booking.return_due_date_override);
   const dl = daysUntil(due);
+  const arrivedAt = booking.actual_return_at ?? booking.return_arrived_at ?? null;
   let color = '#64748b';
   let label = `Rückgabe in ${dl} Tag${dl !== 1 ? 'en' : ''}`;
   if (dl === 0) { color = '#ef4444'; label = 'Heute zurück'; }
@@ -643,6 +654,19 @@ function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buf
       {booking.tracking_number && (
         <p style={{ fontSize: 11, color: 'var(--admin-accent-hover)', marginTop: 2, fontFamily: 'monospace' }}>
           📦 {booking.tracking_number}
+        </p>
+      )}
+      {/* Ist-Logistik: das Rueckpaket ist schon da, die Pruefung steht aus.
+          Erst die Pruefung gibt die Kamera im Kalender wieder frei — deshalb
+          ist das hier die handlungsleitende Information. */}
+      {arrivedAt && (
+        <p style={{ fontSize: 11, color: '#34d399', marginTop: 2, fontWeight: 600 }}>
+          ⇡ Paket eingetroffen am {fmtDate(arrivedAt)} — Prüfung offen
+        </p>
+      )}
+      {!arrivedAt && dl < 0 && (
+        <p style={{ fontSize: 11, color: '#fb7185', marginTop: 2, fontWeight: 600 }}>
+          ▲! Überfällig seit {Math.abs(dl)} Tag{Math.abs(dl) !== 1 ? 'en' : ''} — nichts eingetroffen
         </p>
       )}
       <span

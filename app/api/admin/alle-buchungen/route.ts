@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase';
+import { isMissingLogisticsColumn } from '@/lib/booking-buffer';
 
 /**
  * GET /api/admin/alle-buchungen
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   // GenericStringError typisiert.
   const sb = supabase as unknown as SupabaseClient;
 
-  const COLS = 'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, shipping_address, tracking_number, tracking_url, label_url, return_label_url, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test, ship_date_override, return_due_date_override';
+  const COLS = 'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, shipping_address, tracking_number, tracking_url, label_url, return_label_url, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test, ship_date_override, return_due_date_override, actual_dispatch_at, actual_delivery_at, actual_return_at, return_arrived_at';
 
   interface BookingRow {
     id: string;
@@ -41,10 +42,21 @@ export async function GET(req: NextRequest) {
     return q;
   };
 
-  // Defensiver Retry-Stack: erst alle Spalten, sonst override-Spalten droppen,
-  // sonst booking_type droppen. Migrationen koennen unabhaengig fehlen.
-  const COLS_NO_OVERRIDE = COLS.replace(', ship_date_override, return_due_date_override', '');
+  // Defensiver Retry-Stack: erst alle Spalten, sonst Ist-Logistik droppen,
+  // sonst override-Spalten droppen, sonst booking_type droppen. Migrationen
+  // koennen unabhaengig voneinander fehlen.
+  const COLS_NO_ACTUALS = COLS.replace(
+    ', actual_dispatch_at, actual_delivery_at, actual_return_at, return_arrived_at',
+    '',
+  );
+  const COLS_NO_OVERRIDE = COLS_NO_ACTUALS.replace(
+    ', ship_date_override, return_due_date_override',
+    '',
+  );
   let res = (await runQuery(`${COLS}, booking_type`)) as unknown as QResult;
+  if (res.error && isMissingLogisticsColumn(res.error.message)) {
+    res = (await runQuery(`${COLS_NO_ACTUALS}, booking_type`)) as unknown as QResult;
+  }
   if (res.error && /ship_date_override|return_due_date_override/i.test(res.error.message || '')) {
     res = (await runQuery(`${COLS_NO_OVERRIDE}, booking_type`)) as unknown as QResult;
   }
