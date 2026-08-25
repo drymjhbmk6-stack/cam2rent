@@ -5,8 +5,17 @@ import {
   computeShipDate,
   computeReturnDueDate,
   toIsoDate,
+  isMissingLogisticsColumn,
   type BufferDays,
 } from '@/lib/booking-buffer';
+import { getBerlinDateKey } from '@/lib/timezone';
+
+/** Timestamp → Kalendertag in Berlin-Zeit (YYYY-MM-DD), null wenn leer/ungueltig. */
+function berlinDayOrNull(value?: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : getBerlinDateKey(d);
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +96,13 @@ export async function GET(req: NextRequest) {
     .gte('rental_to', extFrom)
     .order('rental_from', { ascending: true });
 
-  let { data, error } = await runSelect(`${baseCols}, ship_date_override, return_due_date_override`);
+  const overrideCols = `${baseCols}, ship_date_override, return_due_date_override`;
+  let { data, error } = await runSelect(
+    `${overrideCols}, actual_dispatch_at, actual_return_at, return_arrived_at`,
+  );
+  if (error && isMissingLogisticsColumn(error.message)) {
+    ({ data, error } = await runSelect(overrideCols));
+  }
   if (error && /ship_date_override|return_due_date_override/i.test(error.message || '')) {
     ({ data, error } = await runSelect(baseCols));
   }
@@ -131,6 +146,14 @@ export async function GET(req: NextRequest) {
       return_date: returnDate,
       ship_date_overridden: !!shipOverride,
       return_date_overridden: !!returnOverride,
+      // Ist-Termine rein additiv: `ship_date`/`return_date` bleiben die
+      // SOLL-Termine, an denen der Auftragskalender plant. Die Ist-Werte
+      // erlauben der UI ein "tatsaechlich am …"-Badge, ohne die Planung zu
+      // verschieben (deshalb hier auch keine Ueberfaelligkeits-Ausdehnung).
+      actual_dispatch_date: berlinDayOrNull(row.actual_dispatch_at as string | null | undefined),
+      actual_return_date:
+        berlinDayOrNull(row.actual_return_at as string | null | undefined) ??
+        berlinDayOrNull(row.return_arrived_at as string | null | undefined),
     };
   });
 

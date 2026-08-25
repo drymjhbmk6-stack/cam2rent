@@ -2012,6 +2012,120 @@ Admin muss „Als versendet markieren"/„Zugestellt" nicht mehr von Hand klicke
      ```
      Ohne den Crontab-Eintrag passiert nichts (kein Auto-Statuswechsel).
 
+### Ist-Logistik im Verfügbarkeits-Kalender (Stand 2026-08-25)
+Der Kalender blockte bisher ausschließlich die **geplanten** Puffertage
+(`rental_from − versand_before` … `rental_to + versand_after`, optional per
+`ship_date_override`/`return_due_date_override` korrigiert). Weicht die Realität
+ab — Paket geht früher raus, kommt früher beim Kunden an, Rückpaket trifft früher
+oder später ein — stimmte der Kalender nicht mehr. Jetzt wird der **tatsächliche
+Paketlauf** aus der bestehenden Sendcloud-Verfolgung ausgewertet und der Kalender
+korrigiert sich selbständig.
+
+**⚠️ KERN-INVARIANTE:** Der tatsächliche Verlauf darf die Blockspanne **nur
+AUSDEHNEN, nie verkürzen**. Verkürzt wird ausschließlich dadurch, dass die Buchung
+die reservierenden Status verlässt (= Rückgabe-Prüfung abgeschlossen). Dadurch ist
+Überbuchen strukturell unmöglich — der Block schrumpft nie automatisch.
+
+| Fall | Verhalten |
+|---|---|
+| Abgabe **vor** geplantem Puffer-Start | Block nach vorne erweitert + eigene Farbe (`actual-hin-early`) |
+| Abgabe **nach** geplantem Puffer-Start | Spanne **unverändert**, nur Ist-Tag markiert (`⏱`) |
+| Zustellung **vor** `rental_from` | Tage bis Mietbeginn markiert (`⇣`), bleiben blockiert |
+| Rückpaket eingetroffen, Prüfung offen | markiert (`⇡`), **gibt nichts frei** |
+| Rückgabe überfällig, nichts eingetroffen | Block läuft rollierend bis heute (`actual-rueck-overdue`) |
+
+- **Migration `supabase/supabase-bookings-logistics-actuals.sql`** (idempotent,
+  additiv): `bookings.actual_dispatch_at` (Gerät hat das Lager verlassen — Versand
+  = Carrier-Annahme, Abholung = Übergabeprotokoll; **eine Spalte für beide
+  Lieferarten**), `actual_delivery_at` (Zustellung beim Kunden),
+  `actual_return_at` (Rückpaket eingetroffen), je mit `*_source`-Spalte
+  (`sendcloud_updated` / `sendcloud_announced` / `sendcloud_created` / `detected` /
+  `handover` / `return_check` / `manual` / `legacy_detected`) — die trennt echtes
+  Carrier-Datum von Cron-Erkennungszeit. Plus Teilindex für den Backfill-Claim.
+  **`return_arrived_at` bleibt unverändert** und wird NICHT umgewidmet: es ist der
+  Dedup-Claim der `return_arrived`-Notification (`.is('return_arrived_at', null)`).
+  `actual_return_at` ist die kalenderrelevante Fachzeit; für Altbestand zieht der
+  Cron sie mit Source `legacy_detected` nach. `shipped_at` bleibt ebenfalls
+  unangetastet (bedeutet „Status wurde gesetzt", nicht „Ereigniszeit").
+- **Zentraler Helper `computeEffectiveBookingSpan(booking, buf, opts?)`** in
+  `lib/booking-buffer.ts` — die eine Wahrheitsquelle für Plan + Ist. Liefert
+  `{plannedStart, plannedEnd, start, end, actualDispatchDate, actualDeliveryDate,
+  actualReturnDate, markers[]}`. `opts.today` (Berlin-Referenztag),
+  `opts.applyOverdue` (Default `true`) schaltet die Überfälligkeits-Ausdehnung ab
+  — genutzt von rein planenden Ansichten. Dazu `isoAddDays()` (UTC-verankert,
+  DST-fest), `markerForDay()`, `LOGISTICS_ACTUAL_COLUMNS`,
+  `isMissingLogisticsColumn()`. **Rückwärtskompatibel:** ohne Ist-Felder ist das
+  Ergebnis bitgleich zur bisherigen `computeShipDate`/`computeReturnDueDate`-Rechnung
+  und `markers` bleibt leer — jeder Konsument läuft auch vor der Migration korrekt.
+- **Sendcloud-Zeitstempel** (`lib/sendcloud-tracking.ts`): `SendcloudParcel` und
+  `ParcelStatus` lesen jetzt `date_created`/`date_announced`/`date_updated`
+  (additiv-optional → `/api/admin/sendungen` unberührt). ⚠️ **`parseSendcloudDate()`
+  ist zwingend:** Sendcloud liefert `DD-MM-YYYY HH:mm:ss` **ohne Offset**;
+  `new Date()` ergibt darauf `Invalid Date` oder vertauscht Tag/Monat. Der Parser
+  interpretiert den naiven Wert als Berlin-Zeit (`berlinLocalInputToUTC`), akzeptiert
+  daneben echte ISO-Strings mit Offset und liefert sonst `null` → Fallback auf die
+  Erkennungszeit. Sendcloud hat am Parcel **keine Status-Historie**, nur „zuletzt
+  geändert" — deshalb wird im Moment des Übergangs ausgewertet: Abgabe =
+  `updatedAt` eines noch **nicht** zugestellten Pakets (sonst wäre es die
+  Zustellzeit) → `announcedAt` → `createdAt` → `now`.
+- **Cron `sendcloud-status-sync`** schreibt die Ist-Zeiten in **denselben atomaren
+  Statements** wie die Statuswechsel (CAS-Guards `.eq('status', …)` unverändert,
+  kein zusätzlicher Roundtrip). Dazu **drei idempotente Backfill-Claims**
+  (`.is(<spalte>, null)`) für Bestandsbuchungen und manuell auf `shipped` gesetzte
+  Buchungen, bei denen die Übergänge nicht mehr greifen. Lade-Retry ist dreistufig
+  (`hasActualsCols`/`hasReturnCol`/`hasCarrierCol`) — aus dem SELECT-Flag folgt,
+  welche Spalten die UPDATEs schreiben dürfen (Supabase bricht auch bei UPDATE auf
+  unbekannte Spalten hart ab). Response-`summary` um `dispatch_set`/`delivery_set`/
+  `return_set` + `has_actuals_cols` erweitert.
+  ⚠️ **Verbund-Buchungen laufen über `propagateShipmentStatus`** (hat Lieferart- +
+  Rang-Guard), **NICHT über `propagateShipmentFields`** — letzteres macht ein blindes
+  `update().in('id', siblings)` ohne `IS NULL`-Guard und würde einen eigenen,
+  früheren Ist-Zeitstempel eines Geschwisters überschreiben. `actual_return_at` wird
+  gar nicht propagiert (Retourlabels tragen die `order_number` genau einer Buchung).
+- **Abholung**: `handover/[bookingId]` schreibt `actual_dispatch_at` **im ersten
+  Update** (zusammen mit `handover_data`), also bewusst **vor** dem Status-Flip auf
+  `picked_up` — der steht unter einem Status-Guard und kann fehlschlagen, während die
+  Kamera trotzdem weg ist. `return-booking` setzt `actual_return_at` per idempotentem
+  Claim. **Das verletzt das „kein `picked_up_at`"-Prinzip nicht:**
+  `actual_dispatch_at` ist kein Status-Zeitstempel, sondern der lieferartübergreifende
+  Fakt „Gerät hat das Lager verlassen" — dieselbe Spalte, die die Versand-Seite führt.
+  (Gegen ein Lesen aus `handover_data->>completedAt` spricht, dass das JSONB
+  Signatur-Data-URLs enthält und in heißen Verfügbarkeits-Queries nichts zu suchen hat.)
+- **Manueller Versand**: `ship-booking` + `mark-shipped` setzen `actual_dispatch_at`
+  mit Source `manual` per idempotentem Claim — deckt Fremdversand ohne Sendcloud ab.
+- **Wirksam in**: `/api/availability/[productId]` (Kunden-Kalender),
+  `lib/camera-availability-check.ts` (harte Überbuchungssperre — **muss bitgleich
+  rechnen**, sonst winkt sie einen Tag durch, den der Kalender als belegt zeigt),
+  `/api/admin/availability-gantt` + `/admin/verfuegbarkeit`,
+  `lib/accessory-availability.ts`, `/admin/retouren`, `/api/admin/auftragskalender`
+  (dort **additiv**: `ship_date`/`return_date` bleiben die Soll-Termine, die Ist-Werte
+  kommen als eigene Felder dazu).
+- **Gantt-Darstellung — zwei visuelle Kanäle statt Typ-Explosion:** Neue
+  `DayCellType`-Werte nur für Tage, die es im reinen Plan gar nicht gäbe
+  (`actual-hin-early` `#854d0e`, `actual-rueck-overdue` `#9f1239`). Abweichungen
+  **innerhalb** der Plan-Spanne laufen über `DayCellInfo.marker` als **3px unterer
+  Balken + Symbol** (`MARKER_COLORS`/`MARKER_SYMBOLS`). Bewusst weder `outline`
+  (belegt durch Test-Buchungen) noch `boxShadow: inset` (belegt durch „heute") →
+  alle drei Kanäle bleiben kombinierbar, statt jede Markierung mit
+  `pending`/`reserved` durchkombinieren zu müssen. Die Priorisierung in
+  `matchBookingDay` (Miete → Hin-Puffer → Rück-Puffer) ist unverändert; Buchungen
+  ohne Ist-Daten werden exakt wie vorher gerendert.
+- **Nebenbei mitgefixt:** der DST-Bug in `getBookingSpan`
+  (`/admin/verfuegbarkeit`, `setDate` auf UTC-Mitternacht) sowie dieselbe fehlerhafte
+  lokale `isoAddDays`-Kopie in `lib/camera-availability-check.ts` — beide nutzen jetzt
+  die zentrale, UTC-verankerte Variante. `lib/accessory-availability.ts` hatte eine
+  eigene `BufferDays`-Kopie mit eigenem `admin_settings`-Read und ignorierte die
+  Override-Termine komplett (ein vorgezogener Versandtag blockte die Kamera, aber
+  nicht die Speicherkarte im selben Paket) — beides zentralisiert.
+- **Bewusst NICHT ist-logistik-fähig:** `lib/cart-holds.ts` und
+  `lib/reservation-holds.ts` — Warenkorb-Holds und 48h-Reservierungen sind reine
+  Plan-Objekte ohne Paketlauf.
+- **Tests:** `lib/__tests__/booking-buffer-effective.test.ts` (26 Fälle, u.a. „alle
+  Ist-Felder leer ⇒ identisch zum Alt-Verhalten" und die DST-Kanten 26.10./29.03.),
+  `lib/__tests__/sendcloud-date.test.ts` (6 Fälle für den Datums-Parser).
+- **Kein neuer Cron nötig** — `sendcloud-status-sync` läuft bereits alle 10 Minuten.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Verknüpfte Bestellungen — gemeinsamer Versand/Retoure (Stand 2026-08-14)
 Mehrere Buchungen desselben Kunden, die in EINEM Paket verschickt werden
 (z.B. zwei separate Bestellungen desselben Kunden, vom Admin bewusst
@@ -7540,6 +7654,15 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Ist-Logistik-Migration auszuführen:** `supabase/supabase-bookings-logistics-actuals.sql`
+  (idempotent, additiv: `actual_dispatch_at`/`actual_delivery_at`/`actual_return_at`
+  je mit `*_source` + Teilindex). Ohne sie läuft ALLES defensiv wie bisher weiter —
+  die Lese-Pfade haben dreistufige Select-Retries, die Schreib-Pfade fangen den
+  Spalten-Fehler ab, der Helper fällt auf die reine Puffer-/Override-Rechnung zurück
+  und die Gantt-Markierungen erscheinen einfach nicht. Erst nach der Migration
+  korrigiert sich der Kalender anhand des tatsächlichen Paketlaufs. Kein neuer
+  Crontab-Eintrag nötig (`sendcloud-status-sync` läuft schon alle 10 Min). Details
+  siehe „Ist-Logistik im Verfügbarkeits-Kalender". Empfohlen ASAP ausführen.
 - **Admin-Performance-Indizes — Migration auszuführen:**
   `supabase/supabase-admin-perf-indizes.sql` (idempotent, additiv, 4 Indizes:
   `bookings(is_test, created_at DESC)`, `bookings(is_test, status)`,
