@@ -16,6 +16,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { syncAccessoryQty } from './sync-accessory-qty';
+import { lookupProdukteId } from './legacy-bridge';
 
 const STATUS_INVENTAR_TO_PRODUCT_UNITS: Record<string, 'available' | 'rented' | 'maintenance' | 'retired'> = {
   verfuegbar: 'available',
@@ -167,6 +168,63 @@ export async function mirrorCameraToLegacy(
   });
 
   return newId;
+}
+
+/**
+ * Stellt sicher, dass ALLE individuell getrackten Kamera-Einheiten eines
+ * Produkts einen `product_units`-Spiegel haben.
+ *
+ * Hintergrund: Kalender (`availability-gantt`) und Shop-Bestand
+ * (`getProducts()`) lesen die NEUE Welt (`inventar_units`) und zeigen eine
+ * Kamera auch OHNE Legacy-Zwilling als vorhanden/frei. Der Buchungs-Pfad
+ * (`find-free-unit`, RPC `assign_free_camera_units`) liest dagegen
+ * ausschliesslich `product_units` — `bookings.unit_id` ist FK darauf. Ohne
+ * Spiegel ist eine Kamera also sichtbar und buchbar, bekommt aber nie ein
+ * Exemplar zugewiesen.
+ *
+ * Wird deshalb lazy aufgerufen, wenn der Buchungs-Pfad nichts findet (siehe
+ * `find-free-unit` + `assignCamerasToBooking`). Gleiche Wirkung wie der
+ * manuelle „Mirror-Backfill" auf /admin/inventar, nur auf ein Produkt
+ * begrenzt.
+ *
+ * Idempotent (mirrorCameraToLegacy synchronisiert bestehende Spiegel) und
+ * best-effort: wirft nie, liefert im Fehlerfall 0.
+ *
+ * @param legacyProductId `admin_config.products[].id`
+ * @returns Anzahl der Einheiten mit vorhandenem Spiegel nach dem Lauf
+ */
+export async function ensureCameraMirrorsForProduct(
+  supabase: SupabaseClient,
+  legacyProductId: string,
+): Promise<number> {
+  try {
+    // Read-only: KEIN autoCreate. Gibt es keine Bruecken-Zeile, existiert die
+    // neue Welt fuer dieses Produkt gar nicht → nichts zu spiegeln.
+    const produkteId = await lookupProdukteId(
+      supabase,
+      'admin_config.products',
+      legacyProductId,
+    );
+    if (!produkteId) return 0;
+
+    const { data, error } = await supabase
+      .from('inventar_units')
+      .select('id, produkt_id, typ, tracking_mode, bezeichnung, inventar_code, seriennummer, status, notizen, kaufdatum')
+      .eq('produkt_id', produkteId)
+      .eq('typ', 'kamera')
+      .eq('tracking_mode', 'individual');
+    if (error || !data?.length) return 0;
+
+    let mirrored = 0;
+    for (const unit of data as InventarUnitRow[]) {
+      const legacyId = await mirrorCameraToLegacy(supabase, unit);
+      if (legacyId) mirrored++;
+    }
+    return mirrored;
+  } catch (err) {
+    console.error('[inventar-mirror] ensureCameraMirrorsForProduct fehlgeschlagen:', err);
+    return 0;
+  }
 }
 
 /**

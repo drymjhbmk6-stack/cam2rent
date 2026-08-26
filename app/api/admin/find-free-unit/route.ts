@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { toIsoDate } from '@/lib/booking-buffer';
+import { ensureCameraMirrorsForProduct } from '@/lib/inventar-mirror';
 
 export async function GET(req: NextRequest) {
   const productId = req.nextUrl.searchParams.get('product_id');
@@ -36,15 +37,41 @@ export async function GET(req: NextRequest) {
   const bFrom = toIsoDate(bufferedFrom);
   const bTo = toIsoDate(bufferedTo);
 
-  // Alle Units für das Produkt laden
-  const { data: units } = await supabase
-    .from('product_units')
-    .select('id, serial_number, label, status')
-    .eq('product_id', productId)
-    .in('status', ['available', 'rented']);
+  // Alle Units für das Produkt laden — BEWUSST ohne Status-Filter, damit
+  // „gar keine Einheit angelegt" und „Einheit da, aber ausgemustert/in
+  // Wartung" unterscheidbar bleiben (sonst führen beide zur selben Meldung).
+  const loadUnits = async () => {
+    const { data } = await supabase
+      .from('product_units')
+      .select('id, serial_number, label, status')
+      .eq('product_id', productId);
+    return data ?? [];
+  };
 
-  if (!units?.length) {
+  let allUnits = await loadUnits();
+
+  // Selbstheilung: existiert die Kamera NUR in der neuen Inventar-Welt
+  // (`inventar_units`), fehlt hier der `product_units`-Spiegel — der Kalender
+  // zeigt sie dann frei, das Buchungs-Formular fände sie aber nie. Spiegel
+  // lazy nachziehen (gleiche Wirkung wie der Mirror-Backfill auf
+  // /admin/inventar) und erneut lesen. Muster wie der Lazy-Backfill im
+  // Verfügbarkeits-Gantt (resolveProdukteIdMap mit autoCreate).
+  if (allUnits.length === 0) {
+    const mirrored = await ensureCameraMirrorsForProduct(supabase, productId);
+    if (mirrored > 0) allUnits = await loadUnits();
+  }
+
+  if (allUnits.length === 0) {
     return NextResponse.json({ available: false, unit: null, message: 'Keine Kameras für dieses Produkt angelegt.' });
+  }
+
+  const units = allUnits.filter((u) => u.status === 'available' || u.status === 'rented');
+  if (units.length === 0) {
+    return NextResponse.json({
+      available: false,
+      unit: null,
+      message: `Alle ${allUnits.length} Exemplare dieses Modells sind ausgemustert oder in Wartung.`,
+    });
   }
 
   // Überlappende Buchungen finden. Test-Buchungen blocken die Verfuegbarkeits-

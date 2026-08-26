@@ -132,6 +132,43 @@ lesen sie weiterhin.
   (Button „Mirror-Backfill" auf `/admin/inventar`) — synct die alten Tabellen
   aus der neuen Welt, damit Buchungs-RPCs Daten finden. Das ist der
   **unterstuetzte Reparaturweg**, NICHT der Drop.
+  - **Kamera-Spiegel heilt sich selbst (Stand 2026-08-26):** Eine Kamera, die
+    NUR in `inventar_units` lebt (kein `product_units`-Spiegel), war bisher
+    **sichtbar und buchbar, bekam aber nie ein Exemplar zugewiesen** — der
+    Kalender (`availability-gantt` rendert Inventar-Stuecke auch ohne
+    Legacy-Zwilling) und `getProducts()` lesen die neue Welt, der komplette
+    Buchungs-Pfad (`find-free-unit`, RPC `assign_free_camera_units`) dagegen
+    ausschliesslich `product_units` (`bookings.unit_id` ist FK darauf).
+    Symptome: `/admin/buchungen/neu` blockte hart mit „Keine Kameras für
+    dieses Produkt angelegt.", eine Kundenbuchung lief durch und loeste nur
+    die „Kamera-Zuweisung unvollständig"-Notification aus.
+    Neu `ensureCameraMirrorsForProduct(supabase, legacyProductId)` in
+    `lib/inventar-mirror.ts`: loest die legacy product_id **read-only** (kein
+    `autoCreate`) ueber `lookupProdukteId` auf, laedt die individuell
+    getrackten Kamera-Einheiten und ruft pro Stueck das bereits idempotente
+    `mirrorCameraToLegacy` — also derselbe Effekt wie der „Mirror-Backfill",
+    nur auf ein Produkt begrenzt. Wirft nie (best-effort, 0 im Fehlerfall).
+    Eingehaengt an zwei Stellen, **beide nur auf dem Fehlschlag-Pfad**:
+    (a) `lib/camera-unit-assignment.ts` — nach der `missing`-Auswertung
+    (extrahiert in eine lokale `evaluateMissing()`) werden fehlende Spiegel
+    nachgezogen und die RPC **einmal** wiederholt; gefahrlos, weil die RPC nur
+    Slots mit leerer `unit_id` fuellt und den Advisory-Lock haelt. Das ist der
+    EINE Punkt, durch den alle Schreibpfade laufen (confirm-cart,
+    stripe-webhook ×2, manual-booking, booking_edit) → auch Kundenbuchungen
+    bekommen jetzt ihr Exemplar. (b) `app/api/admin/find-free-unit/route.ts` —
+    lazy Backfill wenn `product_units` leer ist (Muster wie der
+    `resolveProdukteIdMap({autoCreate:true})`-Backfill im Gantt-GET).
+    Mitgefixt: `find-free-unit` laedt jetzt **ohne** Status-Filter und
+    partitioniert in JS, damit „gar keine Einheit angelegt" und „Einheit da,
+    aber ausgemustert/in Wartung" unterscheidbare Meldungen bekommen (vorher
+    fuehrten beide zur selben irrefuehrenden Zeile). Kein Schema-Change, keine
+    Migration, RPC + FK unangetastet.
+    ⚠️ **Bekannt, NICHT gefixt:** die Ueberlappungs-Query in `find-free-unit`
+    prueft nur `bookings.unit_id`, nicht `bookings.cameras[].unit_id` — bei
+    einer Multi-Kamera-Buchung koennen Kamera 2..n also uebersehen werden und
+    die **vorgeschlagene** Seriennummer im Formular falsch sein. Doppelvergabe
+    ist ausgeschlossen, weil die RPC beim tatsaechlichen Zuweisen `cameras[]`
+    korrekt mitprueft.
   - **Bestands-Sync (Stand 2026-05-20):** `mirrorAccessoryToLegacy` (Insert)
     und `deleteMirror` (Delete) rufen jetzt `syncAccessoryQty` nach der
     Mutation — vorher blieb `accessories.available_qty` nach dem Loeschen
