@@ -162,8 +162,8 @@ export async function assignCamerasToBooking(
   if (result.missing.length > 0) {
     let mirroredAny = false;
     for (const m of result.missing) {
-      const n = await ensureCameraMirrorsForProduct(supabase, m.product_id);
-      if (n > 0) mirroredAny = true;
+      const res = await ensureCameraMirrorsForProduct(supabase, m.product_id);
+      if (res.mirrored > 0) mirroredAny = true;
     }
 
     if (mirroredAny) {

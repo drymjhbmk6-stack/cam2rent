@@ -163,6 +163,27 @@ lesen sie weiterhin.
     aber ausgemustert/in Wartung" unterscheidbare Meldungen bekommen (vorher
     fuehrten beide zur selben irrefuehrenden Zeile). Kein Schema-Change, keine
     Migration, RPC + FK unangetastet.
+  - **Fehlermeldung sagt jetzt WELCHES Produkt + WARUM (Stand 2026-08-26):**
+    „Keine Kameras für dieses Produkt angelegt." nannte weder das Modell noch
+    den Grund — drei verschiedene Ursachen sahen identisch aus. Behoben:
+    (a) `app/admin/buchungen/neu/page.tsx` setzt den **Produktnamen** vor die
+    Server-Meldung (`Insta360 Ace Pro 2: Keine Kameras …`); zusätzlich hat das
+    Dropdown jetzt den Platzhalter **„— Kamera wählen —"** und ist **nicht mehr
+    mit `apKeys[0]` vorbelegt** — vorher fügte ein Klick auf „+ Hinzufügen"
+    ungewollt das ERSTE Produkt der Liste hinzu (z.B. ein Modell ohne
+    Seriennummern), was exakt dieselbe Meldung erzeugte. „+ Hinzufügen" ist
+    ohne Auswahl gesperrt. (b) `ensureCameraMirrorsForProduct` liefert statt
+    einer Zahl `EnsureCameraMirrorsResult` (`mirrored`/`inventarFound`/
+    `bridgeOk`); `find-free-unit` unterscheidet damit „N Einheit(en) im
+    Inventar gefunden, aber der Legacy-Eintrag konnte nicht angelegt werden"
+    von „gar nichts vorhanden". (c) **`mirrorCameraToLegacy` nimmt einen
+    optionalen `legacyProductIdHint`** — `ensureCameraMirrorsForProduct`
+    reicht die ihm bekannte Legacy-ID durch, statt sie über
+    `reverseLookupLegacyProductId` **zurück**-aufzulösen. Dieser Rück-Lookup
+    ist ein eigener Fehlerpunkt: fehlt die `migration_audit`-Zeile in dieser
+    Richtung ODER gibt es sie **doppelt**, liefert `.maybeSingle()` still
+    `null` → Spiegel unmöglich → die Selbstheilung lief lautlos ins Leere.
+    Ohne Hint (Mirror-Backfill) unverändertes Verhalten.
     ⚠️ **Bekannt, NICHT gefixt:** die Ueberlappungs-Query in `find-free-unit`
     prueft nur `bookings.unit_id`, nicht `bookings.cameras[].unit_id` — bei
     einer Multi-Kamera-Buchung koennen Kamera 2..n also uebersehen werden und

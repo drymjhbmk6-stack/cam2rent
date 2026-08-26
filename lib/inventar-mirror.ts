@@ -108,13 +108,20 @@ async function findExistingMirror(
 export async function mirrorCameraToLegacy(
   supabase: SupabaseClient,
   unit: InventarUnitRow,
+  legacyProductIdHint?: string,
 ): Promise<string | null> {
   if (unit.typ !== 'kamera') return null;
   if (unit.tracking_mode !== 'individual') return null;
   if (!unit.produkt_id) return null;
 
   const existing = await findExistingMirror(supabase, unit.id, 'product_units');
-  const legacyProductId = await reverseLookupLegacyProductId(supabase, unit.produkt_id, 'admin_config.products');
+  // Kennt der Aufrufer die legacy product_id bereits (z.B.
+  // ensureCameraMirrorsForProduct), wird sie direkt genutzt. Der Rueck-Lookup
+  // ueber migration_audit ist sonst ein zusaetzlicher Fehlerpunkt: fehlt die
+  // Zeile in dieser Richtung ODER gibt es sie doppelt, liefert .maybeSingle()
+  // still null und der Mirror waere unmoeglich.
+  const legacyProductId = legacyProductIdHint
+    ?? await reverseLookupLegacyProductId(supabase, unit.produkt_id, 'admin_config.products');
   if (!legacyProductId) {
     // Ohne legacy product_id koennen wir den FK product_units.product_id nicht
     // bedienen — Mirror nicht moeglich. UI-Workaround: User soll erst die
@@ -188,15 +195,29 @@ export async function mirrorCameraToLegacy(
  * begrenzt.
  *
  * Idempotent (mirrorCameraToLegacy synchronisiert bestehende Spiegel) und
- * best-effort: wirft nie, liefert im Fehlerfall 0.
+ * best-effort: wirft nie.
+ *
+ * Liefert bewusst ein Diagnose-Objekt statt nur einer Zahl — sonst ist am
+ * Aufrufer nicht unterscheidbar, ob es gar keine Inventar-Einheit gibt oder
+ * ob die Spiegel-Erzeugung gescheitert ist (z.B. fehlende Bruecken-Zeile).
+ * Genau diese Unterscheidung braucht die Fehlermeldung im Admin.
  *
  * @param legacyProductId `admin_config.products[].id`
- * @returns Anzahl der Einheiten mit vorhandenem Spiegel nach dem Lauf
  */
+export interface EnsureCameraMirrorsResult {
+  /** Einheiten, die danach einen product_units-Spiegel haben */
+  mirrored: number;
+  /** Individuell getrackte Kamera-Einheiten in der neuen Welt */
+  inventarFound: number;
+  /** Existiert die migration_audit-Bruecke legacy → produkte? */
+  bridgeOk: boolean;
+}
+
 export async function ensureCameraMirrorsForProduct(
   supabase: SupabaseClient,
   legacyProductId: string,
-): Promise<number> {
+): Promise<EnsureCameraMirrorsResult> {
+  const empty: EnsureCameraMirrorsResult = { mirrored: 0, inventarFound: 0, bridgeOk: false };
   try {
     // Read-only: KEIN autoCreate. Gibt es keine Bruecken-Zeile, existiert die
     // neue Welt fuer dieses Produkt gar nicht → nichts zu spiegeln.
@@ -205,7 +226,7 @@ export async function ensureCameraMirrorsForProduct(
       'admin_config.products',
       legacyProductId,
     );
-    if (!produkteId) return 0;
+    if (!produkteId) return empty;
 
     const { data, error } = await supabase
       .from('inventar_units')
@@ -213,17 +234,22 @@ export async function ensureCameraMirrorsForProduct(
       .eq('produkt_id', produkteId)
       .eq('typ', 'kamera')
       .eq('tracking_mode', 'individual');
-    if (error || !data?.length) return 0;
+    if (error) {
+      console.error('[inventar-mirror] inventar_units laden fehlgeschlagen:', error.message);
+      return { ...empty, bridgeOk: true };
+    }
 
+    const units = (data ?? []) as InventarUnitRow[];
     let mirrored = 0;
-    for (const unit of data as InventarUnitRow[]) {
-      const legacyId = await mirrorCameraToLegacy(supabase, unit);
+    for (const unit of units) {
+      // legacyProductId als Hint durchreichen — spart den fragilen Rueck-Lookup.
+      const legacyId = await mirrorCameraToLegacy(supabase, unit, legacyProductId);
       if (legacyId) mirrored++;
     }
-    return mirrored;
+    return { mirrored, inventarFound: units.length, bridgeOk: true };
   } catch (err) {
     console.error('[inventar-mirror] ensureCameraMirrorsForProduct fehlgeschlagen:', err);
-    return 0;
+    return empty;
   }
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { toIsoDate } from '@/lib/booking-buffer';
-import { ensureCameraMirrorsForProduct } from '@/lib/inventar-mirror';
+import { ensureCameraMirrorsForProduct, type EnsureCameraMirrorsResult } from '@/lib/inventar-mirror';
 
 export async function GET(req: NextRequest) {
   const productId = req.nextUrl.searchParams.get('product_id');
@@ -56,13 +56,23 @@ export async function GET(req: NextRequest) {
   // lazy nachziehen (gleiche Wirkung wie der Mirror-Backfill auf
   // /admin/inventar) und erneut lesen. Muster wie der Lazy-Backfill im
   // Verfügbarkeits-Gantt (resolveProdukteIdMap mit autoCreate).
+  let mirrorInfo: EnsureCameraMirrorsResult | null = null;
   if (allUnits.length === 0) {
-    const mirrored = await ensureCameraMirrorsForProduct(supabase, productId);
-    if (mirrored > 0) allUnits = await loadUnits();
+    mirrorInfo = await ensureCameraMirrorsForProduct(supabase, productId);
+    if (mirrorInfo.mirrored > 0) allUnits = await loadUnits();
   }
 
   if (allUnits.length === 0) {
-    return NextResponse.json({ available: false, unit: null, message: 'Keine Kameras für dieses Produkt angelegt.' });
+    // Konkret sagen, WARUM nichts da ist — sonst ist von aussen nicht
+    // unterscheidbar, ob das Modell gar keine Exemplare hat oder ob die
+    // Verknuepfung in die neue Inventar-Welt fehlt/kaputt ist.
+    let message = 'Keine Kameras für dieses Produkt angelegt.';
+    if (mirrorInfo && mirrorInfo.inventarFound > 0) {
+      message = `${mirrorInfo.inventarFound} Einheit(en) im Inventar gefunden, aber der Legacy-Eintrag konnte nicht angelegt werden — bitte Kamera-Stammdaten unter /admin/preise/kameras prüfen.`;
+    } else if (mirrorInfo && !mirrorInfo.bridgeOk) {
+      message = 'Keine Kameras für dieses Produkt angelegt (auch keine Inventar-Verknüpfung vorhanden).';
+    }
+    return NextResponse.json({ available: false, unit: null, message });
   }
 
   const units = allUnits.filter((u) => u.status === 'available' || u.status === 'rented');

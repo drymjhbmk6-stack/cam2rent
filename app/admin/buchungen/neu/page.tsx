@@ -250,10 +250,9 @@ export default function ManualBookingPage() {
         setAccessories(accData.accessories ?? []);
         setSets(setData.sets ?? []);
         if (depositSetting?.value) setDepositMode(depositSetting.value);
-        // Set default for add-dropdown (DB-Produkte bevorzugen)
-        const apKeys = Object.keys(prices?.adminProducts ?? {});
-        if (apKeys.length > 0) setAddProductId(apKeys[0]);
-        else if (prods.length > 0) setAddProductId(prods[0].id);
+        // BEWUSST keine Vorbelegung: sonst fuegt ein Klick auf
+        // „+ Hinzufuegen" ungewollt das erste Produkt der Liste hinzu.
+        // Der Platzhalter „— Kamera waehlen —" erzwingt eine aktive Auswahl.
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -294,7 +293,12 @@ export default function ManualBookingPage() {
       const data = await res.json();
 
       if (!data.available) {
-        setError(data.message || 'Keine Kamera verfügbar für diesen Zeitraum.');
+        // Produktnamen davorsetzen — sonst ist nicht erkennbar, auf WELCHES
+        // Modell sich die Meldung bezieht (haeufigster Fall: es war ein
+        // anderes Modell im Dropdown gewaehlt als gedacht).
+        const picked = productList.find((p) => p.id === addProductId);
+        const msg = data.message || 'Keine Kamera verfügbar für diesen Zeitraum.';
+        setError(picked ? `${picked.name}: ${msg}` : msg);
         return;
       }
 
@@ -896,6 +900,7 @@ export default function ManualBookingPage() {
           <div className="mb-4">
             <div className="flex gap-2">
               <select style={{ ...selectStyle, flex: 1 }} value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
+                <option value="">— Kamera wählen —</option>
                 {productList.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.brand}) {!p.available ? '— nicht verfügbar' : ''}
@@ -905,16 +910,18 @@ export default function ManualBookingPage() {
               <button
                 type="button"
                 onClick={addProduct}
-                disabled={!rentalFrom || !rentalTo || adding}
+                disabled={!rentalFrom || !rentalTo || !addProductId || adding}
                 className="px-4 py-2 rounded-lg text-sm font-semibold flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: (!rentalFrom || !rentalTo) ? 'var(--admin-faint)' : 'var(--admin-accent)', color: 'white' }}
+                style={{ background: (!rentalFrom || !rentalTo || !addProductId) ? 'var(--admin-faint)' : 'var(--admin-accent)', color: 'white' }}
               >
                 {adding ? 'Prüfe...' : '+ Hinzufügen'}
               </button>
             </div>
-            {(!rentalFrom || !rentalTo) && (
+            {(!rentalFrom || !rentalTo) ? (
               <p className="text-xs mt-1.5" style={{ color: '#f59e0b' }}>Bitte zuerst Mietzeitraum wählen</p>
-            )}
+            ) : !addProductId ? (
+              <p className="text-xs mt-1.5" style={{ color: '#f59e0b' }}>Bitte Kamera wählen</p>
+            ) : null}
           </div>
 
           {/* Pro-Produkt Blöcke */}
