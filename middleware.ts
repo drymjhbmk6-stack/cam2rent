@@ -214,6 +214,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/update-booking-status', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/approve-booking', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/return-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/return-open-items', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/return-checklist', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/return-label', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/ship-booking', perm: 'tagesgeschaeft' },

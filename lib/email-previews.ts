@@ -33,6 +33,7 @@ import {
   sendPostponementConfirmation,
   sendReviewRequest,
   sendReturnChecklist,
+  sendReturnFollowUpRequest,
   sendCompletionConfirmation,
   sendAbandonedCartReminder,
   sendVerificationRejected,
@@ -904,6 +905,22 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
         { name: 'Speicherkarte 128 GB', qty: 1 },
         { name: 'Floating Hand Grip', qty: 1 },
       ],
+    }),
+  },
+  {
+    id: 'return_follow_up',
+    name: 'Nachsendung offener Teile',
+    description: 'Beim Abschluss der Rückgabe-Prüfung, wenn der Admin Positionen als „Kommt nach" aufgelöst hat — Liste der fehlenden Teile + Frist. Die normale Abschluss-Bestätigung entfällt dann.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendReturnFollowUpRequest, {
+      bookingId: DUMMY_BOOKING_ID,
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      items: [
+        { label: 'Brusthalterung', qty: 1 },
+        { label: 'Rucksackhalterung', qty: 1 },
+      ],
+      dueDate: '2026-06-05',
     }),
   },
   {

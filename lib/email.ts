@@ -2083,6 +2083,100 @@ export async function sendReturnChecklist(data: ReturnChecklistEmailData) {
   });
 }
 
+// ─── Nachsendung offener Rückgabe-Positionen ────────────────────────────────
+
+export interface ReturnFollowUpEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  /** Nachzusendende Positionen (Anzeigename + Menge). */
+  items: { label: string; qty: number }[];
+  /** Späteste Frist über alle Positionen (YYYY-MM-DD), optional. */
+  dueDate?: string | null;
+}
+
+/**
+ * Bitte an den Kunden, fehlende Teile nachzusenden.
+ *
+ * Wird beim Abschluss der Rückgabe-Prüfung verschickt, wenn der Admin
+ * Positionen als „Kommt nach" aufgelöst hat. Die generische
+ * „alles in Ordnung"-Abschlussmail wird in dem Fall unterdrückt, damit der
+ * Kunde keine zwei widersprüchlichen Mails bekommt.
+ */
+export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
+  const BASE_URL = await getSiteUrl();
+  const url = `${BASE_URL}/konto/buchungen`;
+
+  const subject = stripSubject(
+    data.items.length === 1
+      ? `Bitte noch nachsenden: ${data.items[0].label}`
+      : `Bitte noch nachsenden: ${data.items.length} Teile deiner Buchung`,
+  );
+
+  const rows = data.items.map((it) => `
+            <tr>
+              <td style="padding:8px 0;border-bottom:1px solid #fde68a;font-size:14px;color:#78350f;">
+                ${h(it.label)}
+              </td>
+              <td style="padding:8px 0;border-bottom:1px solid #fde68a;font-size:14px;color:#78350f;text-align:right;white-space:nowrap;">
+                ${it.qty}&times;
+              </td>
+            </tr>`).join('');
+
+  const dueLine = data.dueDate
+    ? `<p style="margin:14px 0 0;font-size:14px;font-weight:700;color:#78350f;">Bitte bis spätestens ${h(fmtDate(data.dueDate))} bei uns.</p>`
+    : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Da fehlt noch etwas 📦</h1>
+          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            deine Rückgabe ist bei uns angekommen — vielen Dank! Diese Teile waren allerdings
+            nicht dabei:
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
+            <tr><td style="padding:18px 22px;">
+              <table width="100%" cellpadding="0" cellspacing="0">${rows}
+              </table>
+              ${dueLine}
+            </td></tr>
+          </table>
+          <p style="margin:20px 0;font-size:14px;color:#6b7280;line-height:1.6;">
+            Bitte sende sie uns nach oder bring sie vorbei. Falls du sie schon unterwegs hast,
+            kannst du diese E-Mail ignorieren. Melde dich einfach bei uns, wenn etwas unklar ist.
+          </p>
+          <a href="${url}" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Meine Buchung ansehen
+          </a>
+          <p style="margin:22px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+            Buchung: ${h(data.bookingId)}
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; Action-Cam Verleih &middot; <a href="${h(BUSINESS.url)}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'return_follow_up',
+  });
+}
+
 // ─── Abschluss-Bestätigung ───────────────────────────────────────────────────
 
 export interface CompletionEmailData {

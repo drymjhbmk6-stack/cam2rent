@@ -652,7 +652,7 @@ interface QueueAction {
    * 'shipped', 'coord-done' = markiert die Abhol-/Rückgabe-Terminabsprache als
    * vereinbart (Aufgabe verschwindet).
    */
-  kind?: 'link' | 'mark-shipped' | 'coord-done';
+  kind?: 'link' | 'mark-shipped' | 'coord-done' | 'open-return-done';
 }
 
 // Beide Versandetiketten fertig? Versandlabel = hinterlegtes Tracking
@@ -715,6 +715,18 @@ interface CoordinationTask {
   due_date: string;
 }
 
+/** Nicht zurueckgegebene Position aus der Rueckgabe-Pruefung. */
+interface OpenReturnTask {
+  id: string;
+  booking_id: string;
+  label: string;
+  qty: number;
+  resolution: 'replace' | 'follow_up';
+  due_date: string | null;
+  customer_name: string;
+  total_value: number | null;
+}
+
 interface QueueRow {
   key: string;
   /** Kundenname (fett auf der Karte). */
@@ -737,6 +749,8 @@ interface QueueRow {
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
   /** Nur Terminabsprache-Zeilen: Buchung + Richtung für den „vereinbart"-Button. */
   coord?: { id: string; type: 'pickup' | 'return' };
+  /** ID der nicht zurueckgegebenen Position (Button „Eingetroffen“). */
+  openReturnId?: string;
 }
 
 // Fälligkeits-Buckets = Kanban-Spalten (links → rechts).
@@ -822,7 +836,12 @@ const AQ_CHIPS_CSS = `
 }`;
 
 export function ActionQueueWidget({ data, loading }: {
-  data: { items: QueueBooking[]; verifications?: VerificationTask[]; coordinations?: CoordinationTask[] } | null;
+  data: {
+    items: QueueBooking[];
+    verifications?: VerificationTask[];
+    coordinations?: CoordinationTask[];
+    open_returns?: OpenReturnTask[];
+  } | null;
   loading: boolean;
 }) {
   const today = berlinTodayStr();
@@ -863,6 +882,30 @@ export function ActionQueueWidget({ data, loading }: {
     bucket: bucketForDays(daysUntilDue(c.due_date, today)),
     bookingId: c.id,
     coord: { id: c.id, type: c.type },
+  }));
+
+  // Nicht zurueckgegebene Positionen aus der Rueckgabe-Pruefung. Bleiben
+  // sichtbar, bis das Stueck eingetroffen ist bzw. der Admin abhakt.
+  // weight 1 → direkt nach den Verifizierungen. Ohne Frist (Ersatz-Faelle)
+  // Bucket "Heute", damit sie nicht hinten verschwinden.
+  const openReturnRows: QueueRow[] = (data?.open_returns ?? []).map((o) => ({
+    key: `openret-${o.id}`,
+    customerName: o.customer_name || 'Kunde',
+    detail: o.resolution === 'replace'
+      ? `💶 Ersatz offen · ${o.qty}× ${o.label}`
+      : `📦 Nachsendung offen · ${o.qty}× ${o.label}`,
+    action: {
+      label: '✓ Eingetroffen',
+      href: `/admin/buchungen/${o.booking_id}`,
+      color: C.green,
+      weight: 1,
+      kind: 'open-return-done',
+    },
+    sortDate: o.due_date ?? '',
+    dueDate: o.due_date ?? '',
+    bucket: o.due_date ? bucketForDays(daysUntilDue(o.due_date, today)) : 0,
+    bookingId: o.booking_id,
+    openReturnId: o.id,
   }));
 
   // Verknüpfte Bestellungen (gemeinsamer Versand/Retoure): pro Buchung die
@@ -1008,11 +1051,31 @@ export function ActionQueueWidget({ data, loading }: {
     }
   }
 
+  /** „Eingetroffen" auf einer offenen Rueckgabe-Position — gibt das Exemplar frei. */
+  async function markOpenReturnDone(rowKey: string, openReturnId: string) {
+    if (busyId) return;
+    setBusyId(rowKey);
+    setErrorId(null);
+    try {
+      const res = await fetch('/api/admin/return-open-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: openReturnId, action: 'received' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setDoneIds((prev) => new Set(prev).add(rowKey));
+    } catch {
+      setErrorId(rowKey);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   // Nach Fälligkeits-Bucket gruppieren (Heute → 3 Tage → 7 Tage → später),
   // innerhalb eines Buckets nach Datum, dann nach Dringlichkeit (weight).
   // Verifizierungen haben leeres sortDate + weight 0 → stehen im Heute-Bucket
   // ganz oben.
-  const rows: QueueRow[] = [...verificationRows, ...coordinationRows, ...bookingRows]
+  const rows: QueueRow[] = [...verificationRows, ...coordinationRows, ...openReturnRows, ...bookingRows]
     .filter((r) => !doneIds.has(r.key))
     .sort((x, y) =>
       x.bucket - y.bucket ||
@@ -1027,11 +1090,15 @@ export function ActionQueueWidget({ data, loading }: {
   function renderCard(row: QueueRow) {
     const col = row.action.color;
     const busy = busyId === row.key;
-    const isHandler = row.action.kind === 'mark-shipped' || row.action.kind === 'coord-done';
+    const isHandler = row.action.kind === 'mark-shipped'
+      || row.action.kind === 'coord-done'
+      || row.action.kind === 'open-return-done';
     const onClick =
       row.action.kind === 'coord-done' && row.coord
         ? () => markCoordinationDone(row.key, row.coord!)
-        : () => markShipped(row.key);
+        : row.action.kind === 'open-return-done' && row.openReturnId
+          ? () => markOpenReturnDone(row.key, row.openReturnId!)
+          : () => markShipped(row.key);
     const actionStyle = {
       display: 'block' as const, width: '100%', textAlign: 'center' as const,
       fontSize: 12, fontWeight: 700 as const, color: col,
@@ -1278,7 +1345,12 @@ export function WidgetRenderer({ widgetId, data, loading }: {
 
   // Aufgaben-Queue (Direktlinks zur nächsten Aktion)
   if (widgetId === 'action_queue') {
-    return <ActionQueueWidget data={widgetData as { items: QueueBooking[]; verifications?: VerificationTask[]; coordinations?: CoordinationTask[] } | null} loading={loading} />;
+    return <ActionQueueWidget data={widgetData as {
+      items: QueueBooking[];
+      verifications?: VerificationTask[];
+      coordinations?: CoordinationTask[];
+      open_returns?: OpenReturnTask[];
+    } | null} loading={loading} />;
   }
 
   // Camera utilization widget

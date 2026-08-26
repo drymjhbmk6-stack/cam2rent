@@ -12,6 +12,7 @@ import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, get
 import { resolveBookingCameras, buildCameraSkeleton, type DesiredCamera } from '@/lib/booking-cameras';
 import { getProducts } from '@/lib/get-products';
 import { parseWeightToGrams, computePackWeightKg } from '@/lib/pack-weight';
+import { loadOpenItems } from '@/lib/return-open-items';
 import { resolveAccessoryItems, applyAccessoryComposition, type ResolvedItem } from '@/lib/booking-accessory-apply';
 import { getPriceForDays } from '@/data/products';
 import { calcShipping } from '@/data/shipping';
@@ -399,6 +400,18 @@ export async function GET(
   // Wiederbeschaffungswert + Haftungsgrenze (intern fuer Admin)
   booking.liability_summary = await computeLiabilitySummary(supabase, booking, resolved);
 
+  // Nicht zurueckgegebene Positionen (Ersatz / Nachsendung). Defensiv —
+  // fehlt die Migration, bleibt die Liste leer und die Buchungsdetail-Seite
+  // rendert die Karte einfach nicht.
+  try {
+    const { rows: openReturnItems } = await loadOpenItems(supabase, {
+      bookingIds: [id], status: 'all',
+    });
+    booking.open_return_items = openReturnItems;
+  } catch {
+    booking.open_return_items = [];
+  }
+
   // Zahlungsstatus — gleiche Logik wie der Bezahlt-Haken im Dashboard:
   //  1. Stripe-Abgleich (echter Zahlungseingang),
   //  2. Buchhaltung (invoices auf bezahlt),
@@ -454,7 +467,11 @@ async function computeLiabilitySummary(
   booking: Record<string, unknown>,
   resolvedItems: Array<{ id: string; name: string; qty: number; isFromSet?: boolean; setName?: string }>,
 ) {
-  type Line = { name: string; qty: number; unit_value: number; total_value: number; source: 'asset' | 'accessory_replacement' | 'product_deposit' | 'unknown' };
+  // `accessory_id`/`product_id` sind rein additiv — die Rueckgabe-Pruefung
+  // (`/admin/retouren/[id]/pruefen`) braucht den Wiederbeschaffungswert je
+  // Position, um den Ersatzbetrag fuer nicht zurueckgegebene Stuecke
+  // vorzubelegen. Bestehende Consumer lesen nur name/qty/*_value.
+  type Line = { name: string; qty: number; unit_value: number; total_value: number; source: 'asset' | 'accessory_replacement' | 'product_deposit' | 'unknown'; accessory_id?: string | null; product_id?: string | null };
 
   // Manuelle Anpassung (intern, NUR fuer diese Box). Aendert nichts an der
   // echten Buchung — bestimmt nur, welche Katalog-Kamera bzw. welches
@@ -552,6 +569,7 @@ async function computeLiabilitySummary(
     cameraLines = [{
       name: String(cameraName), qty: 1,
       unit_value: value, total_value: value, source,
+      product_id: cameraId ?? null,
     }];
   } else {
     const cams = resolveBookingCameras(booking);
@@ -565,6 +583,7 @@ async function computeLiabilitySummary(
         return {
           name: c.product_name, qty: 1,
           unit_value: value, total_value: value, source,
+          product_id: pid,
         } as Line;
       }),
     );
@@ -575,6 +594,7 @@ async function computeLiabilitySummary(
       cameraLines = [{
         name: String(cameraName), qty: 1,
         unit_value: value, total_value: value, source,
+        product_id: cameraId ?? null,
       }];
     }
   }
@@ -714,6 +734,7 @@ async function computeLiabilitySummary(
       unit_value: Math.round(unitValue * 100) / 100,
       total_value: Math.round(totalValue * 100) / 100,
       source,
+      accessory_id: item.id,
     });
   }
 

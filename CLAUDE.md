@@ -1985,6 +1985,102 @@ erzeugten weder ein PDF noch eine E-Mail.
   refund_note` existieren bereits. GoBD: Rechnungsnummern bleiben unangetastet,
   Storno läuft über separate `GS-`-Gutschriftnummer.
 
+### Unvollständige Rückgabe — Ersatz oder Nachsendung (Stand 2026-08-26)
+Kommt bei der Rückgabe etwas **nicht** zurück, war der Abschluss-Button auf
+`/admin/retouren/[id]/pruefen` hart auf `allChecked` gegated — der Admin kam
+gar nicht weiter, und die Kamera blieb im Kalender blockiert, obwohl sie
+physisch wieder da war. Jetzt entscheidet der Admin **pro fehlender Position**:
+- **💶 Kunde ersetzt** → zahlt den Wiederbeschaffungswert (vorbelegt, editierbar)
+- **📦 Kommt nach** → bringt/schickt es nach, mit Frist
+
+Danach ist die Rückgabe normal abschliessbar (Buchung wird `completed`, Kamera
+wird frei) — die offenen Positionen leben in einer eigenen Tabelle.
+
+- **Migration `supabase/supabase-return-open-items.sql`** (idempotent, additiv):
+  Tabelle `booking_return_open_items` (`booking_id` FK CASCADE, `kind`
+  `camera|accessory`, `accessory_id`/`product_id`, `label`-Snapshot, `qty`,
+  `resolution` `replace|follow_up`, `unit_value`/`total_value`-WBW-Snapshot,
+  `due_date`, `status` `open|received|charged|waived`, `accessory_unit_ids`,
+  `sale_booking_id`, `notes`, Zeitstempel). Teilindex `WHERE status='open'` +
+  Index auf `booking_id`, RLS service-role-only. Eigene Tabelle statt JSONB an
+  `bookings`, weil quer über alle Buchungen abgefragt wird (Tab, Dashboard, Push).
+- **Shared-Lib `lib/return-open-items.ts`** — die eine Wahrheitsquelle:
+  `sanitizeOpenItems(raw, caps)` (Mengen gegen den **echten** Buchungsbestand
+  gedeckelt → ein manipulierter Client kann keine Fantasie-Mengen melden; ≤ 50
+  Positionen, Beträge nie negativ, Frist nur echtes `YYYY-MM-DD`),
+  `persistOpenItems`, `loadOpenItems`, `splitAccessoryUnitIds`,
+  `totalReplacementValue`, `isMissingOpenItemsTable` (`42P01` + `PGRST205`).
+  Alle Funktionen defensiv — der Rückgabe-Flow darf daran NIE scheitern.
+- **WBW pro Position:** `computeLiabilitySummary` (`GET /api/admin/booking/[id]`)
+  gibt an jeder Zeile zusätzlich `accessory_id` bzw. `product_id` zurück (rein
+  additiv — `LiabilitySection`/`WbwFinalizePanel` lesen nur `name`/`qty`/`*_value`
+  und bleiben unberührt). Die Prüf-Seite baut daraus `Map<accessory_id →
+  unit_value>` bzw. für Kameras `Map<name.toLowerCase() → unit_value>` (die
+  Gruppenschlüssel aus `groupItems` sind genau `accessoryId` bzw.
+  `camera::<label lowercase>`). Dieselbe Route liefert `booking.open_return_items`.
+- **Prüf-Seite** (`app/admin/retouren/[id]/pruefen/page.tsx`): Unter der
+  Item-Liste erscheint automatisch die Sektion **„Nicht zurückgegeben (N)"**
+  für jede Gruppe mit offenen Slots — Mengen-Stepper, die zwei Auflösungs-
+  Buttons, bei `replace` ein Betragsfeld (vorbelegt mit dem WBW) und bei
+  `follow_up` ein Datumsfeld (Default heute + 14 Tage), plus zwei Checkboxen
+  („Rechnung + Zahlungslink senden" / „Kunde erinnern", ohne Kunden-E-Mail
+  deaktiviert). Das Gate ist von `allChecked` auf **`allSlotsAccountedFor`**
+  umgestellt: pro Gruppe muss `abgehakt + aufgelöst === Slots` gelten.
+  ⚠️ **`components/admin/scan-workflow.tsx` wurde bewusst NICHT angefasst** —
+  `ItemList` ist mit Packen und Übergabe geteilt; die Auflösung läuft in einem
+  eigenen Block, damit dort null Regressionsrisiko entsteht.
+- **Haftungsschutz = nur Hinweis, kein Cap:** Unter den Beträgen steht die
+  Haftungsoption des Kunden + sein Höchstbetrag der Ersatzpflicht. Der Betrag
+  bleibt der volle WBW und ist frei änderbar — Nicht-Rückgabe ist rechtlich
+  **kein Schadensfall** (der Kunde behält den Artikel und bezahlt ihn).
+- **`POST /api/admin/return-booking`** (erweitert, Reihenfolge im Handler):
+  1. `sanitizeOpenItems` mit Caps aus `resolveAccessoryItems` (set-expandiert)
+     + `resolveBookingCameras`; `persistOpenItems`. Fehlende Migration →
+     `warnings: ['migration_pending']`, Rest läuft normal weiter.
+  2. **Bestand wird nicht aufgebläht:** Kamera- und Zubehör-Increment
+     überspringen die als offen gemeldeten Mengen.
+  3. **Exemplare korrekt halten:** `releaseAccessoryUnitsFromBooking(bookingId,
+     releasableIds)` bekommt jetzt nur noch den **Rest** (vorher wurde es ohne
+     IDs gerufen und gab damit ALLES frei). `replace` → Units auf `'lost'` +
+     `syncAccessoryQty`; `follow_up` → Units bleiben `'rented'` (nicht neu
+     vermietbar); `replace`-Kamera → `product_units.status='retired'`.
+  4. **Ersatzforderung:** `createSale()` (`lib/verkauf.ts`) erzeugt eine
+     Verkaufs-Buchung mit Rechnungs-PDF + Stripe-Zahlungslink per E-Mail →
+     Buchhaltung/EÜR/DATEV stimmen automatisch. `sale_booking_id` wird an den
+     Positionen vermerkt. Fehlschlag/fehlende E-Mail → `payment_failed`-
+     Notification, die Positionen bleiben stehen.
+  5. **Nachsende-Mail** `sendReturnFollowUpRequest` (emailType
+     `return_follow_up`, in `/admin/emails` + `EMAIL_TEMPLATE_CATALOG`
+     registriert).
+  6. EINE gebündelte Notification `return_open_items` (Permission
+     `tagesgeschaeft`), Deep-Link `/admin/retouren?tab=offen`.
+  7. **Abschluss-Mail unterdrückt**, solange offene Positionen existieren —
+     sonst bekäme der Kunde „alles in Ordnung" und „bitte nachsenden"
+     gleichzeitig.
+  **Buchungsstatus bleibt unverändert** (`completed`/`damaged`) — nur so wird
+  die Kamera frei. Die offenen Positionen leben in der Tabelle, nicht im Status.
+- **`GET/POST /api/admin/return-open-items`** (Permission `tagesgeschaeft` über
+  den Prefix in `middleware.ts`): GET listet (mit Buchungs-/Kundendaten,
+  Bulk-Lookup statt N+1), POST `{id, action: 'received'|'charged'|'waived'}`
+  schliesst **atomar** ab (`.eq('status','open')` → bei Doppelklick 409);
+  `received` gibt die zurückgehaltenen Exemplare wieder frei. Audit
+  `return_open_item.resolve`.
+- **Sichtbar an vier Stellen:** neuer Tab **„Offene Rückgaben"** auf
+  `/admin/retouren` (Stat-Karte, Frist rot bei überfällig, Buttons
+  „✓ Eingetroffen" / „Erledigt", Link auf die Ersatz-Rechnung; Deep-Link
+  `?tab=offen` überschreibt den gemerkten Tab) · **Dashboard-Aufgaben-Widget**
+  (`action_queue.open_returns`, Karte mit „✓ Eingetroffen"-Button und
+  optimistischem Ausblenden) · **Push/Glocke** · **Buchungsdetail** (amber
+  Karte im Reiter „Übersicht").
+- **Tests:** `lib/__tests__/return-open-items.test.ts` (21 Tests — Mengen-Cap
+  gegen den Buchungsbestand, ≤ 50 Positionen, negative/ungültige Beträge,
+  Datumsformat, Feld-Trennung replace/follow_up, Exemplar-Verteilung ohne
+  Doppelvergabe, Missing-Table-Erkennung).
+- ⚠️ **Bekannte, akzeptierte Grenze:** `deductConsumablesForBooking(…, 'return')`
+  rechnet weiter mit den **gebuchten** (nicht den tatsächlich zurückgekommenen)
+  Mengen — bei fehlenden Halterungen kann ein Klebepad zu viel abgezogen werden.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
 Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
 „Als zugestellt markieren" auf `shipped` direkt auf `completed` — falsch, denn
@@ -7737,6 +7833,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Unvollständige Rückgabe — Migration auszuführen:**
+  `supabase/supabase-return-open-items.sql` (idempotent, additiv: Tabelle
+  `booking_return_open_items`). Ohne sie läuft der Rückgabe-Flow **exakt wie
+  bisher** — alle Schreib-/Lesepfade fangen die fehlende Tabelle ab
+  (`migration_pending`), der Abschluss-Button bleibt auf „alles abhaken"
+  gegated, der Tab „Offene Rückgaben" bleibt leer und der Verwaltungs-Endpoint
+  liefert 503. Kein Cron, kein Bucket, keine Env-Variable nötig. Empfohlen ASAP
+  ausführen. Details siehe „Unvollständige Rückgabe — Ersatz oder Nachsendung".
 - **Ist-Logistik-Migration auszuführen:** `supabase/supabase-bookings-logistics-actuals.sql`
   (idempotent, additiv: `actual_dispatch_at`/`actual_delivery_at`/`actual_return_at`
   je mit `*_source` + Teilindex). Ohne sie läuft ALLES defensiv wie bisher weiter —

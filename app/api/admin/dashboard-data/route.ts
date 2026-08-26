@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { loadOpenItems } from '@/lib/return-open-items';
 import { computeCameraUtilization } from '@/lib/camera-utilization';
 import { isTestMode } from '@/lib/env-mode';
 import {
@@ -460,6 +461,41 @@ export async function GET() {
       }
     }
 
+    // ── Nicht zurueckgegebene Positionen ────────────────────────────────────
+    // Eigener defensiver Block: schlaegt er fehl (oder fehlt die Migration),
+    // bleibt das Kern-Dashboard unberuehrt.
+    const openReturns: Array<{
+      id: string; booking_id: string; label: string; qty: number;
+      resolution: 'replace' | 'follow_up'; due_date: string | null;
+      customer_name: string; total_value: number | null;
+    }> = [];
+    try {
+      const { rows: openRows } = await loadOpenItems(supabase, { status: 'open', limit: 100 });
+      if (openRows.length > 0) {
+        const ids = [...new Set(openRows.map((r) => r.booking_id))];
+        const { data: obRows } = await supabase
+          .from('bookings')
+          .select('id, customer_name')
+          .in('id', ids);
+        const nameById = new Map<string, string>();
+        for (const b of obRows ?? []) nameById.set(b.id as string, (b.customer_name as string) ?? '');
+        for (const r of openRows) {
+          openReturns.push({
+            id: r.id,
+            booking_id: r.booking_id,
+            label: r.label,
+            qty: r.qty,
+            resolution: r.resolution,
+            due_date: r.due_date,
+            customer_name: nameById.get(r.booking_id) ?? '',
+            total_value: r.total_value,
+          });
+        }
+      }
+    } catch {
+      // Dashboard laeuft ohne die offenen Positionen weiter.
+    }
+
     // ── Trend-Deltas + 14-Tage-Sparkline (Dashboard 2.0) ─────────────────────
     // Vorperioden-Vergleich + tägliche Umsatz-/Buchungs-Serie. Eigener
     // allSettled-Block: schlägt hier etwas fehl, bleiben die Kernwerte oben
@@ -539,7 +575,7 @@ export async function GET() {
 
       camera_utilization: { products: utilizationProducts },
 
-      action_queue: { items: actionQueueItems, verifications: pendingVerifications, coordinations },
+      action_queue: { items: actionQueueItems, verifications: pendingVerifications, coordinations, open_returns: openReturns },
     };
 
     return NextResponse.json(data);

@@ -78,6 +78,17 @@ interface BookingDetail {
   stripe_payment_link_id: string | null;
   is_test: boolean | null;
   liability_summary?: LiabilitySummary | null;
+  /** Nicht zurückgegebene Positionen aus der Rückgabe-Prüfung. */
+  open_return_items?: {
+    id: string;
+    label: string;
+    qty: number;
+    resolution: 'replace' | 'follow_up';
+    total_value: number | null;
+    due_date: string | null;
+    status: 'open' | 'received' | 'charged' | 'waived';
+    sale_booking_id: string | null;
+  }[] | null;
   wbw_finalized?: boolean | null;
   wbw_finalized_at?: string | null;
   wbw_email_sent_at?: string | null;
@@ -1346,6 +1357,60 @@ export default function BuchungDetailPage() {
 
             {/* ── Reiter: Übersicht ── */}
             {activeTab === 'uebersicht' && (<>
+
+            {/* Nicht zurückgegebene Positionen (aus der Rückgabe-Prüfung) */}
+            {(booking.open_return_items?.length ?? 0) > 0 && (
+              <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-5">
+                <h3 className="text-base font-bold text-amber-300 mb-1">
+                  Nicht zurückgegeben
+                </h3>
+                <p className="text-xs text-amber-200/70 mb-3">
+                  Bei der Rückgabe-Prüfung fehlten diese Positionen.
+                </p>
+                <div className="space-y-2">
+                  {booking.open_return_items!.map((it) => {
+                    const done = it.status !== 'open';
+                    return (
+                      <div
+                        key={it.id}
+                        className="flex items-start justify-between gap-3 text-sm bg-slate-900/40 rounded-lg px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className={done ? 'text-slate-400 line-through' : 'text-slate-100 font-medium'}>
+                            {it.qty}× {it.label}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {it.resolution === 'replace'
+                              ? `💶 Kunde ersetzt${it.total_value ? ` · ${fmtEuro(it.total_value)}` : ''}`
+                              : `📦 Kommt nach${it.due_date ? ` · bis ${isoToDE(it.due_date)}` : ''}`}
+                            {it.sale_booking_id && (
+                              <>
+                                {' · '}
+                                <Link href={`/admin/buchungen/${it.sale_booking_id}`} className="text-cyan-400 hover:underline">
+                                  Rechnung
+                                </Link>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`text-xs font-semibold flex-shrink-0 ${done ? 'text-emerald-400' : 'text-amber-300'}`}>
+                          {it.status === 'open' ? 'offen'
+                            : it.status === 'received' ? '✓ eingetroffen'
+                            : it.status === 'charged' ? '✓ berechnet'
+                            : '✓ erledigt'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Link
+                  href="/admin/retouren?tab=offen"
+                  className="inline-block mt-3 text-xs font-semibold text-amber-300 hover:underline"
+                >
+                  Alle offenen Rückgaben ansehen →
+                </Link>
+              </div>
+            )}
 
             {/* Buchungsdaten */}
             <Section title="Buchungsdaten">

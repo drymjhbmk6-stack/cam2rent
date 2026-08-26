@@ -36,6 +36,7 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
   { type: 'pickup_coordination', label: 'Abholtermin vereinbaren', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'return_coordination', label: 'Rückgabetermin vereinbaren', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'return_arrived', label: 'Retoure eingetroffen', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
+  { type: 'return_open_items', label: 'Nicht zurückgegeben (Ersatz/Nachsendung)', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
 
   // ── Kunden & Kommunikation ────────────────────────────────
   { type: 'verification_pending', label: 'Ausweis-Verifizierung offen', permission: 'kunden', group: 'Kunden & Kommunikation' },

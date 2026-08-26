@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDate } from '@/lib/format-utils';
+import { fmtDate, fmtEuro, isoToDE } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { useToast } from '@/components/admin/ui/FeedbackProvider';
@@ -150,7 +150,23 @@ function daysUntil(due: Date): number {
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'abgeschlossen';
+type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'offen' | 'abgeschlossen';
+
+/** Nicht zurückgegebene Position (aus `GET /api/admin/return-open-items`). */
+interface OpenReturnItem {
+  id: string;
+  booking_id: string;
+  kind: 'camera' | 'accessory';
+  label: string;
+  qty: number;
+  resolution: 'replace' | 'follow_up';
+  unit_value: number | null;
+  total_value: number | null;
+  due_date: string | null;
+  sale_booking_id: string | null;
+  created_at: string;
+  booking: { customer_name: string | null; product_name: string | null } | null;
+}
 
 export default function AdminVersandRueckgabePage() {
   const toast = useToast();
@@ -158,6 +174,11 @@ export default function AdminVersandRueckgabePage() {
   const [loading, setLoading] = useState(() => getCached<FulfillmentBooking[]>(RETOUREN_BOOKINGS_KEY) === undefined);
   const [tab, setTab] = usePersistentState<Tab>('admin:retouren:tab', 'versenden');
   const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
+
+  // Nicht zurückgegebene Positionen (eigener Tab). Werden unabhängig von den
+  // Buchungen geladen — sie überleben den Abschluss der Buchung.
+  const [openItems, setOpenItems] = useState<OpenReturnItem[]>([]);
+  const [openItemsBusy, setOpenItemsBusy] = useState<string | null>(null);
 
   // Sendcloud-Etikett-Modal nur fuer das HIN-Etikett. Das Retour-Etikett
   // wird via separates Upload-Modal manuell hochgeladen (JPG/PNG/PDF) —
@@ -186,7 +207,16 @@ export default function AdminVersandRueckgabePage() {
 
   useEffect(() => {
     fetchBookings();
+    fetchOpenItems();
     loadBuffer();
+    // Deep-Link `?tab=offen` (aus Push-Notification / Buchungsdetail) den
+    // gemerkten Tab überschreiben lassen. Bewusst über window.location statt
+    // useSearchParams — spart die Suspense-Boundary.
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    if (wanted && ['versenden', 'unterwegs', 'rueckgabe', 'offen', 'abgeschlossen'].includes(wanted)) {
+      setTab(wanted as Tab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function openReturnUploadModal(b: FulfillmentBooking) {
@@ -326,6 +356,37 @@ export default function AdminVersandRueckgabePage() {
     }
   }
 
+  async function fetchOpenItems() {
+    try {
+      const res = await fetch('/api/admin/return-open-items?status=open');
+      if (!res.ok) return;
+      const data = await res.json();
+      setOpenItems(Array.isArray(data.items) ? data.items : []);
+    } catch {
+      // Endpoint/Migration nicht verfügbar → Tab bleibt leer.
+    }
+  }
+
+  /** Position abschliessen ('received' gibt das Exemplar wieder frei). */
+  async function resolveOpenItem(id: string, action: 'received' | 'waived') {
+    setOpenItemsBusy(id);
+    try {
+      const res = await fetch('/api/admin/return-open-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Fehler beim Speichern.');
+      setOpenItems((prev) => prev.filter((it) => it.id !== id));
+      toast.success(action === 'received' ? 'Als eingetroffen markiert.' : 'Position abgehakt.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fehler beim Speichern.');
+    } finally {
+      setOpenItemsBusy(null);
+    }
+  }
+
   async function loadBuffer() {
     try {
       const res = await fetch('/api/admin/settings?key=booking_buffer_days');
@@ -377,6 +438,7 @@ export default function AdminVersandRueckgabePage() {
     tab === 'versenden' ? versenden
     : tab === 'unterwegs' ? unterwegs
     : tab === 'rueckgabe' ? rueckgabe
+    : tab === 'offen' ? []
     : abgeschlossen;
 
   // ── Spalten-Konfig je Tab ──────────────────────────────────────────────────
@@ -405,6 +467,7 @@ export default function AdminVersandRueckgabePage() {
           { label: 'Zu versenden', value: versenden.length, color: versendenUeberfaellig.length > 0 ? '#f59e0b' : '#06b6d4' },
           { label: 'Unterwegs', value: unterwegs.length, color: '#10b981' },
           { label: 'Rückgabe prüfen', value: rueckgabe.length, color: rueckgabe.length > 0 ? '#ef4444' : '#64748b' },
+          { label: 'Offene Rückgaben', value: openItems.length, color: openItems.length > 0 ? '#f59e0b' : '#64748b' },
           { label: 'Abgeschlossen', value: abgeschlossen.length, color: '#64748b' },
         ].map((stat) => (
           <div key={stat.label} style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '16px 20px' }}>
@@ -420,6 +483,7 @@ export default function AdminVersandRueckgabePage() {
           { value: 'versenden' as const, label: `Zu versenden (${versenden.length})` },
           { value: 'unterwegs' as const, label: `Unterwegs (${unterwegs.length})` },
           { value: 'rueckgabe' as const, label: `Rückgabe prüfen (${rueckgabe.length})` },
+          { value: 'offen' as const, label: `Offene Rückgaben (${openItems.length})` },
           { value: 'abgeschlossen' as const, label: `Abgeschlossen (${abgeschlossen.length})` },
         ]).map((t) => (
           <button
@@ -439,7 +503,13 @@ export default function AdminVersandRueckgabePage() {
       </div>
 
       {/* Tabelle */}
-      {loading ? (
+      {tab === 'offen' ? (
+        <OpenItemsTable
+          items={openItems}
+          busyId={openItemsBusy}
+          onResolve={resolveOpenItem}
+        />
+      ) : loading ? (
         <div className="text-center py-16" style={{ color: 'var(--admin-text-dim)' }}>Lädt…</div>
       ) : displayed.length === 0 ? (
         <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
@@ -521,8 +591,119 @@ function emptyText(tab: Tab): string {
     case 'versenden': return 'Keine Aufträge zum Versenden oder Übergeben.';
     case 'unterwegs': return 'Aktuell keine Pakete unterwegs.';
     case 'rueckgabe': return 'Keine Rückgaben ausstehend.';
+    case 'offen': return 'Keine offenen Rückgabe-Positionen.';
     case 'abgeschlossen': return 'Keine abgeschlossenen Buchungen.';
   }
+}
+
+// ─── Offene Rückgabe-Positionen ──────────────────────────────────────────────
+
+/**
+ * Positionen, die bei der Rückgabe-Prüfung gefehlt haben.
+ *   'replace'   — Kunde ersetzt (Rechnung läuft über die Verkaufs-Buchung)
+ *   'follow_up' — Kunde sendet nach (Frist, wird rot wenn überfällig)
+ */
+function OpenItemsTable({
+  items, busyId, onResolve,
+}: {
+  items: OpenReturnItem[];
+  busyId: string | null;
+  onResolve: (id: string, action: 'received' | 'waived') => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
+        <p style={{ color: 'var(--admin-text-dim)', fontSize: 14 }}>Keine offenen Rückgabe-Positionen.</p>
+      </div>
+    );
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
+              {['Artikel', 'Kunde', 'Buchung', 'Frist', 'Entscheidung', ''].map((h) => (
+                <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: 'var(--admin-text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, idx) => {
+              const overdue = !!it.due_date && it.due_date < todayIso;
+              const isReplace = it.resolution === 'replace';
+              const busy = busyId === it.id;
+              return (
+                <tr key={it.id} style={{ borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--admin-border)' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: 'var(--admin-text)' }}>
+                    <strong>{it.qty}×</strong> {it.label}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--admin-text-2)' }}>
+                    {it.booking?.customer_name || '—'}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13 }}>
+                    <Link href={`/admin/buchungen/${it.booking_id}`} style={{ color: 'var(--admin-accent-hover)', fontFamily: 'monospace' }}>
+                      {it.booking_id}
+                    </Link>
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, color: overdue ? '#ef4444' : 'var(--admin-text-dim)', fontWeight: overdue ? 600 : 400 }}>
+                    {it.due_date ? `${isoToDE(it.due_date)}${overdue ? ' · überfällig' : ''}` : '—'}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13 }}>
+                    <span style={{
+                      display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                      background: isReplace ? '#f9731622' : '#06b6d422',
+                      color: isReplace ? '#fb923c' : '#22d3ee',
+                    }}>
+                      {isReplace ? `💶 Ersatz ${fmtEuro(it.total_value ?? 0)}` : '📦 Kommt nach'}
+                    </span>
+                    {isReplace && it.sale_booking_id && (
+                      <Link
+                        href={`/admin/buchungen/${it.sale_booking_id}`}
+                        style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--admin-accent-hover)' }}
+                      >
+                        Rechnung ansehen →
+                      </Link>
+                    )}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button
+                      onClick={() => onResolve(it.id, 'received')}
+                      disabled={busy}
+                      style={{
+                        padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        background: '#10b981', color: '#0a0a0a', border: 'none',
+                        cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1, marginRight: 6,
+                      }}
+                    >
+                      ✓ Eingetroffen
+                    </button>
+                    <button
+                      onClick={() => onResolve(it.id, 'waived')}
+                      disabled={busy}
+                      style={{
+                        padding: '7px 12px', borderRadius: 8, fontSize: 12,
+                        background: 'transparent', color: 'var(--admin-text-dim)',
+                        border: '1px solid var(--admin-border)',
+                        cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+                      }}
+                    >
+                      Erledigt
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // ─── Eine Tabellen-Zeile ─────────────────────────────────────────────────────

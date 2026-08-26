@@ -17,7 +17,7 @@ const ALLOWED_TYPES = new Set([
   'new_booking', 'booking_cancelled', 'new_damage', 'new_message', 'new_customer',
   'overdue_return', 'new_review', 'payment_failed', 'new_waitlist', 'blog_ready',
   'social_ready', 'reel_ready', 'new_ugc', 'coupon_race', 'firmware_update_available',
-  'pickup_coordination', 'return_coordination', 'return_arrived', 'verification_pending',
+  'pickup_coordination', 'return_coordination', 'return_arrived', 'return_open_items', 'verification_pending',
   'beleg_ready', 'beleg_failed', 'beleg_duplicate', 'availability_alert',
   'auto_cancelled', 'adjustment_paid', 'dunning_due', 'new_feedback',
 ]);

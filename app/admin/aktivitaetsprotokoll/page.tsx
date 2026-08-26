@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.link_shipment': 'Mit Bestellung für gemeinsamen Versand verknüpft',
   'booking.unlink_shipment': 'Versand-Verknüpfung gelöst',
   'booking.coordination_done': 'Abhol-/Rückgabetermin vereinbart',
+  'return_open_item.resolve': 'Offene Rückgabe-Position erledigt',
   'booking.reset_contract': 'Mietvertrag zurückgesetzt (Neu-Unterschrift)',
   'booking.lock_contract': 'Mietvertrag freigegeben („Alles okay", endgültig)',
   'booking.verification_gate': 'Verifizierungs-Gate',
