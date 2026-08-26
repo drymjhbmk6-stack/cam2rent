@@ -3299,6 +3299,10 @@ function LinkedBookingsSection({ booking, onLinked }: { booking: BookingDetail; 
   );
 }
 
+// Obergrenze fuer die Kamera-Zeilen im Bearbeiten-Formular. Reiner Vertipper-
+// Schutz — der Server prueft die Verfuegbarkeit ohnehin pro Modell.
+const MAX_CAM_ROWS = 10;
+
 function BookingEditSection({
   booking, productList, options, onSaved,
 }: {
@@ -3550,28 +3554,55 @@ function BookingEditSection({
           </label>
           <div className="space-y-2">
             {camRows.map((pid, i) => (
-              <select
-                key={i}
-                value={pid}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setCamRows((rs) => rs.map((p, j) => (j === i ? v : p)));
-                  setPreview(null);
-                }}
-                className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
-              >
-                {!productList.some((p) => p.id === pid) && (
-                  <option value={pid}>{booking.product_name}</option>
+              <div key={i} className="flex gap-2">
+                <select
+                  value={pid}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCamRows((rs) => rs.map((p, j) => (j === i ? v : p)));
+                    setPreview(null);
+                  }}
+                  className="flex-1 min-w-0 text-base border border-brand-border rounded-lg px-2 py-2"
+                >
+                  {!productList.some((p) => p.id === pid) && (
+                    <option value={pid}>{booking.product_name}</option>
+                  )}
+                  {productList.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                {camRows.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => { setCamRows((rs) => rs.filter((_, j) => j !== i)); setPreview(null); }}
+                    className="text-red-500 text-sm px-2 py-2 hover:bg-red-50 rounded-lg"
+                    aria-label="Kamera entfernen"
+                  >
+                    ✕
+                  </button>
                 )}
-                {productList.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              </div>
             ))}
           </div>
+          {camRows.length < MAX_CAM_ROWS && (
+            <button
+              type="button"
+              onClick={() => { setCamRows((rs) => [...rs, rs[rs.length - 1] || booking.product_id]); setPreview(null); }}
+              className="text-sm text-accent-blue font-heading font-semibold mt-2"
+            >
+              + Kamera hinzufügen
+            </button>
+          )}
           {camRows.length > 1 && (
             <p className="text-xs text-brand-muted mt-1">
               Jede Kamera einzeln wählbar — verschiedene Modelle möglich.
+            </p>
+          )}
+          {camRows.length !== camCount && (
+            <p className="text-xs text-amber-700 mt-1">
+              Kamera-Anzahl geändert ({camCount} → {camRows.length}). Zubehör der entfallenen
+              Kamera unten anpassen. Beim Aufteilen einer bereits bezahlten Buchung unten
+              „Nur ändern, keine Zahlung“ wählen.
             </p>
           )}
         </div>

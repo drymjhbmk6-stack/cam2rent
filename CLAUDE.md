@@ -4934,6 +4934,31 @@ Neue Section „Bestellung bearbeiten" auf `/admin/buchungen/[id]` (über der
 schlankeren „Zubehör der Buchung bearbeiten"-Section, die für reine
 Zubehör-Quick-Edits bleibt). Ändert **Mietzeitraum, Kamera, Set/Zubehör und
 Haftungsschutz** in einem Vorgang; Preisdifferenz wird abgewickelt.
+- **Kameras entfernen + hinzufügen (Stand 2026-08-26):** Die Kamera-Liste in der
+  Edit-Maske konnte Modelle bisher nur **tauschen** — eine Zwei-Kamera-Buchung ließ
+  sich über das UI nicht verkleinern (relevant beim **Aufteilen** einer Buchung, deren
+  Kameras eigentlich zwei Mietzeiträume hatten; siehe „Mehrere Mietzeiträume"). Der
+  Server konnte es die ganze Zeit: `booking_edit` nimmt ein `cameras[]` **beliebiger
+  Länge** (`app/api/admin/booking/[id]/route.ts`), gruppiert es nach Modell, prüft die
+  Verfügbarkeit **pro Modell** (409 bei Engpass, **ohne** zu speichern), rechnet die
+  Miete als Summe der Katalogpreise je Kamera neu (`getPriceForDays`) und baut das
+  Kamera-Skelett samt Einheiten-Zuweisung neu auf. Jetzt hat die Maske dafür auch
+  Knöpfe: **✕ pro Zeile** (nur ab 2 Kameras — mindestens eine muss bleiben; bei leerem
+  Array fällt der Server ohnehin auf die bestehende Liste zurück) und **„+ Kamera
+  hinzufügen"** (vorbelegt mit dem Modell der letzten Zeile, Cap `MAX_CAM_ROWS = 10`
+  als Vertipper-Schutz). Beide setzen die Vorschau zurück (`setPreview(null)`), damit
+  kein veralteter `dry_run`-Stand stehen bleibt. Bei geänderter Anzahl erscheint ein
+  amber Hinweis („Zubehör der entfallenen Kamera unten anpassen; bei bereits bezahlter
+  Buchung ‚Nur ändern, keine Zahlung' wählen") — das Zubehör der entfernten Kamera
+  bleibt sonst an der Buchung hängen, und `settle:'auto'` würde die Preisdifferenz als
+  Erstattung abwickeln, was beim Aufteilen falsch ist (der Kunde hat den Gesamtbetrag
+  bereits gezahlt). **Eine entfernte Kamera wird automatisch wieder frei** — die
+  Belegung hängt an `bookings.cameras[].unit_id`, es gibt (anders als bei Zubehör)
+  keinen separaten Freigabe-Schritt. **Reine UI-Änderung** in
+  `app/admin/buchungen/[id]/page.tsx`: kein API-/Schema-Change, keine Migration.
+  Damit ist „Buchung aufteilen" ein normaler Admin-Vorgang: Kamera rausnehmen (die
+  Vorschau liefert den neuen Betrag nach Katalogpreis, Restbetrag = alt − neu), dann
+  die zweite Buchung über `/admin/buchungen/neu` mit Zahlstatus „Bezahlt" anlegen.
 - **Manueller Rabatt (Stand 2026-06-24):** Die Edit-Maske hat jetzt — wie das
   Manuelle-Buchung-Formular (`/admin/buchungen/neu`) — einen **Rabatt-Block**
   (Modus `Kein Rabatt / Prozent (%) / Festbetrag (€)` + Wert + optionaler
