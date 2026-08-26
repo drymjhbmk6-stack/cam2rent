@@ -7,6 +7,7 @@ import { fmtDate, fmtEuro, isoToDE } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { useToast } from '@/components/admin/ui/FeedbackProvider';
+import { useIsNarrow } from '@/components/admin/ui/DataTable';
 
 const RETOUREN_BOOKINGS_KEY = 'admin:retouren-bookings';
 
@@ -610,6 +611,9 @@ function OpenItemsTable({
   busyId: string | null;
   onResolve: (id: string, action: 'received' | 'waived') => void;
 }) {
+  // Vor dem fruehen Return aufrufen — Rules of Hooks.
+  const isNarrow = useIsNarrow();
+
   if (items.length === 0) {
     return (
       <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
@@ -619,6 +623,93 @@ function OpenItemsTable({
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Unter 640px als Karten statt Tabelle: die Aktions-Spalte sitzt sonst ganz
+  // rechts in einem horizontal scrollbaren Container und ist auf dem Handy
+  // unsichtbar — man muss seitwaerts wischen, ohne dass es einen Hinweis gibt.
+  // Gleiches Muster + gleicher Umschaltpunkt wie die geteilte DataTable.
+  if (isNarrow) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((it) => {
+          const overdue = !!it.due_date && it.due_date < todayIso;
+          const isReplace = it.resolution === 'replace';
+          const busy = busyId === it.id;
+          return (
+            <div
+              key={it.id}
+              style={{
+                background: 'var(--admin-surface)', border: '1px solid var(--admin-border)',
+                borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+            >
+              <div style={{ fontSize: 15, color: 'var(--admin-text)' }}>
+                <strong>{it.qty}×</strong> {it.label}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <span style={{
+                  display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                  background: isReplace ? '#f9731622' : '#06b6d422',
+                  color: isReplace ? '#fb923c' : '#22d3ee',
+                }}>
+                  {isReplace ? `💶 Ersatz ${fmtEuro(it.total_value ?? 0)}` : '📦 Kommt nach'}
+                </span>
+                {it.due_date && (
+                  <span style={{ fontSize: 12, color: overdue ? '#ef4444' : 'var(--admin-text-dim)', fontWeight: overdue ? 600 : 400 }}>
+                    {isoToDE(it.due_date)}{overdue ? ' · überfällig' : ''}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ fontSize: 13, color: 'var(--admin-text-2)' }}>
+                {it.booking?.customer_name || '—'}
+                {' · '}
+                <Link href={`/admin/buchungen/${it.booking_id}`} style={{ color: 'var(--admin-accent-hover)', fontFamily: 'monospace' }}>
+                  {it.booking_id}
+                </Link>
+              </div>
+
+              {isReplace && it.sale_booking_id && (
+                <Link
+                  href={`/admin/buchungen/${it.sale_booking_id}`}
+                  style={{ fontSize: 12, color: 'var(--admin-accent-hover)' }}
+                >
+                  Rechnung ansehen →
+                </Link>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                <button
+                  onClick={() => onResolve(it.id, 'received')}
+                  disabled={busy}
+                  style={{
+                    flex: 1, padding: '11px 12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+                    background: '#10b981', color: '#0a0a0a', border: 'none',
+                    cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  ✓ Eingetroffen
+                </button>
+                <button
+                  onClick={() => onResolve(it.id, 'waived')}
+                  disabled={busy}
+                  style={{
+                    padding: '11px 14px', borderRadius: 10, fontSize: 14,
+                    background: 'transparent', color: 'var(--admin-text-dim)',
+                    border: '1px solid var(--admin-border)',
+                    cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  Erledigt
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12, overflow: 'hidden' }}>

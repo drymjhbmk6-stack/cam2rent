@@ -5,8 +5,12 @@ import { TableSkeleton } from './Skeleton';
 import { EmptyState } from './EmptyState';
 
 /** Hydration-sicher: erster Render (Server + Client-Hydration) = false, danach
- *  matchMedia. Schaltet die Tabelle unter `maxWidth` auf Karten-Layout um. */
-function useIsNarrow(maxWidth = 640): boolean {
+ *  matchMedia. Schaltet die Tabelle unter `maxWidth` auf Karten-Layout um.
+ *
+ *  Exportiert, damit hand-gebaute Tabellen (die noch nicht auf `DataTable`
+ *  migriert sind) denselben Umschaltpunkt nutzen koennen, statt die Logik zu
+ *  duplizieren. */
+export function useIsNarrow(maxWidth = 640): boolean {
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;

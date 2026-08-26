@@ -2882,6 +2882,17 @@ NICHT entfernen). **Status: alle Seiten migriert (fertig 2026-08-07).**
   (`useIsNarrow`: erster Render false, dann `matchMedia`), `disableCards` als
   Escape-Hatch. Additiv — bestehende Consumer (z. B. `warteliste`) bekommen die
   Karten automatisch, Desktop unverändert. tsc 0/lint 0.
+- **Karten-Fallback fuer hand-gebaute Tabellen (Stand 2026-08-26):** `useIsNarrow`
+  ist aus `components/admin/ui/DataTable.tsx` **exportiert** (rein additiv), damit
+  Tabellen, die noch nicht auf die geteilte `DataTable` migriert sind, denselben
+  640px-Umschaltpunkt nutzen koennen statt die matchMedia-Logik zu duplizieren.
+  Erster Nutzer: `OpenItemsTable` auf `/admin/retouren` (Reiter „Offene
+  Rueckgaben") — die Aktions-Spalte („✓ Eingetroffen" / „Erledigt") sass als
+  6. Spalte ganz rechts in einem `overflow-x:auto`-Container und war auf dem
+  Handy **unsichtbar**, ohne jeden Hinweis, dass man seitwaerts wischen muss.
+  Unter 640px rendert die Komponente jetzt Karten mit den beiden Buttons voll
+  breit darunter; Desktop-Tabelle unveraendert. Muster fuer weitere
+  Aktions-Spalten-Tabellen.
 - **Kontrast-Audit beider Themes (fertig 2026-08-07):** statischer WCAG-Check
   aller Text-auf-Fläche-Token-Paare (Skript rechnet die Kontrastverhältnisse aus
   den Hex-Werten). **Keine harten Fehlschläge** — alles ≥ 3.0 (AA für große/UI-
