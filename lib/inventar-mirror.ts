@@ -94,25 +94,63 @@ async function findExistingMirror(
 }
 
 /**
+ * Label-Kandidaten fuer den product_units-Spiegel, in Reihenfolge.
+ *
+ * `product_units.label` ist **global** UNIQUE (nicht pro Produkt, siehe
+ * `erledigte supabase/supabase-product-units-label-unique.sql`) — das Label
+ * traegt die Scan-URL cam2rent.de/admin/scan/<label>. Der erste Kandidat
+ * bleibt bewusst `bezeichnung` (unveraendertes Verhalten fuer alle heute
+ * funktionierenden Spiegel); kollidiert der, wird auf garantiert eindeutige
+ * Werte ausgewichen, statt den Spiegel scheitern zu lassen.
+ */
+function mirrorLabelCandidates(unit: InventarUnitRow): string[] {
+  const raw = [
+    unit.bezeichnung,
+    unit.inventar_code,          // in inventar_units global UNIQUE
+    unit.seriennummer,
+    `${unit.bezeichnung} (${unit.id.slice(0, 8)})`,
+  ];
+  const out: string[] = [];
+  for (const c of raw) {
+    const v = (c ?? '').trim();
+    if (!v) continue;
+    if (out.includes(v)) continue;
+    out.push(v);
+  }
+  return out.length > 0 ? out : [unit.id];
+}
+
+/** Postgres-Code fuer unique_violation. */
+function isUniqueViolation(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return err.code === '23505' || /duplicate key value/i.test(err.message ?? '');
+}
+
+/**
  * Spiegelt eine Inventar-Einheit (typ='kamera', tracking_mode='individual')
  * in die alte product_units-Tabelle. Wenn bereits gespiegelt, werden nur
- * Status + Label synchronisiert. Liefert die product_units.id oder null.
+ * Status + Label synchronisiert.
+ *
+ * Liefert zusaetzlich den DB-Fehlertext, damit der Aufrufer ihn anzeigen kann
+ * — sonst landet ein fehlgeschlagener Spiegel nur im Server-Log und der Admin
+ * sieht bloss „konnte nicht angelegt werden" ohne Grund.
  *
  * Voraussetzungen:
  *  - typ === 'kamera'
  *  - tracking_mode === 'individual'
  *  - produkt_id gesetzt
  *  - migration_audit-Eintrag (admin_config.products → produkte) existiert,
- *    sodass wir die alte product_id rekonstruieren koennen.
+ *    sodass wir die alte product_id rekonstruieren koennen — oder der
+ *    Aufrufer reicht sie als `legacyProductIdHint` durch.
  */
-export async function mirrorCameraToLegacy(
+async function mirrorCameraToLegacyDetailed(
   supabase: SupabaseClient,
   unit: InventarUnitRow,
   legacyProductIdHint?: string,
-): Promise<string | null> {
-  if (unit.typ !== 'kamera') return null;
-  if (unit.tracking_mode !== 'individual') return null;
-  if (!unit.produkt_id) return null;
+): Promise<{ id: string | null; error?: string }> {
+  if (unit.typ !== 'kamera') return { id: null, error: 'Einheit ist keine Kamera.' };
+  if (unit.tracking_mode !== 'individual') return { id: null, error: 'Einheit ist Sammelbestand (bulk), kein Einzelstueck.' };
+  if (!unit.produkt_id) return { id: null, error: 'Inventar-Einheit hat kein Produkt zugeordnet.' };
 
   const existing = await findExistingMirror(supabase, unit.id, 'product_units');
   // Kennt der Aufrufer die legacy product_id bereits (z.B.
@@ -126,43 +164,64 @@ export async function mirrorCameraToLegacy(
     // Ohne legacy product_id koennen wir den FK product_units.product_id nicht
     // bedienen — Mirror nicht moeglich. UI-Workaround: User soll erst die
     // Kamera-Stammdaten via /admin/preise/kameras/neu anlegen.
-    return null;
+    return { id: null, error: 'Keine Verknuepfung zwischen Inventar und Kamera-Stammdaten (migration_audit).' };
   }
 
   const newStatus = STATUS_INVENTAR_TO_PRODUCT_UNITS[unit.status] ?? 'available';
   const serial = unit.seriennummer ?? unit.inventar_code ?? unit.bezeichnung;
-  const label = unit.bezeichnung;
+  const candidates = mirrorLabelCandidates(unit);
 
   if (existing) {
     // Synchronisieren — Status, label, notes, purchased_at koennen sich
     // geaendert haben. serial_number ist immutable im Original-Schema.
-    await supabase.from('product_units').update({
-      label,
-      status: newStatus,
-      notes: unit.notizen,
-      purchased_at: unit.kaufdatum,
-    }).eq('id', existing);
-    return existing;
+    // Kollidiert das Label global mit einer anderen Zeile, bleibt das alte
+    // Label stehen (Status/Notizen werden trotzdem gezogen) — ein bereits
+    // gedrucktes Etikett soll dadurch nicht ungueltig werden.
+    const base = { status: newStatus, notes: unit.notizen, purchased_at: unit.kaufdatum };
+    const { error: updErr } = await supabase.from('product_units')
+      .update({ ...base, label: candidates[0] }).eq('id', existing);
+    if (updErr) {
+      if (isUniqueViolation(updErr)) {
+        const { error: retryErr } = await supabase.from('product_units')
+          .update(base).eq('id', existing);
+        if (retryErr) {
+          console.error('[inventar-mirror] product_units update fehlgeschlagen:', retryErr.message);
+          return { id: null, error: retryErr.message };
+        }
+      } else {
+        console.error('[inventar-mirror] product_units update fehlgeschlagen:', updErr.message);
+        return { id: null, error: updErr.message };
+      }
+    }
+    return { id: existing };
   }
 
-  // Neu anlegen
-  const { data: inserted, error } = await supabase
-    .from('product_units')
-    .insert({
-      product_id: legacyProductId,
-      serial_number: serial,
-      label,
-      status: newStatus,
-      notes: unit.notizen,
-      purchased_at: unit.kaufdatum,
-    })
-    .select('id')
-    .single();
-  if (error || !inserted) {
-    console.error('[inventar-mirror] product_units insert fehlgeschlagen:', error?.message);
-    return null;
+  // Neu anlegen. Bei Unique-Verletzung auf `label` (global UNIQUE) den
+  // naechsten Kandidaten probieren — jeder ANDERE Fehler bricht sofort ab.
+  let newId: string | null = null;
+  let lastError = 'Unbekannter Fehler beim Anlegen des Legacy-Eintrags.';
+  for (const label of candidates) {
+    const { data: inserted, error } = await supabase
+      .from('product_units')
+      .insert({
+        product_id: legacyProductId,
+        serial_number: serial,
+        label,
+        status: newStatus,
+        notes: unit.notizen,
+        purchased_at: unit.kaufdatum,
+      })
+      .select('id')
+      .single();
+    if (!error && inserted) {
+      newId = (inserted as { id: string }).id;
+      break;
+    }
+    lastError = error?.message ?? lastError;
+    console.error('[inventar-mirror] product_units insert fehlgeschlagen:', lastError);
+    if (!isUniqueViolation(error)) break;
   }
-  const newId = (inserted as { id: string }).id;
+  if (!newId) return { id: null, error: lastError };
 
   await supabase.from('migration_audit').insert({
     alte_tabelle: 'product_units',
@@ -174,7 +233,20 @@ export async function mirrorCameraToLegacy(
     if (auditErr) console.error('[inventar-mirror] audit insert fehlgeschlagen:', auditErr.message);
   });
 
-  return newId;
+  return { id: newId };
+}
+
+/**
+ * Duenner Wrapper mit unveraenderter Signatur — alle bestehenden Aufrufer
+ * (Mirror-Backfill, Inventar-CRUD, mirrorInventarToLegacy) bleiben unberuehrt.
+ */
+export async function mirrorCameraToLegacy(
+  supabase: SupabaseClient,
+  unit: InventarUnitRow,
+  legacyProductIdHint?: string,
+): Promise<string | null> {
+  const res = await mirrorCameraToLegacyDetailed(supabase, unit, legacyProductIdHint);
+  return res.id;
 }
 
 /**
@@ -211,6 +283,8 @@ export interface EnsureCameraMirrorsResult {
   inventarFound: number;
   /** Existiert die migration_audit-Bruecke legacy → produkte? */
   bridgeOk: boolean;
+  /** DB-Fehlertext des letzten fehlgeschlagenen Spiegel-Versuchs. */
+  lastError?: string;
 }
 
 export async function ensureCameraMirrorsForProduct(
@@ -241,12 +315,14 @@ export async function ensureCameraMirrorsForProduct(
 
     const units = (data ?? []) as InventarUnitRow[];
     let mirrored = 0;
+    let lastError: string | undefined;
     for (const unit of units) {
       // legacyProductId als Hint durchreichen — spart den fragilen Rueck-Lookup.
-      const legacyId = await mirrorCameraToLegacy(supabase, unit, legacyProductId);
-      if (legacyId) mirrored++;
+      const res = await mirrorCameraToLegacyDetailed(supabase, unit, legacyProductId);
+      if (res.id) mirrored++;
+      else if (res.error) lastError = res.error;
     }
-    return { mirrored, inventarFound: units.length, bridgeOk: true };
+    return { mirrored, inventarFound: units.length, bridgeOk: true, lastError };
   } catch (err) {
     console.error('[inventar-mirror] ensureCameraMirrorsForProduct fehlgeschlagen:', err);
     return empty;

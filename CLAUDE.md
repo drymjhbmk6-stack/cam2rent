@@ -184,6 +184,37 @@ lesen sie weiterhin.
     Richtung ODER gibt es sie **doppelt**, liefert `.maybeSingle()` still
     `null` → Spiegel unmöglich → die Selbstheilung lief lautlos ins Leere.
     Ohne Hint (Mirror-Backfill) unverändertes Verhalten.
+  - **Spiegel-Insert scheiterte am globalen Label-Unique (Stand 2026-08-27):**
+    Nach der Diagnose-Meldung oben blieb ein Fall übrig — der Insert in
+    `product_units` schlug fehl, sichtbar nur als „…konnte nicht angelegt
+    werden". Ursache: **`product_units.label` ist GLOBAL UNIQUE** (nicht pro
+    Produkt — `erledigte supabase/supabase-product-units-label-unique.sql`,
+    das Label trägt die Scan-URL `/admin/scan/<label>`), der Mirror setzte
+    aber `label = inventar_units.bezeichnung`, also einen **Modellnamen**.
+    Eine gleichnamige Zeile unter **anderer** `product_id` kollidiert damit —
+    und wird von `find-free-unit` (filtert nach `product_id`) nie gesehen, der
+    Fall war also von außen unsichtbar. Fix in `lib/inventar-mirror.ts`:
+    (a) neuer Helper `mirrorLabelCandidates(unit)` → `bezeichnung` (**erster
+    Versuch, damit sich für bestehende Spiegel nichts ändert**) →
+    `inventar_code` (in `inventar_units` global UNIQUE ⇒ kollisionsfrei) →
+    `seriennummer` → `bezeichnung (<id-prefix>)`; leere/doppelte Kandidaten
+    werden übersprungen. (b) Der Insert läuft über die Kandidaten, aber
+    **nur bei `23505`** wird weiterprobiert — jeder andere Fehler bricht
+    sofort ab (kein blindes Durchprobieren). `serial_number` bleibt
+    unangetastet. (c) Der `if (existing)`-Zweig **prüft jetzt den
+    Update-Fehler**; vorher gab er `existing` zurück, egal ob das Update
+    durchlief — ein fehlgeschlagenes Update zählte als „gespiegelt".
+    Kollidiert dort das Label, wird nur Status/Notizen gezogen und das alte
+    Label behalten (gedrucktes Etikett bleibt gültig). (d) Neue interne
+    `mirrorCameraToLegacyDetailed()` liefert `{id, error}`;
+    `mirrorCameraToLegacy` ist ein dünner Wrapper mit **unveränderter
+    Signatur** (alle bestehenden Aufrufer unberührt),
+    `EnsureCameraMirrorsResult` bekommt `lastError`, und `find-free-unit`
+    hängt den echten Postgres-Fehler an die Meldung — nichts wird mehr still
+    geschluckt. **Kein Constraint-Drop, keine Migration:** die Scan-URL bleibt
+    eindeutig, ein abweichendes Label bekommt nur ein **neu** angelegter
+    Spiegel (für den es noch kein Etikett gibt), und `scan-lookup` matcht
+    ohnehin `serial_number` **oder** `label`.
     ⚠️ **Bekannt, NICHT gefixt:** die Ueberlappungs-Query in `find-free-unit`
     prueft nur `bookings.unit_id`, nicht `bookings.cameras[].unit_id` — bei
     einer Multi-Kamera-Buchung koennen Kamera 2..n also uebersehen werden und

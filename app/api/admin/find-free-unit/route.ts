@@ -68,7 +68,10 @@ export async function GET(req: NextRequest) {
     // Verknuepfung in die neue Inventar-Welt fehlt/kaputt ist.
     let message = 'Keine Kameras für dieses Produkt angelegt.';
     if (mirrorInfo && mirrorInfo.inventarFound > 0) {
-      message = `${mirrorInfo.inventarFound} Einheit(en) im Inventar gefunden, aber der Legacy-Eintrag konnte nicht angelegt werden — bitte Kamera-Stammdaten unter /admin/preise/kameras prüfen.`;
+      // Grund mitschicken — sonst steht die echte DB-Meldung nur im
+      // Server-Log und der Admin raet, woran es liegt.
+      const reason = mirrorInfo.lastError ? ` Grund: ${mirrorInfo.lastError}` : '';
+      message = `${mirrorInfo.inventarFound} Einheit(en) im Inventar gefunden, aber der Legacy-Eintrag konnte nicht angelegt werden.${reason}`;
     } else if (mirrorInfo && !mirrorInfo.bridgeOk) {
       message = 'Keine Kameras für dieses Produkt angelegt (auch keine Inventar-Verknüpfung vorhanden).';
     }
