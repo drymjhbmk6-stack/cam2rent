@@ -260,6 +260,8 @@ export default function BuchungDetailPage() {
   const confirm = useConfirm();
 
   const [booking, setBooking] = useState<BookingDetail | null>(null);
+  /** Läuft gerade ein Abschluss auf einer offenen Rückgabe-Position? */
+  const [openItemBusy, setOpenItemBusy] = useState<string | null>(null);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [agreement, setAgreement] = useState<RentalAgreement | null>(null);
   const [emails, setEmails] = useState<EmailLogEntry[]>([]);
@@ -341,6 +343,38 @@ export default function BuchungDetailPage() {
     setActiveTab(id);
     if (typeof window !== 'undefined') {
       try { window.history.replaceState(null, '', `#${id}`); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Offene Rückgabe-Position direkt hier abschliessen — gleiche Semantik wie
+   * der Tab „Offene Rückgaben": 'received' gibt das zurückgehaltene Exemplar
+   * wieder frei, 'waived' hakt nur ab.
+   */
+  async function resolveOpenReturnItem(id: string, action: 'received' | 'waived') {
+    if (openItemBusy) return;
+    setOpenItemBusy(id);
+    try {
+      const res = await fetch('/api/admin/return-open-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Fehler beim Speichern.');
+      // Optimistisch: nur den Status der einen Position umschreiben, damit die
+      // Liste (inkl. bereits erledigter Positionen) sichtbar bleibt.
+      setBooking((prev) => prev ? {
+        ...prev,
+        open_return_items: (prev.open_return_items ?? []).map((it) =>
+          it.id === id ? { ...it, status: action } : it,
+        ),
+      } : prev);
+      success(action === 'received' ? 'Als eingetroffen markiert.' : 'Position abgehakt.');
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : 'Fehler beim Speichern.');
+    } finally {
+      setOpenItemBusy(null);
     }
   }
 
@@ -1373,7 +1407,7 @@ export default function BuchungDetailPage() {
                     return (
                       <div
                         key={it.id}
-                        className="flex items-start justify-between gap-3 text-sm bg-slate-900/40 rounded-lg px-3 py-2"
+                        className="flex flex-wrap items-start justify-between gap-2 text-sm bg-slate-900/40 rounded-lg px-3 py-2"
                       >
                         <div className="min-w-0">
                           <div className={done ? 'text-slate-400 line-through' : 'text-slate-100 font-medium'}>
@@ -1393,12 +1427,32 @@ export default function BuchungDetailPage() {
                             )}
                           </div>
                         </div>
-                        <span className={`text-xs font-semibold flex-shrink-0 ${done ? 'text-emerald-400' : 'text-amber-300'}`}>
-                          {it.status === 'open' ? 'offen'
-                            : it.status === 'received' ? '✓ eingetroffen'
-                            : it.status === 'charged' ? '✓ berechnet'
-                            : '✓ erledigt'}
-                        </span>
+                        {done ? (
+                          <span className="text-xs font-semibold flex-shrink-0 text-emerald-400">
+                            {it.status === 'received' ? '✓ eingetroffen'
+                              : it.status === 'charged' ? '✓ berechnet'
+                              : '✓ erledigt'}
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => resolveOpenReturnItem(it.id, 'received')}
+                              disabled={openItemBusy === it.id}
+                              className="px-2.5 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-bold whitespace-nowrap"
+                            >
+                              ✓ Eingetroffen
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => resolveOpenReturnItem(it.id, 'waived')}
+                              disabled={openItemBusy === it.id}
+                              className="px-2.5 py-1.5 rounded-md border border-slate-600 text-slate-300 hover:text-slate-100 hover:border-slate-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold whitespace-nowrap"
+                            >
+                              Erledigt
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

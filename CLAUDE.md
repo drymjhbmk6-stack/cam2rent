@@ -2092,7 +2092,9 @@ wird frei) — die offenen Positionen leben in einer eigenen Tabelle.
   `?tab=offen` überschreibt den gemerkten Tab) · **Dashboard-Aufgaben-Widget**
   (`action_queue.open_returns`, Karte mit „✓ Eingetroffen"-Button und
   optimistischem Ausblenden) · **Push/Glocke** · **Buchungsdetail** (amber
-  Karte im Reiter „Übersicht").
+  Karte im Reiter „Übersicht" — pro offener Position ebenfalls mit den
+  Buttons „✓ Eingetroffen" / „Erledigt", damit der Admin direkt dort
+  handeln kann und nicht erst in den Tab wechseln muss).
 - **Tests:** `lib/__tests__/return-open-items.test.ts` (21 Tests — Mengen-Cap
   gegen den Buchungsbestand, ≤ 50 Positionen, negative/ungültige Beträge,
   Datumsformat, Feld-Trennung replace/follow_up, Exemplar-Verteilung ohne
