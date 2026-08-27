@@ -227,6 +227,16 @@ export default function KundenDetailPage() {
   const [convActionLoading, setConvActionLoading] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
+  // ─── Kundenkonto löschen (DSGVO Art. 17) ───
+  const [isOwner, setIsOwner] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
+  const [delReason, setDelReason] = useState('');
+  const [delConfirm, setDelConfirm] = useState('');
+  const [delNotify, setDelNotify] = useState(true);
+  const [delLoading, setDelLoading] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+  const [delBlocked, setDelBlocked] = useState<{ id: string; status: string }[]>([]);
+
   function showToast(kind: 'success' | 'error', text: string) {
     setToast({ kind, text });
     window.setTimeout(() => setToast(null), 4500);
@@ -408,6 +418,63 @@ export default function KundenDetailPage() {
   }
 
   const [testerLoading, setTesterLoading] = useState(false);
+  // Nur Owner dürfen löschen — der Server erzwingt das ohnehin (403),
+  // hier wird der Button nur gar nicht erst angeboten.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setIsOwner(d?.user?.role === 'owner');
+      })
+      .catch(() => { /* im Zweifel kein Button */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  function openDeleteModal() {
+    setDelReason('');
+    setDelConfirm('');
+    setDelNotify(true);
+    setDelError(null);
+    setDelBlocked([]);
+    setDelOpen(true);
+  }
+
+  async function handleDeleteCustomer() {
+    setDelLoading(true);
+    setDelError(null);
+    setDelBlocked([]);
+    try {
+      const res = await fetch('/api/admin/kunden/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId,
+          reason: delReason,
+          confirm: delConfirm,
+          notifyCustomer: delNotify,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDelError(data.error ?? 'Löschung fehlgeschlagen.');
+        if (Array.isArray(data.openBookings)) setDelBlocked(data.openBookings);
+        return;
+      }
+      const kept =
+        data.bookingsRetained > 0
+          ? ` ${data.bookingsRetained} Buchung(en) bleiben aus steuerlichen Gründen gespeichert.`
+          : '';
+      const mail = data.emailSent ? ' Bestätigung an den Kunden verschickt.' : '';
+      sessionStorage.setItem('cam2rent_customer_deleted', `Kundenkonto gelöscht.${kept}${mail}`);
+      router.push('/admin/kunden');
+    } catch {
+      setDelError('Netzwerkfehler. Bitte erneut versuchen.');
+    } finally {
+      setDelLoading(false);
+    }
+  }
+
   async function handleTester(next: boolean) {
     if (next) {
       const ok = await confirm({
@@ -1306,6 +1373,44 @@ export default function KundenDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Gefahrenzone — Konto löschen (DSGVO Art. 17) */}
+          {isOwner && (
+            <div style={{
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid #7f1d1d',
+              padding: 24,
+            }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f87171', marginBottom: 8, marginTop: 0 }}>
+                Gefahrenzone — Konto löschen
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 8, marginTop: 0, lineHeight: 1.6 }}>
+                Für den Fall, dass der Kunde die Löschung seiner Daten verlangt
+                (Art. 17 DSGVO). Entfernt das Kundenkonto restlos: Stammdaten,
+                Ausweisdokumente, Nachrichten, Bewertungen, Kundenmaterial,
+                Merkliste, Warenkorb, Reservierungen, Login-Verlauf, Push-Abos,
+                Newsletter- und Wartelisten-Einträge. Die E-Mail-Adresse wird
+                wieder frei.
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--admin-muted)', marginBottom: 16, marginTop: 0, lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--admin-text)' }}>Ausnahme:</strong>{' '}
+                Hat der Kunde bereits gebucht, bleiben Rechnungen und Mietverträge
+                gespeichert — dazu sind wir gesetzlich 10 Jahre verpflichtet
+                (§ 147 AO, § 257 HGB / Art. 17 Abs. 3 lit. b DSGVO). Alles andere
+                wird auch dann gelöscht. Der Vorgang ist{' '}
+                <strong style={{ color: '#f87171' }}>nicht umkehrbar</strong>.
+              </p>
+              <button
+                onClick={openDeleteModal}
+                style={{
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                  background: '#7f1d1d', color: '#fecaca', border: '1px solid #991b1b',
+                  cursor: 'pointer',
+                }}
+              >
+                Kundendaten endgültig löschen
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1915,6 +2020,149 @@ export default function KundenDetailPage() {
                 }}
               >
                 {composeSending ? 'Sende…' : 'Nachricht senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Modal: Kundendaten endgültig löschen ───── */}
+      {delOpen && (
+        <div
+          onClick={() => !delLoading && setDelOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            zIndex: 1000, padding: '40px 16px', overflowY: 'auto',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--admin-surface)', borderRadius: 12, border: '1px solid #7f1d1d',
+              padding: 24, maxWidth: 560, width: '100%',
+              display: 'flex', flexDirection: 'column', gap: 14,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#f87171' }}>
+              Kundendaten endgültig löschen
+            </h3>
+
+            <div style={{ fontSize: 13, color: 'var(--admin-text-2)', lineHeight: 1.6 }}>
+              Konto von <strong style={{ color: 'var(--admin-text)' }}>{customer.full_name || 'diesem Kunden'}</strong>
+              {customer.email ? ` (${customer.email})` : ''} wird gelöscht.
+              {stats && stats.totalBookings > 0 ? (
+                <>
+                  {' '}Der Kunde hat <strong style={{ color: 'var(--admin-text)' }}>{stats.totalBookings} Buchung(en)</strong> —
+                  Rechnungen und Mietverträge dazu bleiben aus steuerlichen Gründen
+                  10 Jahre gespeichert. Alles andere wird entfernt.
+                </>
+              ) : (
+                <> Der Kunde hat keine Buchungen — das Konto wird restlos gelöscht.</>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>
+                Grund (Pflicht — wird im Löschprotokoll festgehalten)
+              </label>
+              <textarea
+                value={delReason}
+                onChange={(e) => setDelReason(e.target.value)}
+                rows={2}
+                placeholder="z.B. Löschanfrage des Kunden per E-Mail vom 27.08.2026"
+                style={{
+                  width: '100%', background: 'var(--admin-bg)', border: '1px solid var(--admin-border)',
+                  borderRadius: 8, padding: '8px 12px', color: 'var(--admin-text)', fontSize: 16,
+                  resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--admin-text-2)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={delNotify}
+                onChange={(e) => setDelNotify(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                Löschbestätigung per E-Mail an den Kunden senden
+                <span style={{ display: 'block', color: 'var(--admin-muted)', fontSize: 12 }}>
+                  Wird vor der Löschung verschickt — danach ist die Adresse nicht mehr erreichbar.
+                </span>
+              </span>
+            </label>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--admin-muted)', marginBottom: 4 }}>
+                Zur Bestätigung <strong style={{ color: '#f87171' }}>LÖSCHEN</strong> eintippen
+              </label>
+              <input
+                type="text"
+                value={delConfirm}
+                onChange={(e) => setDelConfirm(e.target.value)}
+                placeholder="LÖSCHEN"
+                autoComplete="off"
+                style={{
+                  width: '100%', background: 'var(--admin-bg)', border: '1px solid var(--admin-border)',
+                  borderRadius: 8, padding: '8px 12px', color: 'var(--admin-text)', fontSize: 16,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {delError && (
+              <div style={{
+                background: '#7f1d1d33', border: '1px solid #991b1b', borderRadius: 8,
+                padding: '10px 12px', color: '#fecaca', fontSize: 13, lineHeight: 1.5,
+              }}>
+                {delError}
+                {delBlocked.length > 0 && (
+                  <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                    {delBlocked.map((b) => (
+                      <li key={b.id} style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {b.id} — {b.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setDelOpen(false)}
+                disabled={delLoading}
+                style={{
+                  padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: 'var(--admin-secondary-bg)', color: 'var(--admin-muted)',
+                  border: '1px solid var(--admin-faint)', cursor: delLoading ? 'wait' : 'pointer',
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCustomer}
+                disabled={
+                  delLoading
+                  || delReason.trim().length < 5
+                  || !['LÖSCHEN', 'LOESCHEN'].includes(delConfirm.trim().toUpperCase())
+                }
+                style={{
+                  padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                  background: '#7f1d1d', color: '#fecaca', border: '1px solid #991b1b',
+                  cursor: delLoading ? 'wait' : 'pointer',
+                  opacity:
+                    delLoading
+                    || delReason.trim().length < 5
+                    || !['LÖSCHEN', 'LOESCHEN'].includes(delConfirm.trim().toUpperCase())
+                      ? 0.5 : 1,
+                }}
+              >
+                {delLoading ? 'Lösche…' : 'Endgültig löschen'}
               </button>
             </div>
           </div>

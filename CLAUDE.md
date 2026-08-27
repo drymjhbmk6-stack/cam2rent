@@ -3595,6 +3595,78 @@ zurück). Eingebunden an zwei Stellen, beide auf **1 Stunde** Inaktivität:
   `/admin/login`. Kein Warn-Dialog (silent logout; der Hook kann optional
   `onWarning` — aktuell ungenutzt).
 
+### Kundenkonto komplett löschen — DSGVO-Löschanfrage (Stand 2026-08-27)
+Schreibt ein Kunde „bitte löscht meine Daten" (Art. 17 DSGVO), gibt es dafür
+jetzt einen echten Löschen-Knopf: `/admin/kunden/[id]` → Profil-Tab →
+**„Gefahrenzone — Konto löschen"** (nur für **Owner** sichtbar). Der Kunde
+verschwindet danach aus der Kundenliste, seine E-Mail-Adresse ist wieder frei.
+**Keine Migration nötig** — nutzt ausschließlich vorhandene Tabellen.
+- **Abgrenzung zur bestehenden Anonymisierung** (`/api/admin/anonymize-customer`,
+  `lib/anonymize-customer.ts`): dort bleibt die Profil-Zeile als „Gelöschter
+  Kunde" in der Liste stehen. Die neue Löschung entfernt sie. Die Anonymisierung
+  bleibt unverändert bestehen und wird intern als Baustein weiterverwendet.
+- **Zwei Modi, der Server entscheidet selbst** (`lib/delete-customer.ts` →
+  `deleteCustomerCore`):
+  - **`full`** — Kunde hat **keine** Buchungen ⇒ Auth-User wird **hart gelöscht**
+    (`auth.admin.deleteUser`). Es bleibt nichts. Scheitert das an einem
+    übersehenen Foreign-Key, greift der Fallback „E-Mail umbenennen + bannen"
+    (Adresse wird trotzdem frei).
+  - **`retained`** — Kunde **hat** Buchungen ⇒ Hard-Delete ist wegen
+    `bookings.user_id` unmöglich UND die Rechnungs-/Vertragsdaten sind
+    **10 Jahre aufbewahrungspflichtig** (§ 147 AO, § 257 HGB → Art. 17 Abs. 3
+    lit. b DSGVO). Also: `anonymizeCustomerCore` (E-Mail-Logs scrubben,
+    Auth-Konto bannen + E-Mail auf `deleted_<id>@anonymisiert.local` umbenennen,
+    `admin_audit_log.details` scrubben) + Profil-Zeile löschen. Buchungen bleiben
+    mit ihren eigenen `customer_name`/`customer_email`-Feldern stehen.
+- **In beiden Modi gelöscht** (alles, was nicht aufbewahrungspflichtig ist):
+  Ausweis-Scans (`id-documents`), Kundenmaterial (`customer-ugc` + Zeilen),
+  Nachrichten-Konversationen inkl. Anhang-Dateien (`email-attachments`;
+  `messages`/`message_attachments` hängen per CASCADE an `conversations`),
+  `favorites`, `custom_sets`, `cart_holds`, `reservations`,
+  `customer_login_history`, `customer_push_subscriptions`, `abandoned_carts`,
+  `reviews`, `admin_customer_notes`, sowie über die E-Mail-Adresse
+  `newsletter_subscribers`, `waitlist_subscriptions`, `beta_feedback`,
+  `referrals` (als Geworbener **und** als Werber) und verwaiste
+  E-Mail-Konversationen (`conversations.customer_email`).
+  `client_errors.user_id` wird auf NULL gesetzt. Jede Tabelle einzeln
+  try/catch + `isMissingTable`-Erkennung → eine fehlende Migration bricht die
+  Löschung nie ab, sondern landet als `warning` in der Antwort.
+- **Endpoint `POST /api/admin/kunden/delete`** — Body `{ customerId, reason,
+  confirm: 'LÖSCHEN', notifyCustomer? }`. Gates: **Owner-only** (analog
+  anonymize — Massen-Löschung/Spurenverwischung darf kein Mitarbeiter mit
+  `kunden`-Permission auslösen), keine Selbst-Löschung, **Grund Pflicht**
+  (≥ 5 Zeichen), Tipp-Bestätigung `LÖSCHEN`. **Blockiert bei laufenden
+  Buchungen** (`pending_verification|awaiting_payment|confirmed|
+  preparing_shipment|awaiting_pickup|shipped|delivered|picked_up|postponed|
+  damaged`) → 409 mit der Liste der offenen Buchungen. Geprüft werden
+  **kontogebundene UND Gastbuchungen unter derselben E-Mail** (`user_id IS NULL`
+  + `customer_email ilike`) — sonst könnte ein Konto gelöscht werden, während
+  unter der Adresse noch eine Kamera unterwegs ist.
+- **Löschbestätigung an den Kunden** (Checkbox, Default an):
+  `sendAccountDeletionConfirmation` (`lib/email.ts`, emailType
+  `account_deleted`, in `/admin/emails` + `EMAIL_TEMPLATE_CATALOG`
+  registriert). Wird **vor** der Löschung verschickt — danach ist die Adresse
+  freigegeben bzw. das Konto weg. Listet auf, was gelöscht wurde, und weist bei
+  vorhandenen Buchungen auf die 10-Jahres-Aufbewahrung hin. Ein Fehlversand
+  bricht die Löschung NICHT ab (`emailError` in der Antwort).
+- **Löschprotokoll** (Rechenschaftspflicht Art. 5 Abs. 2 DSGVO): Audit
+  `customer.delete` mit Grund, Modus, Anzahl aufbewahrter Buchungen, gelöschten
+  Zeilen pro Tabelle und Warnungen — **bewusst ohne Klarnamen/E-Mail**, damit das
+  Protokoll die gelöschten Daten nicht konserviert. Die Aktion enthält „delete"
+  und gilt damit als kritisch (Notification bei Audit-Ausfall).
+- **UI:** rote Gefahrenzone-Karte unter „Sonderkonditionen" + Modal (Grund,
+  Bestätigungs-Eingabe, E-Mail-Checkbox, Vorab-Hinweis wie viele Buchungen
+  bleiben, Inline-Fehler inkl. Liste blockierender Buchungen). Nach Erfolg
+  Redirect auf `/admin/kunden` mit Erfolgs-Toast (über `sessionStorage`).
+  Der Owner-Check im Client (`/api/admin/me`) blendet den Button nur aus — der
+  Server erzwingt ihn ohnehin mit 403.
+- **Bewusst NICHT gelöscht:** `bookings`, `invoices`, `credit_notes`,
+  `rental_agreements`, `invoice_versions`, `damage_reports`,
+  `stripe_transactions`, `email_log` (nur `recipient_email` wird anonymisiert) —
+  alles GoBD-/steuerpflichtig. Ein verwaister `bookings.user_id` ist gewollt: die
+  Buchungsdetail-Seite zeigt weiter `customer_name` aus der Buchung, der
+  Kunden-Link läuft ins Leere (Konto existiert nicht mehr).
+
 ### Kunde sperren blockt jetzt auch das Login (Stand 2026-06-14)
 „Gesperrt" (`profiles.blacklisted=true`, gesetzt über
 `/admin/kunden/[id]` → `POST /api/admin/kunden/blacklist`) blockierte vorher

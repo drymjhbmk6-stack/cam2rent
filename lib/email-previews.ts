@@ -44,6 +44,7 @@ import {
   sendVerificationReminder,
   sendAppointmentReminder,
   sendUnverifiedDeletionWarning,
+  sendAccountDeletionConfirmation,
   sendInactiveDeactivationWarning,
   sendCreditNote,
   sendInboundReply,
@@ -1063,6 +1064,17 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       to: 'max.mustermann@example.de',
       name: 'Max Mustermann',
       graceDays: 14,
+    }),
+  },
+  {
+    id: 'account_deleted',
+    name: 'Konto — Löschbestätigung (DSGVO)',
+    description: 'Wird verschickt, wenn der Admin ein Kundenkonto auf Löschanfrage des Kunden vollständig löscht (/admin/kunden → Gefahrenzone). Nennt, was gelöscht wurde, und weist auf die gesetzliche Aufbewahrung der Rechnungsdaten hin, falls Buchungen vorhanden waren.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendAccountDeletionConfirmation, {
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      retainedBookings: 2,
     }),
   },
   // Mietvertrag

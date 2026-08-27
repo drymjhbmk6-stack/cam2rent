@@ -52,6 +52,7 @@ const ACTION_LABELS: Record<string, string> = {
   'customer.block': 'Kunde gesperrt',
   'customer.unblock': 'Kunde entsperrt',
   'customer.anonymize': 'Kunde anonymisiert',
+  'customer.delete': 'Kunde gelöscht (DSGVO)',
   'customer.verify': 'Kunde verifiziert',
   'customer.reject_verification': 'Verifizierung abgelehnt',
   'customer.verification_reminder': 'Verifizierungs-Erinnerung gesendet',

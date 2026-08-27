@@ -3012,3 +3012,88 @@ export async function sendInactiveDeactivationWarning(params: {
 </table></td></tr></table></body></html>`;
   await sendAndLog({ to: params.to, subject, html, emailType: 'account_inactive_warning' });
 }
+
+
+// ─── Löschbestätigung (DSGVO Art. 17) ───────────────────────────────────────
+
+/**
+ * Bestaetigt dem Kunden die Loeschung seines Kontos.
+ *
+ * WICHTIG: muss VOR der eigentlichen Loeschung verschickt werden — danach ist
+ * die Adresse im Auth-Konto bereits freigegeben bzw. das Konto weg.
+ *
+ * `retainedBookings > 0` blendet den Pflicht-Hinweis auf die gesetzliche
+ * Aufbewahrung von Rechnungs-/Buchungsdaten ein (§ 147 AO / § 257 HGB,
+ * Art. 17 Abs. 3 lit. b DSGVO).
+ */
+export async function sendAccountDeletionConfirmation(data: {
+  customerName: string;
+  customerEmail: string;
+  retainedBookings: number;
+}): Promise<void> {
+  const BASE_URL = await getSiteUrl();
+  const subject = 'Deine Daten wurden gelöscht';
+
+  const retainedBlock = data.retainedBookings > 0
+    ? `<div style="margin:0 0 20px;padding:14px 16px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;">
+            <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#92400e;">Was wir behalten müssen</p>
+            <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">
+              Zu ${data.retainedBookings} abgeschlossenen Buchung(en) sind wir gesetzlich verpflichtet,
+              die Rechnungs- und Vertragsunterlagen 10 Jahre aufzubewahren
+              (§ 147 AO, § 257 HGB — Art. 17 Abs. 3 lit. b DSGVO). Diese Unterlagen
+              werden ausschließlich für steuerliche Zwecke gespeichert, nicht mehr
+              anderweitig verarbeitet und nach Ablauf der Frist gelöscht.
+            </p>
+          </div>`
+    : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Deine Daten wurden gelöscht</h1>
+          <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            wir haben deine Löschanfrage bearbeitet. Dein Kundenkonto bei cam2rent
+            wurde entfernt.
+          </p>
+          <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0a0a0a;">Gelöscht wurden unter anderem:</p>
+          <ul style="margin:0 0 20px;padding-left:20px;font-size:13px;color:#6b7280;line-height:1.8;">
+            <li>dein Kundenkonto und deine Stammdaten (Name, Anschrift, Telefon)</li>
+            <li>deine Ausweisdokumente</li>
+            <li>deine Nachrichten, Bewertungen und hochgeladenen Inhalte</li>
+            <li>Merkliste, Warenkorb, Reservierungen und Login-Verlauf</li>
+            <li>Newsletter-Anmeldung und Benachrichtigungen</li>
+          </ul>
+          ${retainedBlock}
+          <p style="margin:0 0 16px;font-size:13px;color:#6b7280;line-height:1.6;">
+            Eine erneute Anmeldung mit deinen bisherigen Zugangsdaten ist nicht mehr
+            möglich. Du kannst dich jederzeit mit dieser E-Mail-Adresse neu registrieren,
+            falls du cam2rent wieder nutzen möchtest.
+          </p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.6;">
+            Fragen zur Löschung? Schreib uns an
+            <a href="mailto:${BUSINESS.emailKontakt}" style="color:#3b82f6;">${BUSINESS.emailKontakt}</a>.
+            Danke, dass du bei uns warst.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; <a href="${BASE_URL}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    emailType: 'account_deleted',
+  });
+}

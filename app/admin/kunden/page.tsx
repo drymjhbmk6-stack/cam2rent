@@ -229,6 +229,15 @@ export default function KundenPage() {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  // Erfolgsmeldung nach dem Löschen eines Kundenkontos (Detailseite leitet hierher).
+  useEffect(() => {
+    const msg = sessionStorage.getItem('cam2rent_customer_deleted');
+    if (msg) {
+      sessionStorage.removeItem('cam2rent_customer_deleted');
+      success(msg);
+    }
+  }, [success]);
+
   // Anfangsbuchstabe für die A–Z-Reiter (Nachname, sonst E-Mail; nicht A–Z → '#')
   const firstLetter = (c: Customer): string => {
     const base = (splitName(c.full_name).last || c.email || '').trim();
