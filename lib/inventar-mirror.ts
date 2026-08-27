@@ -73,6 +73,18 @@ async function reverseLookupLegacyProductId(
 /**
  * Sucht den existierenden Mirror-Eintrag fuer die Inventar-Unit. Liefert die
  * Legacy-ID (product_units.id bzw. accessory_units.id) oder null.
+ *
+ * **Verifiziert die Zielzeile.** Das Loeschen einer Seriennummer im
+ * Kamera-Editor (`DELETE /api/admin/product-units`) bzw. eines Exemplars unter
+ * /admin/zubehoer entfernt die Legacy-Zeile, laesst die `migration_audit`-Zeile
+ * aber stehen. Ohne diese Pruefung zeigt die Bruecke danach ins Leere: der
+ * Mirror haelt das Stueck fuer „bereits gespiegelt", ein
+ * `update … .eq('id', <weg>)` betrifft null Zeilen und ist in Supabase **kein
+ * Fehler** — der Spiegel gilt als erfolgreich, obwohl nichts existiert. Die
+ * Kamera bleibt damit dauerhaft unbuchbar.
+ *
+ * Ist das Ziel weg, wird die verwaiste Audit-Zeile geloescht und `null`
+ * geliefert → der Aufrufer legt den Spiegel reguler neu an.
  */
 async function findExistingMirror(
   supabase: SupabaseClient,
@@ -87,7 +99,27 @@ async function findExistingMirror(
       .eq('neue_tabelle', 'inventar_units')
       .eq('neue_id', inventarUnitId)
       .maybeSingle();
-    return (data as { alte_id?: string } | null)?.alte_id ?? null;
+    const legacyId = (data as { alte_id?: string } | null)?.alte_id ?? null;
+    if (!legacyId) return null;
+
+    const { data: row, error } = await supabase
+      .from(alteTabelle)
+      .select('id')
+      .eq('id', legacyId)
+      .maybeSingle();
+    // Lesefehler (z.B. Netzproblem): konservativ die Audit-Zeile behalten und
+    // sie als gueltig ansehen — nichts loeschen, was noch existieren koennte.
+    if (error) return legacyId;
+    if (row) return legacyId;
+
+    console.warn(`[inventar-mirror] verwaiste migration_audit-Zeile (${alteTabelle}/${legacyId}) — wird aufgeraeumt`);
+    await supabase.from('migration_audit')
+      .delete()
+      .eq('alte_tabelle', alteTabelle)
+      .eq('alte_id', legacyId)
+      .eq('neue_tabelle', 'inventar_units')
+      .eq('neue_id', inventarUnitId);
+    return null;
   } catch {
     return null;
   }
@@ -171,13 +203,41 @@ async function mirrorCameraToLegacyDetailed(
   const serial = unit.seriennummer ?? unit.inventar_code ?? unit.bezeichnung;
   const candidates = mirrorLabelCandidates(unit);
 
-  if (existing) {
+  // Zeile des bestehenden Spiegels laden. Ist sie zwischen Verifikation und
+  // hier verschwunden (Race), NICHT als „gespiegelt" verbuchen — sonst
+  // meldeten wir Erfolg, ohne dass etwas existiert (genau die Klasse Fehler,
+  // die die Kamera unbuchbar gemacht hat). Dann faellt es unten in den
+  // regulaeren Insert.
+  const existingRow = existing
+    ? ((await supabase
+        .from('product_units')
+        .select('product_id')
+        .eq('id', existing)
+        .maybeSingle()).data as { product_id?: string } | null)
+    : null;
+
+  if (existing && existingRow) {
     // Synchronisieren — Status, label, notes, purchased_at koennen sich
     // geaendert haben. serial_number ist immutable im Original-Schema.
     // Kollidiert das Label global mit einer anderen Zeile, bleibt das alte
     // Label stehen (Status/Notizen werden trotzdem gezogen) — ein bereits
     // gedrucktes Etikett soll dadurch nicht ungueltig werden.
-    const base = { status: newStatus, notes: unit.notizen, purchased_at: unit.kaufdatum };
+    //
+    // `product_id` wird MITREPARIERT: haengt der Spiegel unter einem anderen
+    // Produkt, findet ihn `find-free-unit` (filtert nach product_id) nie —
+    // die Kamera ist sichtbar, aber dauerhaft unbuchbar. Zulaessig, weil der
+    // Spiegel per Definition genau diese Inventar-Einheit abbildet, deren
+    // Produkt oben eindeutig aufgeloest wurde.
+    const base: Record<string, unknown> = {
+      status: newStatus,
+      notes: unit.notizen,
+      purchased_at: unit.kaufdatum,
+    };
+    const currentProductId = existingRow.product_id;
+    if (currentProductId && currentProductId !== legacyProductId) {
+      console.warn(`[inventar-mirror] Spiegel ${existing} haengt an product_id=${currentProductId}, korrigiere auf ${legacyProductId}`);
+      base.product_id = legacyProductId;
+    }
     const { error: updErr } = await supabase.from('product_units')
       .update({ ...base, label: candidates[0] }).eq('id', existing);
     if (updErr) {
@@ -553,6 +613,34 @@ export async function mirrorInventarToLegacy(
     return mirrorAccessoryToLegacy(supabase, unit);
   }
   return null; // bulk: nur Listing, keine accessory_units
+}
+
+/**
+ * Raeumt die `migration_audit`-Bruecke, wenn eine Legacy-Zeile ausserhalb des
+ * Inventar-Pfads geloescht wird (Seriennummer im Kamera-Editor, Exemplar unter
+ * /admin/zubehoer). Gegenrichtung zu `deleteMirror`.
+ *
+ * Ohne diesen Aufruf bleibt eine verwaiste Audit-Zeile zurueck: der Mirror
+ * haelt das Inventar-Stueck fuer „bereits gespiegelt", legt es nie neu an und
+ * die Kamera bleibt unbuchbar. `findExistingMirror` heilt das inzwischen zwar
+ * beim naechsten Zugriff — sauberer ist, es gar nicht erst entstehen zu lassen.
+ *
+ * Best-effort: wirft nie.
+ */
+export async function dropMirrorAuditForLegacyId(
+  supabase: SupabaseClient,
+  alteTabelle: 'product_units' | 'accessory_units',
+  legacyId: string,
+): Promise<void> {
+  try {
+    await supabase.from('migration_audit')
+      .delete()
+      .eq('alte_tabelle', alteTabelle)
+      .eq('alte_id', legacyId)
+      .eq('neue_tabelle', 'inventar_units');
+  } catch (err) {
+    console.error('[inventar-mirror] migration_audit-Cleanup fehlgeschlagen:', err);
+  }
 }
 
 /**

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
+import { dropMirrorAuditForLegacyId } from '@/lib/inventar-mirror';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
 
@@ -349,6 +350,9 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('accessory_units').delete().eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Bruecke in die neue Inventar-Welt mit aufraeumen (analog product_units).
+  await dropMirrorAuditForLegacyId(supabase, 'accessory_units', id);
 
   if (unit?.accessory_id) {
     await syncAccessoryQty(supabase, unit.accessory_id);

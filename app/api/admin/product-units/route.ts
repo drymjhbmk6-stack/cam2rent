@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { dropMirrorAuditForLegacyId } from '@/lib/inventar-mirror';
 import { isTestMode } from '@/lib/env-mode';
 
 /**
@@ -305,6 +306,11 @@ export async function DELETE(req: NextRequest) {
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Bruecke in die neue Inventar-Welt mit aufraeumen — sonst bleibt eine
+  // verwaiste migration_audit-Zeile stehen und der Mirror haelt das
+  // Inventar-Stueck faelschlich fuer „bereits gespiegelt".
+  await dropMirrorAuditForLegacyId(supabase, 'product_units', id);
 
   await logAudit({
     action: 'product_unit.delete',

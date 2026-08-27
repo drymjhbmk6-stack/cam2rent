@@ -215,6 +215,37 @@ lesen sie weiterhin.
     eindeutig, ein abweichendes Label bekommt nur ein **neu** angelegter
     Spiegel (für den es noch kein Etikett gibt), und `scan-lookup` matcht
     ohnehin `serial_number` **oder** `label`.
+  - **Verwaister Spiegel — „gespiegelt", aber unauffindbar (Stand 2026-08-27):**
+    Der eigentliche Blocker. Die Kamera meldete weiterhin „…konnte nicht
+    angelegt werden", **ohne** den neuen `Grund:`-Zusatz — und weil jeder
+    Fehlerpfad in `mirrorCameraToLegacyDetailed` einen Fehlertext trägt, war
+    damit bewiesen: die Einheit lieferte eine **gültige ID** (`mirrored = 1`),
+    der Insert wurde nie erreicht, und `product_units` war unter dieser
+    `product_id` **trotzdem** leer. Der einzige Pfad dahin ist der
+    `if (existing)`-Zweig. Zwei Ursachen, beide vorher unreparierbar:
+    (a) **Der Spiegel hängt unter einer anderen `product_id`** — der Mirror
+    synchronisierte nur `label`/`status`/`notes`/`purchased_at`, **nie**
+    `product_id`; einmal falsch verknüpft blieb es für immer falsch.
+    (b) **Verwaiste `migration_audit`-Zeile** — `DELETE /api/admin/product-units`
+    (Seriennummer im Kamera-Editor löschen) entfernte die `product_units`-Zeile,
+    ließ die Audit-Zeile aber stehen; `findExistingMirror` prüfte nie, ob das
+    Ziel noch existiert, und ein `update … .eq('id', <weg>)` auf **null Zeilen
+    ist in Supabase kein Fehler** → galt als „gespiegelt". Fixes:
+    (1) **`findExistingMirror` verifiziert die Zielzeile** und löscht eine
+    verwaiste Audit-Zeile selbst → der Aufrufer legt den Spiegel regulär neu an.
+    Greift an allen drei Aufrufstellen, also **Kameras UND Zubehör**; bei einem
+    Lesefehler wird konservativ nichts gelöscht. (2) **`product_id` wird am
+    bestehenden Kamera-Spiegel mitrepariert** (bewusst NUR Kameras — beim
+    Zubehör fehlt ein verlässlicher Hint, eine `accessory_id`-Reparatur könnte
+    ein Exemplar zwischen Zubehören verschieben). (3) Neuer Export
+    **`dropMirrorAuditForLegacyId`** — `DELETE` von `product-units` UND
+    `accessory-units` räumt die Brücke jetzt mit weg (Gegenrichtung zu
+    `deleteMirror`), damit Fall (b) gar nicht erst entsteht. (4) Verschwindet
+    die Zeile zwischen Verifikation und Update (Race), wird das **nicht** mehr
+    als Erfolg verbucht, sondern fällt in den Insert. (5) `find-free-unit` hat
+    einen eigenen Meldungs-Zweig für „gespiegelt, aber nicht auffindbar" —
+    „konnte nicht angelegt werden" war dort schlicht falsch und hat die
+    Diagnose zwei Runden lang in die falsche Richtung geschickt.
     ⚠️ **Bekannt, NICHT gefixt:** die Ueberlappungs-Query in `find-free-unit`
     prueft nur `bookings.unit_id`, nicht `bookings.cameras[].unit_id` — bei
     einer Multi-Kamera-Buchung koennen Kamera 2..n also uebersehen werden und

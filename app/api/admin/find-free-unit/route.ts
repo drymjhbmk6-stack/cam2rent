@@ -67,7 +67,11 @@ export async function GET(req: NextRequest) {
     // unterscheidbar, ob das Modell gar keine Exemplare hat oder ob die
     // Verknuepfung in die neue Inventar-Welt fehlt/kaputt ist.
     let message = 'Keine Kameras für dieses Produkt angelegt.';
-    if (mirrorInfo && mirrorInfo.inventarFound > 0) {
+    if (mirrorInfo && mirrorInfo.mirrored > 0) {
+      // Spiegel gilt als vorhanden, ist unter dieser product_id aber nicht
+      // auffindbar — „konnte nicht angelegt werden" waere hier schlicht falsch.
+      message = `Die Kamera ist im Inventar vorhanden und verknüpft, der Eintrag ist diesem Modell aber nicht zugeordnet. Bitte auf /admin/inventar unter „Wartung ▾" den Mirror-Backfill ausführen.`;
+    } else if (mirrorInfo && mirrorInfo.inventarFound > 0) {
       // Grund mitschicken — sonst steht die echte DB-Meldung nur im
       // Server-Log und der Admin raet, woran es liegt.
       const reason = mirrorInfo.lastError ? ` Grund: ${mirrorInfo.lastError}` : '';
