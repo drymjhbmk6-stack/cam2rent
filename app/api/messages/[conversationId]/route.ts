@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { sendNewMessageNotificationToAdmin } from '@/lib/email';
+import { verarbeiteKundenanfrage } from '@/lib/ai/auto-reply';
 
 const limiter = rateLimit({ maxAttempts: 20, windowMs: 60_000 });
 
@@ -140,6 +141,11 @@ export async function POST(
     subject: conv.subject,
     messagePreview: body.trim().substring(0, 200),
   }).catch(() => {});
+
+  // KI-Antwort (fire-and-forget): automatischer Versand oder Entwurf fuer
+  // den Admin — der Kunde wartet nicht auf die Generierung.
+  verarbeiteKundenanfrage(supabase, { conversationId, kanal: 'account' })
+    .catch(() => {});
 
   return NextResponse.json({ message_id: msg.id });
 }

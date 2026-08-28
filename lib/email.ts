@@ -1712,6 +1712,12 @@ export async function sendInboundReply(data: {
   fromAddress?: string;
   /** Bei einer ERSTEN (vom Admin initiierten) Mail kein "Re:"-Prefix setzen. Default true. */
   prefixRe?: boolean;
+  /**
+   * Automatisch von der KI versendete Antwort. Setzt die Auto-Reply-Header,
+   * damit Auto-Responder der Gegenseite NICHT zurueckschreiben (sonst entsteht
+   * eine Endlosschleife aus zwei Robotern).
+   */
+  autoReply?: boolean;
 }): Promise<string | null | undefined> {
   const cleanSubject = stripSubject(data.subject) || '(kein Betreff)';
   const prefixRe = data.prefixRe !== false;
@@ -1755,6 +1761,14 @@ export async function sendInboundReply(data: {
   if (data.inReplyToMessageId) {
     headers['In-Reply-To'] = data.inReplyToMessageId;
     headers['References'] = data.inReplyToMessageId;
+  }
+  if (data.autoReply) {
+    // RFC 3834 + Microsoft-Konvention: markiert die Mail als maschinell
+    // erzeugte Antwort. Gegenstellen mit Abwesenheitsnotiz antworten darauf
+    // nicht — Voraussetzung dafuer, dass die KI-Antwort keine Mailschleife
+    // ausloest.
+    headers['Auto-Submitted'] = 'auto-replied';
+    headers['X-Auto-Response-Suppress'] = 'All';
   }
 
   // Absenderadresse nur uebernehmen, wenn sie auf der verifizierten Domain

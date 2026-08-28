@@ -100,6 +100,9 @@ const VERSICHERUNG_ALLOWLIST: Record<string, string> = {
   'lib/accounting/kontenrahmen.ts': 'Buchhaltung: SKR-Konto „Versicherungen"',
   'lib/ai/invoice-extract.ts': 'OCR-Prompt: Versicherungsprämien als Betriebsausgabe',
   'lib/ai/klassifiziere-positionen.ts': 'Klassifizier-Prompt: Versicherungsprämien',
+  // — KI-Leitplanken: der Prompt MUSS das Wort nennen, um es der KI zu verbieten —
+  'lib/ai/kundenanfrage-antwort.ts': 'Antwort-Prompt: verbietet der KI ausdrücklich das Wort „Versicherung"',
+  'lib/ai/kundenanfrage-kontext.ts': 'Wissensbasis: Pflicht-Negation „keine Versicherung im Sinne des VVG" + Leitplanke',
   // — KI-Leitplanken-Prompts, die dem Modell das Wort VERBIETEN (enthalten es dadurch) —
   'app/api/admin/blog/factcheck/route.ts': 'KI-Leitplanke: „Versicherung → Haftungsschutz"',
   'app/api/admin/blog/schedule/route.ts': 'KI-Leitplanke: NIEMALS Versicherung',
@@ -136,6 +139,7 @@ const EIGENBETEILIGUNG_ALLOWLIST: Record<string, string> = {
   // NUR noch der DB-Feld-Identifier `standardEigenbeteiligung` (Feldname bewusst
   // unangetastet) — daher kann der Eintrag nicht entfernt werden.
   'components/admin/HaftungContent.tsx': 'DB-Feld-Identifier `standardEigenbeteiligung` (Anzeige-Labels bereinigt)',
+  'lib/ai/kundenanfrage-kontext.ts': 'Helper `getEigenbeteiligung` (Anzeige-Text lautet „Höchstbetrag der Ersatzpflicht")',
 };
 
 /** Prüft: alle Grep-Treffer müssen in der Allowlist stehen (sonst Verstoß). */

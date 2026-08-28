@@ -18,6 +18,10 @@ interface ConvRow {
   customer_name?: string | null;
   assigned_admin_user_id?: string | null;
   inbox_address?: string | null;
+  ai_draft?: string | null;
+  ai_draft_meta?: Record<string, unknown> | null;
+  ai_draft_created_at?: string | null;
+  ai_auto_reply_count?: number | null;
 }
 
 /** Konversation laden — mit Fallback auf das alte Schema ohne E-Mail-Felder. */
@@ -25,9 +29,20 @@ async function loadConversation(
   supabase: ReturnType<typeof createServiceClient>,
   conversationId: string,
 ): Promise<ConvRow | null> {
+  const BASE =
+    'id, customer_id, subject, booking_id, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address';
+
+  // Erst inkl. KI-Entwurfsfeldern (Auto-Reply-Migration), dann ohne sie.
+  const withAi = await supabase
+    .from('conversations')
+    .select(`${BASE}, ai_draft, ai_draft_meta, ai_draft_created_at, ai_auto_reply_count`)
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (!withAi.error) return withAi.data as ConvRow | null;
+
   const full = await supabase
     .from('conversations')
-    .select('id, customer_id, subject, booking_id, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address')
+    .select(BASE)
     .eq('id', conversationId)
     .maybeSingle();
   if (!full.error) return full.data as ConvRow | null;
@@ -82,12 +97,13 @@ export async function GET(
     body: string;
     body_html?: string | null;
     email_message_id?: string | null;
+    ai_generated?: boolean | null;
     read: boolean;
     created_at: string;
   }> = [];
   const msgFull = await supabase
     .from('messages')
-    .select('id, sender_type, sender_id, body, body_html, email_message_id, read, created_at')
+    .select('id, sender_type, sender_id, body, body_html, email_message_id, ai_generated, read, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
   if (msgFull.error && SCHEMA_ERROR.test(msgFull.error.message)) {
@@ -154,6 +170,9 @@ export async function GET(
       ...conv,
       source: conv.source ?? 'account',
       customer: { full_name: customerName, email: customerEmail },
+      ai_draft: conv.ai_draft ?? null,
+      ai_draft_meta: conv.ai_draft_meta ?? null,
+      ai_draft_created_at: conv.ai_draft_created_at ?? null,
     },
     messages: messages.map((m) => ({
       ...m,
@@ -215,6 +234,15 @@ export async function POST(
     .from('conversations')
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', conversationId);
+
+  // Der Admin hat geantwortet — ein offener KI-Entwurf ist damit erledigt.
+  // Defensiv: ohne Auto-Reply-Migration existiert die Spalte nicht.
+  if (conv.ai_draft) {
+    await supabase
+      .from('conversations')
+      .update({ ai_draft: null, ai_draft_created_at: null })
+      .eq('id', conversationId);
+  }
 
   if (isEmailThread) {
     // Echte E-Mail-Antwort. In-Reply-To = Message-ID der letzten Kundenmail.

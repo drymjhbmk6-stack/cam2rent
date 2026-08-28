@@ -17,6 +17,8 @@ interface Conversation {
   unread_count: number;
   customer: { full_name: string; email: string };
   last_message: { body: string; sender_type: string; created_at: string } | null;
+  /** Es liegt ein KI-Antwort-Entwurf zur Freigabe bereit. */
+  has_ai_draft?: boolean;
 }
 
 interface MessageAttachment {
@@ -34,6 +36,17 @@ interface Message {
   read: boolean;
   created_at: string;
   attachments?: MessageAttachment[];
+  /** true = automatisch von der KI versendet (nicht vom Admin freigegeben). */
+  ai_generated?: boolean | null;
+}
+
+/** Meta zum KI-Entwurf (conversations.ai_draft_meta). */
+interface AiDraftMeta {
+  kategorie_label?: string;
+  confidence?: number;
+  grund?: string;
+  interne_notiz?: string;
+  eskalation?: string[];
 }
 
 function timeAgo(dateStr: string) {
@@ -47,13 +60,23 @@ function timeAgo(dateStr: string) {
   return `vor ${days}d`;
 }
 
-type FilterType = 'all' | 'unread' | 'closed';
+type FilterType = 'all' | 'unread' | 'draft' | 'closed';
 
 export default function AdminNachrichtenPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [convInfo, setConvInfo] = useState<{ subject: string; closed: boolean; source?: 'account' | 'email'; inbox_address?: string | null; customer: { full_name: string; email: string } } | null>(null);
+  const [convInfo, setConvInfo] = useState<{
+    subject: string;
+    closed: boolean;
+    source?: 'account' | 'email';
+    inbox_address?: string | null;
+    customer: { full_name: string; email: string };
+    ai_draft?: string | null;
+    ai_draft_meta?: AiDraftMeta | null;
+  } | null>(null);
+  // KI-Entwurf: laeuft gerade eine Aktion (uebernehmen/verwerfen/neu erzeugen)?
+  const [draftBusy, setDraftBusy] = useState(false);
   const [htmlOpen, setHtmlOpen] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
@@ -148,6 +171,69 @@ export default function AdminNachrichtenPage() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [replyText, showPreview, selectedId, convInfo?.source]);
 
+  // ── KI-Entwurf ────────────────────────────────────────────────────────────
+  // Uebernehmen laedt den Vorschlag nur ins Eingabefeld — abgeschickt wird er
+  // erst, wenn der Admin auf „Senden" klickt. Nichts geht ungeprueft raus.
+  const handleDraftAdopt = () => {
+    if (!convInfo?.ai_draft) return;
+    setReplyText(convInfo.ai_draft);
+    replyRef.current?.focus();
+    toast.info('Entwurf übernommen — prüfen und senden.');
+  };
+
+  const handleDraftDiscard = async () => {
+    if (!selectedId || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      const res = await fetch(`/api/admin/nachrichten/${selectedId}/entwurf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'discard' }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || 'Entwurf konnte nicht verworfen werden.');
+        return;
+      }
+      setConvInfo((prev) => (prev ? { ...prev, ai_draft: null } : prev));
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedId ? { ...c, has_ai_draft: false } : c)),
+      );
+    } catch {
+      toast.error('Entwurf konnte nicht verworfen werden.');
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
+  const handleDraftRegenerate = async () => {
+    if (!selectedId || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      const res = await fetch(`/api/admin/nachrichten/${selectedId}/entwurf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'regenerate' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(d.error || 'Es konnte kein Entwurf erzeugt werden.');
+        return;
+      }
+      // Frisch laden, damit Text + Begruendung aktuell sind.
+      const fresh = await fetch(`/api/admin/nachrichten/${selectedId}`).then((r) => r.json());
+      setConvInfo(fresh.conversation || null);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedId ? { ...c, has_ai_draft: !!fresh.conversation?.ai_draft } : c)),
+      );
+      toast.success('Neuer Entwurf erstellt.');
+    } catch {
+      toast.error('Es konnte kein Entwurf erzeugt werden.');
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
   const handleReply = async () => {
     if (!replyText.trim() || !selectedId || sending) return;
     setSending(true);
@@ -164,12 +250,14 @@ export default function AdminNachrichtenPage() {
           { id: data.message_id, sender_type: 'admin', body: replyText, read: false, created_at: new Date().toISOString() },
         ]);
         setReplyText('');
+        // Der Server verwirft den offenen KI-Entwurf beim Antworten mit.
+        setConvInfo((prev) => (prev ? { ...prev, ai_draft: null } : prev));
         // Mitgewachsenes Eingabefeld wieder auf Ausgangshoehe zuruecksetzen
         if (replyRef.current) replyRef.current.style.height = 'auto';
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
-              ? { ...c, last_message_at: new Date().toISOString(), last_message: { body: replyText.substring(0, 100), sender_type: 'admin', created_at: new Date().toISOString() } }
+              ? { ...c, has_ai_draft: false, last_message_at: new Date().toISOString(), last_message: { body: replyText.substring(0, 100), sender_type: 'admin', created_at: new Date().toISOString() } }
               : c
           )
         );
@@ -259,11 +347,13 @@ export default function AdminNachrichtenPage() {
 
   const filtered = conversations.filter((c) => {
     if (filter === 'unread') return c.unread_count > 0;
+    if (filter === 'draft') return !!c.has_ai_draft;
     if (filter === 'closed') return c.closed;
     return true;
   });
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+  const draftCount = conversations.filter((c) => c.has_ai_draft).length;
 
   const cardStyle: React.CSSProperties = { background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 12 };
   const inputStyle: React.CSSProperties = { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10, color: 'var(--admin-text)', padding: '10px 16px', fontSize: 14, outline: 'none', width: '100%' };
@@ -296,7 +386,7 @@ export default function AdminNachrichtenPage() {
 
           {/* Filter pills */}
           <div style={{ display: 'flex', gap: 4, background: 'var(--admin-input-bg)', borderRadius: 10, padding: 3 }}>
-            {(['all', 'unread', 'closed'] as FilterType[]).map((f) => (
+            {(['all', 'unread', 'draft', 'closed'] as FilterType[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -306,7 +396,13 @@ export default function AdminNachrichtenPage() {
                   color: filter === f ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
                 }}
               >
-                {f === 'all' ? 'Alle' : f === 'unread' ? 'Ungelesen' : 'Geschlossen'}
+                {f === 'all'
+                  ? 'Alle'
+                  : f === 'unread'
+                    ? 'Ungelesen'
+                    : f === 'draft'
+                      ? `KI-Entwürfe${draftCount > 0 ? ` (${draftCount})` : ''}`
+                      : 'Geschlossen'}
               </button>
             ))}
           </div>
@@ -469,6 +565,17 @@ export default function AdminNachrichtenPage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                     <span style={{ fontSize: 10, color: 'var(--admin-muted-2)' }}>{timeAgo(conv.last_message_at)}</span>
+                    {conv.has_ai_draft && (
+                      <span
+                        title="KI-Antwort wartet auf deine Freigabe"
+                        style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+                          background: 'rgba(168,85,247,0.15)', color: '#a855f7',
+                        }}
+                      >
+                        ✨ Entwurf
+                      </span>
+                    )}
                     {conv.unread_count > 0 && (
                       <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--admin-accent)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {conv.unread_count}
@@ -636,6 +743,14 @@ export default function AdminNachrichtenPage() {
 
                           <p style={{ margin: '4px 0 0', fontSize: 10, opacity: 0.7 }}>
                             {new Date(msg.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            {msg.ai_generated && (
+                              <span
+                                title="Diese Antwort wurde automatisch von der KI versendet"
+                                style={{ marginLeft: 6, fontWeight: 700 }}
+                              >
+                                · 🤖 automatisch
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -648,6 +763,108 @@ export default function AdminNachrichtenPage() {
               {/* Reply input */}
               {!convInfo.closed && (
                 <div style={{ borderTop: '1px solid var(--admin-border)' }}>
+                  {/* KI-Antwort-Entwurf: wartet auf Freigabe. Wird NIE von
+                      selbst verschickt — „Übernehmen" laedt ihn nur ins
+                      Eingabefeld. */}
+                  {convInfo.ai_draft && (
+                    <div
+                      style={{
+                        margin: '12px 20px 0', padding: 14, borderRadius: 12,
+                        background: 'rgba(168,85,247,0.08)',
+                        border: '1px solid rgba(168,85,247,0.35)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#a855f7' }}>
+                            ✨ Vorgeschlagene Antwort
+                          </span>
+                          {convInfo.ai_draft_meta?.kategorie_label && (
+                            <span style={{ fontSize: 11, color: 'var(--admin-muted)', background: 'var(--admin-surface-2)', padding: '2px 8px', borderRadius: 6 }}>
+                              {convInfo.ai_draft_meta.kategorie_label}
+                            </span>
+                          )}
+                          {typeof convInfo.ai_draft_meta?.confidence === 'number' && (
+                            <span style={{ fontSize: 11, color: 'var(--admin-muted)' }}>
+                              Sicherheit {Math.round(convInfo.ai_draft_meta.confidence * 100)} %
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--admin-text-dim)' }}>
+                          Geht erst raus, wenn du sendest.
+                        </span>
+                      </div>
+
+                      {convInfo.ai_draft_meta?.grund && (
+                        <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--admin-text-dim)' }}>
+                          Nicht automatisch gesendet: {convInfo.ai_draft_meta.grund}
+                        </p>
+                      )}
+
+                      <div
+                        style={{
+                          fontSize: 13, color: 'var(--admin-text)', whiteSpace: 'pre-wrap',
+                          background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)',
+                          borderRadius: 10, padding: 12, maxHeight: 220, overflowY: 'auto',
+                        }}
+                      >
+                        {convInfo.ai_draft}
+                      </div>
+
+                      {convInfo.ai_draft_meta?.interne_notiz && (
+                        <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--admin-muted)' }}>
+                          Notiz der KI: {convInfo.ai_draft_meta.interne_notiz}
+                        </p>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={handleDraftAdopt}
+                          disabled={draftBusy}
+                          style={{
+                            padding: '8px 14px', borderRadius: 9, border: 'none',
+                            cursor: draftBusy ? 'not-allowed' : 'pointer',
+                            fontSize: 12, fontWeight: 700, background: '#a855f7', color: '#fff',
+                            opacity: draftBusy ? 0.6 : 1,
+                          }}
+                        >
+                          Übernehmen &amp; prüfen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDraftRegenerate}
+                          disabled={draftBusy}
+                          style={{
+                            padding: '8px 14px', borderRadius: 9,
+                            border: '1px solid var(--admin-border)',
+                            cursor: draftBusy ? 'not-allowed' : 'pointer',
+                            fontSize: 12, fontWeight: 600,
+                            background: 'var(--admin-surface-2)', color: 'var(--admin-text-2)',
+                            opacity: draftBusy ? 0.6 : 1,
+                          }}
+                        >
+                          {draftBusy ? 'Moment…' : 'Neu erzeugen'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDraftDiscard}
+                          disabled={draftBusy}
+                          style={{
+                            padding: '8px 14px', borderRadius: 9,
+                            border: '1px solid var(--admin-border)',
+                            cursor: draftBusy ? 'not-allowed' : 'pointer',
+                            fontSize: 12, fontWeight: 600,
+                            background: 'transparent', color: 'var(--admin-text-dim)',
+                            opacity: draftBusy ? 0.6 : 1,
+                          }}
+                        >
+                          Verwerfen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Live-Vorschau der echten E-Mail (nur E-Mail-Konversationen) */}
                   {convInfo.source === 'email' && showPreview && (
                     <div style={{ padding: '12px 20px 0' }}>

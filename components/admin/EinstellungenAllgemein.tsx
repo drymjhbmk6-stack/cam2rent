@@ -10,6 +10,7 @@ import FirmwareCheckSection from '@/components/admin/FirmwareCheckSection';
 import EnvModeSection from '@/components/admin/EnvModeSection';
 import CheckoutConfigSection from '@/components/admin/CheckoutConfigSection';
 import HandoverAddressesSection from '@/components/admin/HandoverAddressesSection';
+import AiReplySection from '@/components/admin/AiReplySection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -653,6 +654,9 @@ export default function EinstellungenAllgemein() {
 
       {/* Sektion 6b: Übergabe-/Abhol-Adressen */}
       <HandoverAddressesSection />
+
+      {/* Sektion 6c: KI-Beantwortung von Kundenanfragen */}
+      <AiReplySection />
       </div>
 
       {/* ── Push & Gerät ────────────────────────────────────────── */}

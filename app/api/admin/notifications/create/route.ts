@@ -20,6 +20,7 @@ const ALLOWED_TYPES = new Set([
   'pickup_coordination', 'return_coordination', 'return_arrived', 'return_open_items', 'verification_pending',
   'beleg_ready', 'beleg_failed', 'beleg_duplicate', 'availability_alert',
   'auto_cancelled', 'adjustment_paid', 'dunning_due', 'new_feedback',
+  'ai_reply_draft', 'ai_reply_sent', 'verbrauch_low_stock',
 ]);
 
 export async function POST(req: NextRequest) {

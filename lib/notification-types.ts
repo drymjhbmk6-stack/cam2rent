@@ -45,6 +45,8 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
   { type: 'new_review', label: 'Neue Bewertung', permission: 'kunden', group: 'Kunden & Kommunikation' },
   { type: 'new_waitlist', label: 'Warteliste-Eintrag', permission: 'kunden', group: 'Kunden & Kommunikation' },
   { type: 'new_ugc', label: 'Neues Kundenmaterial', permission: 'kunden', group: 'Kunden & Kommunikation' },
+  { type: 'ai_reply_draft', label: 'KI-Antwort wartet auf Freigabe', permission: 'kunden', group: 'Kunden & Kommunikation' },
+  { type: 'ai_reply_sent', label: 'Anfrage automatisch beantwortet', permission: 'kunden', group: 'Kunden & Kommunikation' },
 
   // ── Finanzen ──────────────────────────────────────────────
   { type: 'payment_failed', label: 'Zahlungsproblem', permission: 'finanzen', group: 'Finanzen' },

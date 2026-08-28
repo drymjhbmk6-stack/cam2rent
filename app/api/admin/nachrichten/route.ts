@@ -27,16 +27,32 @@ export async function GET() {
     customer_name?: string | null;
     assigned_admin_user_id?: string | null;
     inbox_address?: string | null;
+    ai_draft?: string | null;
+    ai_draft_created_at?: string | null;
   }> | null = null;
 
   // Soft-Delete: Geloeschte Konversationen sind via `deleted_at` markiert
   // und werden hier ausgefiltert. Bei fehlender Migration aufgabe6 faellt
   // der Query unten auf die Variante ohne `deleted_at`-Filter zurueck.
-  const full = await supabase
+  const BASE_COLS =
+    'id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address';
+
+  type ConvRow = NonNullable<typeof conversations>[number];
+
+  // Erst inkl. KI-Entwurfsfeldern; fehlt die Auto-Reply-Migration, ohne sie.
+  const withAi = await supabase
     .from('conversations')
-    .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address')
+    .select(`${BASE_COLS}, ai_draft, ai_draft_created_at`)
     .is('deleted_at', null)
     .order('last_message_at', { ascending: false });
+
+  const full = withAi.error
+    ? await supabase
+        .from('conversations')
+        .select(BASE_COLS)
+        .is('deleted_at', null)
+        .order('last_message_at', { ascending: false })
+    : withAi;
 
   if (full.error) {
     // Retry ohne deleted_at-Filter (Spalte fehlt) UND ohne die E-Mail-Felder.
@@ -47,9 +63,9 @@ export async function GET() {
     if (fallback.error) {
       return NextResponse.json({ conversations: [] });
     }
-    conversations = fallback.data;
+    conversations = fallback.data as ConvRow[];
   } else {
-    conversations = full.data;
+    conversations = full.data as ConvRow[];
   }
 
   // Sichtbarkeit: Owner sieht alle Konversationen. Mitarbeiter sehen nur die
@@ -135,6 +151,7 @@ export async function GET() {
       ...conv,
       source: conv.source ?? 'account',
       inbox_address: conv.inbox_address ?? null,
+      has_ai_draft: !!conv.ai_draft,
       customer,
       unread_count: unreadMap[conv.id] || 0,
       last_message: lastMsg ? {

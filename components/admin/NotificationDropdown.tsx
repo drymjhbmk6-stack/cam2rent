@@ -34,6 +34,20 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
       );
+    case 'ai_reply_draft':
+      // Stift auf Blatt — KI-Entwurf wartet auf Freigabe
+      return (
+        <svg style={iconStyle} fill="none" stroke="#a855f7" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      );
+    case 'ai_reply_sent':
+      // Papierflieger — automatisch beantwortet
+      return (
+        <svg style={iconStyle} fill="none" stroke="#06b6d4" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+        </svg>
+      );
     case 'new_customer':
       return (
         <svg style={iconStyle} fill="none" stroke="#10b981" viewBox="0 0 24 24">

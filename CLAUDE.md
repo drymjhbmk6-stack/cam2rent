@@ -776,6 +776,120 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
     bleibt 1:1 Side-by-Side wie zuvor.
 - **Go-Live TODO:** siehe „Noch offen".
 
+### Kundenanfragen automatisch beantworten — KI mit Freigabe-Netz (Stand 2026-08-28)
+Jede eingehende Kundenanfrage (echte E-Mail **und** Konto-Nachricht) wird von
+Claude gelesen, gegen die **echten Shop-Daten** beantwortet und dann entweder
+**automatisch versendet** (einfache Standardfrage) oder als **Entwurf** zur
+Freigabe in `/admin/nachrichten` gelegt. Modus: **Hybrid** (vom Owner gewählt) —
+umstellbar auf „nur Entwürfe".
+
+**Kern-Invariante:** Alles, wo Geld, Vertrag, Schaden oder Eskalation dranhängt,
+geht NIEMALS automatisch raus — auch nicht bei 100 % Confidence und auch nicht,
+wenn jemand die Kategorie in die Whitelist einträgt (`NIEMALS_AUTOMATISCH` in
+`lib/ai/auto-reply-config.ts` wird im Sanitizer UND im Gate erzwungen).
+
+- **Migration `supabase/supabase-ai-auto-reply.sql`** (idempotent, additiv):
+  `conversations.ai_draft`/`ai_draft_meta`/`ai_draft_created_at`/
+  `ai_last_auto_reply_at`/`ai_auto_reply_count` + `messages.ai_generated` +
+  Teilindex auf offene Entwürfe. **Ohne Migration läuft das Nachrichten-Tool
+  exakt wie vorher** — alle Schreib-/Lesepfade fangen die fehlenden Spalten ab
+  (Entwurf wird nicht gespeichert → `skipped`, kein Hard-Fail).
+- **Config** `admin_settings.ai_reply_config` (`lib/ai/auto-reply-config.ts`,
+  `loadAiReplyConfig`): `{ enabled, mode: 'hybrid'|'draft_only', channels:
+  {email, account}, confidence_min (0.5–1, Default 0.8), auto_categories,
+  max_auto_replies_per_thread (Default 2), max_auto_replies_per_day (Default
+  30), extra_context }`. `normalizeAiReplyConfig` ist pure + getestet und
+  **filtert gesperrte Kategorien aus der Whitelist heraus**. Admin-UI:
+  `components/admin/AiReplySection.tsx` unter Einstellungen → Allgemein →
+  Betrieb (Sektion 6c). Zum Abschalten des Auto-Versands genügt
+  `mode: 'draft_only'`, zum Abschalten des ganzen Features `enabled: false`.
+- **Wissensbasis** `lib/ai/kundenanfrage-kontext.ts` → `shopWissensbasis()`
+  baut die Fakten **live aus der DB**: Kameras mit Preisen für 1/3/7/14 Tage +
+  Kaution + Bestand + Specs (`getProducts`/`getPriceForDays`), buchbares
+  Zubehör, Sets, Versandkosten inkl. Gratis-Schwelle (Express kostet IMMER
+  extra), Haftungsschutz-Staffel + Höchstbetrag der Ersatzpflicht
+  (`getEigenbeteiligung`), Storno-Staffel aus der einen Quelle
+  (`describeCancellationTiers`), Puffer-/Vorlauftage, Kontaktdaten.
+  `buchungsKontext()` ergänzt die letzten 5 Buchungen des Anfragenden
+  (Status, Zeitraum, Lieferart, Tracking, Vertrag unterschrieben ja/nein) —
+  aufgelöst über `user_id`, sonst E-Mail, sonst `booking_id` der Konversation.
+  **Findet sich keine Buchung, bekommt die KI das ausdrücklich gesagt** und
+  darf keine buchungsbezogene Auskunft geben. Alle Blöcke best-effort: fällt
+  eine Quelle aus, fehlt nur dieser Block.
+- **Antwortgenerator** `lib/ai/kundenanfrage-antwort.ts` (Claude Sonnet 4.6,
+  API-Key wie überall aus `admin_settings.blog_settings.anthropic_api_key`).
+  Liefert JSON: `kategorie`, `confidence`, `braucht_mensch`, `antwort`,
+  `interne_notiz`. Der Prompt verbietet ausdrücklich: erfundene Preise/Termine/
+  Fristen, Zusagen zu Erstattung/Kulanz/Rabatt, Aussagen zu Schadensfällen und
+  Rechtsfragen, Auskunft zu nicht gelisteten Buchungen. Wortwahl-Leitplanken
+  („Basis-/Premium-Haftungsschutz", nie „Versicherung", „Höchstbetrag der
+  Ersatzpflicht") sind Teil des System-Prompts. **Prompt-Sicherheit:** der
+  Kundentext landet ausschließlich im User-Turn und läuft vorher durch
+  `sanitizePromptInput` (der Verlauf ist auf die letzten 10 Nachrichten
+  begrenzt).
+- **Gates** `lib/ai/auto-reply-gates.ts` (pure, 36 Unit-Tests) — fünf
+  unabhängige Schichten, jede kann allein den Auto-Versand verhindern:
+  (1) Feature/Modus/Kanal aus der Config, (2) harte Kategorie-Sperrliste,
+  (3) Selbsteinschätzung der KI (`confidence_min` + eigenes `braucht_mensch`),
+  (4) **Stichwort-Abgleich im Kundentext** (`ESKALATIONS_BEGRIFFE`: Geld,
+  Schaden/Verlust, Recht, Unzufriedenheit, Wunsch nach einem Menschen,
+  Paketprobleme) — greift unabhängig davon, wie die KI die Anfrage einsortiert
+  hat, (5) Mengen-/Schleifenschutz pro Thread und pro Tag.
+- **Schleifenschutz gegen Roboter-Pingpong** (drei Ebenen): `isAutomatedEmail`
+  im IMAP-Cron filtert Auto-Mails schon vor dem Speichern; zusätzlich prüft
+  `istWahrscheinlichAutoNachricht` den Text im Thread; und die versendete
+  Antwort trägt selbst **`Auto-Submitted: auto-replied` +
+  `X-Auto-Response-Suppress: All`** (neuer Parameter `autoReply` an
+  `sendInboundReply`), damit Abwesenheitsnotizen der Gegenseite nicht
+  zurückschreiben. Dazu deckelt `max_auto_replies_per_thread` (Default 2)
+  jeden Thread.
+- **Orchestrator** `lib/ai/auto-reply.ts` → `verarbeiteKundenanfrage(supabase,
+  {conversationId, kanal, nurEntwurf?})`. **Wirft nie** — im Fehlerfall bleibt
+  die Anfrage einfach unbeantwortet liegen (wie vorher). Verarbeitet nur, wenn
+  die **letzte** Nachricht vom Kunden ist und die Konversation offen ist.
+  Auto-Pfad: `messages`-Zeile mit `ai_generated=true` (defensiver Insert-Retry
+  ohne die Spalte) → `last_message_at` → Zähler hoch → Zustellung (E-Mail über
+  den bestehenden `sendInboundReply`-Pfad inkl. `In-Reply-To`; Konto über
+  `sendNewMessageNotificationToCustomer`). Entwurf-Pfad: `ai_draft` +
+  `ai_draft_meta` speichern + Push. Audit: `nachricht.ai_auto_reply` /
+  `nachricht.ai_draft`.
+- **Eingehängt an drei Stellen** (alle non-blocking): IMAP-Cron
+  `inbound-email-poll` nach erfolgreichem `processInboundEmail` (Response um
+  `ai_sent`/`ai_draft` erweitert), `POST /api/messages` (neue Konto-Anfrage)
+  und `POST /api/messages/[conversationId]` (Konto-Folgeantwort). Der Kunde
+  wartet nie auf die Generierung.
+- **Admin-UI** (`/admin/nachrichten`): lila **Entwurfs-Karte** über dem
+  Antwortfeld mit Kategorie, Sicherheit in %, **Begründung warum nicht
+  automatisch gesendet wurde**, interner KI-Notiz und drei Aktionen —
+  „Übernehmen & prüfen" (lädt den Text nur ins Eingabefeld, **sendet nicht**),
+  „Neu erzeugen" (`nurEntwurf: true` → löst garantiert keine Mail aus),
+  „Verwerfen". Dazu: Badge **✨ Entwurf** in der Konversationsliste, neuer
+  Filter-Reiter **„KI-Entwürfe (N)"**, und automatisch versendete Nachrichten
+  tragen im Verlauf **🤖 automatisch**. Antwortet der Admin selbst, verwirft
+  der Server den offenen Entwurf mit.
+- **Endpoint** `POST /api/admin/nachrichten/[conversationId]/entwurf`
+  (`{action: 'discard'|'regenerate'}`) — Permission über den bestehenden
+  Prefix `/api/admin/nachrichten` (→ `kunden`), plus Ownership-Check wie in der
+  Reply-Route (Owner alles, Mitarbeiter eigene + unzugeordnete).
+- **Zwei neue Benachrichtigungs-Typen** in `lib/notification-types.ts`:
+  `ai_reply_draft` (Entwurf wartet) + `ai_reply_sent` (automatisch
+  beantwortet), beide Permission `kunden` → greifen automatisch in die
+  Pro-Mitarbeiter-Push-Einstellungen. Icons im `NotificationDropdown`,
+  Whitelist in `notifications/create` ergänzt.
+- **Terminologie-Guard:** `lib/ai/kundenanfrage-antwort.ts` +
+  `kundenanfrage-kontext.ts` stehen mit Begründung in der
+  `VERSICHERUNG_ALLOWLIST` bzw. `EIGENBETEILIGUNG_ALLOWLIST`
+  (`lib/__tests__/widerruf-consistency.test.ts`) — die Prompts müssen die
+  Wörter nennen, um sie der KI zu verbieten. „Selbstbeteiligung" bleibt
+  **clean** (der Prompt ist positiv formuliert).
+- **Kosten:** ca. 0,01–0,03 € pro beantworteter Anfrage (Claude Sonnet, die
+  Wissensbasis ist der größte Teil des Prompts). Bei 300 Anfragen/Monat ≤ 10 €.
+- **Bewusst NICHT im Scope:** Die KI führt **keine Aktionen** aus (keine
+  Stornierung, Umbuchung, Erstattung, Terminänderung) — sie schreibt
+  ausschließlich Text. Keine Anhänge, keine Bild-/PDF-Auswertung eingehender
+  Mails, keine Antwort auf Anfragen ohne Kundenkonto-Bezug im Konto-Kanal.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Rechnungen per E-Mail importieren → automatische Buchhaltung (Stand 2026-07-27)
 Lieferanten-Rechnungen an eine eigene Adresse (z.B. `belege@cam2rent.de`)
 schicken/weiterleiten → der Server legt automatisch einen **Beleg** an, macht
@@ -8123,6 +8237,18 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Nach Abschluss das vollständige Verifikationsskript aus `SECURITY-AUDIT.md`
   Abschnitt 8 einmal am Stück laufen lassen und die Ausgabe zusammen mit dem
   Bericht archivieren — das ist der Nachweis für den Versicherer.
+- **KI-Beantwortung von Kundenanfragen — Migration auszuführen:**
+  `supabase/supabase-ai-auto-reply.sql` (idempotent, additiv: 5 Spalten an
+  `conversations`, `messages.ai_generated`, ein Teilindex). Ohne sie läuft das
+  Nachrichten-Tool **exakt wie bisher** — es wird weder ein Entwurf gespeichert
+  noch automatisch geantwortet (alle Pfade fangen die fehlenden Spalten ab).
+  Kein Cron, kein Bucket, keine neue Env-Variable nötig; der Anthropic-Key wird
+  mit Blog/Social/OCR geteilt. **Nach der Migration ist der Auto-Versand sofort
+  aktiv** (Default `mode: 'hybrid'`) — wer erst beobachten will, stellt unter
+  Einstellungen → Allgemein → Betrieb → „Kundenanfragen automatisch beantworten"
+  auf **„Nur Entwürfe vorschlagen"**. Empfehlung: die ersten Tage im
+  Entwurfs-Modus mitlesen, dann auf Hybrid schalten. Details siehe
+  „Kundenanfragen automatisch beantworten".
 - **Unvollständige Rückgabe — Migration auszuführen:**
   `supabase/supabase-return-open-items.sql` (idempotent, additiv: Tabelle
   `booking_return_open_items`). Ohne sie läuft der Rückgabe-Flow **exakt wie

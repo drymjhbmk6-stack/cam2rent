@@ -10,6 +10,7 @@ import {
   isAutomatedEmail,
   processInboundEmail,
 } from '@/lib/inbound-email';
+import { verarbeiteKundenanfrage } from '@/lib/ai/auto-reply';
 import { loadBelegInboxConfig, isBelegRecipient } from '@/lib/buchhaltung/inbound-beleg-config';
 import { processInboundBeleg } from '@/lib/buchhaltung/inbound-beleg';
 
@@ -145,6 +146,7 @@ async function handler(req: NextRequest) {
 
     let processedUpTo = state!.lastUid;
     let created = 0, duplicate = 0, skipped = 0, errors = 0, belegCreated = 0;
+    let aiSent = 0, aiDraft = 0;
     let migrationPending = false;
 
     for (const item of fetched) {
@@ -194,8 +196,17 @@ async function handler(req: NextRequest) {
         migrationPending = true;
         break;
       }
-      if (result.status === 'created') created++;
-      else if (result.status === 'duplicate') duplicate++;
+      if (result.status === 'created') {
+        created++;
+        // KI-Antwort: geht je nach Einstellung direkt raus oder landet als
+        // Entwurf im Nachrichten-Tool. Wirft nie und haelt den Abruf nicht auf.
+        const ai = await verarbeiteKundenanfrage(supabase, {
+          conversationId: result.conversationId,
+          kanal: 'email',
+        });
+        if (ai.status === 'sent') aiSent++;
+        else if (ai.status === 'draft') aiDraft++;
+      } else if (result.status === 'duplicate') duplicate++;
       else errors++;
       processedUpTo = item.uid;
     }
@@ -208,6 +219,7 @@ async function handler(req: NextRequest) {
       ok: !migrationPending,
       migration_pending: migrationPending,
       created, duplicate, skipped, errors, beleg_created: belegCreated,
+      ai_sent: aiSent, ai_draft: aiDraft,
     });
   } catch (err) {
     return NextResponse.json(
