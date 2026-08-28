@@ -38,3 +38,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Sicherheitsbericht — bleibt bewusst lokal (Entscheidung 2026-08-27).
+# Enthaelt Angriffsszenarien zu noch offenen Befunden; gehoert nicht ins Repo.
+# Umsetzungsstand steht in CLAUDE.md, Pruefzeilen im Migrations-Status-Check.
+SECURITY-AUDIT.md
