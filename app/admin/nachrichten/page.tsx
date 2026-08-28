@@ -763,6 +763,32 @@ export default function AdminNachrichtenPage() {
               {/* Reply input */}
               {!convInfo.closed && (
                 <div style={{ borderTop: '1px solid var(--admin-border)' }}>
+                  {/* Kein Entwurf da → KI manuell anstossen. Nuetzlich, wenn
+                      die Automatik nichts erzeugt hat (Gate gegriffen, Mail
+                      vor dem Feature eingegangen) oder man einfach einen
+                      Vorschlag moechte. Loest garantiert keinen Versand aus. */}
+                  {!convInfo.ai_draft && (
+                    <div style={{ padding: '12px 20px 0' }}>
+                      <button
+                        type="button"
+                        onClick={handleDraftRegenerate}
+                        disabled={draftBusy}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '7px 12px', borderRadius: 9,
+                          border: '1px solid rgba(168,85,247,0.4)',
+                          cursor: draftBusy ? 'not-allowed' : 'pointer',
+                          fontSize: 12, fontWeight: 600,
+                          background: 'rgba(168,85,247,0.08)', color: '#a855f7',
+                          opacity: draftBusy ? 0.6 : 1,
+                        }}
+                        title="Die KI schreibt einen Antwortvorschlag. Es wird nichts versendet."
+                      >
+                        {draftBusy ? 'Die KI überlegt…' : '✨ KI-Vorschlag holen'}
+                      </button>
+                    </div>
+                  )}
+
                   {/* KI-Antwort-Entwurf: wartet auf Freigabe. Wird NIE von
                       selbst verschickt — „Übernehmen" laedt ihn nur ins
                       Eingabefeld. */}
