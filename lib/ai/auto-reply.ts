@@ -204,7 +204,16 @@ export async function verarbeiteKundenanfrage(
     if (!gate.auto) {
       const gespeichert = await speichereEntwurf(supabase, opts.conversationId, ki.antwort, meta);
       if (!gespeichert) {
-        return { status: 'skipped', grund: 'Entwurf konnte nicht gespeichert werden (Migration ausstehend?)' };
+        // Haeufigster Fall: supabase-ai-auto-reply.sql wurde noch nicht
+        // ausgefuehrt. Frueher lief das stumm ins Leere — der Admin sah weder
+        // Antwort noch Entwurf und hatte keinen Hinweis auf die Ursache.
+        console.error(
+          '[ai-auto-reply] Entwurf nicht speicherbar — Migration supabase/supabase-ai-auto-reply.sql ausgefuehrt?',
+        );
+        return {
+          status: 'skipped',
+          grund: 'Entwurf nicht speicherbar — Migration supabase-ai-auto-reply.sql fehlt',
+        };
       }
       await createAdminNotification(supabase, {
         type: 'ai_reply_draft',
@@ -338,7 +347,10 @@ export async function verarbeiteKundenanfrage(
   } catch (err) {
     // Bewusst still: eine unbeantwortete Anfrage ist ein normaler Zustand,
     // ein Absturz im Cron/Request-Pfad waere ein echtes Problem.
-    console.error('[ai-auto-reply]', err instanceof Error ? err.message : err);
-    return { status: 'skipped', grund: 'Fehler bei der Antwortgenerierung' };
+    const text = err instanceof Error ? err.message : String(err);
+    console.error('[ai-auto-reply]', text);
+    // Fehlertext mitgeben (gekuerzt) — sonst steht in der Cron-Antwort nur
+    // "Fehler" und der Admin raet, ob API-Key, Modell oder DB schuld ist.
+    return { status: 'skipped', grund: `Fehler: ${text.slice(0, 200)}` };
   }
 }

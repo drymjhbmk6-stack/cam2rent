@@ -147,6 +147,10 @@ async function handler(req: NextRequest) {
     let processedUpTo = state!.lastUid;
     let created = 0, duplicate = 0, skipped = 0, errors = 0, belegCreated = 0;
     let aiSent = 0, aiDraft = 0;
+    // Warum wurde nicht geantwortet? Gruende zaehlen, damit ein stummer
+    // Ausfall (fehlende Migration, kein API-Key, Kanal aus) in der Antwort
+    // des Crons sichtbar ist statt im Nichts zu verschwinden.
+    const aiSkipped: Record<string, number> = {};
     let migrationPending = false;
 
     for (const item of fetched) {
@@ -206,6 +210,7 @@ async function handler(req: NextRequest) {
         });
         if (ai.status === 'sent') aiSent++;
         else if (ai.status === 'draft') aiDraft++;
+        else aiSkipped[ai.grund] = (aiSkipped[ai.grund] ?? 0) + 1;
       } else if (result.status === 'duplicate') duplicate++;
       else errors++;
       processedUpTo = item.uid;
@@ -220,6 +225,7 @@ async function handler(req: NextRequest) {
       migration_pending: migrationPending,
       created, duplicate, skipped, errors, beleg_created: belegCreated,
       ai_sent: aiSent, ai_draft: aiDraft,
+      ...(Object.keys(aiSkipped).length > 0 ? { ai_skipped: aiSkipped } : {}),
     });
   } catch (err) {
     return NextResponse.json(
