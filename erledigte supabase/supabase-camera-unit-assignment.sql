@@ -113,7 +113,7 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION assign_free_camera_units(text, date, date, text)
-  TO authenticated, service_role;
+  TO service_role;  -- Audit K-3: kein `authenticated` (siehe supabase-sec-01-function-grants.sql)
 
 
 -- ── assign_free_unit: Belegung auch ueber cameras[] beruecksichtigen ──────
@@ -175,4 +175,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION assign_free_unit(text, date, date, text)
-  TO authenticated, service_role;
+  TO service_role;  -- Audit K-3: kein `authenticated` (siehe supabase-sec-01-function-grants.sql)

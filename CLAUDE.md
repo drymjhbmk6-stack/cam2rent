@@ -6360,6 +6360,99 @@ Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Samm
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Sicherheitsaudit 2026-08-27 — Stufe 1 (Datenbankebene)
+Vollständiges Audit für den Nachweis nach Art. 32 DSGVO + Ziffer 7.13 der
+Betriebshaftpflicht. Bericht: **`SECURITY-AUDIT.md`** (Repo-Root, bewusst NICHT
+committet — enthält Angriffsszenarien zu noch offenen Befunden; liegt lokal beim
+Owner). 40 Befunde: 5 kritisch, 10 hoch, 15 mittel, 10 niedrig.
+
+**Kernbefund:** Die Anwendungsebene ist solide (lückenlose Ownership-Prüfungen,
+Secrets sauber getrennt, Webhooks signaturgeprüft). Die **Datenbankebene** nicht.
+Weil der Supabase-`anon`-Key konstruktionsbedingt im Browser-Bundle liegt und im
+Repo **kein globales `REVOKE`** existiert, ist Row Level Security dort nicht
+*zusätzlicher* Schutz, sondern der **einzige** — und 15 Tabellen hatten keine,
+22 Policies waren wirkungslos.
+
+**Warum Policies „wirkungslos" waren:** `FOR ALL USING (true)` **ohne
+`TO`-Klausel** gilt in PostgreSQL für die Rolle PUBLIC, also auch für `anon`.
+Der Kommentar in den Migrationen sagt durchweg „service role", faktisch war es
+das Gegenteil. `ENABLE ROW LEVEL SECURITY` + `USING (true)` für PUBLIC ist
+funktional identisch mit **gar keiner RLS**.
+
+**Sechs Migrationen (Stufe 1), alle idempotent, in dieser Reihenfolge:**
+| Datei | Behebt | Wirkung |
+|---|---|---|
+| `supabase-sec-01-function-grants.sql` | K-2, K-3, H-3, H-5 | 13 `SECURITY DEFINER`-Funktionen: `search_path` gesetzt, EXECUTE nur noch `service_role` |
+| `supabase-sec-02-rls-nachtrag.sql` | K-1 | RLS + Service-Role-Policy für 15 Tabellen (`invoices`, `beta_feedback`, `blog_*`, `suppliers`, `purchases`, …) |
+| `supabase-sec-02b-anon-revoke.sql` | K-1 (strukturell) | `REVOKE ALL … FROM anon` + Default-Privileges → eine künftig vergessene RLS-Aktivierung ist kein Datenleck mehr |
+| `supabase-sec-03-policy-to-service-role.sql` | K-4, H-2 | Die 22 wirkungslosen `FOR ALL`-Policies dynamisch auf `service_role` eingeschränkt |
+| `supabase-sec-04-damage-photos-backfill.sql` | K-5 | Legacy-Public-URLs in `damage_reports.photos` + `customer_visible_paths` → Storage-Pfade |
+| `supabase-sec-05-damage-photos-private.sql` | K-5, N-10 | Bucket `damage-photos` (+ `signatures`) privat, öffentliche Lese-Policy entfernt |
+
+**Warum das nichts bricht (vorab verifiziert, nicht angenommen):**
+- Alle 17 `.rpc()`-Aufrufstellen nutzen `createServiceClient()` — kein einziger
+  Aufruf aus einem Browser- oder Cookie-Auth-Client. Deshalb genügt bei den
+  Funktionen ein reines Service-Role-GRANT; eine `auth.uid()`-Ownership-Prüfung
+  in `assign_free_unit` ist **nicht nötig**.
+- Alle 15 RLS-losen Tabellen werden ausschließlich über Service-Role angefasst
+  (Blog ist SSR/ISR, `invoices` wird von keinem Kundenpfad gelesen,
+  `admin_notifications` läuft über eine API-Route). Keine öffentliche
+  SELECT-Policy nötig.
+- **Öffentliche `FOR SELECT`-Policies auf Katalogdaten bleiben** (`accessories`,
+  `product_units`, `sets`, `admin_config`, `legal_documents`,
+  `product_blocked_dates`) — sonst bricht der Shop. sec-03 filtert deshalb hart
+  auf `cmd='ALL' AND qual='true'`.
+
+> ⚠️ **Regressionsfalle (mitgefixt):** Sechs Migrationsdateien enthielten
+> `GRANT EXECUTE … TO authenticated, service_role` in `CREATE OR REPLACE`-Blöcken
+> und hätten den Fix bei erneuter Ausführung aufgehoben — darunter
+> `supabase/supabase-accessory-assign-exclude-postponed.sql`, das als **offenes
+> Go-Live-TODO** noch aussteht. Alle sechs stehen jetzt auf `TO service_role`.
+> **Bei künftigen RPC-Migrationen niemals `authenticated` granten.**
+
+**Code-Anteil (Paket 3, ein Deploy):**
+- **Zwei vorbestehende Bugs mitgefixt:** `app/api/admin/damage-photo-url` erlaubte
+  per Regex genau **einen** Slash — Zubehör-Schadensfotos liegen aber unter
+  `<bookingId>/<accessoryUnitId>/<datei>` (`accessory-damage/route.ts:186`) und
+  liefen deshalb **schon immer** in ein `400`; ebenso fehlte `heif` in der
+  Endungsliste, obwohl der Upload sie erzeugt. Gleiches Slash-Problem in
+  `damage-attachment-url` (bedient beide Buckets). Beide Regexe akzeptieren jetzt
+  2 **oder** 3 Segmente, Traversal bleibt ausgeschlossen.
+- **Neu `lib/damage-photo-path.ts`** (`toDamagePhotoPath` / `damagePhotoSrc`):
+  normalisiert jeden `photos`-Eintrag zum Storage-Pfad — Alt-URL wie neuer Pfad.
+  Das Admin-UI (`/admin/schaeden`, `/admin/buchungen/[id]`) rendert dadurch **nie
+  mehr die öffentliche URL direkt**, sondern immer die signierte Route (5 Min).
+  Bewusst so gebaut statt „Legacy-Zweig ersatzlos streichen": damit ist der
+  Deploy **reihenfolge-unabhängig** vom Backfill (kein Zeitfenster mit kaputten
+  Vorschaubildern). Nur sec-05 muss zuletzt laufen.
+- `customer_visible_paths` (JSONB) und `photos` (TEXT[]) werden im Backfill in
+  **einer** Transaktion umgestellt — das UI matcht die Freigabe per
+  `.includes()` (`app/admin/schaeden/page.tsx:413`), eine einseitige Migration
+  hätte jede „🔓 Kunde"-Markierung still zerrissen.
+
+**Verifikation:** `supabase-migrationen-status-check.sql` hat für alle sechs
+Migrationen Prüfzeilen bekommen — sie prüfen den **Sicherheitszustand**, nicht nur
+die Existenz eines Objekts (z. B. „darf `anon` die RPC noch ausführen?", „ist der
+Bucket wirklich privat UND die Public-Policy weg?"), bleiben also dauerhaft
+aussagekräftig. Zusätzlich enthält jede Migration Vorschau, Verifikations-Abfrage,
+Smoke-Test-Liste und Rollback.
+
+**Nebenbefund (nicht im Bericht, noch offen):** `api.qrserver.com` bekommt
+**IBAN, Kontoinhaber, Betrag und Buchungsnummer in der URL** übertragen —
+clientseitig in `app/admin/buchungen/neu/page.tsx:596,600`, serverseitig in
+`lib/invoice-pdf.tsx:721`. Der Dienst steht **nicht** in der Sub-Processor-Liste
+der Datenschutzerklärung, ein AV-Vertrag existiert nicht. `qrcode` ist bereits
+Dependency → lokale Erzeugung wäre ein kleiner Fix (Paket 12).
+
+**Mitgefixt:** Der Terminologie-Guard `lib/__tests__/widerruf-consistency.test.ts`
+schlug seit dem Fixkosten-Tab bzw. der `euer-data.ts`-Extraktion fehl (beide
+nutzen „Versicherungen" als **Buchhaltungs-Ausgabenkategorie**, waren aber nicht
+in der `VERSICHERUNG_ALLOWLIST`). Beide mit Begründung ergänzt — 431/431 Tests grün.
+
+**Stufe 2 + 3 stehen noch aus** (Next.js ≥ 15.5.21, Storage-Schreibrechte,
+Fehlerprotokoll-Datenminimierung, Autorisierungslücken, CSP, 2FA für
+Mitarbeiterkonten, Auth-Härtung). Reihenfolge und Begründung siehe Umsetzungsplan.
+
 ### Security-Audit-Fixes (2026-05-07 Sweep 9 — Verifikation + Lueckenschluss)
 Neunter Audit-Sweep mit acht parallelen Spezialisten-Agents (TLS, Auth, Authorization, Payment, Upload/SSRF, XSS, Webhook/Cron, DSGVO/Frontend). Alle Sweep-8-Fixes verifiziert (alle ~80 halten), zusaetzlich ~50 Findings entdeckt und gefixt — diesmal vor allem Defense-in-Depth + uebersehene Pfade.
 
@@ -8001,6 +8094,35 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **🔴 SICHERHEIT ZUERST — sechs Migrationen aus dem Audit 2026-08-27
+  (`SECURITY-AUDIT.md`, Stufe 1). Diese haben Vorrang vor allem anderen in
+  dieser Liste: Solange sie nicht laufen, sind Rechnungen, Testerdaten,
+  Blogkommentare und Schadensfotos mit dem `anon`-Key aus dem Browser-Bundle
+  les- UND schreibbar, und die Zuweisungs-RPCs sind für jeden aufrufbar.
+  In dieser Reihenfolge im Supabase-SQL-Editor ausführen, nach jedem Schritt
+  die Verifikations-Abfrage am Dateiende + den dort genannten Smoke-Test:**
+  1. `supabase/supabase-sec-01-function-grants.sql` — Funktionsrechte.
+     Danach eine Testbuchung in `/admin/buchungen/neu` anlegen: Kamera- und
+     Zubehör-Zuweisung müssen weiter greifen.
+  2. `supabase/supabase-sec-02-rls-nachtrag.sql` — RLS für 15 Tabellen.
+     Danach Shop + `/admin/buchhaltung` + `/admin/blog/artikel` prüfen.
+  3. `supabase/supabase-sec-02b-anon-revoke.sql` — **bewusst eigener Schritt.**
+     Erst ausführen, wenn der Smoke-Test von (2) sauber war; so ist im
+     Fehlerfall klar, welcher Schritt die Ursache ist.
+  4. `supabase/supabase-sec-03-policy-to-service-role.sql` — wirkungslose
+     Policies. Schritt 1 der Datei ist eine reine Vorschau: kurz durchsehen,
+     es dürfen nur Verwaltungstabellen auftauchen.
+  5. `supabase/supabase-sec-04-damage-photos-backfill.sql` — Schadensfoto-URLs.
+     Reihenfolge zum Deploy egal.
+  6. `supabase/supabase-sec-05-damage-photos-private.sql` — **ZULETZT**, erst
+     wenn (5) gelaufen UND der zugehörige Deploy live ist.
+
+  **Vorher einen manuellen Supabase-Snapshot anlegen.** Jede Datei enthält ihr
+  eigenes Rollback. Fortschritt jederzeit über
+  `supabase-migrationen-status-check.sql` prüfbar (sechs neue Prüfzeilen).
+  Nach Abschluss das vollständige Verifikationsskript aus `SECURITY-AUDIT.md`
+  Abschnitt 8 einmal am Stück laufen lassen und die Ausgabe zusammen mit dem
+  Bericht archivieren — das ist der Nachweis für den Versicherer.
 - **Unvollständige Rückgabe — Migration auszuführen:**
   `supabase/supabase-return-open-items.sql` (idempotent, additiv: Tabelle
   `booking_return_open_items`). Ohne sie läuft der Rückgabe-Flow **exakt wie

@@ -56,4 +56,4 @@ END;
 $$;
 
 -- Ausführungsrecht für authentifizierte Rollen + Service-Role.
-GRANT EXECUTE ON FUNCTION assign_free_unit(text, date, date, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION assign_free_unit(text, date, date, text) TO service_role;  -- Audit K-3: kein `authenticated` (siehe supabase-sec-01-function-grants.sql)

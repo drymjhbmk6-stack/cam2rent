@@ -10,6 +10,7 @@ import CancellationPreviewModal from '@/components/admin/CancellationPreviewModa
 import PriceInput from '@/components/admin/PriceInput';
 import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { BUSINESS } from '@/lib/business-config';
+import { damagePhotoSrc } from '@/lib/damage-photo-path';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { computeCancellationSuggestion, refundBelowSuggestion, CANCELLATION_REASON_OPTIONS, type CancellationReasonCategory } from '@/data/cancellation';
@@ -2354,7 +2355,9 @@ export default function BuchungDetailPage() {
                         {r.photos && r.photos.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-3">
                             {r.photos.map((p, i) => {
-                              const src = /^https?:\/\//.test(p) ? p : `/api/admin/damage-photo-url?path=${encodeURIComponent(p)}`;
+                              // Audit K-5: nie mehr die oeffentliche URL direkt
+                              // rendern — immer ueber die signierte Route.
+                              const src = damagePhotoSrc(p);
                               return (
                                 <button
                                   key={i}

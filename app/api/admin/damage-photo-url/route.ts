@@ -9,6 +9,16 @@ import { createServiceClient } from '@/lib/supabase';
  * (5 Min) — auch wenn der Bucket privat ist (was er sein muss).
  *
  * Pfad-Whitelist: muss mit `&lt;bookingId&gt;/` beginnen, kein `..`/`/`.
+ *
+ * Es gibt ZWEI gueltige Pfadformen (Audit K-5 / Paket 3a):
+ *   - `<bookingId>/<datei>.<ext>`                    → Buchungsschaden
+ *     (app/api/damage-report/route.ts:145, app/api/admin/damage/route.ts:173)
+ *   - `<bookingId>/<accessoryUnitId>/<datei>.<ext>`  → Zubehoer-Schaden
+ *     (app/api/admin/accessory-damage/route.ts:186)
+ * Die frueher hier verlangte Form mit genau EINEM Slash liess die zweite Variante
+ * durchfallen — Zubehoer-Schadensfotos liefen deshalb in ein 400 und wurden im
+ * Admin nie angezeigt. Ebenso fehlte `heif` in der Endungsliste, obwohl der
+ * Upload diese Endung erzeugen kann.
  */
 export async function GET(req: NextRequest) {
   const path = req.nextUrl.searchParams.get('path');
@@ -18,7 +28,8 @@ export async function GET(req: NextRequest) {
   if (path.includes('..') || path.startsWith('/')) {
     return NextResponse.json({ error: 'Ungueltiger Pfad.' }, { status: 400 });
   }
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp|heic|gif)$/i.test(path)) {
+  // 2 oder 3 Segmente, jedes ohne Slash — Traversal bleibt ausgeschlossen.
+  if (!/^[A-Za-z0-9_.-]+\/(?:[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp|heic|heif|gif)$/i.test(path)) {
     return NextResponse.json({ error: 'Pfadformat nicht erlaubt.' }, { status: 400 });
   }
 

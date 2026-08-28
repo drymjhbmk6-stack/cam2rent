@@ -244,6 +244,79 @@ WITH checks AS (
                    AND pg_get_functiondef(p.oid) ILIKE '%is_test%'),
          'RPC assign_free_unit mit Tester-Isolation (is_test im Body)'
 
+  -- ── Sicherheits-Migrationen (Audit 2026-08-27) ─────────────────────────
+  -- Siehe SECURITY-AUDIT.md. Diese Zeilen pruefen den Sicherheitszustand, nicht
+  -- nur die Existenz eines Objekts — sie bleiben also dauerhaft aussagekraeftig.
+  UNION ALL
+  SELECT 'supabase-sec-01-function-grants',
+         -- ERLEDIGT, sobald weder anon noch authenticated die Zuweisungs-RPC
+         -- ausfuehren duerfen. NULL (Funktion fehlt) gilt konservativ als offen.
+         NOT COALESCE(
+           has_function_privilege('authenticated',
+             to_regprocedure('public.assign_free_unit(text,date,date,text)'), 'EXECUTE')
+           OR has_function_privilege('anon',
+             to_regprocedure('public.assign_free_unit(text,date,date,text)'), 'EXECUTE'),
+           TRUE),
+         'SECURITY-DEFINER-Funktionen: EXECUTE nur noch service_role (Audit K-2/K-3/H-3/H-5)'
+  UNION ALL
+  SELECT 'supabase-sec-02-rls-nachtrag',
+         -- ERLEDIGT, sobald KEINE der 15 Tabellen mehr ohne RLS dasteht.
+         NOT EXISTS (
+           SELECT 1 FROM pg_class c
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity = false
+              AND c.relname IN ('invoices','invoice_counter','suppliers','purchases',
+                                'purchase_items','beta_feedback','blog_comments',
+                                'return_checklists','admin_notifications','blog_posts',
+                                'blog_categories','blog_auto_topics','blog_schedule',
+                                'blog_series','blog_series_parts')),
+         'RLS auf den 15 ungeschuetzten Tabellen aktiviert (Audit K-1)'
+  UNION ALL
+  SELECT 'supabase-sec-02b-anon-revoke',
+         -- ERLEDIGT, sobald anon keinerlei Tabellenrechte im public-Schema mehr hat.
+         NOT EXISTS (
+           SELECT 1 FROM information_schema.role_table_grants
+            WHERE grantee='anon' AND table_schema='public'),
+         'Tabellenrechte fuer anon entzogen — schuetzt auch kuenftige Tabellen (Audit K-1)'
+  UNION ALL
+  SELECT 'supabase-sec-03-policy-to-service-role',
+         -- ERLEDIGT, sobald keine bedingungslose FOR-ALL-Richtlinie mehr fuer
+         -- public/anon/authenticated gilt. Bewusst auf cmd='ALL' eingegrenzt:
+         -- oeffentliche FOR-SELECT-Richtlinien auf Katalogdaten (accessories,
+         -- sets, admin_config, legal_documents …) sind gewollt und bleiben.
+         NOT EXISTS (
+           SELECT 1 FROM pg_policies
+            WHERE schemaname='public'
+              AND cmd = 'ALL'
+              AND qual = 'true'
+              AND (   'public'        = ANY(roles)
+                   OR 'anon'          = ANY(roles)
+                   OR 'authenticated' = ANY(roles))),
+         'Wirkungslose FOR-ALL-Richtlinien auf service_role eingeschraenkt (Audit K-4/H-2)'
+  UNION ALL
+  SELECT 'supabase-sec-04-damage-photos-backfill',
+         -- ERLEDIGT, sobald in damage_reports.photos keine vollen URLs mehr
+         -- stehen, sondern ausschliesslich Storage-Pfade.
+         NOT EXISTS (
+           SELECT 1 FROM damage_reports d
+            WHERE d.photos IS NOT NULL
+              AND EXISTS (SELECT 1 FROM unnest(d.photos) AS p WHERE p LIKE 'http%')),
+         'Schadensfotos: Legacy-Public-URLs auf Storage-Pfade umgestellt (Audit K-5)'
+  UNION ALL
+  SELECT 'supabase-sec-05-damage-photos-private',
+         -- ERLEDIGT nur, wenn BEIDES stimmt: Bucket nicht mehr oeffentlich UND
+         -- die anonyme Lese-Policy entfernt. Das `public`-Flag allein genuegt
+         -- nicht — die Policy wuerde den Abruf ueber die Objekt-API weiter
+         -- erlauben. Prueft ausserdem den Bucket `signatures` (Audit N-10).
+         (   EXISTS (SELECT 1 FROM storage.buckets
+                      WHERE id='damage-photos' AND public = false)
+         AND NOT EXISTS (SELECT 1 FROM storage.buckets
+                          WHERE id='signatures' AND public)
+         AND NOT EXISTS (SELECT 1 FROM pg_policies
+                          WHERE schemaname='storage' AND tablename='objects'
+                            AND policyname='Public read access for damage photos')),
+         'Bucket damage-photos (+ signatures) privat, oeffentliche Lese-Policy weg (Audit K-5/N-10)'
+
 ), info AS (
 
   -- ── Backfill/Cleanup/Reset — nicht automatisch pruefbar ─────────────────

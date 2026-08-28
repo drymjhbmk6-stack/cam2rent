@@ -67,7 +67,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION assign_free_unit(text, date, date, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION assign_free_unit(text, date, date, text) TO service_role;  -- Audit K-3: kein `authenticated` (siehe supabase-sec-01-function-grants.sql)
 
 
 -- ── Zubehoer (accessory_units) ──────────────────────────────────────────
@@ -133,4 +133,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION assign_free_accessory_units(text, integer, date, date, text)
-  TO authenticated, service_role;
+  TO service_role;  -- Audit K-3: kein `authenticated` (siehe supabase-sec-01-function-grants.sql)

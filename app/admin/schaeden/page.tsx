@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import DamageReportModal from '@/components/admin/DamageReportModal';
 import { PageHeader } from '@/components/admin/ui';
 import { useToast } from '@/components/admin/ui/FeedbackProvider';
+import { damagePhotoSrc } from '@/lib/damage-photo-path';
 import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
@@ -402,15 +403,13 @@ export default function AdminSchaedenPage() {
                   Fotos ({selectedReport.photos.length})
                 </p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {selectedReport.photos.map((urlOrPath, i) => {
-                    // Sweep 9 Followup: neue Eintraege sind Storage-Pfade,
-                    // Legacy-Eintraege sind volle URLs (PublicURL aus Pre-
-                    // Sweep-9-Zeit). Beide unterstuetzen.
-                    const isLegacyUrl = /^https?:\/\//.test(urlOrPath);
-                    const src = isLegacyUrl
-                      ? urlOrPath
-                      : `/api/admin/damage-photo-url?path=${encodeURIComponent(urlOrPath)}`;
-                    const shared = (selectedReport.customer_visible_paths || []).includes(urlOrPath);
+                  {selectedReport.photos.map((entry, i) => {
+                    // Audit K-5: nie mehr die oeffentliche URL direkt rendern.
+                    // damagePhotoSrc() normalisiert Alt-URLs zum Storage-Pfad und
+                    // laedt immer ueber die signierte Route (5 Min Lifetime) —
+                    // funktioniert vor UND nach dem Backfill.
+                    const src = damagePhotoSrc(entry);
+                    const shared = (selectedReport.customer_visible_paths || []).includes(entry);
                     return (
                       <div key={i} style={{ width: 80 }}>
                         <button

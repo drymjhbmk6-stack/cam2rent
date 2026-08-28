@@ -68,5 +68,15 @@ BEGIN
 END;
 $$;
 
+-- Sicherheit (Audit-Befund K-3, Migration supabase-sec-01-function-grants.sql):
+-- KEIN `TO authenticated` mehr. Die Funktion ist SECURITY DEFINER, umgeht damit die
+-- RLS von `bookings` und prüft `auth.uid()` nicht — mit Ausführungsrecht für
+-- `authenticated` konnte jeder eingeloggte Kunde über eine erratbare Buchungsnummer
+-- fremde Buchungen ändern und den Gerätepool blockieren.
+-- Alle Aufrufer im Code nutzen die Service-Role (lib/accessory-unit-assignment.ts:78).
 GRANT EXECUTE ON FUNCTION assign_free_accessory_units(text, integer, date, date, text)
-  TO authenticated, service_role;
+  TO service_role;
+REVOKE ALL ON FUNCTION assign_free_accessory_units(text, integer, date, date, text)
+  FROM PUBLIC, anon, authenticated;
+ALTER FUNCTION assign_free_accessory_units(text, integer, date, date, text)
+  SET search_path = public;

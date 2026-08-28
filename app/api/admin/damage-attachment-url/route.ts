@@ -12,8 +12,14 @@ export async function GET(req: NextRequest) {
   if (!path) {
     return NextResponse.json({ error: 'path erforderlich.' }, { status: 400 });
   }
-  // Path-Traversal-Schutz: nur einfache "<bookingId>/<datei>"-Pfade.
-  if (path.includes('..') || !/^[\w.\-]+\/[\w.\-]+$/.test(path)) {
+  // Path-Traversal-Schutz: 2 oder 3 Segmente, jedes ohne Slash.
+  //   `<bookingId>/<datei>`                    → Dokument bzw. Buchungsschaden-Foto
+  //   `<bookingId>/<accessoryUnitId>/<datei>`  → Zubehoer-Schadensfoto
+  // Die Route bedient beide Buckets (signedDamageAttachmentUrl probiert
+  // damage-photos und damage-attachments), deshalb muss sie auch die dreiteilige
+  // Fotoform akzeptieren — vorher lief die in ein 400 (Audit K-5 / Paket 3a).
+  if (path.includes('..') || path.startsWith('/') ||
+      !/^[\w.\-]+\/(?:[\w.\-]+\/)?[\w.\-]+$/.test(path)) {
     return NextResponse.json({ error: 'Ungültiger Pfad.' }, { status: 400 });
   }
   try {
