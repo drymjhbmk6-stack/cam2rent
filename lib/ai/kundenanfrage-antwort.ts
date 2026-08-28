@@ -126,8 +126,20 @@ async function ladeApiKey(supabase: SB): Promise<string> {
     .select('value')
     .eq('key', 'blog_settings')
     .maybeSingle();
-  const fromDb = (data?.value as { anthropic_api_key?: string } | null)?.anthropic_api_key;
-  return fromDb || process.env.ANTHROPIC_API_KEY || '';
+  // admin_settings.value haelt die Blog-Einstellungen als JSON-STRING
+  // (BlogEinstellungenContent speichert mit JSON.stringify). Ohne das Parsen
+  // ist jeder Feldzugriff undefined — der Key gilt dann faelschlich als
+  // "nicht konfiguriert". Gleiches Muster wie invoice-extract/ai-content.
+  let settings: { anthropic_api_key?: string } | null = null;
+  try {
+    settings =
+      typeof data?.value === 'string'
+        ? JSON.parse(data.value)
+        : (data?.value as { anthropic_api_key?: string } | null);
+  } catch {
+    settings = null;
+  }
+  return settings?.anthropic_api_key?.trim() || process.env.ANTHROPIC_API_KEY || '';
 }
 
 /**

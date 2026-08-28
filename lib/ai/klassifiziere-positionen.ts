@@ -43,9 +43,21 @@ export async function klassifizierePositionen(
     .eq('key', 'blog_settings')
     .maybeSingle();
 
-  const apiKey = (setting?.value as { anthropic_api_key?: string } | null)?.anthropic_api_key
-    ?? process.env.ANTHROPIC_API_KEY
-    ?? '';
+  // Wert liegt als JSON-STRING in admin_settings (siehe BlogEinstellungenContent)
+  // — ohne Parsen war der Key hier immer undefined und die Klassifizierung
+  // scheiterte, sofern keine ANTHROPIC_API_KEY-Env gesetzt war.
+  let settings: { anthropic_api_key?: string } | null = null;
+  try {
+    settings =
+      typeof setting?.value === 'string'
+        ? JSON.parse(setting.value)
+        : (setting?.value as { anthropic_api_key?: string } | null);
+  } catch {
+    settings = null;
+  }
+  const apiKey = settings?.anthropic_api_key?.trim()
+    || process.env.ANTHROPIC_API_KEY
+    || '';
 
   if (!apiKey) {
     throw new Error('Kein Anthropic API-Key konfiguriert (admin_settings.blog_settings.anthropic_api_key)');
