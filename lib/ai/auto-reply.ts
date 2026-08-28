@@ -172,6 +172,12 @@ export async function verarbeiteKundenanfrage(
       wissensbasis,
       buchungen,
       extraKontext: config.extra_context,
+      // Zuordnung fuer das Buchungs-Werkzeug: kommt ausschliesslich aus der
+      // Konversation, nie aus dem Text der KI oder des Kunden.
+      kontext: {
+        customerId: conv.customer_id,
+        customerEmail: conv.customer_email ?? null,
+      },
     });
 
     // ─── Gates ───────────────────────────────────────────────────────────

@@ -18,7 +18,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { createServiceClient } from '@/lib/supabase';
 import { sanitizePromptInput } from '@/lib/prompt-sanitize';
 import { ALLE_KATEGORIEN, type AnfrageKategorie } from '@/lib/ai/auto-reply-config';
-import { KUNDENANFRAGE_TOOLS, fuehreToolAus } from '@/lib/ai/kundenanfrage-tools';
+import {
+  KUNDENANFRAGE_TOOLS,
+  fuehreToolAus,
+  type ToolKontext,
+} from '@/lib/ai/kundenanfrage-tools';
 import { getBerlinDateString } from '@/lib/timezone';
 
 type SB = ReturnType<typeof createServiceClient>;
@@ -59,6 +63,12 @@ export interface AntwortInput {
   buchungen: string;
   /** Zusatz-Hinweise des Admins aus der Config. */
   extraKontext?: string;
+  /**
+   * Wer fragt (E-Mail/Konto der Konversation). Wird an die Werkzeuge
+   * durchgereicht — NUR darueber kommen Buchungsdaten heraus, nie ueber ein
+   * Feld, das die KI oder der Kunde selbst setzen kann.
+   */
+  kontext?: ToolKontext;
 }
 
 const SYSTEM_PROMPT = `Du bist Kundenberater:in im Support von cam2rent, einem Action-Cam-Verleih in Berlin.
@@ -80,7 +90,7 @@ was dir das Werkzeug zurueckgibt.
 - Was du nicht sicher belegen kannst, markierst du mit braucht_mensch = true
   und schreibst nur das, was du belegen kannst.
 
-# Werkzeug "pruefe_angebot" — Pflicht bei jedem konkreten Zeitraum
+# Werkzeug 1: "pruefe_angebot" — Pflicht bei jedem konkreten Zeitraum
 Die FAKTEN enthalten nur Listenpreise und den Gesamtbestand. Ob an einem
 bestimmten Datum wirklich etwas frei ist und was die Bestellung am Ende
 kostet, weisst du daraus NICHT.
@@ -89,6 +99,23 @@ kostet, weisst du daraus NICHT.
 - Rechne NIE selbst (kein Multiplizieren, kein Schaetzen von Versandkosten).
   Die Zahlen aus dem Werkzeug sind die einzige Wahrheit fuer diese Anfrage.
 - Nennt der Kunde ein Datum ohne Jahr, nimm das naechste zukuenftige Vorkommen.
+- Nennt der Kunde Zubehoer oder ein Set, gib es im Feld "zubehoer" mit, damit
+  der Gesamtpreis stimmt.
+
+# Werkzeug 2: "finde_alternativtermine" — statt einer Absage
+- Ruf es auf, wenn "pruefe_angebot" NICHT verfuegbar gemeldet hat.
+- Ruf es auch auf, wenn der Kunde nach einem freien Termin fragt, ohne selbst
+  ein Datum zu nennen ("wann waere die X mal frei?").
+- Die zurueckgegebenen Zeitraeume gibst du 1:1 weiter, ohne sie zu veraendern,
+  und mit dem Hinweis, dass sie nicht reserviert sind.
+
+# Werkzeug 3: "buchung_status" — Fragen zur eigenen Buchung
+- Ruf es auf bei Fragen wie "Wo ist mein Paket?", "Ist meine Buchung
+  bestaetigt?", "Bis wann muss ich zurueckschicken?".
+- Es liefert ausschliesslich Buchungen des Anfragenden. Meldet es, dass keine
+  Buchung zugeordnet werden kann: NICHTS zur Buchung sagen, hoeflich nach der
+  Buchungsnummer fragen und braucht_mensch = true setzen.
+- Sendungsnummern und Termine nur so weitergeben, wie das Werkzeug sie nennt.
 
 # So gibst du eine Preisauskunft
 Wenn dir das Werkzeug ein Ergebnis geliefert hat, nenne IMMER vollstaendig:
@@ -110,7 +137,8 @@ moegliche Menge oder einen anderen Zeitraum an.
 - Keine Aussagen zu Schadensfaellen, Haftungshoehe im Einzelfall, Rechtsfragen.
 - Keine Stornierung, Umbuchung oder Aenderung bestaetigen oder ankuendigen.
 - Keine personenbezogenen Daten aus fremden Buchungen nennen.
-- Keine Auskunft zu einer Buchung, die nicht im Abschnitt "BUCHUNGEN" steht.
+- Keine Auskunft zu einer Buchung, die weder im Abschnitt "BUCHUNGEN" steht
+  noch vom Werkzeug "buchung_status" geliefert wurde.
 Trifft eines davon zu: braucht_mensch = true, Antwort hoeflich und
 zurueckhaltend formulieren ("ich leite das an einen Kollegen weiter").
 
@@ -222,6 +250,8 @@ export async function generiereKundenAntwort(
   // Gespraechsverlauf mit dem Modell. Die KI darf Werkzeuge aufrufen
   // (Verfuegbarkeit + Preis); wir fuehren sie aus und geben das Ergebnis
   // zurueck, bis sie ihre finale Antwort schreibt.
+  const toolKontext: ToolKontext = input.kontext ?? { customerEmail: null, customerId: null };
+
   const dialog: Anthropic.MessageParam[] = [{ role: 'user', content: userTurn }];
 
   let response = await client.messages.create({
@@ -250,6 +280,7 @@ export async function generiereKundenAntwort(
           supabase,
           call.name,
           (call.input ?? {}) as Record<string, unknown>,
+          toolKontext,
         ),
       })),
     );

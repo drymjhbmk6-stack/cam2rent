@@ -908,7 +908,48 @@ wenn jemand die Kategorie in die Whitelist einträgt (`NIEMALS_AUTOMATISCH` in
     nennt danach immer: Verfügbarkeit (mit „Stand jetzt, erst die Buchung
     reserviert"), Preis pro Kamera + Summe, Versand **auch wenn er entfällt**,
     Gesamtpreis, Kaution (nur vorgemerkt) und den Haftungsschutz als Option.
-  - Bewusst **nur lesend** — das Werkzeug bucht nichts und reserviert nichts.
+  - **Zubehör/Sets im Angebot** (Stand 2026-08-28): `pruefe_angebot` nimmt
+    zusätzlich `zubehoer: string[]` (Klartext-Namen). Die Namen werden gegen
+    `getAllAccessories()` **und** die `sets`-Tabelle aufgelöst (exakt →
+    Teilstring, max. 10) und als `accessories: [{accessory_id, qty:1}]` an
+    `computeQuote` gereicht — Set-IDs behandelt `computeQuote` selbst als
+    Pseudo-Zubehör und expandiert sie in die Bestandteile. Nicht gefundene
+    Namen werden der KI **explizit als „nicht im Sortiment" gemeldet**, damit
+    sie nachfragt statt etwas zu erfinden. Damit stimmt der Gesamtpreis auch,
+    wenn der Kunde „mit Basic Set" schreibt.
+- **Werkzeug `finde_alternativtermine` — statt einer Absage (Stand 2026-08-28).**
+  Meldet `pruefe_angebot` „nicht möglich" (oder fragt der Kunde nach einem
+  freien Termin ohne Datum), sucht dieses Werkzeug die nächsten Zeiträume, in
+  denen das Modell in der gewünschten Menge frei ist.
+  - **Gleitende Suche** statt Tag-für-Tag: bei einem Konflikt springt die Suche
+    direkt hinter den blockierten Tag (`conflict.day + 1`), bei einem Treffer
+    hinter das gefundene Fenster (keine überlappenden Vorschläge). Gedeckelt
+    auf 25 Prüfungen, `ALTERNATIV_HORIZONT_TAGE = 120`, `MAX_ALTERNATIVEN = 3`.
+  - Startet frühestens am erstmöglichen Miettag (`loadBufferDays` +
+    `getEffectiveLeadDays`) — schlägt also nie einen Termin vor, der wegen
+    der Vorlaufzeit gar nicht buchbar wäre. Nutzt dieselbe
+    `findCameraOverbookingConflict`-Prüfung wie der harte Überbuchungsschutz.
+  - Der Prompt verlangt, die Zeiträume 1:1 weiterzugeben (nichts umrechnen)
+    und dazuzusagen, dass sie **nicht reserviert** sind.
+- **Werkzeug `buchung_status` — Fragen zur eigenen Buchung (Stand 2026-08-28).**
+  Liefert Status, Zeitraum, Lieferart, Sendungsnummern (hin + zurück) und ob
+  der Mietvertrag unterschrieben ist — für „Wo ist mein Paket?", „Ist meine
+  Buchung bestätigt?", „Bis wann muss ich zurückschicken?".
+  - ⚠️ **Die Zuordnung kommt AUSSCHLIESSLICH aus dem `ToolKontext`**
+    (`customerId`/`customerEmail` der Konversation, gesetzt von
+    `lib/ai/auto-reply.ts`), **niemals** aus einem Feld, das die KI oder der
+    Kunde füllen kann. Eine von der KI genannte Buchungsnummer kann die
+    Auswahl nur **einschränken** (`.eq('id', …)` zusätzlich zum
+    Ownership-Filter), nie fremde Buchungen öffnen. Ohne zuordenbares Konto
+    gibt das Werkzeug gar keine Daten heraus, sondern weist die KI an, nach
+    der Buchungsnummer zu fragen und zu eskalieren.
+  - Ergänzt den statischen `buchungsKontext()`-Block: der ist ein Snapshot vom
+    Prompt-Aufbau, das Werkzeug fragt bei Bedarf gezielt (und mit
+    Buchungsnummer-Filter) frisch nach.
+  - Bewusst **nur lesend** — kein Werkzeug bucht, storniert oder reserviert
+    etwas. Bewusste Architekturentscheidung: eine falsche Auskunft ist
+    korrigierbar, eine fälschlich angelegte oder stornierte Buchung bewegt
+    Inventar und Geld.
 - **Kosten:** ca. 0,01–0,03 € pro beantworteter Anfrage (Claude Sonnet, die
   Wissensbasis ist der größte Teil des Prompts). Bei 300 Anfragen/Monat ≤ 10 €.
 - **Bewusst NICHT im Scope:** Die KI führt **keine Aktionen** aus (keine
