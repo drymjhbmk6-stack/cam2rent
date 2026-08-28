@@ -18,11 +18,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { createServiceClient } from '@/lib/supabase';
 import { sanitizePromptInput } from '@/lib/prompt-sanitize';
 import { ALLE_KATEGORIEN, type AnfrageKategorie } from '@/lib/ai/auto-reply-config';
+import { KUNDENANFRAGE_TOOLS, fuehreToolAus } from '@/lib/ai/kundenanfrage-tools';
+import { getBerlinDateString } from '@/lib/timezone';
 
 type SB = ReturnType<typeof createServiceClient>;
 
 /** Modell fuer die Antwortgenerierung. */
 const MODEL = 'claude-sonnet-4-6';
+
+/** Obergrenze fuer Werkzeug-Runden (Kosten- und Schleifenschutz). */
+const MAX_TOOL_RUNDEN = 4;
 
 export interface KiAntwort {
   kategorie: AnfrageKategorie;
@@ -68,11 +73,37 @@ Du beantwortest eingehende Kundenanfragen auf Deutsch.
 - Absaetze durch Leerzeilen trennen. Aufzaehlungen mit "- " am Zeilenanfang.
 
 # Deine Faktenquelle
-Du kennst NUR die Fakten im Abschnitt "FAKTEN" der Nutzernachricht.
+Du kennst NUR die Fakten im Abschnitt "FAKTEN" der Nutzernachricht — plus das,
+was dir das Werkzeug zurueckgibt.
 - Erfinde NIEMALS Preise, Termine, Verfuegbarkeiten, Fristen oder Zusagen.
 - Steht eine Zahl dort nicht, nennst du keine Zahl.
-- Was du nicht sicher aus den Fakten beantworten kannst, markierst du mit
-  braucht_mensch = true und schreibst nur das, was du belegen kannst.
+- Was du nicht sicher belegen kannst, markierst du mit braucht_mensch = true
+  und schreibst nur das, was du belegen kannst.
+
+# Werkzeug "pruefe_angebot" — Pflicht bei jedem konkreten Zeitraum
+Die FAKTEN enthalten nur Listenpreise und den Gesamtbestand. Ob an einem
+bestimmten Datum wirklich etwas frei ist und was die Bestellung am Ende
+kostet, weisst du daraus NICHT.
+- Nennt der Kunde einen Zeitraum oder ein Datum → Werkzeug aufrufen. Immer.
+- Fragt er nach mehreren Modellen → pro Modell ein Aufruf.
+- Rechne NIE selbst (kein Multiplizieren, kein Schaetzen von Versandkosten).
+  Die Zahlen aus dem Werkzeug sind die einzige Wahrheit fuer diese Anfrage.
+- Nennt der Kunde ein Datum ohne Jahr, nimm das naechste zukuenftige Vorkommen.
+
+# So gibst du eine Preisauskunft
+Wenn dir das Werkzeug ein Ergebnis geliefert hat, nenne IMMER vollstaendig:
+1. Verfuegbarkeit im gefragten Zeitraum — klare Aussage ("sind frei" /
+   "leider nicht moeglich, nur N frei"), mit dem Zusatz, dass das der Stand
+   von jetzt ist und erst die Buchung reserviert.
+2. Mietpreis pro Kamera UND Gesamtsumme.
+3. Versandkosten — ausdruecklich auch dann, wenn sie entfallen
+   ("Versand ist bei dieser Bestellung kostenlos").
+4. Gesamtpreis als klar erkennbare Summe.
+5. Kaution, falls das Werkzeug eine nennt — mit dem Hinweis, dass sie nur
+   vorgemerkt und nicht abgebucht wird.
+6. Haftungsschutz kurz als Option erwaehnen, wenn ohne gerechnet wurde.
+Ist etwas NICHT verfuegbar: sag es zuerst und deutlich, biete dann die
+moegliche Menge oder einen anderen Zeitraum an.
 
 # Was du NIEMALS tust
 - Keine Zusagen zu Erstattungen, Gutschriften, Rabatten, Kulanz oder Fristen.
@@ -168,6 +199,9 @@ export async function generiereKundenAntwort(
     .join('\n\n');
 
   const userTurn = [
+    `# HEUTE ist der ${getBerlinDateString()} (Format JJJJ-MM-TT).`,
+    'Nennt der Kunde ein Datum ohne Jahr, ist das nächste zukünftige Vorkommen gemeint.',
+    '',
     '# FAKTEN (einzige erlaubte Quelle)',
     input.wissensbasis,
     input.buchungen ? `\n${input.buchungen}` : '\n## Buchungen dieses Kunden\nKeine Buchung zuordenbar — daher KEINE Auskunft zu einer konkreten Buchung geben.',
@@ -185,12 +219,52 @@ export async function generiereKundenAntwort(
     .filter(Boolean)
     .join('\n');
 
-  const response = await client.messages.create({
+  // Gespraechsverlauf mit dem Modell. Die KI darf Werkzeuge aufrufen
+  // (Verfuegbarkeit + Preis); wir fuehren sie aus und geben das Ergebnis
+  // zurueck, bis sie ihre finale Antwort schreibt.
+  const dialog: Anthropic.MessageParam[] = [{ role: 'user', content: userTurn }];
+
+  let response = await client.messages.create({
     model: MODEL,
     max_tokens: 1500,
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userTurn }],
+    tools: KUNDENANFRAGE_TOOLS,
+    messages: dialog,
   });
+
+  // Begrenzt, damit eine Fehlschleife nicht endlos Geld kostet.
+  for (let runde = 0; runde < MAX_TOOL_RUNDEN && response.stop_reason === 'tool_use'; runde++) {
+    const aufrufe = response.content.filter(
+      (c): c is Anthropic.ToolUseBlock => c.type === 'tool_use',
+    );
+    if (aufrufe.length === 0) break;
+
+    // Alle Werkzeuge parallel ausfuehren; die Ergebnisse muessen zusammen in
+    // EINER Nutzernachricht zurueck (sonst hoert das Modell auf, mehrere
+    // Aufrufe gleichzeitig zu machen).
+    const ergebnisse = await Promise.all(
+      aufrufe.map(async (call) => ({
+        type: 'tool_result' as const,
+        tool_use_id: call.id,
+        content: await fuehreToolAus(
+          supabase,
+          call.name,
+          (call.input ?? {}) as Record<string, unknown>,
+        ),
+      })),
+    );
+
+    dialog.push({ role: 'assistant', content: response.content });
+    dialog.push({ role: 'user', content: ergebnisse });
+
+    response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      system: SYSTEM_PROMPT,
+      tools: KUNDENANFRAGE_TOOLS,
+      messages: dialog,
+    });
+  }
 
   const textBlock = response.content.find((c) => c.type === 'text');
   if (!textBlock || textBlock.type !== 'text') {

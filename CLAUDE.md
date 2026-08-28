@@ -882,6 +882,33 @@ wenn jemand die Kategorie in die Whitelist einträgt (`NIEMALS_AUTOMATISCH` in
   (`lib/__tests__/widerruf-consistency.test.ts`) — die Prompts müssen die
   Wörter nennen, um sie der KI zu verbieten. „Selbstbeteiligung" bleibt
   **clean** (der Prompt ist positiv formuliert).
+- **Werkzeuge: die KI prüft Verfügbarkeit + Preis selbst (Stand 2026-08-28).**
+  Die Wissensbasis kennt nur Listenpreise und den Gesamtbestand — ob an einem
+  konkreten Datum wirklich etwas frei ist und was die Bestellung am Ende
+  kostet, steht dort nicht. Deshalb bekommt die KI über Anthropic Tool Use ein
+  **lesendes** Werkzeug `pruefe_angebot` (`lib/ai/kundenanfrage-tools.ts`):
+  Kameramodell + Zeitraum + Menge + Lieferart + Haftungsschutz rein, raus geht
+  das Ergebnis von **`computeQuote`** (`lib/quote.ts`) — also exakt derselben
+  Funktion wie der Admin-Preisrechner. Damit sind Verfügbarkeit (via
+  `findCameraOverbookingConflict`, inkl. Cart-Holds + Reservierungen) und
+  Preis (Miete, Haftungsschutz, Versand inkl. Gratis-Schwelle, Kaution) per
+  Konstruktion identisch mit dem, was der Kunde im Shop sähe.
+  - **Modell-Auflösung** tolerant (exakt → Teilstring → Wort-Überlappung);
+    kein Treffer → die KI bekommt die Liste der echten Modellnamen zurück und
+    fragt nach, statt zu raten.
+  - **Tool-Loop** in `generiereKundenAntwort`: `stop_reason === 'tool_use'` →
+    alle Aufrufe **parallel** ausführen → alle `tool_result` in EINER
+    Nutzernachricht zurück (sonst stellt das Modell parallele Aufrufe ein) →
+    erneut fragen. Gedeckelt auf `MAX_TOOL_RUNDEN = 4` (Kosten-/Schleifenschutz).
+  - **Heutiges Datum** steht im User-Turn, sonst kann die KI „1.11." nicht
+    einordnen; Datum ohne Jahr = nächstes zukünftiges Vorkommen. Vergangene
+    Zeiträume liefern einen Hinweis statt einer Verfügbarkeitsaussage.
+  - **Prompt-Pflicht:** Bei jedem genannten Zeitraum MUSS das Werkzeug laufen;
+    selbst rechnen oder Versandkosten schätzen ist verboten. Die Preisauskunft
+    nennt danach immer: Verfügbarkeit (mit „Stand jetzt, erst die Buchung
+    reserviert"), Preis pro Kamera + Summe, Versand **auch wenn er entfällt**,
+    Gesamtpreis, Kaution (nur vorgemerkt) und den Haftungsschutz als Option.
+  - Bewusst **nur lesend** — das Werkzeug bucht nichts und reserviert nichts.
 - **Kosten:** ca. 0,01–0,03 € pro beantworteter Anfrage (Claude Sonnet, die
   Wissensbasis ist der größte Teil des Prompts). Bei 300 Anfragen/Monat ≤ 10 €.
 - **Bewusst NICHT im Scope:** Die KI führt **keine Aktionen** aus (keine
