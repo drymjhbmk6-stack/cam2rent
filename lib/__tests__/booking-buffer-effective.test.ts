@@ -181,6 +181,92 @@ describe('Regel 4 — Rueckpaket frueher eingetroffen', () => {
   });
 });
 
+describe('Abgeschlossene Buchung — frueher zurueckgebracht', () => {
+  it('verkuerzt die Spanne auf den tatsaechlichen Rueckgabetag', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'completed', actual_return_at: '2026-04-13T10:00:00Z' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    // Geplant bis 17.04., zurueck am 13.04. → ab dem 14. ist die Kamera frei.
+    expect(r.plannedEnd).toBe('2026-04-17');
+    expect(r.end).toBe('2026-04-13');
+    expect(r.markers).toContainEqual({
+      kind: 'returned-early',
+      from: '2026-04-14',
+      to: '2026-04-17',
+    });
+  });
+
+  it('nutzt returned_at, wenn kein genaueres Ist-Datum vorliegt (Abholung)', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'completed', delivery_mode: 'abholung', returned_at: '2026-04-12T16:00:00Z' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.actualReturnDate).toBe('2026-04-12');
+    expect(r.end).toBe('2026-04-12');
+  });
+
+  it('bevorzugt das echte Ist-Datum vor returned_at', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({
+        status: 'completed',
+        actual_return_at: '2026-04-13T10:00:00Z',
+        returned_at: '2026-04-16T10:00:00Z',
+      }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.actualReturnDate).toBe('2026-04-13');
+  });
+
+  it('verkuerzt NICHT ohne bekanntes Rueckgabedatum', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'completed' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.end).toBe('2026-04-17');
+    expect(r.markers).toEqual([]);
+  });
+
+  it('verkuerzt NICHT, wenn die Rueckgabe nach dem Plan-Ende lag', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'completed', actual_return_at: '2026-04-19T10:00:00Z' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.end).toBe('2026-04-19');
+    expect(r.markers.find((m) => m.kind === 'returned-early')).toBeUndefined();
+  });
+
+  it('LAEUFT NOCH: frueher Paket-Eingang verkuerzt weiterhin NICHTS', () => {
+    // Kern-Zusage: solange die Buchung reserviert, gibt erst die Pruefung frei.
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'delivered', actual_return_at: '2026-04-13T10:00:00Z' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.end).toBe('2026-04-17');
+    expect(r.markers.find((m) => m.kind === 'returned-early')).toBeUndefined();
+    expect(r.markers).toContainEqual({
+      kind: 'early-return',
+      from: '2026-04-13',
+      to: '2026-04-17',
+    });
+  });
+
+  it('returned_at an einer reservierenden Buchung dehnt hoechstens aus', () => {
+    const r = computeEffectiveBookingSpan(
+      booking({ status: 'delivered', returned_at: '2026-04-19T10:00:00Z' }),
+      BUF,
+      { today: '2026-04-20' },
+    );
+    expect(r.end).toBe('2026-04-19');
+  });
+});
+
 describe('Regel 5 — ueberfaellige Rueckgabe', () => {
   it('dehnt den Block rollierend bis heute aus', () => {
     const r = computeEffectiveBookingSpan(

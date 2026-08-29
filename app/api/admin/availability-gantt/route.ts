@@ -104,9 +104,10 @@ export async function GET(req: NextRequest) {
     actual_delivery_at?: string | null;
     actual_return_at?: string | null;
     return_arrived_at?: string | null;
+    returned_at?: string | null;
   };
   type BookingsQResult = { data: BookingRow[] | null; error: { message: string } | null };
-  const bookingsBaseCols = 'id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test';
+  const bookingsBaseCols = 'id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test, returned_at';
   const runBookings = async (cols: string): Promise<BookingsQResult> => {
     const r = await supabase
       .from('bookings')
@@ -350,8 +351,13 @@ export async function GET(req: NextRequest) {
           // sonst falsche Tage sehen.
           actual_dispatch_date: berlinDayOrNull(b.actual_dispatch_at),
           actual_delivery_date: berlinDayOrNull(b.actual_delivery_at),
+          // Fallback-Kette bis `returned_at` (Zeitpunkt der Rueckgabe-Pruefung),
+          // damit die Korrektur auch ohne die Ist-Logistik-Migration und bei
+          // Abholungen ohne Paket-Tracking greift.
           actual_return_date:
-            berlinDayOrNull(b.actual_return_at) ?? berlinDayOrNull(b.return_arrived_at),
+            berlinDayOrNull(b.actual_return_at) ??
+            berlinDayOrNull(b.return_arrived_at) ??
+            berlinDayOrNull(b.returned_at),
         })),
         // Reservierungen (Status 'reserved') als Pseudo-Buchungen anhängen.
         ...(reservationsByProduct[p.id] ?? []),

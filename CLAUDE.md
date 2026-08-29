@@ -2442,10 +2442,12 @@ oder später ein — stimmte der Kalender nicht mehr. Jetzt wird der **tatsächl
 Paketlauf** aus der bestehenden Sendcloud-Verfolgung ausgewertet und der Kalender
 korrigiert sich selbständig.
 
-**⚠️ KERN-INVARIANTE:** Der tatsächliche Verlauf darf die Blockspanne **nur
-AUSDEHNEN, nie verkürzen**. Verkürzt wird ausschließlich dadurch, dass die Buchung
-die reservierenden Status verlässt (= Rückgabe-Prüfung abgeschlossen). Dadurch ist
-Überbuchen strukturell unmöglich — der Block schrumpft nie automatisch.
+**⚠️ KERN-INVARIANTE:** Solange eine Buchung **reserviert**, darf der tatsächliche
+Verlauf die Blockspanne **nur AUSDEHNEN, nie verkürzen**. Verkürzt wird ausschließlich
+dadurch, dass die Buchung die reservierenden Status verlässt (= Rückgabe-Prüfung
+abgeschlossen) — dann endet die Spanne am **tatsächlichen Rückgabetag** statt am
+geplanten Ende. Dadurch ist Überbuchen strukturell unmöglich: solange die Kamera
+gebucht ist, schrumpft der Block nie automatisch.
 
 | Fall | Verhalten |
 |---|---|
@@ -2454,6 +2456,7 @@ die reservierenden Status verlässt (= Rückgabe-Prüfung abgeschlossen). Dadurc
 | Zustellung **vor** `rental_from` | Tage bis Mietbeginn markiert (`⇣`), bleiben blockiert |
 | Rückpaket eingetroffen, Prüfung offen | markiert (`⇡`), **gibt nichts frei** |
 | Rückgabe überfällig, nichts eingetroffen | Block läuft rollierend bis heute (`actual-rueck-overdue`) |
+| **Abgeschlossen**, Kamera war früher zurück | Spanne endet am Ist-Rückgabetag; Resttage gedämpft (`plan-tail`) |
 
 - **Migration `supabase/supabase-bookings-logistics-actuals.sql`** (idempotent,
   additiv): `bookings.actual_dispatch_at` (Gerät hat das Lager verlassen — Versand
@@ -2468,6 +2471,18 @@ die reservierenden Status verlässt (= Rückgabe-Prüfung abgeschlossen). Dadurc
   `actual_return_at` ist die kalenderrelevante Fachzeit; für Altbestand zieht der
   Cron sie mit Source `legacy_detected` nach. `shipped_at` bleibt ebenfalls
   unangetastet (bedeutet „Status wurde gesetzt", nicht „Ereigniszeit").
+- **Fallback-Kette fürs Ist-Rückgabedatum:** `actual_return_at → return_arrived_at →
+  returned_at`. Das letzte Glied (Zeitpunkt der abgeschlossenen Rückgabe-Prüfung,
+  gesetzt von `return-booking`) existiert seit langem — dadurch wirkt die Verkürzung
+  abgeschlossener Buchungen **sofort und rückwirkend für Altbestand**, auch ohne die
+  Migration und bei **Abholungen ohne Paket-Tracking**. `returned_at` ist immer ≥ dem
+  echten Eingang, als Verkürzungsgrenze also konservativ; die genaueren Ist-Felder
+  haben Vorrang.
+- **Warum abgeschlossene Buchungen verkürzt werden dürfen:** `completed` steht nicht in
+  `RESERVING_BOOKING_STATUSES` — die Buchung blockt in Kunden-Kalender,
+  Überbuchungssperre und Zubehör-Verfügbarkeit ohnehin nichts mehr. Der **Admin-Gantt**
+  lädt sie aber bewusst mit (historische Sichtbarkeit) und zeigte dadurch „belegt", wo
+  längst frei ist. Die Verkürzung wirkt deshalb praktisch **nur im Gantt**.
 - **Zentraler Helper `computeEffectiveBookingSpan(booking, buf, opts?)`** in
   `lib/booking-buffer.ts` — die eine Wahrheitsquelle für Plan + Ist. Liefert
   `{plannedStart, plannedEnd, start, end, actualDispatchDate, actualDeliveryDate,
@@ -2531,6 +2546,12 @@ die reservierenden Status verlässt (= Rückgabe-Prüfung abgeschlossen). Dadurc
   `pending`/`reserved` durchkombinieren zu müssen. Die Priorisierung in
   `matchBookingDay` (Miete → Hin-Puffer → Rück-Puffer) ist unverändert; Buchungen
   ohne Ist-Daten werden exakt wie vorher gerendert.
+  Dritter Typ **`plan-tail`** (`#1e3a5f`, gedämpftes Marineblau, Text „✓ zurück"):
+  geplant belegte Tage nach einer abgeschlossenen, früheren Rückgabe.
+  ⚠️ **`plan-tail` hat in `getCellInfo` die NIEDRIGSTE Priorität** — die Funktion nimmt
+  sonst den ersten Treffer, und ein `plan-tail` würde eine echte Folgebuchung auf
+  derselben Zeile überdecken. Deshalb wird er gemerkt, die Schleife läuft weiter, und
+  er kommt erst vor `free`/`past` zum Zug.
 - **Nebenbei mitgefixt:** der DST-Bug in `getBookingSpan`
   (`/admin/verfuegbarkeit`, `setDate` auf UTC-Mitternacht) sowie dieselbe fehlerhafte
   lokale `isoAddDays`-Kopie in `lib/camera-availability-check.ts` — beide nutzen jetzt

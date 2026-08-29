@@ -160,6 +160,8 @@ type DayCellType =
   // Ist-Logistik: Tage, die es im reinen Plan gar nicht gaebe.
   | 'actual-hin-early'
   | 'actual-rueck-overdue'
+  // Geplant belegt, aber die Rueckgabe ist schon geprueft → Kamera ist frei.
+  | 'plan-tail'
   | 'maintenance'
   | 'retired'
   | 'blocked'
@@ -186,6 +188,7 @@ const MARKER_COLORS: Record<LogisticsMarkerKind, string> = {
   'early-delivery': '#a3e635',
   'early-return': '#34d399',
   'overdue-return': '#fb7185',
+  'returned-early': '#64748b',
 };
 
 /** Kurzsymbol des Markers in der Zelle. */
@@ -195,6 +198,7 @@ const MARKER_SYMBOLS: Record<LogisticsMarkerKind, string> = {
   'early-delivery': '⇣',
   'early-return': '⇡',
   'overdue-return': '!',
+  'returned-early': '✓',
 };
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
@@ -509,21 +513,31 @@ export default function AdminVerfuegbarkeitPage() {
 
     // Real + virtuell dieser Unit zugewiesene Buchungen prüfen
     // (cameraAssignment verteilt unzugeordnete Buchungen auf genau eine Zeile).
+    //
+    // `plan-tail` (abgeschlossene Buchung, Kamera schon zurueck) hat die
+    // NIEDRIGSTE Prioritaet: der Tag ist ja frei, eine echte Folgebuchung auf
+    // derselben Zeile muss ihn ueberschreiben duerfen. Deshalb merken und
+    // weitersuchen, statt sofort zurueckzugeben.
+    let tail: DayCellInfo | null = null;
     const assignment = cameraAssignment.get(product.id);
     const unitBookings = assignment?.byUnit.get(unit.id) ?? [];
     for (const b of unitBookings) {
       const hit = matchBookingDay(b, dateStr, buf);
-      if (hit) return hit;
+      if (!hit) continue;
+      if (hit.type === 'plan-tail') { tail ??= hit; continue; }
+      return hit;
     }
 
     // Nur echte Überbuchungen (keine freie Zeile gefunden) auf allen Zeilen
     // sichtbar machen — als Konflikt-Hinweis.
     for (const b of assignment?.leftovers ?? []) {
       const hit = matchBookingDay(b, dateStr, buf);
-      if (hit) return hit;
+      if (!hit) continue;
+      if (hit.type === 'plan-tail') { tail ??= hit; continue; }
+      return hit;
     }
 
-    return { type: isPast ? 'past' : 'free' };
+    return tail ?? { type: isPast ? 'past' : 'free' };
   }
 
   function matchBookingDay(b: GanttBooking, dateStr: string, buf: BufferDays): DayCellInfo | null {
@@ -543,6 +557,20 @@ export default function AdminVerfuegbarkeitPage() {
       : null;
     const withMarker = (info: DayCellInfo): DayCellInfo =>
       mk ? { ...info, marker: mk.kind, markerDate: mk.from } : info;
+
+    // Rueckgabe-Pruefung abgeschlossen und die Kamera war frueher zurueck als
+    // geplant: die restlichen Plan-Tage sind frei. Gedaempft statt gruen, damit
+    // die Historie sichtbar bleibt. Greift nur, wenn `end` verkuerzt wurde —
+    // also ausschliesslich bei abgeschlossenen Buchungen; laufende rendern
+    // dadurch bitgleich wie bisher. Deckt Miet- UND Puffertage ab.
+    if (plain && dateStr > bufEndStr && dateStr <= plannedEnd) {
+      return {
+        type: 'plan-tail',
+        booking: b,
+        bufferLabel: 'Schon zurück',
+        markerDate: eff.actualReturnDate,
+      };
+    }
 
     // Priorisierung unveraendert: Miete → Hin-Puffer → Rueck-Puffer.
     if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
@@ -602,6 +630,7 @@ export default function AdminVerfuegbarkeitPage() {
         case 'buffer-rueck-reserved': return { background: '#164e63', color: '#cffafe' }; // Cyan (Rückversand, reserviert)
         case 'actual-hin-early': return { background: '#854d0e', color: '#fde68a' };  // Dunkles Gold — frueher rausgegangen
         case 'actual-rueck-overdue': return { background: '#9f1239', color: '#fecdd3' }; // Rosé — Rueckgabe ueberfaellig
+        case 'plan-tail': return { background: '#1e3a5f', color: '#64748b' };        // Gedaempft — war geplant, schon zurueck
         case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
         case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
         case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
@@ -665,6 +694,13 @@ export default function AdminVerfuegbarkeitPage() {
       }
       if (info.type === 'actual-rueck-overdue') {
         extra.push('▲! Rückgabe überfällig — nichts eingetroffen');
+      }
+      if (info.type === 'plan-tail') {
+        extra.push(
+          info.markerDate
+            ? `✓ Zurückgegeben am ${fmtDate(info.markerDate)} — Kamera ist wieder frei`
+            : '✓ Rückgabe abgeschlossen — Kamera ist wieder frei',
+        );
       }
       if (info.marker === 'late-dispatch' && b.actual_dispatch_date) {
         extra.push(`⏱ Tatsächlich abgegeben: ${fmtDate(b.actual_dispatch_date)} (später als geplant — Blockzeit unverändert)`);
@@ -1122,6 +1158,7 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['late-dispatch']}` }} /> ⏱ Später abgegeben</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['early-delivery']}` }} /> ⇣ Früh zugestellt</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: 'transparent', borderBottom: `3px solid ${MARKER_COLORS['early-return']}` }} /> ⇡ Rückpaket da, Prüfung offen</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1e3a5f' }} /> ✓ Schon zurück (war geplant)</span>
               </div>
 
               {/* EIN gemeinsamer Kalender für ALLE Kameras. Jede Zeile = ein
@@ -1256,6 +1293,7 @@ export default function AdminVerfuegbarkeitPage() {
                                       {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending' || info.type === 'buffer-rueck-reserved') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
                                       {info.type === 'actual-hin-early' && <span style={{ fontSize: '8px' }}>▼▼ FRÜH</span>}
                                       {info.type === 'actual-rueck-overdue' && <span style={{ fontSize: '8px' }}>▲! ÜBER</span>}
+                                      {info.type === 'plan-tail' && <span style={{ fontSize: '8px' }}>✓ zurück</span>}
                                       {info.marker && info.type !== 'actual-hin-early' && info.type !== 'actual-rueck-overdue' && (
                                         <span style={{ fontSize: '8px' }}> {MARKER_SYMBOLS[info.marker]}</span>
                                       )}

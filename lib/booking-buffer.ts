@@ -243,6 +243,13 @@ export interface BookingLogisticsInput {
   actual_return_at?: string | null;
   /** Legacy-Fallback (Erkennungszeit des Retoure-Crons). */
   return_arrived_at?: string | null;
+  /**
+   * Zeitpunkt der abgeschlossenen Rueckgabe-Pruefung. Letzter Fallback fuer das
+   * Ist-Rueckgabedatum — immer >= dem echten Eingang, als Verkuerzungsgrenze also
+   * konservativ. Greift auch ohne die Ist-Logistik-Migration und bei Abholungen
+   * ohne Paket-Tracking.
+   */
+  returned_at?: string | null;
 }
 
 export type LogisticsMarkerKind =
@@ -250,7 +257,8 @@ export type LogisticsMarkerKind =
   | 'late-dispatch'
   | 'early-delivery'
   | 'early-return'
-  | 'overdue-return';
+  | 'overdue-return'
+  | 'returned-early';
 
 export interface LogisticsMarker {
   kind: LogisticsMarkerKind;
@@ -306,8 +314,12 @@ export function computeEffectiveBookingSpan(
 
   const actualDispatchDate = toBerlinDay(b.actual_dispatch_at);
   const actualDeliveryDate = toBerlinDay(b.actual_delivery_at);
-  // Legacy-Fallback: vor der Migration hielt `return_arrived_at` die Info.
-  const actualReturnDate = toBerlinDay(b.actual_return_at) ?? toBerlinDay(b.return_arrived_at);
+  // Fallback-Kette: echtes Ist-Datum → Cron-Erkennungszeit → Zeitpunkt der
+  // Rueckgabe-Pruefung. Letzteres greift auch ohne Migration und bei Abholungen.
+  const actualReturnDate =
+    toBerlinDay(b.actual_return_at) ??
+    toBerlinDay(b.return_arrived_at) ??
+    toBerlinDay(b.returned_at);
 
   const rentalFrom = b.rental_from.slice(0, 10);
   const today = opts?.today ?? getBerlinDateKey(new Date());
@@ -326,6 +338,13 @@ export function computeEffectiveBookingSpan(
   const overdue =
     applyOverdue && stillReserving && !actualReturnDate && today > plannedEnd;
   if (overdue && today > end) end = today;
+
+  // Rueckgabe-Pruefung abgeschlossen: ab hier ist Verkuerzen risikolos, weil die
+  // Buchung ohnehin nicht mehr in RESERVING_BOOKING_STATUSES steht und damit
+  // nirgends mehr blockt. Die Spanne endet am tatsaechlichen Rueckgabetag statt
+  // am geplanten Ende — sonst zeigt der Admin-Gantt "belegt", wo laengst frei ist.
+  const settledEarly = !stillReserving && !!actualReturnDate && actualReturnDate < plannedEnd;
+  if (settledEarly && actualReturnDate) end = actualReturnDate;
 
   // ── Markierungs-Segmente ───────────────────────────────────────────────
   const markers: LogisticsMarker[] = [];
@@ -358,6 +377,16 @@ export function computeEffectiveBookingSpan(
 
   if (overdue) {
     markers.push({ kind: 'overdue-return', from: isoAddDays(plannedEnd, 1), to: today });
+  }
+
+  if (settledEarly && actualReturnDate) {
+    // Tage, die geplant waren, aber durch die frueher abgeschlossene Rueckgabe
+    // wieder frei sind.
+    markers.push({
+      kind: 'returned-early',
+      from: isoAddDays(actualReturnDate, 1),
+      to: plannedEnd,
+    });
   }
 
   return {
