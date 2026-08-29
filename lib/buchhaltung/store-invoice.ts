@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getBerlinDateString } from '@/lib/timezone';
 
 export interface BookingForInvoice {
   id: string;
@@ -92,7 +93,12 @@ export async function storeInvoiceForBooking(
           ? 'Zahlung ausstehend'
           : 'Stripe';
 
-  const invoiceDate = (booking.created_at ?? new Date().toISOString()).slice(0, 10);
+  // Rechnungsdatum in Berlin-Zeit — `created_at` ist ein UTC-Timestamp. Das
+  // rohe slice(0,10) haette eine Buchung vom 01.03. 00:30 Berlin (= 28.02.
+  // 23:30 UTC) auf den Vormonat datiert; das PDF zeigt das Berliner Datum.
+  const invoiceDate = getBerlinDateString(
+    booking.created_at ? new Date(booking.created_at) : new Date(),
+  );
 
   try {
     const { error } = await supabase.from('invoices').insert({
@@ -120,6 +126,67 @@ export async function storeInvoiceForBooking(
     return true;
   } catch (err) {
     console.error('[store-invoice] Unerwarteter Fehler:', err, { bookingId: booking.id });
+    return false;
+  }
+}
+
+/**
+ * Haelt die `invoices`-Zeile einer Buchung betragsmaessig aktuell.
+ *
+ * `storeInvoiceForBooking` legt die Zeile nur EINMAL an. Aendert sich der
+ * Buchungsbetrag danach (Verlaengerung, Bestellbearbeitung), blieb der alte
+ * Betrag stehen — Umsatzliste, Offene Posten und Mahnwesen rechneten mit
+ * veralteten Zahlen. Diese Funktion zieht Netto/Steuer/Brutto nach.
+ *
+ * Zahlstatus, Rechnungsnummer und -datum bleiben unangetastet. Stornierte
+ * Rechnungen werden nicht angefasst. Best-effort — wirft nie.
+ */
+export async function syncInvoiceAmountForBooking(
+  supabase: SupabaseClient,
+  booking: BookingForInvoice,
+  opts?: { taxMode?: 'kleinunternehmer' | 'regelbesteuerung'; taxRate?: number },
+): Promise<boolean> {
+  try {
+    const gross = Number(booking.price_total ?? 0);
+    if (!Number.isFinite(gross) || gross <= 0) return false;
+
+    const { data: rows, error } = await supabase
+      .from('invoices')
+      .select('id, gross_amount, status')
+      .eq('booking_id', booking.id)
+      .neq('status', 'cancelled');
+    if (error) return false;
+    if (!rows || rows.length === 0) {
+      // Noch keine Rechnung vorhanden → regulaer anlegen.
+      return await storeInvoiceForBooking(supabase, booking, opts);
+    }
+    // Mehrere aktive Rechnungen zu einer Buchung sind nicht vorgesehen — dann
+    // lieber nichts anfassen, als Betraege zu vervielfachen.
+    if (rows.length > 1) {
+      console.warn('[store-invoice] Mehrere aktive Rechnungen zu Buchung', booking.id, '— Betrag nicht synchronisiert.');
+      return false;
+    }
+
+    const row = rows[0] as { id: string; gross_amount: number | null };
+    if (Math.abs(Number(row.gross_amount ?? 0) - gross) < 0.005) return false;
+
+    const taxMode = opts?.taxMode ?? 'kleinunternehmer';
+    const taxRate = opts?.taxRate ?? 0;
+    const isRegel = taxMode === 'regelbesteuerung' && taxRate > 0;
+    const net = isRegel ? Math.round((gross / (1 + taxRate / 100)) * 100) / 100 : gross;
+    const tax = isRegel ? Math.round((gross - net) * 100) / 100 : 0;
+
+    const { error: updErr } = await supabase
+      .from('invoices')
+      .update({ gross_amount: gross, net_amount: net, tax_amount: tax })
+      .eq('id', row.id);
+    if (updErr) {
+      console.error('[store-invoice] Betrag-Sync fehlgeschlagen:', updErr.message, { bookingId: booking.id });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[store-invoice] Betrag-Sync Fehler:', err, { bookingId: booking.id });
     return false;
   }
 }

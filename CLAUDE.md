@@ -3669,6 +3669,105 @@ Katalog-Match (Preis unbekannt) Fallback auf gleichmäßige Verteilung.
 - Reine Anzeige-/Aggregations-Änderung — kein Schema, keine Migration. Greift
   beim nächsten Dashboard-Reload bzw. Wochenbericht.
 
+### Umsatz in EÜR/DATEV/USt = tatsächlich gezahlter Betrag (Stand 2026-08-29)
+**Kernregel: Massgeblich für JEDEN Finanz-Report ist `bookings.price_total`
+(= was Stripe/der Kunde tatsächlich gezahlt hat), NICHT die Summe der
+Einzelposten.**
+
+Vorher rekonstruierten EÜR (`lib/buchhaltung/euer-data.ts`), DATEV
+(`app/api/admin/datev-export/*`) und der Monatsabschluss den Umsatz aus
+`price_rental + price_accessories + price_haftung + shipping_price` minus den
+Rabatt-Spalten. Das geht nur auf, solange JEDER Nachlass in einem Rabatt-Feld
+steht. Zwei Schreibpfade senkten `price_total` aber ohne die Differenz
+abzulegen → die EÜR buchte mehr Einnahme als geflossen ist. Die Rechnung selbst
+weist die Lücke seit jeher als **„Set-Bundle / Anpassung"** aus
+(`lib/invoice-pdf.tsx:425`) — die Reports ignorierten sie. Belegt an zwei
+Live-Buchungen: C2R-2635-008 (EÜR 119,00 € vs. gezahlt 78,64 €) und
+C2R-2631-005 (EÜR 32,90 € vs. gezahlt 24,67 €).
+
+- **Neu `lib/buchhaltung/booking-revenue.ts`** → `computeBookingRevenue(row, opts)`
+  ist die EINE Wahrheitsquelle. Ablauf pro Buchung: (1) Rabatt-Felder anteilig
+  auf Miete + Zubehör (Haftung/Versand bleiben brutto — sie werden typisch nicht
+  rabattiert), (2) **Normierung auf `price_total`** — die verbleibende Differenz
+  wird im Wasserfall Miete → Zubehör → Haftung → Versand abgezogen (bzw. als
+  Aufpreis auf die Miete gelegt), (3) `refund_amount` im selben Wasserfall.
+  Liefert `net`/`gross`/`discountCut`/`refundCut` je Kategorie → die EÜR-Zeilen
+  bleiben erhalten, die Summe entspricht aber immer dem Zahlungseingang.
+  Pure Funktion, 23 Unit-Tests (`lib/buchhaltung/__tests__/booking-revenue.test.ts`).
+- **Genutzt von:** `euer-data.ts`, `datev-export` (+ `preview-rows`),
+  Buchhaltungs-Cockpit (`buchhaltung/dashboard`). `ust-vorbereitung` und
+  `period-close` rufen jetzt direkt `computeEuerData()` → **alle fünf
+  Finanz-Zahlen für denselben Zeitraum sind identisch** (vorher vier
+  verschiedene).
+- **Zufluss-Prinzip (§ 11 EStG):** unbezahlte Belege erzeugen keinen Umsatz —
+  neben `awaiting_payment`/`pending_verification` jetzt auch offene
+  Überweisungen (`MANUAL-UNPAID-…`). ⚠️ Massgeblich ist die **`invoices`-Zeile**
+  (`payment_status`), nicht der `payment_intent_id`-Prefix: „Als bezahlt
+  markieren" ändert die Buchung NICHT, ein bar bezahlter Manuell-Beleg trägt
+  weiterhin `MANUAL-UNPAID-…`. Alle Konsumenten laden dafür eine
+  `booking_id → bezahlt?`-Map (`buildInvoicePaidMap`). Der Zeitraum bleibt
+  `created_at` (nicht `paid_at`) — eine später bezahlte Buchung erscheint in der
+  EÜR ihres Buchungsmonats.
+- **Storno-Einbehalt ist Umsatz:** stornierte Buchungen waren komplett
+  ausgeblendet — auch die einbehaltene Stornogebühr (bei < 3 Tagen 90 % des
+  Mietpreises). Jetzt eigene EÜR-Kategorie **„Storno-Einbehalt"**
+  (`income.cancellationFees` + Items), DATEV bucht sie als `S` auf dem
+  Erlöskonto (statt wie bisher die ganze Buchung als `H` gegenzubuchen).
+  ⚠️ Gezählt wird **nur ein dokumentierter Storno** (`refund_note` bzw.
+  `refund_amount` gesetzt): der Storno-Endpoint schreibt die Doku jetzt IMMER,
+  auch bei 0 € Erstattung. Alt-Stornos ohne Doku bleiben bewusst draußen —
+  lieber zu wenig als eine erfundene Einnahme. Ohne die Migration
+  `supabase-bookings-refund.sql` greift der Einbehalt gar nicht.
+- **Ursachen mitgefixt (sonst entstehen neue Lücken):**
+  1. `confirm-cart:825` + `stripe-webhook:869` — `scale = bodyDiscountSum > 0 ? … : 0`
+     verwarf den gesamten Nachlass, wenn das Frontend keinen Rabatt meldete,
+     Stripe aber weniger als den Listenpreis abbuchte. Der unerklärte Rest landet
+     jetzt im generischen `discount_amount`. **Zusätzlich** war in `confirm-cart`
+     der Gruppenanteil doppelt angewendet (`ratio × scale`) → bei
+     Mehr-Zeitraum-Warenkörben wurden die Rabatte halbiert; `ratio` ist entfernt.
+  2. `booking/[id]` `booking_edit` — „Gesamtpreis manuell überschreiben"
+     (`new_price_total`) setzte `price_total`, ohne die Differenz abzulegen. Sie
+     wandert jetzt in `discount_amount` (Vorschau zeigt sie mit).
+- **Diagnose:** `supabase/diagnose-buchungen-preisdifferenz.sql` (rein lesend)
+  listet die Buchungen mit inkonsistenten Feldern. **Keine Datenreparatur nötig**
+  — die Reports normieren selbst.
+
+### Weitere Finanz-Korrekturen im selben Durchgang (Stand 2026-08-29)
+- **Gutschriften mindern jetzt den Umsatz.** `credit-notes/[id]/approve` löste
+  den Stripe-Refund aus, schrieb aber nichts an die Buchung — und `credit_notes`
+  wird von KEINEM Report gelesen. Eine Teilgutschrift war damit Geld zurück bei
+  unverändertem Umsatz. Der Endpoint summiert jetzt alle wirksamen
+  (`approved`/`sent`) Gutschriften der Buchung nach `bookings.refund_amount`
+  (+ `refund_note`-Eintrag); bei fehlgeschlagenem Refund passiert nichts.
+- **Wochenbericht zeigte immer 0 Rechnungen.** `lib/weekly-report.ts` selektierte
+  `amount_gross`, die Spalte heißt `gross_amount` → PostgREST-Fehler → `data=null`
+  → „0 bezahlt / 0 offen / 0,00 € überfällig" in jedem Sonntagsbericht.
+- **`invoices.gross_amount` wird nach Preisänderungen nachgezogen.** Neuer Export
+  `syncInvoiceAmountForBooking()` in `lib/buchhaltung/store-invoice.ts`, gerufen
+  von `confirm-extension` (Verlängerung) und `booking_edit`. Vorher blieb die
+  Rechnungszeile auf dem alten Betrag → Umsatzliste, Offene Posten und Mahnwesen
+  rechneten mit veralteten Zahlen. Aktualisiert nur Netto/Steuer/Brutto (nicht
+  Nummer, Datum, Zahlstatus), fasst stornierte Rechnungen nicht an und bricht bei
+  mehreren aktiven Rechnungen zu einer Buchung ab.
+- **`invoices.invoice_date` in Berlin-Zeit** (vorher `created_at.slice(0,10)` =
+  UTC) → eine Buchung am Monatsersten um 00:30 landete in der Umsatzliste im
+  Vormonat und wich vom Rechnungs-PDF ab.
+- **EÜR-Ausgaben liefen ins 1000-Zeilen-Limit.** `beleg_positionen` wurde ohne
+  Datumsfilter und ohne Pagination geladen (PostgREST-Default 1000) → ab der
+  1001. Position wären ältere Ausgaben still aus der EÜR verschwunden. Jetzt
+  Filter in SQL (`belege.status/is_test/beleg_datum`) + seitenweises Laden
+  (`fetchAllRows`), ebenso für `expenses` und `bookings`.
+- **Cockpit „überfällige Rechnungen" nutzte einen ODER-Filter** (status ODER
+  payment_status offen), die Offene-Posten-Liste ein UND → beide Zahlen konnten
+  auseinanderlaufen. Jetzt beide UND.
+- **Umsatzverlauf (12 Monate) im Cockpit:** 12 Einzelabfragen mit festem
+  `+01:00`-Offset → im Sommer (MESZ) fielen Buchungen der Randstunden in den
+  Nachbarmonat. Jetzt EINE Abfrage + Monatszuordnung in Berlin-Zeit.
+- **Bewusst NICHT angeglichen:** `/api/admin/dashboard-data` (Start-Dashboard)
+  und `/api/admin/analytics` zeigen weiterhin das **gebuchte Volumen**
+  (Σ `price_total` aller nicht stornierten Buchungen, inkl. noch unbezahlter).
+  Das sind operative KPIs, keine Steuerzahlen — sie dürfen von der EÜR abweichen.
+
 ### Rechnungs-Status spiegelt Buchungs-Status (Stand 2026-05-20)
 Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `awaiting_payment` (Stripe-Payment-Link noch nicht bezahlt) wurden in der Buchhaltungs-Welt faelschlich als „bezahlt" gefuehrt. Im Dashboard-Cockpit „Letzte 10 Rechnungen" sowie in `/admin/buchhaltung/rechnungen` standen sie mit gruenem **Bezahlt**-Badge, obwohl der Kunde noch keinen Cent ueberwiesen hatte. Drei aufeinander aufbauende Ursachen, alle gefixt:
 

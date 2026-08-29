@@ -792,7 +792,6 @@ export async function POST(req: NextRequest) {
       const group = periodGroups[gi];
       const groupItems = group.items;
       const firstItem = groupItems[0];
-      const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
       // Rabatte proportional aufteilen.
       // Versand pro Gruppe (vorab in groupCalcs[gi] berechnet).
@@ -822,15 +821,31 @@ export async function POST(req: NextRequest) {
             Number(r_durationDiscount ?? 0) +
             Number(r_earlyBirdDiscount ?? 0) +
             Number(r_loyaltyDiscount ?? 0));
+      // `scale` bezieht die cart-weiten Melde-Werte bereits auf den effektiven
+      // Rabatt DIESER Gruppe — ein zusaetzlicher `ratio`-Faktor (Gruppenanteil)
+      // wuerde den Anteil ein zweites Mal anwenden und die Rabatte bei
+      // Mehr-Zeitraum-Warenkoerben halbieren.
       const scale = bodyDiscountSum > 0 ? effectiveDiscount / bodyDiscountSum : 0;
-      const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-      const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * ratio * scale * 100) / 100;
-      const groupProductDiscount = specialActive ? 0 : Math.round((r_productDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupDiscount = groupCouponDiscount + groupProductDiscount;
-      const groupDurationDiscount = specialActive ? 0 : Math.round((r_durationDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupEarlyBirdDiscount = specialActive ? 0 : Math.round((r_earlyBirdDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupLoyaltyDiscount = specialActive ? 0 : Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
-      const groupSpecialDiscount = specialActive ? Math.round(serverSpecialTotal * ratio * scale * 100) / 100 : 0;
+      const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * scale * 100) / 100;
+      const groupProductDiscount = specialActive ? 0 : Math.round((r_productDiscount ?? 0) * scale * 100) / 100;
+      const groupDurationDiscount = specialActive ? 0 : Math.round((r_durationDiscount ?? 0) * scale * 100) / 100;
+      const groupEarlyBirdDiscount = specialActive ? 0 : Math.round((r_earlyBirdDiscount ?? 0) * scale * 100) / 100;
+      const groupLoyaltyDiscount = specialActive ? 0 : Math.round((r_loyaltyDiscount ?? 0) * scale * 100) / 100;
+      const groupSpecialDiscount = specialActive ? Math.round(serverSpecialTotal * scale * 100) / 100 : 0;
+      // Alles, was die gemeldeten Felder nicht erklaeren (Frontend meldet gar
+      // keinen Rabatt, Stripe bucht aber weniger als den Listenpreis ab; oder
+      // Rundungsdrift), landet im generischen Rabatt-Feld. Sonst waere
+      // price_total niedriger als die Einzelposten, ohne dass ein Feld die
+      // Differenz traegt — Rechnung und EÜR liefen auseinander.
+      const explainedDiscount = Math.round(
+        (groupCouponDiscount + groupProductDiscount + groupDurationDiscount
+          + groupEarlyBirdDiscount + groupLoyaltyDiscount + groupSpecialDiscount) * 100,
+      ) / 100;
+      const unexplainedDiscount = Math.round((effectiveDiscount - explainedDiscount) * 100) / 100;
+      const groupDiscount = Math.max(
+        0,
+        Math.round((groupCouponDiscount + groupProductDiscount + unexplainedDiscount) * 100) / 100,
+      );
 
       // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt zu
       // weit auseinander liegen, ist das ein Hinweis auf einen Frontend-Bug oder

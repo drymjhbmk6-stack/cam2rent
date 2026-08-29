@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { loadKontenrahmen, accountForBestand, type BestandKey } from '@/lib/accounting/kontenrahmen';
 import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
+import { computeBookingRevenue, buildInvoicePaidMap } from '@/lib/buchhaltung/booking-revenue';
 
 /**
  * GET /api/admin/datev-export?from=2026-01-01&to=2026-03-31
@@ -27,6 +28,8 @@ interface Booking {
   early_bird_discount: number;
   special_discount: number;
   refund_amount: number;
+  refund_note: string | null;
+  payment_intent_id: string | null;
   status: string;
   created_at: string;
 }
@@ -97,9 +100,9 @@ export async function GET(req: NextRequest) {
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
   // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
-  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, status, created_at';
+  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, payment_intent_id, status, created_at';
   // Optionale Spalten, die je nach ausstehender Migration fehlen koennen.
-  const OPTIONAL_DATEV_COLS = [', early_bird_discount', ', special_discount', ', refund_amount'];
+  const OPTIONAL_DATEV_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note'];
   const buildDatevQuery = (cols: string) => supabase
     .from('bookings')
     .select(cols)
@@ -108,8 +111,10 @@ export async function GET(req: NextRequest) {
     .lte('created_at', toIso)
     .order('created_at', { ascending: true });
 
+  let hasRefundColumn = true;
   let { data: bookings, error: bookingsError } = await buildDatevQuery(datevCols);
-  if (bookingsError && /refund_amount|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsError.message)) {
+  if (bookingsError && /refund_amount|refund_note|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsError.message)) {
+    hasRefundColumn = false;
     // Migration(en) noch nicht durch — ohne die optionalen Spalten exportieren
     // (die betroffenen Werte zaehlen dann als 0).
     let stripped = datevCols;
@@ -124,10 +129,34 @@ export async function GET(req: NextRequest) {
   const allBookings = (bookings || []) as unknown as Booking[];
 
   // Preview mode: return count and revenue
+  // Bezahlt-Status aus den Rechnungen (analog EÜR — "Als bezahlt markieren"
+  // aendert `bookings.payment_intent_id` nicht).
+  const invoicePaidMap = await (async () => {
+    const ids = allBookings.map((b) => b.id).filter(Boolean);
+    if (ids.length === 0) return new Map<string, boolean>();
+    try {
+      const rows: Array<{ booking_id: string | null; status: string | null; payment_status: string | null }> = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data } = await supabase
+          .from('invoices')
+          .select('booking_id, status, payment_status')
+          .in('booking_id', ids.slice(i, i + 200));
+        if (data) rows.push(...(data as typeof rows));
+      }
+      return buildInvoicePaidMap(rows);
+    } catch {
+      return new Map<string, boolean>();
+    }
+  })();
+  const revenueOf = (b: Booking) => computeBookingRevenue(b, {
+    invoicePaid: invoicePaidMap.has(b.id) ? invoicePaidMap.get(b.id) : null,
+    hasRefundColumn,
+  });
+
   if (isPreview) {
-    const activeBookings = allBookings.filter((b) => b.status !== 'cancelled');
-    const revenue = activeBookings.reduce((sum, b) => sum + (b.price_total || 0), 0);
-    return NextResponse.json({ count: allBookings.length, revenue });
+    const counted = allBookings.map(revenueOf).filter((r) => r.counts);
+    const revenue = counted.reduce((sum, r) => sum + r.total, 0);
+    return NextResponse.json({ count: counted.length, revenue: Math.round(revenue * 100) / 100 });
   }
 
   // Load DATEV config — admin_config.datev_config (Beraternummer/Mandantennummer/
@@ -242,27 +271,40 @@ export async function GET(req: NextRequest) {
 
   // Booking lines
   for (const booking of allBookings) {
-    const isCancelled = booking.status === 'cancelled';
     const bookingDate = formatDateDATEV(booking.created_at);
     const belegfeld = `B-${booking.id.substring(0, 8)}`;
     const customerText = escapeField(
       `${booking.product_name || 'Vermietung'} - ${booking.customer_name || 'Kunde'}`
     );
 
-    // Main rental revenue — alle Rabatt-Arten abziehen (nicht nur discount_amount):
-    // duration_discount, loyalty_discount, early_bird_discount, special_discount.
-    const rentalAmount = (booking.price_rental || 0) + (booking.price_accessories || 0)
-      - (booking.discount_amount || 0)
-      - (booking.duration_discount || 0)
-      - (booking.loyalty_discount || 0)
-      - (booking.early_bird_discount || 0)
-      - (booking.special_discount || 0)
-      - (booking.refund_amount || 0);
+    // Massgeblich ist der tatsaechlich kassierte Betrag (price_total), nicht die
+    // Summe der Einzelposten — identische Logik wie in der EÜR, damit beide
+    // Reports nie wieder unterschiedliche Umsatzzahlen liefern.
+    const rev = revenueOf(booking);
+    if (!rev.counts) continue;
+
+    // Stornierte Buchung: nur die einbehaltene Stornogebuehr ist Erloes.
+    if (rev.kind === 'cancelled_retained') {
+      lines.push(buildLine(
+        formatAmount(rev.total),
+        'S',
+        cfg.erloeskonto,
+        '1200',
+        taxMode === 'regelbesteuerung' ? '3' : '',
+        bookingDate,
+        belegfeld,
+        escapeField(`Stornogebuehr - ${booking.customer_name || 'Kunde'}`),
+      ));
+      continue;
+    }
+
+    // Main rental revenue (Miete + Zubehoer, nach Rabatt/Erstattung).
+    const rentalAmount = Math.round((rev.net.rental + rev.net.accessories) * 100) / 100;
     if (rentalAmount > 0) {
       const buSchluessel = taxMode === 'regelbesteuerung' ? '3' : '';
       const line = buildLine(
         formatAmount(rentalAmount),
-        isCancelled ? 'H' : 'S',
+        'S',
         cfg.erloeskonto,
         '1200',
         buSchluessel,
@@ -274,10 +316,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Haftung (deposit/liability option)
-    if ((booking.price_haftung || 0) > 0) {
+    if (rev.net.haftung > 0) {
       const line = buildLine(
-        formatAmount(booking.price_haftung),
-        isCancelled ? 'H' : 'S',
+        formatAmount(rev.net.haftung),
+        'S',
         cfg.kautionskonto,
         '1200',
         '',
@@ -289,11 +331,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Shipping
-    if ((booking.shipping_price || 0) > 0) {
+    if (rev.net.shipping > 0) {
       const buSchluessel = taxMode === 'regelbesteuerung' ? '3' : '';
       const line = buildLine(
-        formatAmount(booking.shipping_price),
-        isCancelled ? 'H' : 'S',
+        formatAmount(rev.net.shipping),
+        'S',
         cfg.versandkostenkonto,
         '1200',
         buSchluessel,

@@ -182,14 +182,14 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
       .gte('published_at', iso(periodStart))
       .lte('published_at', iso(periodEnd)),
     supabase.from('invoices')
-      .select('amount_gross, payment_status')
+      .select('gross_amount, payment_status')
       .eq('is_test', false)
       .eq('payment_status', 'paid')
       .gte('paid_at', iso(periodStart))
       .lte('paid_at', iso(periodEnd))
       .limit(2000),
     supabase.from('invoices')
-      .select('amount_gross, due_date, payment_status')
+      .select('gross_amount, due_date, payment_status')
       .eq('is_test', false)
       .in('payment_status', ['open', 'overdue'])
       .limit(2000),
@@ -265,7 +265,7 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
   const today = new Date();
   const overdueAmount = invoicesOpen
     .filter((i: { due_date?: string | null }) => i.due_date && new Date(i.due_date) < today)
-    .reduce((s: number, i: { amount_gross?: number | null }) => s + Number(i.amount_gross ?? 0), 0);
+    .reduce((s: number, i: { gross_amount?: number | null }) => s + Number(i.gross_amount ?? 0), 0);
 
   // Warnings: abgelaufene/bald ablaufende Tokens, API-Keys etc.
   const warnings: string[] = [];

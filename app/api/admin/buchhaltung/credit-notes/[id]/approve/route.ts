@@ -123,6 +123,44 @@ export async function POST(
     }
   }
 
+  // Erstattung auf der Buchung dokumentieren — sonst zaehlt die EÜR/DATEV die
+  // Einnahme weiter in voller Hoehe, obwohl das Geld zurueckgegangen ist
+  // (`credit_notes` wird von keinem Report gelesen). Summiert alle wirksamen
+  // Gutschriften der Buchung, damit mehrere Teilgutschriften nicht die
+  // vorherige ueberschreiben. Best-effort: fehlt die Migration
+  // supabase-bookings-refund.sql, bleibt es beim bisherigen Verhalten.
+  if (creditNote.booking_id && refundStatus !== 'failed') {
+    try {
+      const { data: effectiveCNs } = await supabase
+        .from('credit_notes')
+        .select('gross_amount')
+        .eq('booking_id', creditNote.booking_id)
+        .neq('id', id)
+        .in('status', ['approved', 'sent']);
+      const previous = (effectiveCNs ?? []).reduce((sum, c) => sum + Number(c.gross_amount || 0), 0);
+      const refundTotal = Math.round((previous + Number(creditNote.gross_amount || 0)) * 100) / 100;
+      const note = `Gutschrift ${creditNote.credit_note_number ?? id}: ${Number(creditNote.gross_amount || 0).toFixed(2)} EUR (${refundStatus})`;
+      const { data: bRow } = await supabase
+        .from('bookings')
+        .select('refund_note')
+        .eq('id', creditNote.booking_id)
+        .maybeSingle();
+      const existingNote = ((bRow as { refund_note?: string | null } | null)?.refund_note ?? '') as string;
+      const { error: refundErr } = await supabase
+        .from('bookings')
+        .update({
+          refund_amount: refundTotal,
+          refund_note: existingNote ? `${existingNote} | ${note}` : note,
+        })
+        .eq('id', creditNote.booking_id);
+      if (refundErr && /refund_amount|refund_note/i.test(refundErr.message || '')) {
+        console.warn('[credit-note-approve] refund_amount/refund_note Migration steht aus — Betrag nicht persistiert.');
+      }
+    } catch (err) {
+      console.error('[credit-note-approve] Erstattung konnte nicht dokumentiert werden:', err);
+    }
+  }
+
   // Sweep 7 Vuln 18 — bei Stripe-Refund-Fehler NICHT auf 'sent' flippen
   // und auch die Originalrechnung NICHT auf 'cancelled' setzen. Vorher: bei
   // Refund-Fail wurde der CN trotzdem sent + Invoice cancelled → USt-Voran-

@@ -5,6 +5,7 @@ import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { getProducts } from '@/lib/get-products';
 import { getPriceForDays, type Product } from '@/data/products';
+import { computeBookingRevenue, buildInvoicePaidMap, type BookingRevenueRow } from '@/lib/buchhaltung/booking-revenue';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -46,20 +47,23 @@ export async function GET(req: NextRequest) {
       rental_from?: string | null;
       rental_to?: string | null;
       cameras?: unknown;
+      payment_intent_id?: string | null;
+      refund_amount?: number | null;
+      refund_note?: string | null;
     }> | null = null;
     let bookingsError: { message: string } | null = null;
     {
       const withCameras = await supabase
         .from('bookings')
-        .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, cameras')
+        .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, cameras, payment_intent_id, refund_amount, refund_note')
         .eq('is_test', false)
         .gte('created_at', fromIso)
         .lte('created_at', toIso)
         .order('created_at', { ascending: false });
-      if (withCameras.error && /cameras|column|schema cache|PGRST/i.test(withCameras.error.message)) {
+      if (withCameras.error && /cameras|refund_amount|refund_note|column|schema cache|PGRST/i.test(withCameras.error.message)) {
         const retry = await supabase
           .from('bookings')
-          .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to')
+          .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, payment_intent_id')
           .eq('is_test', false)
           .gte('created_at', fromIso)
           .lte('created_at', toIso)
@@ -93,14 +97,42 @@ export async function GET(req: NextRequest) {
     const prevToIso = getBerlinDayEndFromDateString(prevToKey) ?? `${prevToKey}T23:59:59Z`;
     const { data: prevBookings } = await supabase
       .from('bookings')
-      .select('price_total, status')
+      .select('price_total, status, payment_intent_id')
       .eq('is_test', false)
       .gte('created_at', prevFromIso)
       .lte('created_at', prevToIso);
 
-    const prevActive = (prevBookings || []).filter(b => b.status !== 'cancelled');
-    const currentRevenue = activeBookings.reduce((sum, b) => sum + (b.price_total || 0), 0);
-    const prevRevenue = prevActive.reduce((sum, b) => sum + (b.price_total || 0), 0);
+    // Umsatz = tatsaechlich geflossenes Geld (identische Logik wie EÜR/DATEV:
+    // lib/buchhaltung/booking-revenue.ts). Unbezahlte Belege zaehlen nicht,
+    // stornierte Buchungen nur mit der einbehaltenen Stornogebuehr.
+    const invoicePaidMap = await (async () => {
+      const ids = allBookings.map((b) => b.id).filter(Boolean);
+      if (ids.length === 0) return new Map<string, boolean>();
+      try {
+        const rows: Array<{ booking_id: string | null; status: string | null; payment_status: string | null }> = [];
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data } = await supabase
+            .from('invoices')
+            .select('booking_id, status, payment_status')
+            .in('booking_id', ids.slice(i, i + 200));
+          if (data) rows.push(...(data as typeof rows));
+        }
+        return buildInvoicePaidMap(rows);
+      } catch {
+        return new Map<string, boolean>();
+      }
+    })();
+    const revenueOf = (b: { id?: string } & BookingRevenueRow) =>
+      computeBookingRevenue(b, {
+        invoicePaid: b.id && invoicePaidMap.has(b.id) ? invoicePaidMap.get(b.id) : null,
+      });
+
+    const currentRevenue = Math.round(
+      allBookings.reduce((sum, b) => sum + revenueOf(b).total, 0) * 100,
+    ) / 100;
+    const prevRevenue = Math.round(
+      (prevBookings || []).reduce((sum, b) => sum + computeBookingRevenue(b).total, 0) * 100,
+    ) / 100;
     const trend = prevRevenue > 0 ? ((currentRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
     // Rechnungen — mit Fallback falls Spalte noch nicht existiert
@@ -165,24 +197,53 @@ export async function GET(req: NextRequest) {
     const [bYearStr, bMonthStr] = berlinNow.split('-');
     const curYear = parseInt(bYearStr, 10);
     const curMonth = parseInt(bMonthStr, 10) - 1; // 0-based
+    // EINE Abfrage ueber die letzten 12 Monate statt 12 Einzelabfragen; die
+    // Zuordnung zum Monat passiert in Berlin-Zeit. Vorher wurde pro Monat mit
+    // einem festen "+01:00"-Offset gefiltert — im Sommer (MESZ = +02:00) fielen
+    // Buchungen der ersten/letzten Stunde in den Nachbarmonat.
+    const chartStartYear = curYear + Math.floor((curMonth - 11) / 12);
+    const chartStartMonth = ((curMonth - 11) % 12 + 12) % 12;
+    const chartFrom = `${chartStartYear}-${String(chartStartMonth + 1).padStart(2, '0')}-01`;
+    const chartFromIso = getBerlinDayStartFromDateString(chartFrom) ?? `${chartFrom}T00:00:00Z`;
+    const { data: chartBookings } = await supabase
+      .from('bookings')
+      .select('id, price_total, status, payment_intent_id, refund_amount, refund_note, created_at')
+      .eq('is_test', false)
+      .gte('created_at', chartFromIso);
+    const chartRows = (chartBookings ?? []) as Array<BookingRevenueRow & { id?: string; created_at?: string | null }>;
+    const chartInvoicePaid = await (async () => {
+      const ids = chartRows.map((b) => b.id).filter((v): v is string => !!v);
+      if (ids.length === 0) return new Map<string, boolean>();
+      try {
+        const rows: Array<{ booking_id: string | null; status: string | null; payment_status: string | null }> = [];
+        for (let k = 0; k < ids.length; k += 200) {
+          const { data } = await supabase
+            .from('invoices')
+            .select('booking_id, status, payment_status')
+            .in('booking_id', ids.slice(k, k + 200));
+          if (data) rows.push(...(data as typeof rows));
+        }
+        return buildInvoicePaidMap(rows);
+      } catch {
+        return new Map<string, boolean>();
+      }
+    })();
+    const monthTotals = new Map<string, number>();
+    for (const b of chartRows) {
+      if (!b.created_at) continue;
+      const key = new Date(b.created_at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 7);
+      const rev = computeBookingRevenue(b, {
+        invoicePaid: b.id && chartInvoicePaid.has(b.id) ? chartInvoicePaid.get(b.id) : null,
+      });
+      if (!rev.counts) continue;
+      monthTotals.set(key, (monthTotals.get(key) ?? 0) + rev.total);
+    }
+
     for (let i = 11; i >= 0; i--) {
       const year = curYear + Math.floor((curMonth - i) / 12);
       const month = ((curMonth - i) % 12 + 12) % 12;
-      const firstDay = String(new Date(Date.UTC(year, month, 1)).getUTCDate()).padStart(2, '0');
-      const lastDay = String(new Date(Date.UTC(year, month + 1, 0)).getUTCDate()).padStart(2, '0');
-      const mFrom = `${year}-${String(month + 1).padStart(2, '0')}-${firstDay}`;
-      const mTo = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`;
-
-      // Berlin-Zeit in UTC umrechnen fuer den DB-Filter
-      const { data: monthBookings } = await supabase
-        .from('bookings')
-        .select('price_total')
-        .eq('is_test', false)
-        .neq('status', 'cancelled')
-        .gte('created_at', `${mFrom}T00:00:00+01:00`)
-        .lte('created_at', `${mTo}T23:59:59+01:00`);
-
-      const revenue = (monthBookings || []).reduce((sum, b) => sum + (b.price_total || 0), 0);
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const revenue = Math.round((monthTotals.get(key) ?? 0) * 100) / 100;
       const monthName = new Date(Date.UTC(year, month, 15)).toLocaleDateString('de-DE', { month: 'short', year: '2-digit', timeZone: 'Europe/Berlin' });
       revenueChart.push({ month: monthName, revenue, net: revenue });
     }
@@ -212,8 +273,10 @@ export async function GET(req: NextRequest) {
 
     const productRevenue: Record<string, { name: string; revenue: number; count: number }> = {};
     for (const b of activeBookings) {
+      const bookingRevenue = revenueOf(b);
+      if (!bookingRevenue.counts || bookingRevenue.kind !== 'normal') continue;
       const cameras = resolveBookingCameras(b);
-      const total = b.price_total || 0;
+      const total = bookingRevenue.total;
       if (cameras.length === 0) {
         // Keine Kamera ableitbar (z.B. Verkauf ohne product_name) — als
         // Sammelposten zaehlen, damit der Umsatz nicht verschwindet.

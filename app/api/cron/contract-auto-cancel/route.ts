@@ -191,6 +191,29 @@ async function handle(req: NextRequest) {
         }
       }
 
+      // Storno auf der Buchung dokumentieren — die EÜR erkennt daran, ob eine
+      // Stornogebuehr einbehalten wurde (bei `refund_on_cancel: false` bleibt
+      // das Geld hier vollstaendig beim Vermieter). Ohne die Doku faellt die
+      // Buchung komplett aus der EÜR.
+      try {
+        const priceTotal = Number((b as { price_total?: number | null }).price_total ?? 0);
+        const refunded = config.refund_on_cancel && !!paymentIntentId?.startsWith('pi_')
+          ? priceTotal
+          : 0;
+        const note = refunded > 0
+          ? `Auto-Storno (Vertrag fehlt): ${refunded.toFixed(2)} EUR erstattet`
+          : `Auto-Storno (Vertrag fehlt) ohne Erstattung — Einbehalt ${priceTotal.toFixed(2)} EUR`;
+        const { error: refErr } = await supabase
+          .from('bookings')
+          .update({ refund_amount: refunded, refund_note: note })
+          .eq('id', id);
+        if (refErr && /refund_amount|refund_note/i.test(refErr.message || '')) {
+          console.warn('[contract-auto-cancel] refund-Migration steht aus — Storno nicht dokumentiert.');
+        }
+      } catch (docErr) {
+        console.error('[contract-auto-cancel] Storno-Doku fehlgeschlagen:', docErr);
+      }
+
       cancelledIds.push(id);
 
       // Admin-Notification

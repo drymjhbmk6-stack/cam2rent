@@ -9,6 +9,7 @@ import { sendExtensionConfirmation } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
+import { syncInvoiceAmountForBooking } from '@/lib/buchhaltung/store-invoice';
 
 /**
  * POST /api/confirm-extension
@@ -219,6 +220,28 @@ export async function POST(req: NextRequest) {
   if (updateError) {
     console.error('Extension update error:', updateError);
     return NextResponse.json({ error: 'Buchung konnte nicht aktualisiert werden: ' + updateError.message }, { status: 500 });
+  }
+
+  // Rechnungsbetrag in der Buchhaltung nachziehen — sonst bleibt `invoices`
+  // auf dem Betrag VOR der Verlaengerung stehen (Umsatzliste, Offene Posten,
+  // Mahnwesen rechneten mit dem alten Wert). Non-blocking.
+  try {
+    const { data: taxRows } = await supabase
+      .from('admin_settings')
+      .select('key, value')
+      .in('key', ['tax_mode', 'tax_rate']);
+    const tx: Record<string, string> = {};
+    for (const r of taxRows ?? []) tx[r.key] = r.value as string;
+    await syncInvoiceAmountForBooking(
+      supabase,
+      { ...(booking as Record<string, unknown>), id: bookingId, price_total: newTotal } as Parameters<typeof syncInvoiceAmountForBooking>[1],
+      {
+        taxMode: (tx['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+        taxRate: parseFloat(tx['tax_rate'] || '19'),
+      },
+    );
+  } catch (e) {
+    console.error('[confirm-extension] Rechnungsbetrag-Sync fehlgeschlagen:', e);
   }
 
   // Rechnung intern versionieren (non-blocking — darf die Verlängerung nie kippen).

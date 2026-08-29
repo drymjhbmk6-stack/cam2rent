@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString, getBerlinDateString } from '@/lib/timezone';
+import { computeBookingRevenue, buildInvoicePaidMap } from '@/lib/buchhaltung/booking-revenue';
 
 /**
  * Geteilte EÜR-Berechnung — einzige Quelle der Wahrheit fuer alle Reports,
@@ -12,6 +13,30 @@ import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString, getBerl
  * Herausgeloest aus app/api/admin/buchhaltung/reports/euer/route.ts
  * (Verhalten 1:1 unveraendert).
  */
+
+/**
+ * Laedt ALLE Zeilen einer Abfrage seitenweise.
+ *
+ * PostgREST liefert per Default maximal 1000 Zeilen. Die EÜR fragte
+ * `beleg_positionen` bisher ohne Limit ab — ab der 1001. Position waeren
+ * aeltere Ausgaben still aus der EÜR verschwunden.
+ */
+async function fetchAllRows(
+  page: (offset: number, limit: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+): Promise<{ rows: unknown[]; error: string | null }> {
+  const PAGE = 1000;
+  const rows: unknown[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await page(offset, PAGE);
+    if (error) return { rows, error: error.message };
+    const chunk = data ?? [];
+    rows.push(...chunk);
+    if (chunk.length < PAGE) break;
+    // Sicherheitsnetz gegen Endlosschleifen bei unerwarteten Antworten.
+    if (offset > 100_000) break;
+  }
+  return { rows, error: null };
+}
 
 export const CATEGORY_LABELS: Record<string, string> = {
   stripe_fees: 'Zahlungsgebühren',
@@ -50,6 +75,8 @@ export type EuerData = {
     accessories: number;
     haftung: number;
     shipping: number;
+    /** Einbehaltene Stornogebuehren (dokumentierte Stornos). */
+    cancellationFees: number;
     discounts: number;
     refunds: number;
     other: number;
@@ -59,6 +86,7 @@ export type EuerData = {
       accessories: EuerIncomeItem[];
       haftung: EuerIncomeItem[];
       shipping: EuerIncomeItem[];
+      cancellationFees: EuerIncomeItem[];
     };
   };
   bookingStats: { count: number; pickup: number; shipped: number };
@@ -96,30 +124,33 @@ export async function computeEuerData(
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
-  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, coupon_code, status, delivery_mode, created_at';
+  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, coupon_code, status, delivery_mode, payment_intent_id, created_at';
   // Optionale Spalten, die je nach ausstehender Migration fehlen koennen
-  // (refund_amount / early_bird_discount / special_discount). Beim Schema-Fehler
-  // werden alle drei aus der Select-Liste gestrippt und der Query wiederholt.
-  const OPTIONAL_BOOKING_COLS = [', early_bird_discount', ', special_discount', ', refund_amount'];
-  const buildBookingQuery = (cols: string) => supabase
+  // (refund_amount/refund_note / early_bird_discount / special_discount). Beim
+  // Schema-Fehler werden sie aus der Select-Liste gestrippt und der Query
+  // wiederholt.
+  const OPTIONAL_BOOKING_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note'];
+  // KEIN Status-Filter mehr in SQL: welche Buchung Umsatz erzeugt, entscheidet
+  // ausschliesslich computeBookingRevenue() — inkl. stornierter Buchungen mit
+  // einbehaltener Stornogebuehr und unbezahlter Belege (Zufluss-Prinzip).
+  const buildBookingQuery = (cols: string) => (offset: number, limit: number) => supabase
     .from('bookings')
     .select(cols)
     .eq('is_test', false)
-    .neq('status', 'cancelled')
-    // Zufluss-Prinzip: awaiting_payment / pending_verification zaehlen NICHT
-    // als Umsatz, weil das Geld noch nicht geflossen ist.
-    .not('status', 'in', '(awaiting_payment,pending_verification)')
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  let { data: bookings, error: bookingsErr } = await buildBookingQuery(bookingCols);
-  if (bookingsErr && /refund_amount|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
+  let hasRefundColumn = true;
+  let bookings = await fetchAllRows(buildBookingQuery(bookingCols));
+  if (bookings.error && /refund_amount|refund_note|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookings.error)) {
     // Migration(en) noch nicht durch — ohne die optionalen Spalten weiterlaufen
     // (die betroffenen Werte werden dann als 0 behandelt).
     let stripped = bookingCols;
     for (const c of OPTIONAL_BOOKING_COLS) stripped = stripped.replace(c, '');
-    ({ data: bookings, error: bookingsErr } = await buildBookingQuery(stripped));
+    hasRefundColumn = false;
+    bookings = await fetchAllRows(buildBookingQuery(stripped));
   }
 
   // .select(<string-variable>) verliert die PostgREST-Typinferenz → expliziter
@@ -132,73 +163,62 @@ export async function computeEuerData(
     price_total: number | null; discount_amount: number | null;
     duration_discount: number | null; loyalty_discount: number | null;
     early_bird_discount: number | null; special_discount: number | null;
-    refund_amount: number | null; coupon_code: string | null;
-    status: string | null; delivery_mode: string | null; created_at: string | null;
+    refund_amount: number | null; refund_note: string | null; coupon_code: string | null;
+    status: string | null; delivery_mode: string | null;
+    payment_intent_id: string | null; created_at: string | null;
   };
-  const bookingRows = (bookings ?? []) as unknown as BookingRow[];
+  const bookingRows = bookings.rows as unknown as BookingRow[];
+
+  // Bezahlt-Status aus den Rechnungen nachladen — "Als bezahlt markieren"
+  // aendert `bookings.payment_intent_id` nicht, ein bar bezahlter Manuell-Beleg
+  // traegt also weiterhin `MANUAL-UNPAID-…`. Ohne diesen Blick wuerde er
+  // dauerhaft aus der EÜR fallen.
+  const invoicePaidMap = await (async () => {
+    const ids = bookingRows.map((b) => b.id).filter(Boolean);
+    if (ids.length === 0) return new Map<string, boolean>();
+    try {
+      const rows: Array<{ booking_id: string | null; status: string | null; payment_status: string | null }> = [];
+      // In Bloecken abfragen, damit die URL nicht ueberlaeuft.
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data } = await supabase
+          .from('invoices')
+          .select('booking_id, status, payment_status')
+          .in('booking_id', ids.slice(i, i + 200));
+        if (data) rows.push(...(data as typeof rows));
+      }
+      return buildInvoicePaidMap(rows);
+    } catch (err) {
+      console.error('[EÜR] invoices-Zahlstatus lesen fehlgeschlagen:', err);
+      return new Map<string, boolean>();
+    }
+  })();
 
   let rental = 0;
   let accessories = 0;
   let haftung = 0;
   let shipping = 0;
+  let cancellationFees = 0;
   let discounts = 0;
   let refunds = 0;
   const rentalItems: EuerIncomeItem[] = [];
   const accessoryItems: EuerIncomeItem[] = [];
   const haftungItems: EuerIncomeItem[] = [];
   const shippingItems: EuerIncomeItem[] = [];
+  const cancellationItems: EuerIncomeItem[] = [];
+  let countedBookings = 0;
+  let countedPickup = 0;
 
   for (const b of bookingRows) {
-    const r = Number(b.price_rental ?? 0);
-    const a = Number(b.price_accessories ?? 0);
-    const h = Number(b.price_haftung ?? 0);
-    const s = Number(b.shipping_price ?? 0);
-    const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0)
-      + Number(b.early_bird_discount ?? 0) + Number(b.special_discount ?? 0);
-    discounts += d;
+    // Massgeblich ist der tatsaechlich kassierte Betrag (price_total), nicht
+    // die Summe der Einzelposten — siehe lib/buchhaltung/booking-revenue.ts.
+    const rev = computeBookingRevenue(b, {
+      invoicePaid: invoicePaidMap.has(b.id) ? invoicePaidMap.get(b.id) : null,
+      hasRefundColumn,
+    });
+    if (!rev.counts) continue;
 
-    // Rabatt proportional auf Miete + Zubehoer verteilen — sonst zeigt die
-    // EUeR z.B. 12 EUR Kamera-Einnahmen obwohl effektiv nur 6 EUR (12 - 6 EUR
-    // Release50-Rabatt) realisiert wurden. Haftung + Versand bleiben gross.
-    const base = r + a;
-    let rentalNet = r;
-    let accessoriesNet = a;
-    let rentalDiscountCut = 0;
-    let accDiscountCut = 0;
-    if (d > 0 && base > 0) {
-      const rentalShare = r / base;
-      const accessoriesShare = a / base;
-      rentalDiscountCut = Math.min(r, Math.round(d * rentalShare * 100) / 100);
-      accDiscountCut = Math.min(a, Math.round(d * accessoriesShare * 100) / 100);
-      rentalNet = Math.max(0, r - rentalDiscountCut);
-      accessoriesNet = Math.max(0, a - accDiscountCut);
-    }
-
-    // Rückerstattungen (Teilerstattung / Fehlbuchung, bookings.refund_amount)
-    // mindern das realisierte Einkommen. Wasserfall Miete → Zubehör →
-    // Haftung → Versand, damit keine Kategorie negativ wird und die Summe
-    // exakt um die erstattete Summe sinkt (gedeckelt auf die Einnahme).
-    let refundLeft = Number(b.refund_amount ?? 0);
-    const applyRefund = (val: number): number => {
-      if (refundLeft <= 0 || val <= 0) return val;
-      const c = Math.min(val, refundLeft);
-      refundLeft = Math.round((refundLeft - c) * 100) / 100;
-      return Math.round((val - c) * 100) / 100;
-    };
-    const rentalRefBefore = rentalNet;
-    const accRefBefore = accessoriesNet;
-    rentalNet = applyRefund(rentalNet);
-    accessoriesNet = applyRefund(accessoriesNet);
-    const hNet = applyRefund(h);
-    const sNet = applyRefund(s);
-    const rentalRefCut = Math.round((rentalRefBefore - rentalNet) * 100) / 100;
-    const accRefCut = Math.round((accRefBefore - accessoriesNet) * 100) / 100;
-    refunds += Math.round(((rentalRefBefore - rentalNet) + (accRefBefore - accessoriesNet) + (h - hNet) + (s - sNet)) * 100) / 100;
-
-    rental += rentalNet;
-    accessories += accessoriesNet;
-    haftung += hNet;
-    shipping += sNet;
+    countedBookings += 1;
+    if (b.delivery_mode === 'abholung') countedPickup += 1;
 
     const bookingId = String(b.id);
     // Anzeige-Datum in Berlin-Zeit — created_at ist ein UTC-Timestamp; das
@@ -210,67 +230,104 @@ export async function computeEuerData(
     const rentalFromShort = (b.rental_from ?? '').toString().slice(0, 10);
     const couponNote = b.coupon_code ? ` · ${b.coupon_code}` : '';
 
+    // ── Stornierte Buchung: nur die einbehaltene Stornogebuehr ─────────────
+    if (rev.kind === 'cancelled_retained') {
+      cancellationFees += rev.total;
+      refunds += rev.refundTotal;
+      cancellationItems.push({
+        id: `${bookingId}-storno`,
+        date: dateIso,
+        description: `${bookingId} · ${productName} · Storno-Einbehalt`,
+        amount: rev.total,
+        note: rev.refundTotal > 0
+          ? `gezahlt ${Number(b.price_total ?? 0).toFixed(2)} EUR − ${rev.refundTotal.toFixed(2)} EUR erstattet`
+          : `gezahlt ${Number(b.price_total ?? 0).toFixed(2)} EUR − keine Erstattung`,
+      });
+      continue;
+    }
+
+    discounts += rev.discountTotal;
+    refunds += rev.refundTotal;
+    rental += rev.net.rental;
+    accessories += rev.net.accessories;
+    haftung += rev.net.haftung;
+    shipping += rev.net.shipping;
+
     const buildNote = (gross: number, discountCut: number, refundCut: number): string | undefined => {
       const parts: string[] = [];
-      if (discountCut > 0) parts.push(`${discountCut.toFixed(2)} EUR Rabatt${couponNote}`);
-      if (refundCut > 0) parts.push(`${refundCut.toFixed(2)} EUR Erstattung`);
+      if (discountCut > 0.005) parts.push(`${discountCut.toFixed(2)} EUR Rabatt${couponNote}`);
+      if (refundCut > 0.005) parts.push(`${refundCut.toFixed(2)} EUR Erstattung`);
       return parts.length ? `brutto ${gross.toFixed(2)} EUR − ${parts.join(' − ')}` : undefined;
     };
 
-    if (rentalNet > 0 || r > 0) {
+    if (rev.net.rental > 0 || rev.gross.rental > 0) {
       rentalItems.push({
         id: `${bookingId}-rental`,
         date: dateIso,
         description: `${bookingId} · ${productName} · ${days} ${days === 1 ? 'Tag' : 'Tage'} ab ${rentalFromShort}`,
-        amount: rentalNet,
-        note: buildNote(r, rentalDiscountCut, rentalRefCut),
+        amount: rev.net.rental,
+        note: buildNote(rev.gross.rental, rev.discountCut.rental, rev.refundCut.rental),
       });
     }
-    if (accessoriesNet > 0 || a > 0) {
+    if (rev.net.accessories > 0 || rev.gross.accessories > 0) {
       accessoryItems.push({
         id: `${bookingId}-acc`,
         date: dateIso,
         description: `${bookingId} · Zubehör/Set`,
-        amount: accessoriesNet,
-        note: buildNote(a, accDiscountCut, accRefCut),
+        amount: rev.net.accessories,
+        note: buildNote(rev.gross.accessories, rev.discountCut.accessories, rev.refundCut.accessories),
       });
     }
-    if (hNet > 0 || h > 0) {
+    if (rev.net.haftung > 0 || rev.gross.haftung > 0) {
       haftungItems.push({
         id: `${bookingId}-haftung`,
         date: dateIso,
         description: `${bookingId} · Haftungsschutz`,
-        amount: hNet,
-        note: h - hNet > 0 ? `brutto ${h.toFixed(2)} EUR − ${(h - hNet).toFixed(2)} EUR Erstattung` : undefined,
+        amount: rev.net.haftung,
+        note: buildNote(rev.gross.haftung, rev.discountCut.haftung, rev.refundCut.haftung),
       });
     }
-    if (sNet > 0 || s > 0) {
+    if (rev.net.shipping > 0 || rev.gross.shipping > 0) {
       shippingItems.push({
         id: `${bookingId}-shipping`,
         date: dateIso,
         description: `${bookingId} · Versand`,
-        amount: sNet,
-        note: s - sNet > 0 ? `brutto ${s.toFixed(2)} EUR − ${(s - sNet).toFixed(2)} EUR Erstattung` : undefined,
+        amount: rev.net.shipping,
+        note: buildNote(rev.gross.shipping, rev.discountCut.shipping, rev.refundCut.shipping),
       });
     }
   }
-  const bookingCount = bookingRows.length;
-  const pickupCount = bookingRows.filter((b) => b.delivery_mode === 'abholung').length;
+  const bookingCount = countedBookings;
+  const pickupCount = countedPickup;
   const shippedCount = bookingCount - pickupCount;
   // discounts wird nicht mehr separat abgezogen — schon in rental/accessories
   // verrechnet. Total = direkter Sum der Netto-Kategorien.
-  const incomeTotal = Math.round((rental + accessories + haftung + shipping) * 100) / 100;
+  const incomeTotal = Math.round((rental + accessories + haftung + shipping + cancellationFees) * 100) / 100;
+  // Aufsummierte Cent-Betraege sauber runden (Float-Drift bei vielen Posten).
+  rental = Math.round(rental * 100) / 100;
+  accessories = Math.round(accessories * 100) / 100;
+  haftung = Math.round(haftung * 100) / 100;
+  shipping = Math.round(shipping * 100) / 100;
+  cancellationFees = Math.round(cancellationFees * 100) / 100;
+  discounts = Math.round(discounts * 100) / 100;
+  refunds = Math.round(refunds * 100) / 100;
 
   // Ausgaben (inkl. Detail-Items pro Kategorie fuer aufklappbare Ansicht)
   // Quelle 1: alte expenses-Tabelle (Stripe-Gebuehren-Import, migrierte Altdaten)
-  const { data: expenses } = await supabase
+  const expensesPage = await fetchAllRows((offset, limit) => supabase
     .from('expenses')
     .select('id, category, gross_amount, description, vendor, expense_date')
     .eq('is_test', false)
     .is('deleted_at', null)
     .gte('expense_date', from)
     .lte('expense_date', to)
-    .order('expense_date', { ascending: false });
+    .order('expense_date', { ascending: false })
+    .range(offset, offset + limit - 1));
+  if (expensesPage.error) console.error('[EÜR] expenses:', expensesPage.error);
+  const expenses = expensesPage.rows as Array<{
+    id: string; category: string; gross_amount: number | null;
+    description: string | null; vendor: string | null; expense_date: string;
+  }>;
 
   const categoryTotals: Record<string, number> = {};
   const categoryItems: Record<string, EuerExpenseItem[]> = {};
@@ -292,7 +349,10 @@ export async function computeEuerData(
   // AfA/GWG-Positionen erzeugen separate Asset/Afa-Eintraege und werden
   // hier NICHT mitgezaehlt (sonst Doppel-Buchung).
   try {
-    const { data: belegPositionen } = await supabase
+    // Zeitraum + Status schon in SQL filtern (nicht erst in JS) und seitenweise
+    // laden — sonst kappt PostgREST bei 1000 Zeilen und aeltere Ausgaben
+    // verschwinden still aus der EÜR.
+    const posPage = await fetchAllRows((offset, limit) => supabase
       .from('beleg_positionen')
       .select(`
         id, bezeichnung, gesamt_brutto, kategorie, klassifizierung, ki_vorschlag,
@@ -301,7 +361,14 @@ export async function computeEuerData(
       // 'verbrauch' (SD-Karten/ND-Filter/Schrauben) ist steuerlich identisch
       // zu 'ausgabe' und gehoert genauso in die EUeR.
       .in('klassifizierung', ['ausgabe', 'verbrauch', 'gwg'])
-      .order('reihenfolge');
+      .eq('belege.status', 'festgeschrieben')
+      .eq('belege.is_test', false)
+      .gte('belege.beleg_datum', from)
+      .lte('belege.beleg_datum', to)
+      .order('reihenfolge')
+      .range(offset, offset + limit - 1));
+    if (posPage.error) console.error('[EÜR] beleg_positionen:', posPage.error);
+    const belegPositionen = posPage.rows;
 
     type RawPos = {
       id: string;
@@ -422,6 +489,7 @@ export async function computeEuerData(
       accessories,
       haftung,
       shipping,
+      cancellationFees,
       discounts,
       refunds,
       other: 0,
@@ -434,6 +502,7 @@ export async function computeEuerData(
         accessories: accessoryItems,
         haftung: haftungItems,
         shipping: shippingItems,
+        cancellationFees: cancellationItems,
       },
     },
     bookingStats: {

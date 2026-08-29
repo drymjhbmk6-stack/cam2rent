@@ -36,7 +36,13 @@ export async function GET() {
       .from('invoices')
       .select('id, gross_amount, invoice_date, due_date')
       .eq('is_test', false)
-      .or('status.in.(open,overdue),payment_status.in.(open,overdue)');
+      // BEIDE Felder muessen offen sein — identisch zur "Offene Posten"-Liste
+      // (app/api/admin/buchhaltung/open-items). Mit dem frueheren ODER-Filter
+      // zeigte das Cockpit eine bezahlte Rechnung als ueberfaellig an, sobald
+      // nur eines der beiden Statusfelder nachhinkte.
+      .neq('payment_status', 'paid')
+      .neq('status', 'paid')
+      .neq('status', 'cancelled');
 
     const overdue = (openInvoices ?? []).filter((inv) => {
       const due = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date);

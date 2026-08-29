@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { calculateTax, type TaxMode } from '@/lib/accounting/tax';
-import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
+import { computeEuerData } from '@/lib/buchhaltung/euer-data';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -23,34 +23,19 @@ export async function GET(req: NextRequest) {
   const { data: rateRow } = await supabase.from('admin_settings').select('value').eq('key', 'tax_rate').maybeSingle();
   const taxRate = parseFloat(rateRow?.value || '19');
 
-  // Umsätze aus Buchungen — wird in beiden Modi geliefert (im Klein-Modus
-  // als Brutto fuer die § 19 UStG-Grenzbeobachtung 22.000 EUR / 100.000 EUR).
-  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
-  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
-
-  // refund_amount vom Umsatz abziehen (konsistent zur EÜR bei Erstattungen).
-  // Zufluss-Prinzip: awaiting_payment / pending_verification zaehlen NICHT.
-  const buildRevenueQuery = (cols: string) => supabase
-    .from('bookings')
-    .select(cols)
-    .eq('is_test', false)
-    .neq('status', 'cancelled')
-    .not('status', 'in', '(awaiting_payment,pending_verification)')
-    .gte('created_at', fromIso)
-    .lte('created_at', toIso);
-
-  let { data: bookings, error: bookingsErr } = await buildRevenueQuery('price_total, refund_amount');
-  if (bookingsErr && /refund_amount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
-    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die Spalte
-    // (refund_amount wird dann als 0 behandelt).
-    ({ data: bookings, error: bookingsErr } = await buildRevenueQuery('price_total'));
+  // Umsatz aus derselben Quelle wie die EÜR (lib/buchhaltung/euer-data.ts) —
+  // massgeblich ist der tatsaechlich kassierte Betrag inkl. Storno-Einbehalt,
+  // ohne unbezahlte Belege. Vorher summierte diese Route roh `price_total`
+  // und lieferte damit eine zweite, abweichende "Umsatz"-Zahl fuer denselben
+  // Zeitraum (relevant fuer die § 19-Grenzbeobachtung).
+  let totalRevenue = 0;
+  try {
+    const euer = await computeEuerData(supabase, from, to);
+    totalRevenue = euer.income.total;
+  } catch (err) {
+    console.error('[USt] EÜR-Umsatz konnte nicht berechnet werden:', err);
+    return NextResponse.json({ error: 'Umsatz konnte nicht berechnet werden.' }, { status: 500 });
   }
-
-  const bookingRows = (bookings || []) as unknown as Array<{ price_total: number | null; refund_amount?: number | null }>;
-  const totalRevenue = bookingRows.reduce(
-    (sum, b) => sum + (b.price_total || 0) - (b.refund_amount || 0),
-    0,
-  );
 
   // Im Kleinunternehmer-Modus rechtlich KEIN Vorsteuerabzug (§ 19 UStG).
   // Vorher wurde Vorsteuer aus expenses.tax_amount summiert und zahllast als

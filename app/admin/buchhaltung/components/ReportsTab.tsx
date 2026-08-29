@@ -28,6 +28,7 @@ interface EuerData {
     accessories: number;
     haftung: number;
     shipping: number;
+    cancellationFees?: number;
     discounts: number;
     other: number;
     total: number;
@@ -36,6 +37,7 @@ interface EuerData {
       accessories?: IncomeItem[];
       haftung?: IncomeItem[];
       shipping?: IncomeItem[];
+      cancellationFees?: IncomeItem[];
     };
   };
   bookingStats?: { count: number; pickup: number; shipped: number };
@@ -144,7 +146,7 @@ function EuerReport() {
           {data.bookingStats && data.bookingStats.count > 0 && (
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', padding: '10px 14px', background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
               <span style={{ color: '#94a3b8' }}>
-                Buchungen: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.count}</span>
+                Buchungen mit Umsatz: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.count}</span>
               </span>
               <span style={{ color: '#94a3b8' }}>
                 davon Versand: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.shipped}</span>
@@ -180,6 +182,13 @@ function EuerReport() {
                 label="Versandkostenpauschalen"
                 amount={data.income.shipping}
                 items={data.income.items?.shipping ?? []}
+              />
+            )}
+            {(data.income.cancellationFees ?? 0) > 0 && (
+              <IncomeCategoryRow
+                label="Storno-Einbehalt"
+                amount={data.income.cancellationFees ?? 0}
+                items={data.income.items?.cancellationFees ?? []}
               />
             )}
             {data.income.other > 0 && <EuerRow label="Sonstige Einnahmen" amount={data.income.other} />}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { syncInvoiceAmountForBooking } from '@/lib/buchhaltung/store-invoice';
 import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog, sendShippingConfirmation } from '@/lib/email';
 import { buildTrackingUrl, isAllowedCarrier, type TrackingCarrier } from '@/lib/tracking-url';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
@@ -1377,7 +1378,21 @@ export async function PATCH(
       bookingEdit.new_price_total !== undefined && bookingEdit.new_price_total !== null;
     const overrideVal = overrideProvided ? Math.max(0, Number(bookingEdit.new_price_total)) : null;
     const overrideValid = overrideProvided && overrideVal !== null && Number.isFinite(overrideVal);
-    const finalTotal = overrideValid ? (overrideVal as number) : computedTotal;
+    let finalTotal = overrideValid ? (overrideVal as number) : computedTotal;
+
+    // Manueller Gesamtpreis: die Differenz zu den Einzelposten MUSS in einem
+    // Rabatt-Feld landen. Sonst traegt sie kein Feld — die Rechnung weist sie
+    // als "Set-Bundle / Anpassung" aus und die EÜR/DATEV buchen den vollen
+    // Listenpreis als Einnahme, obwohl weniger kassiert wurde.
+    if (overrideValid) {
+      const requiredDiscount = Math.round((subtotal + shippingPrice - finalTotal) * 100) / 100;
+      const extraDiscount = Math.round((requiredDiscount - discountTotal) * 100) / 100;
+      if (extraDiscount > 0.005) {
+        scaledDiscountAmount = Math.round((scaledDiscountAmount + extraDiscount) * 100) / 100;
+        discountTotal = Math.round((discountTotal + extraDiscount) * 100) / 100;
+      }
+      finalTotal = Math.round(finalTotal * 100) / 100;
+    }
 
     const oldTotal = Number(booking.price_total ?? 0);
     const diff = Math.round((finalTotal - oldTotal) * 100) / 100;
@@ -1714,6 +1729,28 @@ export async function PATCH(
       },
       request: req,
     });
+
+    // Rechnungsbetrag in der Buchhaltung nachziehen — sonst bleibt `invoices`
+    // auf dem Betrag VOR der Bearbeitung stehen (Umsatzliste, Offene Posten,
+    // Mahnwesen rechneten mit dem alten Wert). Non-blocking.
+    try {
+      const { data: taxRows } = await supabase
+        .from('admin_settings')
+        .select('key, value')
+        .in('key', ['tax_mode', 'tax_rate']);
+      const tx: Record<string, string> = {};
+      for (const r of taxRows ?? []) tx[r.key] = r.value as string;
+      await syncInvoiceAmountForBooking(
+        supabase,
+        { ...(booking as Record<string, unknown>), id, price_total: finalTotal } as Parameters<typeof syncInvoiceAmountForBooking>[1],
+        {
+          taxMode: (tx['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+          taxRate: parseFloat(tx['tax_rate'] || '19'),
+        },
+      );
+    } catch (e) {
+      console.error('[booking-edit] Rechnungsbetrag-Sync fehlgeschlagen:', e);
+    }
 
     // Rechnung intern versionieren (non-blocking — darf den Edit nie kippen).
     await snapshotInvoiceVersion(supabase, id, {
@@ -2259,9 +2296,18 @@ export async function PATCH(
           refundStatus = 'manual';
         }
 
-        // Refund-Betrag + Status auf der Buchung dokumentieren (defensiver
-        // Retry ohne die Spalten, falls supabase-bookings-refund.sql aussteht).
-        const refundNoteEntry = `Storno-Rueckerstattung ${requestedRefund.toFixed(2)} EUR (${refundStatus})`;
+      }
+
+      // Storno IMMER dokumentieren — auch bei 0 EUR Erstattung (= voller
+      // Einbehalt der Stornogebuehr). Die EÜR erkennt an dieser Doku, dass der
+      // Einbehalt geprueft wurde, und bucht ihn als Einnahme; undokumentierte
+      // Alt-Stornos bleiben bewusst aussen vor.
+      // (Defensiver Retry entfaellt: schlaegt das Update fehl, weil
+      // supabase-bookings-refund.sql aussteht, bleibt es beim Alt-Verhalten.)
+      {
+        const refundNoteEntry = requestedRefund > 0
+          ? `Storno-Rueckerstattung ${requestedRefund.toFixed(2)} EUR (${refundStatus})`
+          : `Storno ohne Rueckerstattung — Einbehalt ${priceTotal.toFixed(2)} EUR`;
         const existingRefundNote = (booking.refund_note ?? '') as string;
         const refundUpdate: Record<string, unknown> = {
           refund_amount: requestedRefund,

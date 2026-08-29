@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
     { kategorie: 'Zubehör & Sets', items: data.income.items.accessories },
     { kategorie: 'Haftungsschutz', items: data.income.items.haftung },
     { kategorie: 'Versandkostenpauschale', items: data.income.items.shipping },
+    { kategorie: 'Storno-Einbehalt', items: data.income.items.cancellationFees ?? [] },
   ];
   for (const g of incomeGroups) {
     for (const it of g.items) {

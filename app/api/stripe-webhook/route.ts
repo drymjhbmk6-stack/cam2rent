@@ -867,6 +867,19 @@ async function handleCartBooking(
   const gLoyalty = distributeAmount(sLoyaltyDiscount, groupSubtotals);
   const gSpecial = distributeAmount(sSpecialDiscount, groupSubtotals);
   const gEffectiveDiscount = distributeAmount(effectiveDiscount, groupSubtotals);
+  // Alles, was die gemeldeten Rabatt-Felder nicht erklaeren (discScale = 0,
+  // weil das Frontend gar keinen Rabatt gemeldet hat, Stripe aber weniger als
+  // den Listenpreis abgebucht hat) landet im generischen Rabatt-Feld — sonst
+  // waere price_total niedriger als die Einzelposten, ohne dass ein Feld die
+  // Differenz traegt (Rechnung + EÜR liefen auseinander).
+  const explainedDiscount = Math.round(
+    (sCouponDiscount + sProductDiscount + sDurationDiscount
+      + sEarlyBirdDiscount + sLoyaltyDiscount + sSpecialDiscount) * 100,
+  ) / 100;
+  const gUnexplained = distributeAmount(
+    Math.round((effectiveDiscount - explainedDiscount) * 100) / 100,
+    groupSubtotals,
+  );
 
   type AccItem = { accessory_id: string; qty: number };
   const createdBookingIds: string[] = [];
@@ -937,7 +950,7 @@ async function handleCartBooking(
       // "Sommer25"), damit die Rechnung die Rabatt-Zeile korrekt beschriftet.
       coupon_code: couponCode || productDiscountLabel || null,
       // H-7: skalierter Coupon + Produktaktion (analog confirm-cart groupDiscount).
-      discount_amount: Math.round((gCoupon[gi] + gProduct[gi]) * 100) / 100,
+      discount_amount: Math.max(0, Math.round((gCoupon[gi] + gProduct[gi] + gUnexplained[gi]) * 100) / 100),
       duration_discount: gDuration[gi],
       loyalty_discount: gLoyalty[gi],
       // Fruehbucherrabatt — eigene Spalte (Migration ausstehend → Retry ohne sie).
