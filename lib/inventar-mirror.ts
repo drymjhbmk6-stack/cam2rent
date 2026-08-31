@@ -548,6 +548,14 @@ export async function mirrorAccessoryToLegacy(
       notes: unit.notizen,
       purchased_at: unit.kaufdatum,
     }).eq('id', existing);
+    // WICHTIG: auch beim UPDATE den Bestand nachziehen. Wird ein Stueck im
+    // Inventar auf wartung/defekt/ausgemustert gesetzt, aendert sich nur der
+    // Status — ohne diesen Aufruf blieb `accessories.available_qty` auf dem
+    // alten Wert stehen und Kalender/Verfuegbarkeit boten das defekte Stueck
+    // weiter an. Frueher lief der Sync nur beim Insert.
+    await syncAccessoryQty(supabase, legacyAccessoryId).catch((e) => {
+      console.error('[inventar-mirror] syncAccessoryQty nach update fehlgeschlagen:', e);
+    });
     return existing;
   }
 

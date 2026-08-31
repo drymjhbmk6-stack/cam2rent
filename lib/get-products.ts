@@ -137,7 +137,12 @@ async function loadNewWorldCount(supabase: ServiceClient): Promise<Map<string, n
         .from('inventar_units')
         .select('produkt_id, tracking_mode, bestand')
         .eq('typ', 'kamera')
-        .neq('status', 'ausgemustert'),
+        // Nur nutzbare Status zaehlen — identisch zu syncAccessoryQty beim
+        // Zubehoer. `wartung`/`defekt` sind nicht vermietbar und duerfen den
+        // buchbaren Bestand nicht erhoehen (der Gantt behandelt sie ohnehin
+        // schon als nicht belegbar). Erlaubte Werte laut CHECK-Constraint:
+        // verfuegbar | vermietet | wartung | defekt | ausgemustert.
+        .in('status', ['verfuegbar', 'vermietet']),
     ]);
 
     const produktIdToLegacy = new Map<string, string>();
@@ -170,7 +175,8 @@ async function loadOldWorldCount(supabase: ServiceClient): Promise<Map<string, n
     const { data: unitRows } = await supabase
       .from('product_units')
       .select('product_id')
-      .neq('status', 'retired');
+      // Analog zur neuen Welt: `maintenance` ist nicht vermietbar.
+      .in('status', ['available', 'rented']);
     if (unitRows) {
       for (const row of unitRows) {
         if (row.product_id) {

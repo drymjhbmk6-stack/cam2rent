@@ -488,6 +488,53 @@ also eher zu viel; siehe „Set-Expansion in Verfuegbarkeits-Check".
 Keine Migration, kein Schema-Change.
 
 
+### „Defekt"/„Wartung" senkt jetzt wirklich den buchbaren Bestand (Stand 2026-08-31)
+
+**Symptom:** Ein Stück unter `/admin/inventar` auf **Defekt** gesetzt — Kalender
+und Kunden-Verfügbarkeit boten es unverändert weiter an.
+
+**Zwei unabhängige Ursachen, beide gefixt:**
+
+**1. Zubehör — Bestand wurde nur beim Anlegen nachgezogen.**
+`mirrorAccessoryToLegacy` (`lib/inventar-mirror.ts`) rief `syncAccessoryQty`
+ausschließlich im **Insert**-Zweig. Der `if (existing)`-Zweig (= jede
+Status-Änderung an einem bereits gespiegelten Stück) schrieb brav
+`accessory_units.status = 'damaged'`, ließ `accessories.available_qty` aber auf
+dem alten Wert stehen — und genau dieser Wert ist der Gesamtbestand für
+Gantt, Kunden-Kalender, Preisrechner und Reservierung. Jetzt läuft der Sync
+auch beim Update. `syncAccessoryQty` selbst war korrekt (zählt nur
+`verfuegbar`/`vermietet` bzw. `available`/`rented`).
+
+**2. Kameras — Bestand zählte kaputte Stücke mit.**
+`getProducts()` (`lib/get-products.ts`) leitet `product.stock` live aus den
+physischen Einheiten ab, filterte aber nur den jeweils *letzten* Status weg:
+neue Welt `status != 'ausgemustert'`, alte Welt `status != 'retired'`. Eine
+Kamera in **Wartung** oder **Defekt** zählte damit als buchbar — obwohl der
+Gantt sie längst als nicht belegbar behandelt (`usableUnits` schließt
+`maintenance`/`retired` aus). Jetzt beide Zählungen als **Positiv-Liste**:
+`IN ('verfuegbar','vermietet')` bzw. `IN ('available','rented')` — identische
+Regel wie beim Zubehör. Erlaubte Werte sind per CHECK-Constraint fest
+(`verfuegbar|vermietet|wartung|defekt|ausgemustert`), NULL-Status waren durch
+das bisherige `.neq(...)` ohnehin schon ausgeschlossen.
+
+**Wirkt in:** Kunden-Kalender, harte Überbuchungssperre, Gantt-Gesamtbestand,
+Verlängerung, `check-availability` — überall wo `product.stock` bzw.
+`accessories.available_qty` gelesen wird.
+
+⚠️ **Altbestand heilt nicht von selbst:** ein VOR dem Fix auf defekt gesetztes
+Zubehör hat weiterhin den alten `available_qty`. Entweder den Status im
+Inventar einmal neu speichern (löst den Sync aus) oder `/admin/inventar` →
+„Wartung ▾" → **„Bestände prüfen"** laufen lassen und den Eintrag anhaken —
+er ist dort **nicht vorausgewählt**, weil der Sollwert 0 ist. Kamera-Bestände
+heilen sofort (Live-Zählung bei jedem Request).
+
+⚠️ **Sammel-Zubehör (`is_bulk`) unverändert:** dort ist `available_qty` der
+manuell gepflegte Lagerbestand, `syncAccessoryQty` fasst ihn bewusst nicht an.
+Ein defektes Sammel-Stück muss der Admin per Mengenkorrektur abziehen.
+
+Keine Migration, kein Schema-Change.
+
+
 ### Inventar-Löschen + Sammel-Zubehör-Autoinventar (Stand 2026-05-17)
 Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 
