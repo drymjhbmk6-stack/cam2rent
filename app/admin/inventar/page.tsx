@@ -350,11 +350,19 @@ function MaintenanceMenu() {
         <span className={`transition-transform text-xs ${open ? 'rotate-180' : ''}`}>▾</span>
       </button>
 
+      {/*
+        WICHTIG: Das Panel darf beim Klick NICHT selbst schliessen.
+        Jedes Wartungs-Tool rendert sein Modal als eigenes Kind dieses Panels.
+        Ein `onClick={() => setOpen(false)}` hier hat React dazu gebracht, das
+        Tool samt gerade geoeffnetem Modal im selben Tick zu unmounten — fuer
+        den Admin sah es aus, als wuerde der Button gar nichts tun (galt fuer
+        alle fuenf Tools, nicht nur eins).
+        Geschlossen wird das Menue vom Klick-ausserhalb-Handler oben. Klicks im
+        Modal zaehlen als "innerhalb" (das Modal haengt im DOM unter
+        data-maintenance-menu-root) und lassen das Menue bewusst offen stehen.
+      */}
       {open && (
-        <div
-          className="absolute right-0 top-full mt-1 z-40 w-72 bg-admin-surface border border-[var(--admin-faint)] rounded-lg shadow-2xl overflow-hidden"
-          onClick={() => setOpen(false)}
-        >
+        <div className="absolute right-0 top-full mt-1 z-40 w-72 bg-admin-surface border border-[var(--admin-faint)] rounded-lg shadow-2xl overflow-hidden">
           <div className="px-3 py-2 border-b border-[var(--admin-faint)] bg-admin-surface-2/50">
             <div className="text-xs text-admin-text-2 font-semibold">Reparatur-Tools</div>
             <div className="text-[11px] text-[var(--admin-text-dim)] leading-tight mt-0.5">

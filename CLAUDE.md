@@ -554,6 +554,31 @@ Alt-Welt höher als Neu-Welt, lebt eine **verwaiste `accessory_units`-Zeile**
 weiter (`syncAccessoryQty` nimmt `MAX(legacy, inventar)` und kann deshalb nicht
 darunter fallen) → „Mirror-Zeilen anzeigen" → **Ausmustern**.
 
+**4. Nachtrag — das komplette „Wartung ▾"-Menü war tot.**
+Das Dropdown-Panel auf `/admin/inventar` hatte ein
+`onClick={() => setOpen(false)}` auf dem Panel selbst. Jedes Wartungs-Tool
+rendert sein Modal aber als **Kind genau dieses Panels** — der Klick auf einen
+Tool-Button hat also im selben Tick das Panel geschlossen und damit das Tool
+samt frisch geöffnetem Modal **unmountet**. Nach außen: „Button drücken, nichts
+passiert." Betraf **alle fünf** Tools (Mirror-Backfill, Bestand
+wiederherstellen, Bestände prüfen, Codes aufräumen, Verwaiste aufräumen), also
+seit Einführung des Dropdowns (2026-05-26) das gesamte Reparatur-Menü.
+Fix: das Auto-Close am Panel entfernt. Geschlossen wird das Menü weiterhin vom
+Klick-außerhalb-Handler — Klicks im Modal zählen als „innerhalb"
+(`closest('[data-maintenance-menu-root]')`, das Modal hängt im DOM darunter)
+und lassen es bewusst offen.
+
+⚠️ **Merksatz:** In diesem Dropdown darf nichts am Panel hängen, das die Kinder
+unmountet — die Tools halten ihren eigenen Modal-State.
+
+**5. Ein-Klick-Reparatur im Drift-Banner.**
+Der Zubehör-Editor (`AccessoryUnitsManager`) hat im Welten-Drift-Banner einen
+Button **„Bestand neu berechnen"** (ruft `resync-qty` für genau dieses
+Zubehör) plus einen Hinweissatz für den Fall „Shop-Bestand höher als beide
+Welten" inkl. des künftigen Werts. Spart den Umweg über das Wartungs-Menü, wo
+der Eintrag zusätzlich **nicht vorausgewählt** ist, sobald der Sollwert 0 ist
+(bewusster Schutz gegen versehentlichen Bestandsverlust).
+
 Keine Migration, kein Schema-Change.
 
 
