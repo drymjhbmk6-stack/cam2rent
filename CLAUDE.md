@@ -579,6 +579,24 @@ Welten" inkl. des künftigen Werts. Spart den Umweg über das Wartungs-Menü, wo
 der Eintrag zusätzlich **nicht vorausgewählt** ist, sobald der Sollwert 0 ist
 (bewusster Schutz gegen versehentlichen Bestandsverlust).
 
+**6. Vergangenheit wird nicht mehr gegen den heutigen Bestand gerechnet.**
+Sobald der Bestand sinkt (Stück defekt/ausgemustert), färbte der Zubehör-Tab
+**rückwirkend die gesamte Historie** rot mit „⚠ 1/0 überbucht" — obwohl die
+Buchung damals sauber bedient wurde. Ursache: `getAccCellInfo` verglich
+`count` auch für vergangene Tage mit dem **aktuellen** `available_qty`.
+Jetzt: vergangene Tage bekommen den Typ **`past-booked`** (gedämpftes
+Marineblau `#1e3a5f` wie im Sets-Tab), zeigen **nur die Anzahl** statt
+`x/Bestand`, und `overbooked` ist dort hart `false`. Der Überbuchungs-Alarm
+ist eine **Handlungs**-aufforderung — für die Vergangenheit gibt es nichts zu
+tun. Tooltip + Detail-Fenster sagen das explizit
+(„Vergangener Tag — N belegt", „Der heutige Bestand wird auf vergangene Tage
+bewusst nicht angewendet").
+
+⚠️ **Sichtbare Folge:** Belegte Vergangenheits-Tage sind im Zubehör-Tab nicht
+mehr amber/rot, sondern gedämpft blau — Historie statt Verfügbarkeits-Aussage.
+Der **Sets-Tab** hatte diese Trennung schon (`isPast ? null : getSetCellInfo`),
+der **Kameras-Tab** rechnet nicht Bestand-gegen-Anzahl und ist unberührt.
+
 Keine Migration, kein Schema-Change.
 
 

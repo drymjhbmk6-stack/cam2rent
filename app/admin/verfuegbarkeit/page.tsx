@@ -719,7 +719,8 @@ export default function AdminVerfuegbarkeitPage() {
 
   // Zubehör-Zellinfo
   function getAccCellInfo(acc: GanttAccessory, dateStr: string, buf: BufferDays): {
-    type: string; count: number; total: number; free: number; overbooked: boolean; bookings: GanttSimpleBooking[];
+    type: string; count: number; total: number; free: number; overbooked: boolean;
+    isPast: boolean; bookings: GanttSimpleBooking[];
   } {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const isPast = new Date(dateStr) < today;
@@ -740,8 +741,18 @@ export default function AdminVerfuegbarkeitPage() {
     let type = 'free';
     if (free <= 0) type = 'soldout';
     else if (count > 0) type = 'partial';
-    if (isPast && count === 0) type = 'past';
-    return { type, count, total, free, overbooked: count > total, bookings: matchedBookings };
+    // Vergangene Tage werden NICHT gegen den heutigen Bestand gerechnet.
+    // Sinkt der Bestand (Stueck defekt/ausgemustert), wuerde sonst die ganze
+    // Historie rueckwirkend rot als „ueberbucht" erscheinen, obwohl die
+    // Buchung damals sauber bedient wurde. Vergangenheit zeigt nur noch, ob
+    // etwas belegt war — der Ueberbuchungs-Alarm ist eine Handlungs-
+    // aufforderung und gilt deshalb erst ab heute.
+    if (isPast) type = count === 0 ? 'past' : 'past-booked';
+    return {
+      type, count, total, free, isPast,
+      overbooked: !isPast && count > total,
+      bookings: matchedBookings,
+    };
   }
 
   /* ─── Set-Verfuegbarkeit: kann das Set an einem Tag gebaut werden? ──────
@@ -1445,10 +1456,14 @@ export default function AdminVerfuegbarkeitPage() {
                           // vorhanden). Blau entfaellt hier — „ausgebucht" und
                           // „ueberbucht" waren vorher optisch nicht zu trennen.
                           const bg = info.type === 'past' ? '#1e293b'
+                            // Belegte Vergangenheit: gedaempftes Marineblau wie im
+                            // Sets-Tab — Historie, kein Alarm.
+                            : info.type === 'past-booked' ? '#1e3a5f'
                             : info.type === 'soldout' ? '#7f1d1d'
                             : info.count > 0 ? '#a16207'
                             : '#065f46';
                           const color = info.type === 'past' ? '#475569'
+                            : info.type === 'past-booked' ? '#94a3b8'
                             : info.type === 'soldout' ? '#fecaca'
                             : info.count > 0 ? '#fef3c7'
                             : '#6ee7b7';
@@ -1464,7 +1479,9 @@ export default function AdminVerfuegbarkeitPage() {
                                 if (info.type === 'past') { setTooltip(null); return; }
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 const lines: string[] = [acc.name];
-                                if (info.overbooked) {
+                                if (info.isPast) {
+                                  lines.push(`Vergangener Tag — ${info.count} belegt`);
+                                } else if (info.overbooked) {
                                   lines.push(`⚠ Überbucht — ${info.count} belegt bei nur ${info.total} vorhanden`);
                                 } else if (info.total === 0) {
                                   lines.push('Kein Bestand hinterlegt');
@@ -1487,7 +1504,12 @@ export default function AdminVerfuegbarkeitPage() {
                               onClick={() => { setTooltip(null); setAccModal({ acc, dateStr: d.dateStr }); }}
                               style={{ background: bg, color, cursor: 'pointer', boxShadow: rings.length > 0 ? rings.join(', ') : 'none' }}>
                               <div className="text-[9px] leading-tight font-semibold">
-                                {info.type !== 'past' && info.count > 0 ? `${info.overbooked ? '⚠' : ''}${info.count}/${info.total}` : ''}
+                                {info.count === 0 || info.type === 'past'
+                                  ? ''
+                                  : info.isPast
+                                    // Ohne „/Bestand": der Bestand ist ein Wert von HEUTE.
+                                    ? `${info.count}`
+                                    : `${info.overbooked ? '⚠' : ''}${info.count}/${info.total}`}
                               </div>
                             </td>
                           );
@@ -1830,7 +1852,16 @@ export default function AdminVerfuegbarkeitPage() {
             maxWidth={620}
           >
             {/* Bestandsübersicht */}
-            {info.overbooked ? (
+            {info.isPast ? (
+              <div style={{ background: 'rgba(148,163,184,0.10)', border: '1px solid var(--admin-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                <div className="font-heading font-bold" style={{ color: 'var(--admin-text-2)', fontSize: 14 }}>
+                  Vergangener Tag — {info.count} {info.count === 1 ? 'Stück war' : 'Stück waren'} belegt
+                </div>
+                <div className="font-body" style={{ color: 'var(--admin-text-2)', fontSize: 12, marginTop: 2 }}>
+                  Der heutige Bestand wird auf vergangene Tage bewusst nicht angewendet.
+                </div>
+              </div>
+            ) : info.overbooked ? (
               <div style={{ background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(220,38,38,0.6)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
                 <div className="font-heading font-bold" style={{ color: '#f87171', fontSize: 14 }}>
                   ⚠ Überbucht — {info.count} belegt bei nur {info.total} vorhanden
