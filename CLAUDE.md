@@ -946,6 +946,24 @@ wenn jemand die Kategorie in die Whitelist einträgt (`NIEMALS_AUTOMATISCH` in
   - Ergänzt den statischen `buchungsKontext()`-Block: der ist ein Snapshot vom
     Prompt-Aufbau, das Werkzeug fragt bei Bedarf gezielt (und mit
     Buchungsnummer-Filter) frisch nach.
+  - **Stückzahl + Zubehör explizit (Fix Stand 2026-08-31):** Beide Stellen gaben
+    vorher nur `bookings.product_name` roh weiter. Bei einer Einzelbuchung ist
+    das ein Name **ohne Mengenangabe** — die KI hat daraus eine Menge geraten
+    („2× OSMO Action 5 Pro" bei genau einer Kamera) und Zubehör vorgeschlagen,
+    das der Kunde bereits gebucht hatte. Neuer gemeinsamer Formatter
+    `formatiereBuchungen()` (+ `ladeBuchungsZeilen()`/`BUCHUNGS_COLS`) in
+    `lib/ai/kundenanfrage-kontext.ts`, genutzt von `buchungsKontext()` **und**
+    dem Werkzeug — sonst stünden zwei verschieden formatierte Stände derselben
+    Buchung im Prompt. Kameras laufen über `resolveBookingCameras` (Multi-Kamera
+    + Legacy-Komma-Split) und werden pro Modell gezählt („1x OSMO Action 5 Pro"),
+    Zubehör über `resolveAccessoryItems` (Sets bleiben als Set = Kundensicht);
+    ohne Zubehör steht ausdrücklich „Zubehoer: keines gebucht". Fällt die
+    Zubehör-Auflösung aus, entfällt die Zeile (statt eine falsche
+    „kein Zubehör"-Aussage zu erzeugen). Der Select ist **bewusst nicht
+    `select('*')`** (`handover_data` enthält Signatur-Data-URLs) und hat einen
+    defensiven Retry ohne `cameras` (Multi-Kamera-Migration steht noch aus).
+    Dazu eine harte Prompt-Regel: Stückzahl/Modell/Zubehör nur wörtlich aus den
+    Buchungsdaten, nie aus Preis, Zeitraum oder Verlauf abgeleitet.
   - Bewusst **nur lesend** — kein Werkzeug bucht, storniert oder reserviert
     etwas. Bewusste Architekturentscheidung: eine falsche Auskunft ist
     korrigierbar, eine fälschlich angelegte oder stornierte Buchung bewegt

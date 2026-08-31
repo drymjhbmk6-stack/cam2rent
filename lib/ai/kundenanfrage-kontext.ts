@@ -26,6 +26,8 @@ import { loadBufferDays } from '@/lib/booking-buffer';
 import { BUSINESS } from '@/lib/business-config';
 import { BOOKING_STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { fmtDate } from '@/lib/format-utils';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { resolveAccessoryItems } from '@/lib/booking-accessory-apply';
 
 type SB = ReturnType<typeof createServiceClient>;
 
@@ -204,52 +206,149 @@ function kontaktBlock(): string {
  * Ohne Treffer bleibt der Block leer — die KI weiss dann, dass sie keine
  * buchungsbezogene Auskunft geben darf.
  */
+/**
+ * Spalten, die eine Buchungszeile fuer die KI braucht.
+ *
+ * Bewusst KEIN select('*') — `handover_data` enthaelt Signatur-Data-URLs und
+ * hat in einem Prompt-Kontext nichts zu suchen.
+ */
+export const BUCHUNGS_COLS =
+  'id, status, product_id, product_name, cameras, accessory_items, rental_from, rental_to, ' +
+  'delivery_mode, tracking_number, return_tracking_number, price_total, contract_signed, created_at';
+
+/** Ohne die Multi-Kamera-Spalte (Migration evtl. noch nicht ausgefuehrt). */
+export const BUCHUNGS_COLS_OHNE_CAMERAS = BUCHUNGS_COLS.replace('cameras, ', '');
+
+type BuchungsRow = Record<string, unknown>;
+
+/**
+ * Laedt Buchungszeilen defensiv — faellt die `cameras`-Spalte (Multi-Kamera-
+ * Migration) noch, wird ohne sie erneut geladen. `resolveBookingCameras`
+ * greift dann auf den Komma-Split von `product_name` zurueck.
+ */
+export async function ladeBuchungsZeilen(
+  supabase: SB,
+  bauen: (cols: string) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<BuchungsRow[]> {
+  const erst = await bauen(BUCHUNGS_COLS);
+  if (!erst.error) return (erst.data ?? []) as BuchungsRow[];
+  const zweit = await bauen(BUCHUNGS_COLS_OHNE_CAMERAS);
+  if (zweit.error) return [];
+  return (zweit.data ?? []) as BuchungsRow[];
+}
+
+/**
+ * Formatiert eine Buchung fuer die KI — mit AUSGESCHRIEBENER Stueckzahl und
+ * dem tatsaechlich gebuchten Zubehoer.
+ *
+ * Warum das wichtig ist: Frueher stand hier nur `product_name`. Bei einer
+ * Einzelbuchung ist das ein einzelner Name ohne Mengenangabe — die KI hat
+ * daraus schon eine Menge geraten ("2x OSMO Action 5 Pro" bei einer einzigen
+ * Kamera). Steht die Zahl explizit da, muss sie nicht raten. Dasselbe gilt
+ * fuers Zubehoer: ohne die Liste hat sie Zubehoer vorgeschlagen, das der
+ * Kunde bereits gebucht hatte.
+ */
+export async function formatiereBuchungen(
+  supabase: SB,
+  rows: BuchungsRow[],
+): Promise<string[]> {
+  return Promise.all(
+    rows.map(async (b) => {
+      const status = BOOKING_STATUS_CONFIG[String(b.status)]?.label ?? String(b.status ?? '');
+      const von = b.rental_from ? fmtDate(String(b.rental_from)) : '?';
+      const bis = b.rental_to ? fmtDate(String(b.rental_to)) : '?';
+      const art = b.delivery_mode === 'versand' ? 'Versand' : 'Abholung';
+
+      // Kameras mit echter Stueckzahl (gleiche Modelle zusammengefasst).
+      const kameras = resolveBookingCameras({
+        product_id: (b.product_id as string | null) ?? null,
+        product_name: (b.product_name as string | null) ?? null,
+        unit_id: null,
+        cameras: b.cameras,
+      });
+      const proModell = new Map<string, number>();
+      for (const k of kameras) proModell.set(k.product_name, (proModell.get(k.product_name) ?? 0) + 1);
+      const kameraText =
+        proModell.size > 0
+          ? [...proModell.entries()].map(([name, n]) => `${n}x ${name}`).join(', ')
+          : String(b.product_name ?? 'unbekannt');
+
+      // Gebuchtes Zubehoer (Sets bleiben als Set stehen — so sieht es auch
+      // der Kunde). Faellt die Aufloesung aus, wird das Feld weggelassen,
+      // statt eine falsche "kein Zubehoer"-Aussage zu erzeugen.
+      let zubehoerText = '';
+      const rawItems = Array.isArray(b.accessory_items)
+        ? (b.accessory_items as { accessory_id?: string; qty?: number }[])
+        : [];
+      if (rawItems.length === 0) {
+        zubehoerText = ' · Zubehoer: keines gebucht';
+      } else {
+        try {
+          const aufgeloest = await resolveAccessoryItems(
+            supabase,
+            rawItems
+              .filter((r) => typeof r?.accessory_id === 'string')
+              .map((r) => ({ accessory_id: String(r.accessory_id), qty: Number(r.qty) || 1 })),
+          );
+          const top = aufgeloest.filter((i) => !i.isFromSet);
+          if (top.length > 0) {
+            zubehoerText = ` · Zubehoer: ${top.map((i) => `${i.qty}x ${i.name}`).join(', ')}`;
+          }
+        } catch {
+          /* Zubehoer-Zeile entfaellt — lieber weglassen als raten. */
+        }
+      }
+
+      const teile = [
+        `${b.id}: ${kameraText}`,
+        `${von} bis ${bis}`,
+        art,
+        `Status: ${status}`,
+      ];
+      let zeile = `- ${teile.join(' · ')}${zubehoerText}`;
+      if (b.tracking_number) zeile += ` · Sendungsnummer hin: ${b.tracking_number}`;
+      if (b.return_tracking_number) zeile += ` · Sendungsnummer zurueck: ${b.return_tracking_number}`;
+      if (b.contract_signed === false) zeile += ' · Mietvertrag noch NICHT unterschrieben';
+      return zeile;
+    }),
+  );
+}
+
 export async function buchungsKontext(
   supabase: SB,
   opts: { customerId?: string | null; email?: string | null; bookingId?: string | null },
 ): Promise<string> {
   try {
-    const cols =
-      'id, status, product_name, rental_from, rental_to, delivery_mode, tracking_number, tracking_url, price_total, contract_signed, created_at';
     let rows: Record<string, unknown>[] = [];
 
     if (opts.customerId) {
-      const { data } = await supabase
-        .from('bookings')
-        .select(cols)
-        .eq('user_id', opts.customerId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      rows = data ?? [];
+      rows = await ladeBuchungsZeilen(supabase, (cols) =>
+        supabase
+          .from('bookings')
+          .select(cols)
+          .eq('user_id', opts.customerId as string)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      );
     }
     if (rows.length === 0 && opts.email) {
-      const { data } = await supabase
-        .from('bookings')
-        .select(cols)
-        .ilike('customer_email', opts.email)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      rows = data ?? [];
+      rows = await ladeBuchungsZeilen(supabase, (cols) =>
+        supabase
+          .from('bookings')
+          .select(cols)
+          .ilike('customer_email', opts.email as string)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      );
     }
     if (rows.length === 0 && opts.bookingId) {
-      const { data } = await supabase
-        .from('bookings')
-        .select(cols)
-        .eq('id', opts.bookingId)
-        .limit(1);
-      rows = data ?? [];
+      rows = await ladeBuchungsZeilen(supabase, (cols) =>
+        supabase.from('bookings').select(cols).eq('id', opts.bookingId as string).limit(1),
+      );
     }
     if (rows.length === 0) return '';
 
-    const lines = rows.map((b) => {
-      const status = BOOKING_STATUS_CONFIG[String(b.status)]?.label ?? String(b.status ?? '');
-      const von = b.rental_from ? fmtDate(String(b.rental_from)) : '?';
-      const bis = b.rental_to ? fmtDate(String(b.rental_to)) : '?';
-      const art = b.delivery_mode === 'versand' ? 'Versand' : 'Abholung';
-      const tracking = b.tracking_number ? ` · Sendungsnummer ${b.tracking_number}` : '';
-      const vertrag = b.contract_signed === false ? ' · Mietvertrag noch NICHT unterschrieben' : '';
-      return `- ${b.id}: ${b.product_name ?? 'Buchung'} · ${von} bis ${bis} · ${art} · Status: ${status}${tracking}${vertrag}`;
-    });
+    const lines = await formatiereBuchungen(supabase, rows);
     return `## Buchungen dieses Kunden (aktueller Stand)\n${lines.join('\n')}`;
   } catch {
     return '';

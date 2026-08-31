@@ -25,8 +25,8 @@ import { computeQuote } from '@/lib/quote';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 import { loadBufferDays, getEffectiveLeadDays, isoAddDays } from '@/lib/booking-buffer';
 import { getBerlinDateString } from '@/lib/timezone';
-import { BOOKING_STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { fmtDate } from '@/lib/format-utils';
+import { ladeBuchungsZeilen, formatiereBuchungen } from '@/lib/ai/kundenanfrage-kontext';
 
 type SB = ReturnType<typeof createServiceClient>;
 
@@ -382,45 +382,35 @@ async function toolBuchungStatus(
     return 'Diese Anfrage lässt sich keinem Kundenkonto zuordnen. Es dürfen KEINE Buchungsdaten genannt werden — bitte den Kunden nach seiner Buchungsnummer fragen und an einen Mitarbeiter übergeben.';
   }
 
-  const cols =
-    'id, status, product_name, rental_from, rental_to, delivery_mode, tracking_number, tracking_url, return_tracking_number, price_total, contract_signed, created_at';
+  const nummer = typeof input.buchungsnummer === 'string' ? input.buchungsnummer.trim() : '';
 
   // Zuordnung IMMER über den Kontext des Anfragenden — die von der KI
   // gelieferte Buchungsnummer darf nur zusaetzlich einschraenken, niemals
   // fremde Buchungen oeffnen.
-  let query = supabase.from('bookings').select(cols).order('created_at', { ascending: false }).limit(5);
-  query = kontext.customerId
-    ? query.eq('user_id', kontext.customerId)
-    : query.ilike('customer_email', kontext.customerEmail as string);
+  const rows = await ladeBuchungsZeilen(supabase, (cols) => {
+    let q = supabase.from('bookings').select(cols).order('created_at', { ascending: false }).limit(5);
+    q = kontext.customerId
+      ? q.eq('user_id', kontext.customerId)
+      : q.ilike('customer_email', kontext.customerEmail as string);
+    if (nummer) q = q.eq('id', nummer.toUpperCase());
+    return q;
+  });
 
-  const nummer = typeof input.buchungsnummer === 'string' ? input.buchungsnummer.trim() : '';
-  if (nummer) query = query.eq('id', nummer.toUpperCase());
-
-  const { data, error } = await query;
-  if (error) return 'Der Buchungsstand konnte gerade nicht abgerufen werden.';
-
-  const rows = (data ?? []) as Record<string, unknown>[];
   if (rows.length === 0) {
     return nummer
       ? `Zu diesem Kunden gibt es keine Buchung mit der Nummer ${nummer}. Nichts dazu zusagen — nachfragen oder an einen Mitarbeiter übergeben.`
       : 'Zu diesem Kunden ist keine Buchung hinterlegt. KEINE Auskunft zu einer konkreten Buchung geben.';
   }
 
-  const zeilen = rows.map((b) => {
-    const status = BOOKING_STATUS_CONFIG[String(b.status)]?.label ?? String(b.status ?? '');
-    const teile = [
-      `Buchung ${b.id}: ${b.product_name ?? '—'}`,
-      `Zeitraum ${b.rental_from ? fmtDate(String(b.rental_from)) : '?'} bis ${b.rental_to ? fmtDate(String(b.rental_to)) : '?'}`,
-      b.delivery_mode === 'versand' ? 'Versand' : 'Abholung',
-      `Status: ${status}`,
-    ];
-    if (b.tracking_number) teile.push(`Sendungsnummer hin: ${b.tracking_number}`);
-    if (b.return_tracking_number) teile.push(`Sendungsnummer zurück: ${b.return_tracking_number}`);
-    if (b.contract_signed === false) teile.push('Mietvertrag noch NICHT unterschrieben');
-    return `- ${teile.join(' · ')}`;
-  });
+  // Gleicher Formatter wie die Wissensbasis — sonst haette die KI zwei
+  // unterschiedlich formatierte Staende derselben Buchung im Prompt.
+  const zeilen = await formatiereBuchungen(supabase, rows);
 
-  return ['Buchungen dieses Kunden (aktueller Stand):', ...zeilen].join('\n');
+  return [
+    'Buchungen dieses Kunden (aktueller Stand):',
+    ...zeilen,
+    'Nenne Modelle, Stueckzahlen und Zubehoer AUSSCHLIESSLICH so, wie sie hier stehen.',
+  ].join('\n');
 }
 
 // ─── Dispatcher ─────────────────────────────────────────────────────────────
