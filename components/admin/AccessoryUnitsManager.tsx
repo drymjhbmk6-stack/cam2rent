@@ -195,6 +195,31 @@ function LegacyMirrorPanel({ accessoryId }: { accessoryId: string }) {
   if (loading || !data || data.accessory.is_bulk) return null;
   if (!data.drift) return null;
 
+  // Setzt accessories.available_qty auf MAX(Alt-Welt, Neu-Welt) neu.
+  // Direkt hier, weil genau an dieser Stelle sichtbar ist, dass der
+  // Shop-Bestand nicht zum tatsaechlichen Inventar passt — sonst muss der
+  // Admin den Umweg ueber /admin/inventar → Wartung → „Bestaende pruefen"
+  // nehmen und die Zeile dort erst suchen.
+  async function resyncQty() {
+    setBusyId('__resync__');
+    setMsg(null);
+    try {
+      const res = await fetch('/api/admin/accessories/resync-qty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [accessoryId] }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen.');
+      setMsg({ t: 'ok', m: 'Bestand neu berechnet. Seite neu laden, um den Wert oben zu sehen.' });
+      load();
+    } catch (e) {
+      setMsg({ t: 'err', m: e instanceof Error ? e.message : 'Fehlgeschlagen.' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function retire(unitId: string) {
     setBusyId(unitId);
     setMsg(null);
@@ -226,6 +251,13 @@ function LegacyMirrorPanel({ accessoryId }: { accessoryId: string }) {
             Shop-Bestand: <strong>{data.counts.available_qty}</strong> ·
             Alt-Welt (Mirror aktiv): <strong>{data.counts.mirror_active}</strong> ·
             Neu-Welt (Inventar aktiv): <strong>{data.counts.inventar_active}</strong>.
+            {data.counts.available_qty > Math.max(data.counts.mirror_active, data.counts.inventar_active) && (
+              <>
+                {' '}Der Shop-Bestand ist <strong>höher als beide Welten</strong> — er wurde nach der
+                {' '}letzten Status-Änderung nicht neu berechnet. <strong>&bdquo;Bestand neu berechnen&ldquo;</strong>
+                {' '}setzt ihn auf {Math.max(data.counts.mirror_active, data.counts.inventar_active)}.
+              </>
+            )}
             {data.counts.mirror_active > data.counts.inventar_active && (
               <>
                 {' '}Überzählige Mirror-Zeilen ohne Inventar-Pendant kannst du <strong>ausmustern</strong>
@@ -234,13 +266,23 @@ function LegacyMirrorPanel({ accessoryId }: { accessoryId: string }) {
             )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="text-[11px] font-heading font-semibold px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 whitespace-nowrap"
-        >
-          {open ? 'Schließen' : 'Mirror-Zeilen anzeigen'}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={resyncQty}
+            disabled={busyId === '__resync__'}
+            className="text-[11px] font-heading font-semibold px-3 py-1.5 rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50 whitespace-nowrap"
+          >
+            {busyId === '__resync__' ? 'Berechne…' : 'Bestand neu berechnen'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-[11px] font-heading font-semibold px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 whitespace-nowrap"
+          >
+            {open ? 'Schließen' : 'Mirror-Zeilen anzeigen'}
+          </button>
+        </div>
       </div>
 
       {open && (
