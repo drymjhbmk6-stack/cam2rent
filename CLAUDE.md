@@ -435,6 +435,59 @@ migration_audit-Lookup auf `product_units`) und faellt auf alte `assets`-Tabelle
 zurueck. Die `pickAssetsTable`-Aufraeumung ist reine Code-Hygiene INNERHALB des
 Hybrids (siehe „Welle 2+3"), kein Drop.
 
+### Zubehör-Belegung: zugewiesene Exemplare verdrängten die gebuchte Menge (Stand 2026-08-31)
+
+**Symptom:** Im Gantt (`/admin/verfuegbarkeit` → Zubehör) stand eine
+Halterung mit 2 Stück bei „1/2 belegt", obwohl **zwei** Buchungen sie im selben
+Zeitraum hatten (einmal direkt gewählt, einmal als Bestandteil eines Sets). Die
+Position war damit im Kunden-Kalender weiter buchbar → **echte Überbuchung
+möglich**, nicht nur eine falsche Anzeige.
+
+**Ursache:** Beide Zähl-Stellen behandelten `bookings.accessory_unit_ids`
+(konkret reservierte Exemplare) als **exklusiven Vorrang**: sobald EIN Exemplar
+zugewiesen war, wurde der Rest der Buchung ignoriert. Nicht gezählt wurden
+damit:
+- **Sammel-Zubehör** (`is_bulk`) und jedes Zubehör, für das die RPC kein freies
+  Exemplar fand (`missing`) — es gibt schlicht keine `accessory_units`-Zeile,
+  die auf die Buchung zeigt.
+- **Set-Inhalte** im Admin-Gantt (der Kunden-Pfad hatte dafür einen
+  Sonder-Nachzähler, der Gantt nicht) — die Zuweisung bekommt nur die Set-ID als
+  Pseudo-Zubehör, für die Inhalte entstehen keine Exemplare.
+
+Der Sonder-Nachzähler des Kunden-Pfads hatte zusätzlich das umgekehrte Problem:
+wurde ein Set beim **Bearbeiten** einer Buchung in Einzelteile aufgelöst und
+diesen Teilen doch ein Exemplar zugewiesen, zählten sie **doppelt**.
+
+**Fix — eine Regel an beiden Stellen** (`lib/accessory-availability.ts` +
+`app/api/admin/availability-gantt/route.ts`):
+
+> belegte Menge je Zubehör = **MAX**( zugewiesene Exemplare , gebuchte Menge aus
+> `accessory_items` inkl. Set-Expansion ) — bewusst **nicht** die Summe.
+
+Beide Werte beschreiben dieselbe Buchungsposition aus zwei Blickwinkeln, nicht
+zwei getrennte Bedarfe. Fehlt ein Exemplar, trägt die gebuchte Menge; ist das
+Exemplar da, ändert sich der Wert nicht. Damit ist der Prio-1/2/3-Kaskaden-Bau
+in `accessory-availability.ts` entfallen (Legacy-`accessories[]` bleibt als
+Quelle, wenn `accessory_items` leer ist).
+
+**Wirkt in allen Konsumenten** von `computeAccessoryAvailability`:
+Kunden-Buchungsflow, `/api/accessory-availability`, `/admin/buchungen/neu`,
+Preisrechner (`computeQuote`), 48-h-Reservierung, Basis-Set-Gate +
+Verfügbarkeits-Alerts — und im Gantt zusätzlich im **Sets-Tab** (dessen
+Deckungs-Rechnung liest dieselben Route-Daten).
+
+**Mitgefixt:** der Gantt markierte die Set-Zeile im Sets-Tab nur über das
+Legacy-`accessories[]`-Array; ein Set in `accessory_items` bei gleichzeitig
+vorhandenen Exemplaren blieb unmarkiert.
+
+⚠️ **Bekannt, bewusst NICHT geändert:** Der Gantt kennt weiterhin keinen
+Upgrade-Gruppen-Override (zählt das 64-GB-Default eines Sets auch dann, wenn der
+Kunde auf 512 GB aufgerüstet hat) — der Kunden-Pfad tut das. Der Gantt zählt dort
+also eher zu viel; siehe „Set-Expansion in Verfuegbarkeits-Check".
+
+Keine Migration, kein Schema-Change.
+
+
 ### Inventar-Löschen + Sammel-Zubehör-Autoinventar (Stand 2026-05-17)
 Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 

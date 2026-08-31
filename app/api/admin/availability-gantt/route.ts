@@ -440,14 +440,19 @@ export async function GET(req: NextRequest) {
       }
     };
 
-    if (unitIds.length > 0) {
-      for (const uid of unitIds) {
-        const accId = unitToAcc.get(uid);
-        if (accId) accQty.set(accId, (accQty.get(accId) ?? 0) + 1);
-      }
-      // Set-Zeilen fuer die Set-Ansicht weiterhin markieren.
-      for (const id of accessories) if (setAccessoryMap[id]) touchedSets.add(id);
-    } else if (items.length > 0) {
+    // Zugewiesene Exemplare (falls vorhanden) — loesen direkt auf ein Zubehoer auf.
+    const fromUnits = new Map<string, number>();
+    for (const uid of unitIds) {
+      const accId = unitToAcc.get(uid);
+      if (accId) fromUnits.set(accId, (fromUnits.get(accId) ?? 0) + 1);
+    }
+
+    // Gebuchte Zusammensetzung IMMER aus accessory_items (bzw. Legacy-Array)
+    // ableiten — inkl. Set-Expansion. Frueher wurde bei vorhandenen
+    // accessory_unit_ids alles andere ignoriert; damit fielen Set-Inhalte und
+    // Sammel-Zubehoer ohne eigenes Exemplar komplett aus der Belegung raus
+    // (Gantt zeigte z.B. "1/2" obwohl beide Stueck gebucht waren).
+    if (items.length > 0) {
       for (const it of items) {
         if (!it?.accessory_id) continue;
         const q = typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1;
@@ -455,6 +460,16 @@ export async function GET(req: NextRequest) {
       }
     } else {
       for (const id of accessories) { if (id) addAcc(id, 1); }
+    }
+    // Set-Zeilen auch aus dem Legacy-Array markieren (Anzeige im Sets-Tab).
+    for (const id of accessories) if (setAccessoryMap[id]) touchedSets.add(id);
+
+    // Pro Zubehoer das MAXIMUM aus zugewiesenen Exemplaren und gebuchter Menge
+    // — bewusst nicht die Summe: wurde ein Set beim Bearbeiten in Einzelteile
+    // aufgeloest und diesen Teilen ein Exemplar zugewiesen, stuenden sie sonst
+    // doppelt in der Belegung.
+    for (const [accId, q] of fromUnits) {
+      accQty.set(accId, Math.max(accQty.get(accId) ?? 0, q));
     }
 
     for (const [accId, q] of accQty) {

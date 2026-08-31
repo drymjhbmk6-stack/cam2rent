@@ -293,80 +293,48 @@ export async function computeAccessoryAvailability(opts: {
       continue;
     }
 
-    // Prio 1: accessory_unit_ids (konkret zugewiesene Exemplare) — die sind
-    //  bereits aufgeloest, keine Set-Expansion noetig. Buchungs-Pipeline
-    //  weist heute fuer Set-Inhalte KEINE Units zu (assignAccessoryUnits
-    //  bekommt nur Set-ID als pseudo-acc), daher tauchen die Set-Default-
-    //  Items hier in der Regel nicht auf — das wird in Prio 2 nachgeholt.
-    if (Array.isArray(booking.accessory_unit_ids) && booking.accessory_unit_ids.length > 0) {
+    // Belegte Menge pro Zubehoer = MAXIMUM aus:
+    //  (a) konkret zugewiesenen Exemplaren (accessory_unit_ids) und
+    //  (b) der gebuchten Zusammensetzung (accessory_items bzw. Legacy-Array,
+    //      inkl. Set-Expansion + Upgrade-Default-Override).
+    //
+    // Frueher war (a) ein exklusiver Vorrang: sobald EIN Exemplar zugewiesen
+    // war, wurde der Rest der Buchung ignoriert. Zubehoer ohne eigenes
+    // Exemplar (Sammel-Zubehoer, oder wenn die Zuweisung kein freies Stueck
+    // fand) fiel damit komplett aus der Belegung — die Verfuegbarkeit war zu
+    // hoch und die Position ueberbuchbar. Set-Inhalte wurden gesondert
+    // nachgezaehlt, was sie doppelt zaehlte, sobald ihnen doch Exemplare
+    // zugewiesen waren (passiert beim Bearbeiten einer Buchung).
+    //
+    // Maximum statt Summe, weil (a) und (b) dieselbe Buchungsposition aus zwei
+    // Blickwinkeln beschreiben — nicht zwei getrennte Bedarfe.
+    const fromUnits = new Map<string, number>();
+    if (Array.isArray(booking.accessory_unit_ids)) {
       for (const uid of booking.accessory_unit_ids) {
         const accId = unitToAcc.get(uid);
         if (!accId) continue;
-        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + 1);
+        fromUnits.set(accId, (fromUnits.get(accId) ?? 0) + 1);
       }
-      // ZUSAETZLICH: accessory_items koennen Set-IDs enthalten, deren
-      // Inhalte NICHT als Units zugewiesen wurden. Diese Set-Defaults
-      // muessen wir trotzdem als belegt zaehlen — sonst wuerde z.B.
-      // das 64-GB-Default im "Basic Set" nie als gebucht erkannt, und
-      // der Kunden-Verfuegbarkeits-Check wuerde Ueberbuchungen zulassen.
-      if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
-        for (const it of booking.accessory_items) {
-          if (!it?.accessory_id) continue;
-          // Nur Set-Inhalte expandieren — direkte Items wurden bereits als
-          // Units oben gezaehlt. Wir verlassen uns hier auf setItemsById:
-          // Wenn die accessory_id KEIN Set ist, ueberspringen.
-          const setSub = setItemsById.get(it.accessory_id);
-          if (!setSub) continue;
-          // Active-Upgrade-Gruppen ueber alle items dieser Buchung sammeln
-          // (auch fuer direkt gewaehlte Upgrades, die nicht im Set sind).
-          const activeUpgradeGroups = new Set<string>();
-          for (const other of booking.accessory_items) {
-            if (!other?.accessory_id) continue;
-            const otherSet = setItemsById.get(other.accessory_id);
-            const collect = (aid: string) => {
-              const info = upgradeInfoById.get(aid);
-              if (info && !info.isBase) activeUpgradeGroups.add(info.group);
-            };
-            if (otherSet) {
-              for (const sub of otherSet) collect(sub.accessory_id);
-            } else {
-              collect(other.accessory_id);
-            }
-          }
-          for (const sub of setSub) {
-            const info = upgradeInfoById.get(sub.accessory_id);
-            if (info?.isBase && activeUpgradeGroups.has(info.group)) continue;
-            const qty = sub.qty * (typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1);
-            bookedCounts.set(sub.accessory_id, (bookedCounts.get(sub.accessory_id) ?? 0) + qty);
-          }
-        }
-      }
-      continue;
     }
 
-    // Prio 2: accessory_items (qty-aware) — MIT Set-Expansion und
-    //  Upgrade-Default-Override. Die Helper-Funktion macht beides:
-    //    - Wenn accessory_id eine Set-ID ist → in Einzelteile expandieren
-    //    - Wenn das expandierte Default-Item zu einer Upgrade-Gruppe gehoert,
-    //      die in derselben Buchung mit einer Upgrade-Variante belegt ist →
-    //      Default ueberspringen.
-    if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
-      const counts = expandBookingToAccCounts(booking.accessory_items);
-      for (const [accId, qty] of counts) {
-        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
-      }
-      continue;
-    }
+    const itemSource: AccessoryItemLite[] =
+      Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+        ? booking.accessory_items
+            .filter((it) => !!it?.accessory_id)
+            .map((it) => ({
+              accessory_id: it.accessory_id,
+              qty: typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1,
+            }))
+        : Array.isArray(booking.accessories)
+          ? booking.accessories.filter(Boolean).map((id) => ({ accessory_id: id, qty: 1 }))
+          : [];
 
-    // Prio 3: accessories[] (uralte Legacy, je 1) — analog mit Set-Expansion.
-    //  Hier gibts keine qty, kein upgrade-Override (es gibt kein Upgrade-
-    //  Konzept im alten string-array Format).
-    if (Array.isArray(booking.accessories)) {
-      const items: AccessoryItemLite[] = booking.accessories.map((id) => ({ accessory_id: id, qty: 1 }));
-      const counts = expandBookingToAccCounts(items);
-      for (const [accId, qty] of counts) {
-        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
-      }
+    const expected = expandBookingToAccCounts(itemSource);
+
+    for (const accId of new Set([...fromUnits.keys(), ...expected.keys()])) {
+      const qty = Math.max(fromUnits.get(accId) ?? 0, expected.get(accId) ?? 0);
+      if (qty <= 0) continue;
+      bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
     }
   }
 
