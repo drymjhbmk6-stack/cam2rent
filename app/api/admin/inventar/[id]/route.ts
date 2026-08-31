@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { mirrorInventarToLegacy, deleteMirror } from '@/lib/inventar-mirror';
+import { mirrorInventarToLegacy, deleteMirror, syncAccessoryQtyForInventarUnit } from '@/lib/inventar-mirror';
 import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
 
 export async function GET(
@@ -78,6 +78,12 @@ export async function PATCH(
   await mirrorInventarToLegacy(supabase, data).catch((e) => {
     console.error('[inventar PATCH] mirror failed:', e);
   });
+
+  // Bestand der alten Welt IMMER nachziehen — auch wenn der Spiegel-Pfad
+  // frueh ausgestiegen ist. `accessories.available_qty` ist der Gesamtbestand
+  // fuer Gantt, Kunden-Kalender, Preisrechner und Reservierung; bleibt er
+  // stehen, ist ein auf „defekt" gesetztes Stueck weiter buchbar.
+  await syncAccessoryQtyForInventarUnit(supabase, data);
 
   await logAudit({ action: 'inventar.update', entityType: 'inventar_unit', entityId: id, changes: update, request: req });
   return NextResponse.json({ unit: data });

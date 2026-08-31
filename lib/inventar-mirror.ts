@@ -571,6 +571,41 @@ export async function mirrorAccessoryToLegacy(
     .select('id')
     .single();
   if (error || !inserted) {
+    // Kollidiert der Exemplar-Code, existiert der Spiegel bereits — nur die
+    // migration_audit-Bruecke fehlt (z.B. weil die Zeile ausserhalb des
+    // Inventar-Pfads angelegt wurde). Dann adoptieren statt aufgeben: sonst
+    // erreicht KEINE Statusaenderung je die alte Welt, der Bestand bleibt
+    // stehen und das defekte Stueck ist weiter buchbar.
+    if (error && isUniqueViolation(error)) {
+      const { data: adopt } = await supabase
+        .from('accessory_units')
+        .select('id')
+        .eq('accessory_id', legacyAccessoryId)
+        .eq('exemplar_code', exemplarCode)
+        .maybeSingle();
+      const adoptedId = (adopt as { id?: string } | null)?.id ?? null;
+      if (adoptedId) {
+        console.warn(`[inventar-mirror] adoptiere bestehende accessory_units-Zeile ${adoptedId} (Bruecke fehlte)`);
+        await supabase.from('accessory_units').update({
+          status: newStatus,
+          notes: unit.notizen,
+          purchased_at: unit.kaufdatum,
+        }).eq('id', adoptedId);
+        await supabase.from('migration_audit').insert({
+          alte_tabelle: 'accessory_units',
+          alte_id: adoptedId,
+          neue_tabelle: 'inventar_units',
+          neue_id: unit.id,
+          notizen: 'auto-mirror (adoptiert, Bruecke fehlte)',
+        }).then(({ error: auditErr }) => {
+          if (auditErr) console.error('[inventar-mirror] audit insert fehlgeschlagen:', auditErr.message);
+        });
+        await syncAccessoryQty(supabase, legacyAccessoryId).catch((e) => {
+          console.error('[inventar-mirror] syncAccessoryQty nach adopt fehlgeschlagen:', e);
+        });
+        return adoptedId;
+      }
+    }
     console.error('[inventar-mirror] accessory_units insert fehlgeschlagen:', error?.message);
     return null;
   }
@@ -621,6 +656,31 @@ export async function mirrorInventarToLegacy(
     return mirrorAccessoryToLegacy(supabase, unit);
   }
   return null; // bulk: nur Listing, keine accessory_units
+}
+
+/**
+ * Zieht `accessories.available_qty` fuer die zu dieser Inventar-Einheit
+ * gehoerende Zubehoer-Zeile nach — UNABHAENGIG davon, ob der Spiegel-Pfad
+ * erfolgreich war.
+ *
+ * Warum extra: `mirrorAccessoryToLegacy` steigt an mehreren Stellen frueh aus
+ * (kein produkt_id, bulk, Insert-Fehler). Haengt der Bestands-Sync nur dort
+ * drin, bleibt `available_qty` in genau diesen Faellen stehen — ein auf
+ * „defekt" gesetztes Stueck waere weiter buchbar. Best-effort, wirft nie.
+ */
+export async function syncAccessoryQtyForInventarUnit(
+  supabase: SupabaseClient,
+  unit: { typ: string; produkt_id: string | null },
+): Promise<void> {
+  try {
+    if (unit.typ === 'kamera') return; // Kamera-Bestand wird live gezaehlt
+    if (!unit.produkt_id) return;
+    const accessoryId = await reverseLookupLegacyProductId(supabase, unit.produkt_id, 'accessories');
+    if (!accessoryId) return;
+    await syncAccessoryQty(supabase, accessoryId);
+  } catch (err) {
+    console.error('[inventar-mirror] syncAccessoryQtyForInventarUnit fehlgeschlagen:', err);
+  }
 }
 
 /**

@@ -532,6 +532,28 @@ heilen sofort (Live-Zählung bei jedem Request).
 manuell gepflegte Lagerbestand, `syncAccessoryQty` fasst ihn bewusst nicht an.
 Ein defektes Sammel-Stück muss der Admin per Mengenkorrektur abziehen.
 
+**3. Nachtrag — der Sync hing komplett am Spiegel-Pfad.**
+`mirrorAccessoryToLegacy` steigt an mehreren Stellen früh aus (kein
+`produkt_id`, `tracking_mode='bulk'`, Insert-Fehler). Hing der Bestands-Sync
+nur dort drin, blieb `available_qty` in genau diesen Fällen stehen. Zwei
+Härtungen:
+- **Direkt-Sync in der Route:** `PATCH /api/admin/inventar/[id]` ruft neu
+  `syncAccessoryQtyForInventarUnit()` (löst `produkt_id` → `accessories` über
+  `migration_audit` auf) **immer**, unabhängig vom Ergebnis des Spiegels.
+- **Verwaisten Spiegel adoptieren:** existiert die `accessory_units`-Zeile,
+  fehlt aber die `migration_audit`-Brücke, lief der Insert in einen
+  `23505`-Konflikt und brach ab — **keine** Statusänderung erreichte je die alte
+  Welt. Jetzt wird die Zeile bei Unique-Verletzung über
+  `(accessory_id, exemplar_code)` gesucht, adoptiert (Status gezogen, Brücke neu
+  angelegt) und der Bestand gesynct. Gegenstück zur bereits vorhandenen Heilung
+  der umgekehrten Richtung in `findExistingMirror`.
+
+⚠️ **Diagnose, wenn ein Stück trotzdem buchbar bleibt:** `/admin/zubehoer` →
+Eintrag öffnen → das Drift-Banner zeigt **Shop / Alt-Welt / Neu-Welt**. Steht
+Alt-Welt höher als Neu-Welt, lebt eine **verwaiste `accessory_units`-Zeile**
+weiter (`syncAccessoryQty` nimmt `MAX(legacy, inventar)` und kann deshalb nicht
+darunter fallen) → „Mirror-Zeilen anzeigen" → **Ausmustern**.
+
 Keine Migration, kein Schema-Change.
 
 
