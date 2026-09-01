@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
+import { splitQuotedReply } from '@/lib/email-quote';
 
 interface Conversation {
   id: string;
@@ -359,58 +360,65 @@ export default function AdminNachrichtenPage() {
   const inputStyle: React.CSSProperties = { background: 'var(--admin-input-bg)', border: '1px solid var(--admin-faint)', borderRadius: 10, color: 'var(--admin-text)', padding: '10px 16px', fontSize: 14, outline: 'none', width: '100%' };
 
   return (
-    <div style={{ padding: '24px 20px' }}>
-      <AdminBackLink label="Zurück" />
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Nachrichten</h1>
-          <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', margin: '4px 0 0' }}>
-            {totalUnread > 0 ? `${totalUnread} ungelesene Nachricht${totalUnread !== 1 ? 'en' : ''}` : 'Alle Kundennachrichten'}
-          </p>
-        </div>
+    <div style={{ padding: isMobile && selectedId ? '12px 10px' : '24px 20px' }}>
+      {/* Auf dem Handy blendet sich der Seiten-Kopf aus, sobald eine
+          Konversation offen ist — der Verlauf bekommt den ganzen Bildschirm. */}
+      {!(isMobile && selectedId) && (
+        <>
+        <AdminBackLink label="Zurück" />
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--admin-text)', margin: 0 }}>Nachrichten</h1>
+            <p style={{ fontSize: 13, color: 'var(--admin-text-dim)', margin: '4px 0 0' }}>
+              {totalUnread > 0 ? `${totalUnread} ungelesene Nachricht${totalUnread !== 1 ? 'en' : ''}` : 'Alle Kundennachrichten'}
+            </p>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Neue Nachricht */}
-          <button
-            type="button"
-            onClick={() => setComposeOpen(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: 700, background: 'var(--admin-accent)', color: '#fff',
-            }}
-          >
-            ✏️ Neue Nachricht
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 auto', justifyContent: 'flex-end', minWidth: 0 }}>
+            {/* Neue Nachricht */}
+            <button
+              type="button"
+              onClick={() => setComposeOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, background: 'var(--admin-accent)', color: '#fff',
+              }}
+            >
+              ✏️ Neue Nachricht
+            </button>
 
-          {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 4, background: 'var(--admin-input-bg)', borderRadius: 10, padding: 3 }}>
-            {(['all', 'unread', 'draft', 'closed'] as FilterType[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  background: filter === f ? 'var(--admin-surface-2)' : 'transparent',
-                  color: filter === f ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
-                }}
-              >
-                {f === 'all'
-                  ? 'Alle'
-                  : f === 'unread'
-                    ? 'Ungelesen'
-                    : f === 'draft'
-                      ? `KI-Entwürfe${draftCount > 0 ? ` (${draftCount})` : ''}`
-                      : 'Geschlossen'}
-              </button>
-            ))}
+            {/* Filter pills */}
+            <div style={{ display: 'flex', gap: 4, background: 'var(--admin-input-bg)', borderRadius: 10, padding: 3, overflowX: 'auto', maxWidth: '100%' }}>
+              {(['all', 'unread', 'draft', 'closed'] as FilterType[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  style={{
+                    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                    background: filter === f ? 'var(--admin-surface-2)' : 'transparent',
+                    color: filter === f ? 'var(--admin-accent-hover)' : 'var(--admin-text-dim)',
+                  }}
+                >
+                  {f === 'all'
+                    ? 'Alle'
+                    : f === 'unread'
+                      ? 'Ungelesen'
+                      : f === 'draft'
+                        ? `KI-Entwürfe${draftCount > 0 ? ` (${draftCount})` : ''}`
+                        : 'Geschlossen'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+        </>
+      )}
 
       {/* Bulk-Bar: sichtbar sobald mindestens eine Konversation markiert ist. */}
-      {selection.size > 0 && (
+      {selection.size > 0 && !(isMobile && selectedId) && (
         <div
           style={{
             position: 'sticky', top: 0, zIndex: 20,
@@ -584,7 +592,10 @@ export default function AdminNachrichtenPage() {
                   </div>
                 </div>
                 {conv.last_message && (
-                  <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--admin-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <p style={{
+                    margin: '6px 0 0', fontSize: 11, color: 'var(--admin-text-dim)', lineHeight: 1.45,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  }}>
                     {conv.last_message.sender_type === 'admin' ? 'Du: ' : ''}
                     {conv.last_message.body}
                   </p>
@@ -671,89 +682,22 @@ export default function AdminNachrichtenPage() {
               </div>
 
               {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: 20, maxHeight: 380 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 12px' : 20, minHeight: 220, maxHeight: isMobile ? '58vh' : 380 }}>
                 {msgLoading ? (
                   <div style={{ textAlign: 'center', padding: 32 }}>
                     <div style={{ width: 20, height: 20, border: '2px solid var(--admin-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {messages.map((msg) => (
-                      <div key={msg.id} style={{ display: 'flex', justifyContent: msg.sender_type === 'admin' ? 'flex-end' : 'flex-start' }}>
-                        <div style={{
-                          maxWidth: '75%', padding: '10px 14px', borderRadius: 16, fontSize: 13,
-                          ...(msg.sender_type === 'admin'
-                            ? { background: 'var(--admin-accent)', color: '#fff', borderBottomRightRadius: 4 }
-                            : { background: 'var(--admin-surface-2)', color: 'var(--admin-text)', borderBottomLeftRadius: 4 }
-                          ),
-                        }}>
-                          <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.body}</p>
-
-                          {msg.body_html && (
-                            <div style={{ marginTop: 6 }}>
-                              <button
-                                onClick={() => setHtmlOpen((p) => ({ ...p, [msg.id]: !p[msg.id] }))}
-                                style={{
-                                  background: 'transparent', border: '1px solid currentColor', borderRadius: 6,
-                                  color: 'inherit', fontSize: 10, fontWeight: 600, padding: '3px 8px',
-                                  cursor: 'pointer', opacity: 0.85,
-                                }}
-                              >
-                                {htmlOpen[msg.id] ? 'HTML-Ansicht ausblenden' : 'HTML-Ansicht anzeigen'}
-                              </button>
-                              {htmlOpen[msg.id] && (
-                                <iframe
-                                  // Sandbox ohne allow-scripts/allow-same-origin: neutralisiert
-                                  // eingebettetes JS in der eingegangenen E-Mail.
-                                  sandbox=""
-                                  srcDoc={msg.body_html}
-                                  title="E-Mail-HTML"
-                                  style={{
-                                    marginTop: 6, width: '100%', minWidth: 320, height: 360,
-                                    border: 'none', borderRadius: 8, background: '#fff',
-                                  }}
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          {msg.attachments && msg.attachments.length > 0 && (
-                            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {msg.attachments.map((att) => (
-                                <a
-                                  key={att.id}
-                                  href={`/api/admin/message-attachment-url?id=${att.id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
-                                    color: 'inherit', textDecoration: 'underline', opacity: 0.9,
-                                  }}
-                                >
-                                  📎 {att.filename}
-                                  {att.size_bytes != null && (
-                                    <span style={{ opacity: 0.6 }}>
-                                      ({Math.round(att.size_bytes / 1024)} KB)
-                                    </span>
-                                  )}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-
-                          <p style={{ margin: '4px 0 0', fontSize: 10, opacity: 0.7 }}>
-                            {new Date(msg.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            {msg.ai_generated && (
-                              <span
-                                title="Diese Antwort wurde automatisch von der KI versendet"
-                                style={{ marginLeft: 6, fontWeight: 700 }}
-                              >
-                                · 🤖 automatisch
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
+                    {messages.map((msg, idx) => (
+                      <MessageItem
+                        key={msg.id}
+                        msg={msg}
+                        prev={messages[idx - 1] ?? null}
+                        isMobile={isMobile}
+                        htmlOpen={!!htmlOpen[msg.id]}
+                        onToggleHtml={() => setHtmlOpen((p) => ({ ...p, [msg.id]: !p[msg.id] }))}
+                      />
                     ))}
                     <div ref={messagesEndRef} />
                   </div>
@@ -992,6 +936,157 @@ export default function AdminNachrichtenPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Eine Nachricht im Verlauf.
+ *
+ * Kern der Umstrukturierung: bei E-Mails steckt der komplette zitierte Verlauf
+ * mit im `body`. Angezeigt wird deshalb nur der neu geschriebene Teil; das
+ * Zitat liegt zusammengeklappt darunter und ist auf Klick einsehbar.
+ */
+function MessageItem({
+  msg,
+  prev,
+  isMobile,
+  htmlOpen,
+  onToggleHtml,
+}: {
+  msg: Message;
+  prev: Message | null;
+  isMobile: boolean;
+  htmlOpen: boolean;
+  onToggleHtml: () => void;
+}) {
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const { reply, quoted } = splitQuotedReply(msg.body || '');
+  const isAdmin = msg.sender_type === 'admin';
+
+  // Tages-Trenner, sobald die vorherige Nachricht an einem anderen Tag war.
+  const dayOf = (d: string) => new Date(d).toDateString();
+  const showDay = !prev || dayOf(prev.created_at) !== dayOf(msg.created_at);
+  const dayLabel = new Date(msg.created_at).toLocaleDateString('de-DE', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+
+  return (
+    <>
+      {showDay && (
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+          <span style={{
+            fontSize: 10, fontWeight: 600, color: 'var(--admin-muted-2)',
+            background: 'var(--admin-surface-2)', padding: '3px 10px', borderRadius: 999,
+          }}>
+            {dayLabel}
+          </span>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start' }}>
+        <div style={{
+          maxWidth: isMobile ? '94%' : '80%', padding: '10px 14px', borderRadius: 16, fontSize: 13,
+          ...(isAdmin
+            ? { background: 'var(--admin-accent)', color: '#fff', borderBottomRightRadius: 4 }
+            : { background: 'var(--admin-surface-2)', color: 'var(--admin-text)', borderBottomLeftRadius: 4 }
+          ),
+        }}>
+          <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>{reply}</p>
+
+          {/* Zitierter Verlauf — standardmaessig eingeklappt. */}
+          {quoted && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setQuoteOpen((v) => !v)}
+                style={{
+                  background: 'transparent', border: '1px solid currentColor', borderRadius: 6,
+                  color: 'inherit', fontSize: 10, fontWeight: 600, padding: '3px 8px',
+                  cursor: 'pointer', opacity: 0.75,
+                }}
+              >
+                {quoteOpen ? '▴ Zitierten Verlauf ausblenden' : '▾ Zitierter Verlauf'}
+              </button>
+              {quoteOpen && (
+                <div style={{
+                  marginTop: 6, padding: '8px 10px', borderRadius: 8,
+                  borderLeft: '3px solid currentColor',
+                  background: isAdmin ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.04)',
+                  fontSize: 12, lineHeight: 1.5, opacity: 0.8,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  maxHeight: 240, overflowY: 'auto',
+                }}>
+                  {quoted}
+                </div>
+              )}
+            </div>
+          )}
+
+          {msg.body_html && (
+            <div style={{ marginTop: 6 }}>
+              <button
+                onClick={onToggleHtml}
+                style={{
+                  background: 'transparent', border: '1px solid currentColor', borderRadius: 6,
+                  color: 'inherit', fontSize: 10, fontWeight: 600, padding: '3px 8px',
+                  cursor: 'pointer', opacity: 0.75,
+                }}
+              >
+                {htmlOpen ? 'Originalansicht ausblenden' : 'Originalansicht (HTML)'}
+              </button>
+              {htmlOpen && (
+                <iframe
+                  // Sandbox ohne allow-scripts/allow-same-origin: neutralisiert
+                  // eingebettetes JS in der eingegangenen E-Mail.
+                  sandbox=""
+                  srcDoc={msg.body_html}
+                  title="E-Mail-HTML"
+                  style={{
+                    marginTop: 6, width: '100%', height: 360,
+                    border: 'none', borderRadius: 8, background: '#fff',
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {msg.attachments.map((att) => (
+                <a
+                  key={att.id}
+                  href={`/api/admin/message-attachment-url?id=${att.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+                    color: 'inherit', textDecoration: 'underline', opacity: 0.9,
+                  }}
+                >
+                  📎 {att.filename}
+                  {att.size_bytes != null && (
+                    <span style={{ opacity: 0.6 }}>
+                      ({Math.round(att.size_bytes / 1024)} KB)
+                    </span>
+                  )}
+                </a>
+              ))}
+            </div>
+          )}
+
+          <p style={{ margin: '6px 0 0', fontSize: 10, opacity: 0.7 }}>
+            {new Date(msg.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+            {msg.ai_generated && (
+              <span
+                title="Diese Antwort wurde automatisch von der KI versendet"
+                style={{ marginLeft: 6, fontWeight: 700 }}
+              >
+                · 🤖 automatisch
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    </>
   );
 }
 

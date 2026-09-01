@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendNewMessageNotificationToCustomer, sendInboundReply } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { previewFromBody } from '@/lib/email-quote';
 
 /**
  * GET /api/admin/nachrichten
@@ -39,33 +40,37 @@ export async function GET() {
 
   type ConvRow = NonNullable<typeof conversations>[number];
 
-  // Erst inkl. KI-Entwurfsfeldern; fehlt die Auto-Reply-Migration, ohne sie.
-  const withAi = await supabase
-    .from('conversations')
-    .select(`${BASE_COLS}, ai_draft, ai_draft_created_at`)
-    .is('deleted_at', null)
-    .order('last_message_at', { ascending: false });
-
-  const full = withAi.error
-    ? await supabase
-        .from('conversations')
-        .select(BASE_COLS)
-        .is('deleted_at', null)
-        .order('last_message_at', { ascending: false })
-    : withAi;
-
-  if (full.error) {
-    // Retry ohne deleted_at-Filter (Spalte fehlt) UND ohne die E-Mail-Felder.
-    const fallback = await supabase
-      .from('conversations')
-      .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at')
+  // Gestufter Fallback: erst alles, dann Schritt fuer Schritt weniger.
+  // WICHTIG: der deleted_at-Filter wird VOR den E-Mail-Spalten aufgegeben.
+  // Vorher fiel eine fehlende `deleted_at`-Spalte direkt auf den minimalen
+  // Select durch — dann fehlten `source`/`customer_name`/`customer_email` und
+  // JEDE Konversation erschien in der Liste als „Konto" von „Unbekannt",
+  // obwohl es eine E-Mail mit bekanntem Absender war.
+  const load = (cols: string, withDeletedFilter: boolean) => {
+    const q = supabase.from('conversations').select(cols);
+    return (withDeletedFilter ? q.is('deleted_at', null) : q)
       .order('last_message_at', { ascending: false });
-    if (fallback.error) {
-      return NextResponse.json({ conversations: [] });
+  };
+
+  const attempts: Array<{ cols: string; deletedFilter: boolean }> = [
+    { cols: `${BASE_COLS}, ai_draft, ai_draft_created_at`, deletedFilter: true },
+    { cols: BASE_COLS, deletedFilter: true },
+    { cols: `${BASE_COLS}, ai_draft, ai_draft_created_at`, deletedFilter: false },
+    { cols: BASE_COLS, deletedFilter: false },
+    { cols: 'id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name', deletedFilter: false },
+    { cols: 'id, customer_id, subject, booking_id, last_message_at, closed, created_at', deletedFilter: false },
+  ];
+
+  for (const attempt of attempts) {
+    const res = await load(attempt.cols, attempt.deletedFilter);
+    if (!res.error) {
+      conversations = res.data as unknown as ConvRow[];
+      break;
     }
-    conversations = fallback.data as ConvRow[];
-  } else {
-    conversations = full.data as ConvRow[];
+  }
+
+  if (!conversations) {
+    return NextResponse.json({ conversations: [] });
   }
 
   // Sichtbarkeit: Owner sieht alle Konversationen. Mitarbeiter sehen nur die
@@ -155,7 +160,9 @@ export async function GET() {
       customer,
       unread_count: unreadMap[conv.id] || 0,
       last_message: lastMsg ? {
-        body: lastMsg.body.substring(0, 100),
+        // Vorschau ohne zitierten Verlauf — sonst steht in der Liste bei
+        // E-Mail-Antworten nur der alte, mitzitierte Text.
+        body: previewFromBody(lastMsg.body, 140),
         sender_type: lastMsg.sender_type,
         created_at: lastMsg.created_at,
       } : null,

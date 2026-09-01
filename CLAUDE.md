@@ -872,6 +872,47 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
     Gäste); die Live-Vorschau zeigt dasselbe Ergebnis, weil sie über
     `renderEmailPreview(sendInboundReply, …)` läuft. Keine Migration, kein
     API-Change.
+- **E-Mail-Verlauf lesbar: Zitat wird eingeklappt + Layout-Fixes (Stand 2026-09-01):**
+  Eingehende E-Mails schleppen den kompletten Verlauf im `messages.body` mit
+  (`>`-Zeilen, „Am … schrieb …:", „Il giorno … ha scritto:", Outlook-Kopfblock).
+  Das Tool zeigte das roh — die eigentliche Kundenfrage ging in einer Zitat-Wand
+  unter. Neu:
+  - **`lib/email-quote.ts`** (pure, 15 Unit-Tests in
+    `lib/__tests__/email-quote.test.ts`): `splitQuotedReply(body)` trennt
+    „neu geschrieben" von „zitierter Verlauf" (Trennlinien, Einleitungszeilen
+    de/en/it/fr/es, Outlook-Kopfblock, reiner `>`-Block ab 60 % Zitatanteil),
+    `stripQuoteMarkers()` entfernt die `>`-Präfixe, `previewFromBody()` liefert
+    die einzeilige Listen-Vorschau. **Bewusst konservativ:** ohne eindeutiges
+    Zitat oder wenn der neue Teil leer wäre (reine Weiterleitung), wird der
+    komplette Text als Nachricht gezeigt — lieber zu viel als eine versteckte
+    Kundenfrage. Rein lesend, die gespeicherten Daten bleiben unangetastet.
+  - **Neue Sub-Komponente `MessageItem`** in `app/admin/nachrichten/page.tsx`
+    (aus dem `messages.map`-Block extrahiert): zeigt nur den neuen Teil, das
+    Zitat liegt hinter „▾ Zitierter Verlauf". Dazu **Tages-Trenner** im Verlauf,
+    Uhrzeit statt Datum+Uhrzeit an der Blase, breitere Blasen (94 % mobil /
+    80 % Desktop), Label „Originalansicht (HTML)".
+  - **Listen-Vorschau ohne Zitat:** `GET /api/admin/nachrichten` schneidet nicht
+    mehr stumpf die ersten 100 Zeichen ab, sondern nimmt `previewFromBody(…, 140)`
+    (nur der neue Teil, einzeilig) — die Liste zeigt jetzt zweizeilig echten
+    Inhalt statt mitzitierter Altlast.
+  - ⚠️ **Bug gefixt — alle Threads erschienen in der Liste als „💬 Konto" von
+    „Unbekannt"** (auch reine E-Mail-Threads, deren Detailansicht Name + Adresse
+    korrekt zeigte): der Select fiel bei einer fehlenden Spalte **direkt** auf den
+    minimalen Spaltensatz durch, in dem `source`/`customer_name`/`customer_email`
+    fehlen. Jetzt läuft ein **gestufter Fallback**, der zuerst den
+    `deleted_at`-Filter und die KI-Spalten aufgibt und erst zuletzt die
+    E-Mail-Spalten (Reihenfolge: ai+filter → filter → ai → base → base ohne
+    Postfach-Spalten → minimal). Betraf u. a. Umgebungen ohne die noch offenen
+    Migrationen `supabase-inbound-email-per-employee.sql` / KI-Auto-Reply.
+  - **Mobile-Layout:** Der „✏️ Neue Nachricht"-Button klebte über der
+    Überschrift (Header war `space-between` ohne `flexWrap`) und der Filter-Reiter
+    „KI-Entwürfe" war rechts abgeschnitten → Header umbruchfähig, Pills
+    horizontal scrollbar. Ist eine Konversation geöffnet, blendet sich der
+    **Seiten-Kopf (Zurück/Titel/Buttons/Filter) auf dem Handy komplett aus** und
+    der Verlauf bekommt den ganzen Bildschirm (max. 58 vh statt fixer 380 px,
+    kleineres Seiten-Padding). Desktop unverändert.
+  Keine Migration, kein API-Vertrag geändert (nur der Inhalt von
+  `last_message.body` ist jetzt bereinigt).
 - **„Neue Nachricht"-Button (Stand 2026-06-22):** Button oben rechts im Header
   von `/admin/nachrichten` öffnet ein Compose-Modal (`ComposeModal` lokal in
   `app/admin/nachrichten/page.tsx`): Kunde aus der Liste suchen/wählen (lädt
