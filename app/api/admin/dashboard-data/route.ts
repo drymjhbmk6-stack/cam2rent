@@ -421,6 +421,8 @@ export async function GET() {
     const coordinations: Array<{
       id: string; type: 'pickup' | 'return';
       product_name: string; customer_name: string; due_date: string;
+      /** Für den Termin-Dialog: ohne Adresse kann keine Bestätigung raus. */
+      customer_email: string | null;
     }> = [];
     for (const b of aqRows) {
       if (b.delivery_mode !== 'abholung') continue;
@@ -440,6 +442,7 @@ export async function GET() {
             product_name: (b.product_name as string) ?? '',
             customer_name: (b.customer_name as string) ?? '',
             due_date: pickupDate,
+            customer_email: (b.customer_email as string | null) ?? null,
           });
         }
       } else if (st === 'picked_up') {
@@ -456,6 +459,7 @@ export async function GET() {
             product_name: (b.product_name as string) ?? '',
             customer_name: (b.customer_name as string) ?? '',
             due_date: returnDate,
+            customer_email: (b.customer_email as string | null) ?? null,
           });
         }
       }

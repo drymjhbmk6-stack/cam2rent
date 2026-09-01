@@ -2261,12 +2261,61 @@ vereinbart).
   `supabase/supabase-bookings-coordination-done.sql` (idempotent, additiv, 2 neue
   Timestamp-Spalten, getrennt von den Reminder-Dedup-Markern). Audit
   `booking.coordination_done`.
+- **Termin-Dialog + Bestätigungs-E-Mail (Stand 2026-09-01):** Der Klick auf
+  **„✓ Termin vereinbart"** hakt die Aufgabe nicht mehr blind ab, sondern öffnet
+  zuerst ein **Fenster** (`AppointmentModal` in `components/admin/DashboardWidgets.tsx`),
+  in dem der Admin den tatsächlich ausgemachten Termin einträgt: **Ort**
+  (anhakbare Auswahl aus `admin_settings.handover_addresses` + Freitextfeld für
+  abweichende Treffpunkte — gleiche Quelle wie der Übergabe-Wizard), **Datum**
+  (vorbelegt mit dem geplanten Abhol-/Rückgabetag, Abweichung wird amber
+  markiert), **Uhrzeit** und optional **„bis"** (leer = fester Zeitpunkt, gesetzt
+  = Zeitfenster), eine optionale **Notiz für den Kunden** sowie die Checkbox
+  **„Bestätigung an den Kunden senden"** (Default an; ohne hinterlegte
+  Kunden-E-Mail deaktiviert + Hinweis). Erst das Absenden speichert + hakt ab.
+  - **Endpoint erweitert** (`POST /api/admin/booking/[id]/coordination-done`):
+    Body nimmt zusätzlich `appointment: { date, timeFrom, timeTo?, location, note? }`
+    + `notifyCustomer?`. Validierung serverseitig (Datums-/Zeitformat, Endzeit
+    nach Startzeit, Ort Pflicht → 422). Der Admin gibt **Berliner Ortszeit** ein,
+    gespeichert wird UTC über `berlinLocalInputToUTC` (DST-sicher). `done:false`
+    leert Marker **und** Termin. Antwort um `emailSent`/`emailError`/`warnings`
+    erweitert. Audit `booking.coordination_done` enthält den Termin.
+  - **Migration `supabase/supabase-bookings-coordination-appointment.sql`**
+    (idempotent, additiv): je 4 Spalten pro Richtung —
+    `{pickup,return}_appointment_at` / `_end_at` / `_location` / `_note`.
+    **Defensiv ohne Migration:** die Termin-Spalten werden gestript, der
+    „vereinbart"-Marker wird trotzdem gesetzt und die Bestätigung geht raus; die
+    Antwort trägt `warnings:['migration_pending']` und das Modal zeigt dem Admin
+    ausdrücklich, dass der Termin NICHT gespeichert wurde (sonst sucht er ihn
+    später vergeblich in der Buchung).
+  - **E-Mail** `sendAppointmentConfirmation` (`lib/email.ts`, emailType
+    `appointment_confirmation`): Ort, Wochentag + Datum, Uhrzeit bzw.
+    Zeitfenster, Buchungsnummer, Ausrüstung, Mietzeitraum, optionale Notiz +
+    richtungsabhängige Hinweise (Abholung: Ausweis mitbringen / Übergabeprotokoll;
+    Rückgabe: komplettes Zubehör + Originalverpackung) und die Bitte, sich bei
+    Terminproblemen zu melden. Registriert in `/admin/emails` (`TYPE_LABELS` +
+    Filter) und im Vorlagen-Katalog `lib/email-previews.ts` (vorab ansehbar +
+    per Override anpassbar). **Mailversand ist best-effort:** schlägt er fehl,
+    bleibt der Termin gespeichert und das Modal nennt den Grund.
+  - **Anzeige in der Buchung:** neue read-only Karte `AgreedAppointmentsCard`
+    im Reiter „Versand & Rückgabe" von `/admin/buchungen/[id]` (grün, über den
+    Termin-Overrides) mit Wochentag/Datum/Uhrzeit, Ort und Notiz. Ohne
+    hinterlegten Termin rendert sie nichts. `GET /api/admin/booking/[id]` nutzt
+    `select('*')` → kein API-Change nötig.
+  - **Bewusst NICHT:** kein Auto-Setzen von `ship_date_override`/
+    `return_due_date_override` (der vereinbarte Tag ist eine Uhrzeit-Absprache,
+    kein Verfügbarkeits-Puffer — die Overrides bleiben eine getrennte,
+    bewusste Admin-Entscheidung), keine Kalender-Datei (.ics), keine
+    Termin-Erinnerung an den Kunden kurz vorher.
 - **Go-Live TODO:**
-  1. Migrationen `supabase/supabase-bookings-coordination-reminder.sql` **und**
-     `supabase/supabase-bookings-coordination-done.sql` ausführen. Ohne die
+  1. Migrationen `supabase/supabase-bookings-coordination-reminder.sql`,
+     `supabase/supabase-bookings-coordination-done.sql` **und**
+     `supabase/supabase-bookings-coordination-appointment.sql` ausführen. Ohne die
      Reminder-Migration erscheinen die Aufgaben im Dashboard trotzdem (live), nur
      der Push ist inaktiv (`migration_pending`). Ohne die Done-Migration liefert
      der „✓ Termin vereinbart"-Button 503 (Aufgabe lässt sich nicht abhaken).
+     Ohne die Appointment-Migration lässt sich die Aufgabe abhaken und die
+     Bestätigungs-E-Mail geht raus, der Termin wird aber nicht gespeichert
+     (das Modal weist darauf hin).
   2. Hetzner-Crontab (mehrmals täglich, `--resolve` umgeht Cloudflare):
      ```
      0 8,13,18 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/pickup-return-reminder
@@ -8819,6 +8868,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   auto-storniert. Verhalten/Config siehe „Mietvertrag-Erinnerung + Auto-Storno".
   **Abholungen werden nie wegen fehlendem Vertrag auto-storniert (hart im Code).**
   Empfohlen ASAP ausführen.
+- **Termin-Dialog (Ort/Datum/Zeit) + Bestätigungs-E-Mail — Migration auszuführen:**
+  `supabase/supabase-bookings-coordination-appointment.sql` (idempotent, additiv:
+  je 4 Spalten für Abholung + Rückgabe). Ohne sie lässt sich die Aufgabe wie
+  bisher abhaken und die Terminbestätigung geht an den Kunden raus, der Termin
+  wird aber **nicht gespeichert** (das Modal weist ausdrücklich darauf hin, und
+  die „Vereinbarter Termin"-Karte in der Buchung bleibt leer). Kein Cron, kein
+  Bucket, keine Env-Variable nötig. Siehe „Abhol-/Rückgabe-Terminabsprache" →
+  „Termin-Dialog + Bestätigungs-E-Mail". Empfohlen ASAP ausführen.
 - **Abhol-/Rückgabe-Terminabsprache — Migration + Cron auszuführen:** Migration
   `supabase/supabase-bookings-coordination-reminder.sql` (idempotent, additiv:
   2 Timestamp-Marker) + Crontab-Eintrag (mehrmals täglich, `--resolve`):

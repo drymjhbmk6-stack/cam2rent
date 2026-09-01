@@ -11,7 +11,7 @@ import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ReturnChecklistPDF } from '@/lib/return-checklist-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
-import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
+import { fmtDate, fmtDateTime, fmtDateWeekday, fmtEuro } from '@/lib/format-utils';
 import { getResendFromEmail, getTestModeEmailRedirect, isTestMode, getSiteUrl } from '@/lib/env-mode';
 import { getEmailTemplateOverride, applyEmailOverride } from '@/lib/email-template-overrides';
 
@@ -1947,6 +1947,148 @@ export async function sendPostponementConfirmation(data: PostponementEmailData) 
 </html>`;
 
   await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'booking_postponed' });
+}
+
+// ─── Abhol-/Rückgabe-Termin (Terminbestätigung) ──────────────────────────────
+
+export interface AppointmentConfirmationData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  productName: string;
+  /** 'pickup' = Kunde holt ab, 'return' = Kunde bringt zurück. */
+  type: 'pickup' | 'return';
+  /** Beginn als ISO-UTC (der Admin gibt Berliner Ortszeit ein). */
+  startsAt: string;
+  /** Ende als ISO-UTC — gesetzt = Zeitraum, leer = fester Zeitpunkt. */
+  endsAt?: string | null;
+  /** Ort der Übergabe/Rückgabe (Adresse oder Freitext). */
+  location: string;
+  /** Optionale Zusatzinfo vom Admin (z.B. „bitte am Hinterhof klingeln"). */
+  note?: string | null;
+  /** Mietzeitraum für den Kontext-Block. */
+  rentalFrom?: string;
+  rentalTo?: string;
+}
+
+/** ISO-UTC → "14:30" in Berliner Zeit. */
+function fmtBerlinTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('de-DE', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin',
+  });
+}
+
+/**
+ * Bestätigt dem Kunden den telefonisch/per Nachricht ausgemachten Abhol- bzw.
+ * Rückgabetermin mit Ort, Datum und Uhrzeit (bzw. Zeitfenster). Wird aus dem
+ * Dashboard-Aufgaben-Widget ausgelöst, sobald der Admin „✓ Termin vereinbart"
+ * ausfüllt.
+ */
+export async function sendAppointmentConfirmation(data: AppointmentConfirmationData) {
+  const isPickup = data.type === 'pickup';
+  const dayLabel = fmtDateWeekday(data.startsAt);
+  const timeLabel = data.endsAt
+    ? `${fmtBerlinTime(data.startsAt)} – ${fmtBerlinTime(data.endsAt)} Uhr`
+    : `${fmtBerlinTime(data.startsAt)} Uhr`;
+
+  const subject = stripSubject(
+    isPickup
+      ? `Abholtermin bestätigt: ${dayLabel}, ${timeLabel}`
+      : `Rückgabetermin bestätigt: ${dayLabel}, ${timeLabel}`,
+  );
+
+  const headline = isPickup ? 'Dein Abholtermin steht' : 'Dein Rückgabetermin steht';
+  const intro = isPickup
+    ? 'wie besprochen haben wir folgenden Termin für die Übergabe deiner Ausrüstung festgehalten:'
+    : 'wie besprochen haben wir folgenden Termin für die Rückgabe deiner Ausrüstung festgehalten:';
+
+  const hints = isPickup
+    ? [
+        'Bitte bring deinen Ausweis mit — wir gleichen ihn bei der Übergabe kurz ab.',
+        'Wir gehen die Ausrüstung gemeinsam durch und halten den Zustand im Übergabeprotokoll fest.',
+      ]
+    : [
+        'Bitte bring die komplette Ausrüstung inklusive Zubehör und Originalverpackung mit.',
+        'Wir prüfen alles gemeinsam durch und schließen die Miete direkt ab.',
+      ];
+
+  const rentalRow = data.rentalFrom && data.rentalTo
+    ? `<tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Mietzeitraum</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmtDate(data.rentalFrom)} – ${fmtDate(data.rentalTo)}</td></tr>`
+    : '';
+
+  const noteBlock = data.note
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:14px 18px;">
+              <p style="margin:0;font-size:13px;color:#92400e;"><strong>Hinweis:</strong> ${h(data.note)}</p>
+            </td></tr>
+          </table>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:20px 32px;">
+          <p style="margin:0;font-size:17px;font-weight:700;color:#15803d;">${headline}</p>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:32px;">
+          <p style="margin:0 0 20px;font-size:15px;color:#374151;">
+            Hallo ${h(data.customerName)},<br><br>
+            ${intro}
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 4px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">${isPickup ? 'Abholung' : 'Rückgabe'}</p>
+              <p style="margin:0 0 2px;font-size:20px;color:#0a0a0a;font-weight:700;">${h(dayLabel)}</p>
+              <p style="margin:0 0 16px;font-size:16px;color:#15803d;font-weight:700;">${h(timeLabel)}</p>
+              <p style="margin:0 0 4px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Ort</p>
+              <p style="margin:0 0 16px;font-size:15px;color:#0a0a0a;font-weight:600;white-space:pre-line;">${h(data.location)}</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;">
+                <tr><td style="padding:12px 0 0;"></td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Buchungs-Nr.</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.bookingId)}</td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Ausrüstung</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.productName)}</td></tr>${rentalRow}
+              </table>
+            </td></tr>
+          </table>
+          ${noteBlock}
+          <p style="margin:0 0 8px;font-size:14px;color:#374151;font-weight:600;">Damit alles glatt läuft:</p>
+          <ul style="margin:0 0 24px;padding-left:20px;font-size:14px;color:#374151;line-height:1.7;">
+            ${hints.map((t) => `<li>${h(t)}</li>`).join('')}
+          </ul>
+          <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">
+            Passt der Termin doch nicht? Melde dich einfach kurz bei uns unter
+            <a href="mailto:${BUSINESS.emailKontakt}" style="color:#0a0a0a;font-weight:600;">${BUSINESS.emailKontakt}</a>${BUSINESS.phone ? ` oder ${h(BUSINESS.phone)}` : ''} — wir finden einen neuen.
+          </p>
+          <a href="${BUSINESS.url}/konto/buchungen" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Meine Buchungen</a>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'appointment_confirmation',
+  });
 }
 
 // ─── Review Request ──────────────────────────────────────────────────────────

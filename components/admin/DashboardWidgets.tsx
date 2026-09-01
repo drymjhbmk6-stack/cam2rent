@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatCurrency } from '@/lib/format-utils';
+import { BUSINESS } from '@/lib/business-config';
+import { normalizeHandoverAddresses } from '@/components/admin/HandoverAddressesSection';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
 // Neutrale Flächen/Texte auf Design-Tokens (Dark-Werte identisch zu den alten
@@ -713,6 +715,8 @@ interface CoordinationTask {
   product_name: string;
   customer_name: string;
   due_date: string;
+  /** Ohne Adresse kann keine Terminbestätigung rausgehen (Hinweis im Dialog). */
+  customer_email?: string | null;
 }
 
 /** Nicht zurueckgegebene Position aus der Rueckgabe-Pruefung. */
@@ -725,6 +729,238 @@ interface OpenReturnTask {
   due_date: string | null;
   customer_name: string;
   total_value: number | null;
+}
+
+/** Kontext, den der Termin-Dialog zum Vorbefüllen + für die Mail braucht. */
+interface CoordContext {
+  id: string;
+  type: 'pickup' | 'return';
+  /** Vorgeschlagener Tag (Abhol- bzw. Rückgabetag laut Puffer/Override). */
+  dueDate: string;
+  customerName: string;
+  productName: string;
+  customerEmail?: string | null;
+}
+
+/** Was der Admin im Termin-Dialog ausfüllt. */
+export interface AppointmentInput {
+  date: string;       // YYYY-MM-DD
+  timeFrom: string;   // HH:MM
+  timeTo: string;     // HH:MM, leer = fester Zeitpunkt statt Zeitraum
+  location: string;
+  note: string;
+  notifyCustomer: boolean;
+}
+
+/**
+ * Dialog nach dem Klick auf „✓ Termin vereinbart": Ort, Datum und Uhrzeit
+ * (bzw. Zeitfenster) erfassen. Beim Speichern geht die Terminbestätigung an
+ * den Kunden raus (abwählbar).
+ */
+function AppointmentModal({ coord, busy, error, onCancel, onSubmit }: {
+  coord: CoordContext;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (input: AppointmentInput) => void;
+}) {
+  const isPickup = coord.type === 'pickup';
+  const [date, setDate] = useState(coord.dueDate || '');
+  const [timeFrom, setTimeFrom] = useState('');
+  const [timeTo, setTimeTo] = useState('');
+  const [location, setLocation] = useState('');
+  const [note, setNote] = useState('');
+  const [notify, setNotify] = useState(true);
+
+  // Hinterlegte Übergabe-Adressen (Einstellungen) als anhakbare Auswahl —
+  // gleiche Quelle wie der Übergabe-Wizard.
+  const [savedAddresses, setSavedAddresses] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/settings?key=handover_addresses')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const list = normalizeHandoverAddresses(d?.value);
+        setSavedAddresses(list.length > 0 ? list : [BUSINESS.fullAddress]);
+      })
+      .catch(() => { if (alive) setSavedAddresses([BUSINESS.fullAddress]); });
+    return () => { alive = false; };
+  }, []);
+
+  // ESC schließt den Dialog (solange nicht gerade gespeichert wird).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [busy, onCancel]);
+
+  const hasEmail = Boolean(coord.customerEmail);
+  const canSave = Boolean(date && timeFrom && location.trim()) && !busy;
+
+  const label = { display: 'block', fontSize: 11, fontWeight: 700 as const, color: C.textDim, textTransform: 'uppercase' as const, letterSpacing: 0.3, marginBottom: 5 };
+  const field = {
+    width: '100%', padding: '9px 10px', borderRadius: 8,
+    border: `1px solid ${C.border}`, background: 'var(--admin-input-bg)',
+    color: C.text, fontSize: 14, fontFamily: 'inherit',
+  };
+
+  return (
+    <div
+      onClick={() => { if (!busy) onCancel(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+          width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', padding: 20,
+          display: 'flex', flexDirection: 'column', gap: 14,
+        }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>
+            {isPickup ? '📞 Abholtermin festhalten' : '📞 Rückgabetermin festhalten'}
+          </h3>
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: C.textDim, lineHeight: 1.45 }}>
+            {coord.customerName}{coord.productName ? ` · ${coord.productName}` : ''}
+          </p>
+        </div>
+
+        {/* Ort */}
+        <div>
+          <span style={label}>Ort *</span>
+          {savedAddresses.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              {savedAddresses.map((addr) => {
+                const active = location.trim() === addr.trim();
+                return (
+                  <button
+                    key={addr}
+                    type="button"
+                    onClick={() => setLocation(active ? '' : addr)}
+                    style={{
+                      textAlign: 'left', fontSize: 13, lineHeight: 1.4, cursor: 'pointer',
+                      padding: '8px 10px', borderRadius: 8, whiteSpace: 'pre-line',
+                      border: `1px solid ${active ? C.green : C.border}`,
+                      background: active ? C.greenDim : 'transparent',
+                      color: active ? C.text : C.textDim,
+                    }}
+                  >
+                    {active ? '☑ ' : '☐ '}{addr}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Abweichende Adresse / Treffpunkt"
+            style={field}
+          />
+        </div>
+
+        {/* Datum */}
+        <div>
+          <span style={label}>Datum *</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={field} />
+          {coord.dueDate && date !== coord.dueDate && (
+            <p style={{ margin: '5px 0 0', fontSize: 11, color: C.yellow }}>
+              Weicht vom geplanten Tag ({formatDate(coord.dueDate)}) ab.
+            </p>
+          )}
+        </div>
+
+        {/* Uhrzeit / Zeitraum */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <span style={label}>Uhrzeit *</span>
+            <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} style={field} />
+          </div>
+          <div>
+            <span style={label}>bis (optional)</span>
+            <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} style={field} />
+          </div>
+        </div>
+        <p style={{ margin: -6, marginLeft: 0, fontSize: 11, color: C.textDim }}>
+          &bdquo;bis&ldquo; leer lassen = fester Zeitpunkt, sonst wird ein Zeitfenster bestätigt.
+        </p>
+
+        {/* Notiz */}
+        <div>
+          <span style={label}>Hinweis für den Kunden (optional)</span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            placeholder="z.B. bitte am Seiteneingang klingeln"
+            style={{ ...field, resize: 'vertical' as const }}
+          />
+        </div>
+
+        {/* E-Mail-Bestätigung */}
+        <label style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13,
+          color: hasEmail ? C.text : C.textDim, cursor: hasEmail ? 'pointer' : 'default',
+        }}>
+          <input
+            type="checkbox"
+            checked={notify && hasEmail}
+            disabled={!hasEmail}
+            onChange={(e) => setNotify(e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Bestätigung an den Kunden senden
+            <span style={{ display: 'block', fontSize: 11, color: hasEmail ? C.textDim : C.yellow, marginTop: 2 }}>
+              {hasEmail
+                ? `E-Mail mit Ort, Datum und Uhrzeit an ${coord.customerEmail}`
+                : 'Keine E-Mail-Adresse bei der Buchung hinterlegt — es geht keine Bestätigung raus.'}
+            </span>
+          </span>
+        </label>
+
+        {error && (
+          <p style={{ margin: 0, fontSize: 12, color: C.red, background: 'rgba(239,68,68,0.12)', padding: '8px 10px', borderRadius: 8 }}>
+            {error}
+          </p>
+        )}
+
+        {/* Aktionen */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            style={{
+              fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 8,
+              border: `1px solid ${C.border}`, background: 'transparent', color: C.textDim,
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            disabled={!canSave}
+            onClick={() => onSubmit({ date, timeFrom, timeTo, location: location.trim(), note: note.trim(), notifyCustomer: notify && hasEmail })}
+            style={{
+              fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 8,
+              border: `1px solid ${C.green}40`, background: `${C.green}1a`, color: C.green,
+              cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.5,
+            }}
+          >
+            {busy ? 'Wird gespeichert…' : notify && hasEmail ? 'Speichern & bestätigen' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface QueueRow {
@@ -747,8 +983,8 @@ interface QueueRow {
   extraLinks?: { label: string; href: string; external?: boolean }[];
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
-  /** Nur Terminabsprache-Zeilen: Buchung + Richtung für den „vereinbart"-Button. */
-  coord?: { id: string; type: 'pickup' | 'return' };
+  /** Nur Terminabsprache-Zeilen: Buchung + Richtung + Kontext für den Termin-Dialog. */
+  coord?: CoordContext;
   /** ID der nicht zurueckgegebenen Position (Button „Eingetroffen“). */
   openReturnId?: string;
 }
@@ -881,7 +1117,14 @@ export function ActionQueueWidget({ data, loading }: {
     dueDate: c.due_date,
     bucket: bucketForDays(daysUntilDue(c.due_date, today)),
     bookingId: c.id,
-    coord: { id: c.id, type: c.type },
+    coord: {
+      id: c.id,
+      type: c.type,
+      dueDate: c.due_date,
+      customerName: c.customer_name || 'Kunde',
+      productName: c.product_name || '',
+      customerEmail: c.customer_email ?? null,
+    },
   }));
 
   // Nicht zurueckgegebene Positionen aus der Rueckgabe-Pruefung. Bleiben
@@ -1030,22 +1273,58 @@ export function ActionQueueWidget({ data, loading }: {
     }
   }
 
-  // Abhol-/Rückgabe-Terminabsprache als vereinbart markieren → Aufgabe wird
-  // optimistisch ausgeblendet.
-  async function markCoordinationDone(rowKey: string, coord: { id: string; type: 'pickup' | 'return' }) {
+  // Abhol-/Rückgabe-Termin: Klick auf „✓ Termin vereinbart" öffnet zuerst den
+  // Dialog (Ort/Datum/Zeit). Gespeichert wird erst mit dem Absenden — dann geht
+  // auch die Terminbestätigung an den Kunden raus.
+  const [coordModal, setCoordModal] = useState<{ rowKey: string; coord: CoordContext } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  async function submitCoordination(rowKey: string, coord: CoordContext, input: AppointmentInput) {
     if (busyId) return;
     setBusyId(rowKey);
+    setModalError(null);
     setErrorId(null);
     try {
       const res = await fetch(`/api/admin/booking/${coord.id}/coordination-done`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: coord.type, done: true }),
+        body: JSON.stringify({
+          type: coord.type,
+          done: true,
+          appointment: {
+            date: input.date,
+            timeFrom: input.timeFrom,
+            timeTo: input.timeTo || undefined,
+            location: input.location,
+            note: input.note || undefined,
+          },
+          notifyCustomer: input.notifyCustomer,
+        }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error || 'Termin konnte nicht gespeichert werden.');
+      }
+      // Termin-Spalten fehlen noch (Migration ausstehend): die Aufgabe ist
+      // abgehakt und die Bestätigung ist raus, der Termin selbst wurde aber
+      // NICHT gespeichert — das muss der Admin sehen, sonst sucht er ihn
+      // später vergeblich in der Buchung.
+      if (payload?.warnings?.includes('migration_pending')) {
+        setModalError(
+          'Aufgabe abgehakt, aber der Termin konnte nicht gespeichert werden — Migration supabase-bookings-coordination-appointment.sql ausstehend. Bitte den Termin in den Buchungsnotizen festhalten.',
+        );
+        return;
+      }
+      // Termin steht — der Mailversand ist best-effort. Schlug er fehl, bleibt
+      // der Termin gespeichert und der Admin sieht den Grund im Dialog.
+      if (input.notifyCustomer && payload?.emailSent === false && payload?.emailError) {
+        setModalError(`Termin gespeichert, aber die Bestätigung ging nicht raus: ${payload.emailError}`);
+        return;
+      }
       setDoneIds((prev) => new Set(prev).add(rowKey));
-    } catch {
-      setErrorId(rowKey);
+      setCoordModal(null);
+    } catch (e) {
+      setModalError(e instanceof Error ? e.message : 'Termin konnte nicht gespeichert werden.');
     } finally {
       setBusyId(null);
     }
@@ -1095,7 +1374,7 @@ export function ActionQueueWidget({ data, loading }: {
       || row.action.kind === 'open-return-done';
     const onClick =
       row.action.kind === 'coord-done' && row.coord
-        ? () => markCoordinationDone(row.key, row.coord!)
+        ? () => { setModalError(null); setCoordModal({ rowKey: row.key, coord: row.coord! }); }
         : row.action.kind === 'open-return-done' && row.openReturnId
           ? () => markOpenReturnDone(row.key, row.openReturnId!)
           : () => markShipped(row.key);
@@ -1220,6 +1499,17 @@ export function ActionQueueWidget({ data, loading }: {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Termin-Dialog (Ort/Datum/Zeit) — erscheint nach „✓ Termin vereinbart" */}
+      {coordModal && (
+        <AppointmentModal
+          coord={coordModal.coord}
+          busy={busyId === coordModal.rowKey}
+          error={modalError}
+          onCancel={() => { setCoordModal(null); setModalError(null); }}
+          onSubmit={(input) => submitCoordination(coordModal.rowKey, coordModal.coord, input)}
+        />
       )}
     </div>
   );

@@ -101,6 +101,15 @@ interface BookingDetail {
   adjustment_note?: string | null;
   ship_date_override?: string | null;
   return_due_date_override?: string | null;
+  // Vereinbarter Abhol-/Rückgabetermin (Dashboard-Aufgabe „✓ Termin vereinbart")
+  pickup_appointment_at?: string | null;
+  pickup_appointment_end_at?: string | null;
+  pickup_appointment_location?: string | null;
+  pickup_appointment_note?: string | null;
+  return_appointment_at?: string | null;
+  return_appointment_end_at?: string | null;
+  return_appointment_location?: string | null;
+  return_appointment_note?: string | null;
   invoice_name?: string | null;
   invoice_address?: string | null;
   paid?: boolean | null;
@@ -1926,6 +1935,9 @@ export default function BuchungDetailPage() {
 
             {/* ── Reiter: Versand & Rückgabe (Termine) ── */}
             {activeTab === 'versand' && (<>
+
+            {/* Mit dem Kunden vereinbarter Abhol-/Rückgabetermin (falls erfasst) */}
+            <AgreedAppointmentsCard booking={booking} />
 
             {/* Versand- / Rückgabe-Datum */}
             <ShippingOverrideSection
@@ -5003,6 +5015,65 @@ function shipAddDays(dateStr: string, n: number): string {
   const mo = String(d.getMonth() + 1).padStart(2, '0');
   const da = String(d.getDate()).padStart(2, '0');
   return `${y}-${mo}-${da}`;
+}
+
+/**
+ * Zeigt den mit dem Kunden ausgemachten Abhol- bzw. Rückgabetermin (Ort, Datum,
+ * Uhrzeit/Zeitfenster, Hinweis). Erfasst wird er über das Dashboard-Aufgaben-
+ * Widget („✓ Termin vereinbart"); der Kunde hat dazu eine Bestätigungs-E-Mail
+ * bekommen. Rein informativ — ohne hinterlegten Termin rendert die Karte nichts.
+ */
+function AgreedAppointmentsCard({ booking }: { booking: BookingDetail }) {
+  const entries = ([
+    {
+      key: 'pickup',
+      label: 'Abholung',
+      at: booking.pickup_appointment_at,
+      end: booking.pickup_appointment_end_at,
+      location: booking.pickup_appointment_location,
+      note: booking.pickup_appointment_note,
+    },
+    {
+      key: 'return',
+      label: 'Rückgabe',
+      at: booking.return_appointment_at,
+      end: booking.return_appointment_end_at,
+      location: booking.return_appointment_location,
+      note: booking.return_appointment_note,
+    },
+  ] as const).filter((e) => Boolean(e.at));
+
+  if (entries.length === 0) return null;
+
+  const timeOf = (iso: string) =>
+    new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+
+  return (
+    <div className="bg-white rounded-xl border border-brand-border p-5 mb-6">
+      <h2 className="font-heading font-semibold text-base text-brand-black mb-1">Vereinbarter Termin</h2>
+      <p className="text-xs font-body text-brand-muted mb-4">
+        Mit dem Kunden ausgemacht und per E-Mail bestätigt.
+      </p>
+      <div className="space-y-3">
+        {entries.map((e) => (
+          <div key={e.key} className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-[10px] font-heading font-semibold uppercase tracking-wider text-emerald-700">
+              {e.label}
+            </p>
+            <p className="font-heading font-semibold text-brand-black mt-1">
+              {fmtDateWd(e.at!)} · {timeOf(e.at!)}{e.end ? ` – ${timeOf(e.end)}` : ''} Uhr
+            </p>
+            {e.location && (
+              <p className="text-sm font-body text-brand-steel mt-1 whitespace-pre-line">📍 {e.location}</p>
+            )}
+            {e.note && (
+              <p className="text-sm font-body text-brand-muted mt-1">💬 {e.note}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ShippingOverrideSection({

@@ -31,6 +31,7 @@ import {
   sendNewMessageNotificationToCustomer,
   sendExtensionConfirmation,
   sendPostponementConfirmation,
+  sendAppointmentConfirmation,
   sendReviewRequest,
   sendReturnChecklist,
   sendReturnFollowUpRequest,
@@ -209,6 +210,21 @@ const dummyPostponeDate: PostponementEmailData = {
   oldTo: '2026-05-07',
   newFrom: '2026-06-01',
   newTo: '2026-06-07',
+};
+
+const dummyAppointment = {
+  bookingId: DUMMY_BOOKING_ID,
+  customerName: 'Max Mustermann',
+  customerEmail: 'max.mustermann@example.de',
+  productName: 'GoPro Hero13 Black',
+  type: 'pickup' as const,
+  // Fester Zeitpunkt in Berliner Zeit: 30.04.2026, 16:00–16:30 Uhr
+  startsAt: '2026-04-30T14:00:00.000Z',
+  endsAt: '2026-04-30T14:30:00.000Z',
+  location: 'Musterstraße 1, 12345 Musterstadt',
+  note: 'Bitte am Seiteneingang klingeln.',
+  rentalFrom: '2026-05-01',
+  rentalTo: '2026-05-07',
 };
 
 
@@ -855,6 +871,13 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     description: 'Bestätigung, wenn eine Buchung verlegt wird — auf einen neuen konkreten Zeitraum (gleiche Dauer/Preis) oder vom Admin auf unbestimmte Zeit.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendPostponementConfirmation, dummyPostponeDate),
+  },
+  {
+    id: 'appointment_confirmation',
+    name: 'Terminbestätigung (Abholung/Rückgabe)',
+    description: 'Bestätigt dem Kunden den ausgemachten Abhol- bzw. Rückgabetermin mit Ort, Datum und Uhrzeit (oder Zeitfenster). Wird ausgelöst, wenn der Admin im Dashboard-Aufgaben-Widget „✓ Termin vereinbart" ausfüllt.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendAppointmentConfirmation, dummyAppointment),
   },
   // Bewertung & Warenkorb
   {

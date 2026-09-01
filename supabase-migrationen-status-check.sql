@@ -88,6 +88,12 @@ WITH checks AS (
                    AND column_name='tracking_carrier'),
          'bookings.tracking_carrier + return_tracking_*'
   UNION ALL
+  SELECT 'supabase-bookings-coordination-appointment',
+         EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='bookings'
+                   AND column_name='pickup_appointment_at'),
+         'bookings.{pickup,return}_appointment_at/_end_at/_location/_note (Termin-Dialog + Bestaetigungsmail)'
+  UNION ALL
   SELECT 'supabase-bookings-edit-adjustment',
          EXISTS (SELECT 1 FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='bookings'
