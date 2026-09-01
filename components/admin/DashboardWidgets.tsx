@@ -640,6 +640,8 @@ interface QueueBooking {
   verified?: boolean;
   contract_signed?: boolean;
   contract_checked?: boolean;
+  /** contract_locked-Spalte in der DB vorhanden? (Migration ausgeführt) */
+  contract_lock_available?: boolean;
   paid?: boolean;
 }
 
@@ -1214,6 +1216,36 @@ export function ActionQueueWidget({ data, loading }: {
           paid: b.paid ?? false,
           isVersand: b.delivery_mode === 'versand',
         },
+      });
+    }
+
+    // Vertragsprüfung: sobald der Kunde den Mietvertrag unterschrieben hat,
+    // muss der Admin ihn durchsehen und mit „Alles okay" freigeben
+    // (contract_locked). Bis dahin eine eigene Aufgabe im Bucket „Heute" —
+    // die Prüfung hängt an keinem Termin, sie ist sofort zu erledigen und
+    // blockiert Versand/Übergabe. Verschwindet automatisch, sobald der
+    // Vertrag freigegeben ist. Ohne die contract_locked-Migration wird die
+    // Aufgabe nicht erzeugt (wäre sonst nicht abhakbar).
+    if (b.contract_lock_available && b.contract_signed && !b.contract_checked) {
+      out.push({
+        key: `contract-${b.id}`,
+        customerName,
+        detail: `📄 Mietvertrag prüfen & freigeben · ${b.product_name || 'Buchung'}`,
+        action: {
+          label: '📄 Vertrag prüfen',
+          href: `/admin/buchungen/${b.id}#dokumente`,
+          color: C.yellow,
+          weight: 1,
+        },
+        // Kein Fälligkeitsdatum — sofort zu erledigen (Spalte „Heute").
+        sortDate: '',
+        dueDate: '',
+        bucket: 0,
+        customerId: b.user_id ?? null,
+        bookingId: b.id,
+        extraLinks: [
+          { label: '📄 Vertrag ansehen', href: `/admin/pdf-viewer?u=/api/rental-contract/${b.id}&t=Mietvertrag` },
+        ],
       });
     }
 

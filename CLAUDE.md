@@ -692,6 +692,36 @@ vertikal (`maxHeight 440`); leere Spalte zeigt „—".
   `tracking_url` + `return_tracking_url` mit (`select('*')`); `QueueRow.extraLinks`
   trägt die Links, im Builder nur für Versand-Buchungen gefüllt.
 
+### Dashboard-Aufgabe „Vertrag prüfen" (Stand 2026-09-01)
+Sobald eine Bestellung reinkommt und der Kunde den **Mietvertrag unterschrieben**
+hat, erscheint im „Aufgaben"-Widget (`/admin`) eine eigene Karte
+**„📄 Vertrag prüfen"** in der Spalte **Heute** — die Prüfung hängt an keinem
+Termin, sie ist sofort zu erledigen und blockiert Versand/Übergabe (der
+„Geprüft"-Chip bleibt bis dahin amber/rot). Die Karte verschwindet automatisch,
+sobald der Admin den Vertrag in der Buchung mit **„Alles okay (freigeben)"**
+freigegeben hat (`bookings.contract_locked=true`).
+- **Bedingung:** `contract_signed === true && contract_locked !== true` — pro
+  Buchung eine zusätzliche Zeile im `bookingRows`-flatMap von
+  `ActionQueueWidget` (`components/admin/DashboardWidgets.tsx`), Key
+  `contract-<bookingId>`, `weight 1` (direkt nach Verifizierungen/Terminen,
+  über den Standard-Buchungsaufgaben), `bucket 0` + leeres `dueDate` → Spalte
+  „Heute", Anzeige „📅 sofort".
+- **Links:** Aktions-Button → `/admin/buchungen/<id>#dokumente` (Reiter
+  „Dokumente & E-Mail" mit Vertrags-PDF + Freigabe-Button), zusätzlicher
+  Schnell-Link **„📄 Vertrag ansehen"** → `/admin/pdf-viewer?u=/api/rental-contract/<id>`.
+  **Bewusst KEIN Ein-Klick-Freigeben im Dashboard** — die Freigabe ist
+  unwiderruflich (`lock-contract` lehnt jedes Unlock mit 409 ab), der Admin
+  soll den Vertrag vorher öffnen.
+- **Migrations-Gate:** `GET /api/admin/dashboard-data` liefert pro Item neu
+  `contract_lock_available` (= `'contract_locked' in row`, der Select ist
+  `select('*')`). Fehlt die Migration
+  `supabase/supabase-bookings-contract-locked.sql`, wäre `contract_checked`
+  dauerhaft `false` und die Aufgabe **nie abhakbar** (`lock-contract` liefert
+  503) → das Widget erzeugt sie dann gar nicht erst. **Die Aufgabe erscheint
+  also erst NACH dieser Migration** (steht ohnehin unter „Noch offen").
+- Keine neue Migration, kein Cron, keine Notification — reine Ableitung aus
+  bereits geladenen Feldern.
+
 ### Dashboard-Aufgaben-Widget — Status-Übersicht pro Buchung (Stand 2026-06-14)
 Jede Buchungszeile im „Aufgaben"-Widget (`ActionQueueWidget`) zeigt unter
 Titel/Untertitel eine Reihe von **4 Status-Chips** (`StatusChips`): **Ausweis**

@@ -399,6 +399,13 @@ export async function GET() {
         verified,
         contract_signed: b.contract_signed === true,
         contract_checked: b.contract_locked === true,
+        // Steht die Spalte `contract_locked` überhaupt zur Verfügung? Der
+        // Select ist `select('*')` — fehlt die Migration
+        // (supabase-bookings-contract-locked.sql), fehlt auch der Key. Ohne
+        // sie wäre `contract_checked` dauerhaft false und die daraus
+        // abgeleitete Aufgabe „Vertrag prüfen" nie abhakbar → das Dashboard
+        // blendet sie dann aus (Feature erst nach der Migration aktiv).
+        contract_lock_available: Object.prototype.hasOwnProperty.call(b, 'contract_locked'),
         paid,
       };
     });
