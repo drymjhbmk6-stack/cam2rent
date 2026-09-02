@@ -14,6 +14,12 @@ import { damagePhotoSrc } from '@/lib/damage-photo-path';
 import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 import { computeCancellationSuggestion, refundBelowSuggestion, CANCELLATION_REASON_OPTIONS, type CancellationReasonCategory } from '@/data/cancellation';
+import { ALLOWED_CARRIERS, buildTrackingUrl, isAllowedCarrier, type TrackingCarrier } from '@/lib/tracking-url';
+
+/** Gespeicherten Carrier-Wert auf einen gueltigen Wert klemmen (Default DHL). */
+function carrierOrDefault(v: unknown): TrackingCarrier {
+  return isAllowedCarrier(v) ? v : 'DHL';
+}
 
 interface BookingDetail {
   id: string;
@@ -315,11 +321,11 @@ export default function BuchungDetailPage() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [editingTracking, setEditingTracking] = useState(false);
   const [trackingDraft, setTrackingDraft] = useState('');
-  const [trackingCarrierDraft, setTrackingCarrierDraft] = useState<'DHL' | 'DPD'>('DHL');
+  const [trackingCarrierDraft, setTrackingCarrierDraft] = useState<TrackingCarrier>('DHL');
   const [trackingSaving, setTrackingSaving] = useState(false);
   const [editingReturnTracking, setEditingReturnTracking] = useState(false);
   const [returnTrackingDraft, setReturnTrackingDraft] = useState('');
-  const [returnTrackingCarrierDraft, setReturnTrackingCarrierDraft] = useState<'DHL' | 'DPD'>('DHL');
+  const [returnTrackingCarrierDraft, setReturnTrackingCarrierDraft] = useState<TrackingCarrier>('DHL');
   const [returnTrackingSaving, setReturnTrackingSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -1183,11 +1189,6 @@ export default function BuchungDetailPage() {
     } catch { toastError('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
   }
 
-  function buildTrackingUrlClient(carrier: 'DHL' | 'DPD', number: string): string {
-    const clean = number.trim();
-    if (carrier === 'DPD') return `https://www.dpd.com/de/de/empfangen/sendungsverfolgung/?parcelId=${clean}`;
-    return `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${clean}`;
-  }
 
   async function saveTracking() {
     if (!booking) return;
@@ -1205,7 +1206,7 @@ export default function BuchungDetailPage() {
         ...booking,
         tracking_number: next || null,
         tracking_carrier: next ? carrier : null,
-        tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
+        tracking_url: next ? buildTrackingUrl(carrier, next) : null,
       });
       setEditingTracking(false);
     } catch { toastError('Trackingnummer konnte nicht gespeichert werden.'); }
@@ -1235,7 +1236,7 @@ export default function BuchungDetailPage() {
         ...booking,
         return_tracking_number: next || null,
         return_tracking_carrier: next ? carrier : null,
-        return_tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
+        return_tracking_url: next ? buildTrackingUrl(carrier, next) : null,
       });
       setEditingReturnTracking(false);
     } catch { toastError('Rueckgabe-Trackingnummer konnte nicht gespeichert werden.'); }
@@ -1648,12 +1649,13 @@ export default function BuchungDetailPage() {
                           <div className="flex gap-2 items-center">
                             <select
                               value={trackingCarrierDraft}
-                              onChange={e => setTrackingCarrierDraft(e.target.value as 'DHL' | 'DPD')}
+                              onChange={e => setTrackingCarrierDraft(e.target.value as TrackingCarrier)}
                               className="px-2 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
                               title="Versanddienstleister"
                             >
-                              <option value="DHL">DHL</option>
-                              <option value="DPD">DPD</option>
+                              {ALLOWED_CARRIERS.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
                             </select>
                             <input
                               type="text"
@@ -1694,7 +1696,7 @@ export default function BuchungDetailPage() {
                           <button
                             onClick={() => {
                               setTrackingDraft(booking.tracking_number || '');
-                              setTrackingCarrierDraft((booking.tracking_carrier as 'DHL' | 'DPD') || 'DHL');
+                              setTrackingCarrierDraft(carrierOrDefault(booking.tracking_carrier));
                               setEditingTracking(true);
                             }}
                             className="text-brand-muted hover:text-accent-cyan transition-colors"
@@ -1731,12 +1733,13 @@ export default function BuchungDetailPage() {
                           <div className="flex gap-2 items-center">
                             <select
                               value={returnTrackingCarrierDraft}
-                              onChange={e => setReturnTrackingCarrierDraft(e.target.value as 'DHL' | 'DPD')}
+                              onChange={e => setReturnTrackingCarrierDraft(e.target.value as TrackingCarrier)}
                               className="px-2 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
                               title="Versanddienstleister"
                             >
-                              <option value="DHL">DHL</option>
-                              <option value="DPD">DPD</option>
+                              {ALLOWED_CARRIERS.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
                             </select>
                             <input
                               type="text"
@@ -1778,7 +1781,7 @@ export default function BuchungDetailPage() {
                             <button
                               onClick={() => {
                                 setReturnTrackingDraft(booking.return_tracking_number || '');
-                                setReturnTrackingCarrierDraft((booking.return_tracking_carrier as 'DHL' | 'DPD') || 'DHL');
+                                setReturnTrackingCarrierDraft(carrierOrDefault(booking.return_tracking_carrier));
                                 setEditingReturnTracking(true);
                               }}
                               className="text-brand-muted hover:text-accent-cyan transition-colors"

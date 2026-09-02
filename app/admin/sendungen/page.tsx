@@ -69,6 +69,8 @@ function parseDayMs(iso: string): number | null {
 function normCarrier(c: string | null): string {
   if (!c) return '';
   const u = c.toUpperCase();
+  // Express zuerst pruefen — sonst wuerde es unter "DHL" verschwinden.
+  if (u.includes('EXPRESS')) return 'DHL Express';
   if (u.includes('DHL')) return 'DHL';
   if (u.includes('DPD')) return 'DPD';
   return u;
@@ -76,6 +78,7 @@ function normCarrier(c: string | null): string {
 
 function carrierColor(c: string): string {
   if (c === 'DHL') return '#f59e0b';
+  if (c === 'DHL Express') return '#dc2626';
   if (c === 'DPD') return '#dc2626';
   return '#64748b';
 }
@@ -86,7 +89,7 @@ export default function SendungenPage() {
   const [entries, setEntries] = useState<SendungEntry[]>(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) ?? []);
   const [loading, setLoading] = useState(() => getCached<SendungEntry[]>(SENDUNGEN_CACHE_KEY) === undefined);
   const [error, setError] = useState<string | null>(null);
-  const [carrierFilter, setCarrierFilter] = usePersistentState<'' | 'DHL' | 'DPD'>('admin:sendungen:carrierFilter', '');
+  const [carrierFilter, setCarrierFilter] = usePersistentState<'' | 'DHL' | 'DHL Express' | 'DPD'>('admin:sendungen:carrierFilter', '');
   const [q, setQ] = usePersistentState('admin:sendungen:q', '');
   const [showArchive, setShowArchive] = usePersistentState('admin:sendungen:showArchive', false);
 
@@ -198,11 +201,12 @@ export default function SendungenPage() {
           />
           <select
             value={carrierFilter}
-            onChange={(e) => setCarrierFilter(e.target.value as '' | 'DHL' | 'DPD')}
+            onChange={(e) => setCarrierFilter(e.target.value as '' | 'DHL' | 'DHL Express' | 'DPD')}
             style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', color: 'var(--admin-text)', borderRadius: 8, padding: '8px 12px', fontSize: 14 }}
           >
             <option value="">Alle Carrier</option>
             <option value="DHL">DHL</option>
+            <option value="DHL Express">DHL Express</option>
             <option value="DPD">DPD</option>
           </select>
           <button

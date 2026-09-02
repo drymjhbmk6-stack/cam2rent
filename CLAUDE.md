@@ -3045,6 +3045,50 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   Buchungsstatus, damit die Retoure nicht „verschwindet". Live-Status kommt über
   die Trackingnummer (siehe oben).
 
+### DHL Express — extern erzeugte Etiketten (Stand 2026-09-02)
+Sendcloud kann **keine DHL-Express-Etiketten** erzeugen. Eil-Sendungen werden
+direkt bei DHL gekauft und die Trackingnummer im Buchungsdetail
+(`/admin/buchungen/[id]` → Versand & Rückgabe → Stift neben „Trackingnummer")
+manuell eingetragen. Zwei Dinge griffen dabei vorher nicht:
+- **Falscher Verfolgungs-Link:** `buildTrackingUrl` kannte nur DHL Paket
+  (`verfolgen.html?piececode=`) und DPD. Eine Express-Nummer (z. B.
+  `JD014600012806500816`) findet das Paket-Portal nicht. Neuer Carrier
+  **`DHL Express`** in `lib/tracking-url.ts` mit eigenem Portal
+  (`dhl.com/.../tracking-express.html?tracking-id=`). Zusätzlich werden die
+  Nummern jetzt `encodeURIComponent`-kodiert. Auswählbar in beiden Dropdowns
+  der Buchungsdetail-Seite (Hin + Retoure) und im „Als versendet"-Modal auf
+  `/admin/versand`; alle drei lesen jetzt `ALLOWED_CARRIERS` statt eigener
+  Literale (die Client-Kopie `buildTrackingUrlClient` in
+  `/admin/buchungen/[id]` ist entfallen — die Seite nutzt die geteilte Lib).
+  Tests: `lib/__tests__/tracking-url.test.ts` (9 Fälle).
+- **Paketverfolgung zeigte das ungenutzte Sendcloud-Label:**
+  `GET /api/admin/sendungen` fragt Sendcloud pro Buchungsnummer ab und nutzte
+  den DB-Stand **nur**, wenn Sendcloud gar nichts lieferte. Wurde vorher ein
+  Standard-Etikett erzeugt (und dann nicht eingeliefert, weil per Express
+  versendet wurde), gewann dieses Label — die echte Express-Sendung war
+  unsichtbar. Neue Regel **pro Richtung** (Hin/Retoure): weicht die in der
+  Buchung hinterlegte Trackingnummer von **allen** Sendcloud-Paketen dieser
+  Richtung ab, gilt der DB-Stand und die ungenutzten Sendcloud-Labels dieser
+  Richtung werden ausgeblendet (`normTracking` vergleicht ohne Leerzeichen/
+  Groß-Kleinschreibung). Stimmt sie überein (Normalfall) oder ist keine
+  hinterlegt (z. B. eine **im Sendcloud-Panel** erstellte Retoure), bleibt
+  alles exakt wie bisher — der Panel-Retouren-Use-Case ist unberührt. Für die
+  extern erzeugte Richtung wird die `sendcloud_parcel_id` bewusst verworfen,
+  sonst hinge der Live-Status des alten Labels an der Express-Sendung; sie
+  zeigt korrekt **„Kein Live-Status"** (Sendcloud kennt das Paket nicht).
+- **Anzeige:** `normCarrier` prüft „EXPRESS" **vor** „DHL" (sonst kollabiert
+  das Badge zu „DHL"), eigener Filter-Eintrag im Carrier-Dropdown.
+- **Unberührt:** Der `sendcloud-status-sync`-Cron überschreibt eine vorhandene
+  `tracking_number` ohnehin nie (`if (!b.tracking_number …`) und flippt nur bei
+  echter Carrier-Bewegung (`transit`/`delivered`) — ein nie eingeliefertes
+  Label bleibt `announced` und löst nichts aus. Express-Sendungen bekommen
+  daher **keinen** Auto-Statuswechsel; „Als versendet markieren" bzw. der
+  Statuswechsel bleiben dort manuell.
+- **Migration:** `supabase/supabase-bookings-tracking-carrier-express.sql`
+  (idempotent) erweitert die beiden CHECK-Constraints um `'DHL Express'`.
+  **Pflicht** — ohne sie scheitert das Speichern der Auswahl an der
+  Constraint-Verletzung (der Rest läuft unverändert weiter).
+
 #### Spalten-Layout + Auto-Archiv (Stand 2026-07-16)
 Die Seite ist keine flache Liste mehr, sondern ein **Status-Board**: von links
 nach rechts **Angekündigt → Unterwegs → Zugestellt → Problem** (Konstante
@@ -8783,6 +8827,15 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   auf **„Nur Entwürfe vorschlagen"**. Empfehlung: die ersten Tage im
   Entwurfs-Modus mitlesen, dann auf Hybrid schalten. Details siehe
   „Kundenanfragen automatisch beantworten".
+- **DHL-Express-Carrier — Migration auszuführen:**
+  `supabase/supabase-bookings-tracking-carrier-express.sql` (idempotent,
+  erweitert die CHECK-Constraints `bookings_tracking_carrier_check` +
+  `bookings_return_tracking_carrier_check` um `'DHL Express'`; keine
+  Datenänderung). Ohne sie läuft alles wie bisher, nur die neue Auswahl
+  „DHL Express" scheitert beim Speichern. Danach bei bereits per Express
+  versendeten Buchungen den Carrier einmal auf „DHL Express" umstellen, damit
+  der Verfolgungs-Link aufs richtige Portal zeigt. Siehe „DHL Express — extern
+  erzeugte Etiketten".
 - **Unvollständige Rückgabe — Migration auszuführen:**
   `supabase/supabase-return-open-items.sql` (idempotent, additiv: Tabelle
   `booking_return_open_items`). Ohne sie läuft der Rückgabe-Flow **exakt wie

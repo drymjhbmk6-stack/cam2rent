@@ -6,6 +6,14 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, escapeHtml } from '@/lib/format-utils';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { useToast } from '@/components/admin/ui/FeedbackProvider';
+import { ALLOWED_CARRIERS, type TrackingCarrier } from '@/lib/tracking-url';
+
+/** Beispiel-Trackingnummer je Carrier (nur Platzhalter im Eingabefeld). */
+const CARRIER_PLACEHOLDER: Record<TrackingCarrier, string> = {
+  DHL: 'z.B. 00340434172822390523',
+  'DHL Express': 'z.B. 1234567890',
+  DPD: 'z.B. 01234567890123',
+};
 
 interface Booking {
   id: string;
@@ -113,7 +121,7 @@ export default function AdminVersandPage() {
   // Ship modal state
   const [shipModal, setShipModal] = useState<Booking | null>(null);
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [carrier, setCarrier] = useState<'DHL' | 'DPD'>('DHL');
+  const [carrier, setCarrier] = useState<TrackingCarrier>('DHL');
   const [shipping, setShipping] = useState(false);
   const [shipError, setShipError] = useState('');
 
@@ -621,7 +629,7 @@ export default function AdminVersandPage() {
             <div>
               <label className="block text-sm font-heading font-semibold text-brand-black mb-2">Paketdienstleister</label>
               <div className="flex gap-3">
-                {(['DHL', 'DPD'] as const).map((c) => (
+                {ALLOWED_CARRIERS.map((c) => (
                   <button key={c} onClick={() => setCarrier(c)}
                     className={`flex-1 py-2.5 text-sm font-heading font-semibold rounded-btn border transition-colors ${carrier === c ? 'bg-brand-black text-white border-brand-black' : 'bg-white text-brand-steel border-brand-border hover:bg-brand-bg'}`}>
                     {c}
@@ -632,7 +640,7 @@ export default function AdminVersandPage() {
             <div>
               <label className="block text-sm font-heading font-semibold text-brand-black mb-2">Tracking-Nummer</label>
               <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-                placeholder={carrier === 'DHL' ? 'z.B. 00340434172822390523' : 'z.B. 01234567890123'}
+                placeholder={CARRIER_PLACEHOLDER[carrier]}
                 className="w-full px-4 py-3 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
             </div>
             {shipError && <p className="text-sm text-red-600 font-body">{shipError}</p>}

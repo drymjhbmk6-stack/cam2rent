@@ -35,6 +35,11 @@ export interface SendungEntry {
 
 type Row = Record<string, unknown>;
 
+/** Trackingnummern vergleichbar machen (Leerzeichen/Gross-Kleinschreibung egal). */
+function normTracking(v: unknown): string {
+  return typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() : '';
+}
+
 export async function GET() {
   const user = await getCurrentAdminUser();
   if (!user) {
@@ -101,15 +106,43 @@ export async function GET() {
 
   const entries: SendungEntry[] = [];
   const dbFallbackRows: Row[] = [];
+  // Richtungen, die pro Buchung NICHT aus Sendcloud kommen, sondern aus der DB
+  // (extern erzeugtes Etikett, z.B. DHL Express — Sendcloud kann das nicht).
+  const manualDirections = new Map<string, Set<'outbound' | 'return'>>();
 
   for (const r of bookingRows) {
     const parcels = orderMap.get(String(r.id));
     if (parcels && parcels.length > 0) {
       const base = baseOf(r);
+      // Die in der Buchung hinterlegte Trackingnummer ist die massgebliche
+      // Sendung. Weicht sie von ALLEN Sendcloud-Paketen dieser Richtung ab,
+      // wurde das Etikett ausserhalb von Sendcloud erzeugt (DHL Express) bzw.
+      // das Sendcloud-Label nie eingeliefert → dann gilt der DB-Stand, und die
+      // ungenutzten Sendcloud-Labels werden nicht mehr angezeigt.
+      // Stimmt sie ueberein (Normalfall) ODER ist keine hinterlegt (z.B. eine
+      // im Sendcloud-Panel erstellte Retoure), bleibt alles wie bisher.
+      const manual = new Set<'outbound' | 'return'>();
+      for (const dir of ['outbound', 'return'] as const) {
+        const dbNum = normTracking(
+          dir === 'outbound' ? (r.tracking_number as string) : (r.return_tracking_number as string),
+        );
+        if (!dbNum) continue;
+        const ofDir = parcels.filter((p) => (p.isReturn ? 'return' : 'outbound') === dir);
+        if (ofDir.length > 0 && !ofDir.some((p) => normTracking(p.trackingNumber) === dbNum)) {
+          manual.add(dir);
+        }
+      }
+      if (manual.size > 0) {
+        manualDirections.set(String(r.id), manual);
+        dbFallbackRows.push(r);
+      }
+
       for (const p of parcels) {
+        const dir: 'outbound' | 'return' = p.isReturn ? 'return' : 'outbound';
+        if (manual.has(dir)) continue; // ungenutztes Sendcloud-Label ausblenden
         entries.push({
           ...base,
-          direction: p.isReturn ? 'return' : 'outbound',
+          direction: dir,
           carrier: p.carrier,
           trackingNumber: p.trackingNumber,
           trackingUrl: p.trackingUrl,
@@ -129,9 +162,18 @@ export async function GET() {
   const parcelIds: number[] = [];
   for (const r of dbFallbackRows) {
     const base = baseOf(r);
-    const outParcel = r.sendcloud_parcel_id != null ? Number(r.sendcloud_parcel_id) : null;
+    // Steht die Buchung nur wegen einer extern erzeugten Sendung hier, wird
+    // ausschliesslich diese Richtung gebaut — die andere kam schon aus
+    // Sendcloud und wuerde sonst doppelt erscheinen. Zusaetzlich wird die
+    // sendcloud_parcel_id verworfen: sie gehoert zum ungenutzten Label und
+    // wuerde dessen (falschen) Live-Status an die externe Sendung haengen.
+    const manual = manualDirections.get(String(r.id));
+    const wantOut = !manual || manual.has('outbound');
+    const wantRet = !manual || manual.has('return');
+
+    const outParcel = manual ? null : r.sendcloud_parcel_id != null ? Number(r.sendcloud_parcel_id) : null;
     const outTracking = (r.tracking_number as string) ?? null;
-    if (outParcel || outTracking) {
+    if (wantOut && (outParcel || outTracking)) {
       if (outParcel) parcelIds.push(outParcel);
       fallbackEntries.push({
         ...base, direction: 'outbound', carrier: (r.tracking_carrier as string) ?? null,
@@ -139,9 +181,9 @@ export async function GET() {
         parcelId: outParcel, statusMessage: null, category: 'unknown',
       });
     }
-    const retParcel = r.sendcloud_return_parcel_id != null ? Number(r.sendcloud_return_parcel_id) : null;
+    const retParcel = manual ? null : r.sendcloud_return_parcel_id != null ? Number(r.sendcloud_return_parcel_id) : null;
     const retTracking = (r.return_tracking_number as string) ?? null;
-    if (retParcel || retTracking) {
+    if (wantRet && (retParcel || retTracking)) {
       if (retParcel) parcelIds.push(retParcel);
       fallbackEntries.push({
         ...base, direction: 'return', carrier: (r.return_tracking_carrier as string) ?? null,

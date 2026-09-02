@@ -1,18 +1,21 @@
 /**
- * Tracking-URL-Helper fuer DHL und DPD.
+ * Tracking-URL-Helper fuer DHL, DHL Express und DPD.
  *
  * Eine einzige Quelle der Wahrheit. Wird genutzt von:
  *  - app/api/admin/ship-booking/route.ts (Versand-Workflow)
  *  - app/api/admin/booking/[id]/route.ts (manuelles Korrigieren in Buchungsdetail)
  *
- * cam2rent verschickt aktuell ausschliesslich mit DHL und DPD (siehe
- * components/ShippingLogos.tsx + Versand-Workflow). Andere Carrier
- * bewusst nicht hinterlegt — bei Bedarf hier ergaenzen.
+ * cam2rent verschickt mit DHL und DPD (Sendcloud-Etikett) sowie — fuer
+ * Eil-Sendungen — mit DHL Express. Express-Etiketten kann Sendcloud NICHT
+ * erzeugen; sie werden direkt bei DHL gekauft und die Trackingnummer im
+ * Buchungsdetail manuell eingetragen. DHL Express hat ein eigenes
+ * Verfolgungs-Portal (das Paket-Portal kennt Express-Nummern nicht).
+ * Andere Carrier bewusst nicht hinterlegt — bei Bedarf hier ergaenzen.
  */
 
-export type TrackingCarrier = 'DHL' | 'DPD';
+export type TrackingCarrier = 'DHL' | 'DHL Express' | 'DPD';
 
-export const ALLOWED_CARRIERS: ReadonlyArray<TrackingCarrier> = ['DHL', 'DPD'];
+export const ALLOWED_CARRIERS: ReadonlyArray<TrackingCarrier> = ['DHL', 'DHL Express', 'DPD'];
 
 export function isAllowedCarrier(value: unknown): value is TrackingCarrier {
   return typeof value === 'string' && (ALLOWED_CARRIERS as ReadonlyArray<string>).includes(value);
@@ -28,8 +31,12 @@ export function isAllowedCarrier(value: unknown): value is TrackingCarrier {
 export function buildTrackingUrl(carrier: string, trackingNumber: string): string {
   const clean = trackingNumber.trim();
   if (carrier === 'DPD') {
-    return `https://www.dpd.com/de/de/empfangen/sendungsverfolgung/?parcelId=${clean}`;
+    return `https://www.dpd.com/de/de/empfangen/sendungsverfolgung/?parcelId=${encodeURIComponent(clean)}`;
   }
-  // DHL (Standard / Fallback)
-  return `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${clean}`;
+  if (carrier === 'DHL Express') {
+    // Eigenes Express-Portal — das Paket-Portal (piececode) findet Express-Nummern nicht.
+    return `https://www.dhl.com/de-de/home/tracking/tracking-express.html?submit=1&tracking-id=${encodeURIComponent(clean)}`;
+  }
+  // DHL Paket (Standard / Fallback)
+  return `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodeURIComponent(clean)}`;
 }
