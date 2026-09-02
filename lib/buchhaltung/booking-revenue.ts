@@ -26,6 +26,21 @@
  * Bezahlt-Haken im Dashboard — die `invoices`-Zeile; ohne sie greift der
  * Prefix-Fallback aus `lib/buchhaltung/store-invoice.ts`.
  *
+ * ── Offene Nachzahlung (Bestellbearbeitung) ────────────────────────────────
+ * Wird eine Buchung nachtraeglich teurer (`booking_edit`), steigt `price_total`
+ * sofort auf den neuen Gesamtbetrag — das Geld ist aber erst da, wenn der
+ * Kunde den Stripe-Zahlungslink bezahlt hat. Die `invoices`-Zeile bleibt dabei
+ * auf "bezahlt" (nur der Betrag wird nachgezogen), die Buchung galt also als
+ * voll bezahlt, obwohl die Differenz noch aussteht. Deshalb zieht eine OFFENE
+ * Nachzahlung (`adjustment_status` 'pending_payment' | 'payment_link_failed')
+ * den noch nicht geflossenen Betrag wieder ab. Sobald der Stripe-Webhook auf
+ * 'paid' flippt, zaehlt der volle Betrag.
+ *
+ * Die umgekehrte Richtung (`refund_pending` = Erstattung noch nicht
+ * ausgefuehrt) wird bewusst NICHT gegengerechnet: `price_total` ist dort
+ * bereits gesenkt, der Umsatz also eher zu niedrig — konservativ und damit
+ * unkritisch.
+ *
  * ── Stornierte Buchungen ───────────────────────────────────────────────────
  * Wurden bisher komplett ausgeblendet — auch die einbehaltene Stornogebuehr
  * (bei < 3 Tagen 90 % des Mietpreises). Jetzt zaehlt der einbehaltene Betrag
@@ -52,6 +67,10 @@ export interface BookingRevenueRow {
   refund_note?: string | null;
   status?: string | null;
   payment_intent_id?: string | null;
+  /** Nachzahlung/Erstattung aus der Bestellbearbeitung (booking_edit). */
+  adjustment_status?: string | null;
+  /** Betrag der Anpassung (positiv = Nachzahlung, negativ = Erstattung). */
+  adjustment_amount?: number | null;
 }
 
 export interface RevenueSplit {
@@ -75,8 +94,12 @@ export interface BookingRevenue {
   discountCut: RevenueSplit;
   /** Abzug je Kategorie durch Rueckerstattung. */
   refundCut: RevenueSplit;
+  /** Abzug je Kategorie durch eine noch NICHT bezahlte Nachzahlung. */
+  pendingCut: RevenueSplit;
   discountTotal: number;
   refundTotal: number;
+  /** Summe von `pendingCut` — noch offener Teil des Gesamtbetrags. */
+  pendingTotal: number;
   /** Summe von `net` — bei kind='cancelled_retained' der Einbehalt. */
   total: number;
 }
@@ -135,6 +158,23 @@ function applyWaterfall(
   return left;
 }
 
+/**
+ * Noch nicht geflossener Teil einer Nachzahlung aus der Bestellbearbeitung.
+ *
+ * Nur POSITIVE Anpassungen zaehlen: bei einer Erstattung ist `adjustment_amount`
+ * negativ (siehe booking_edit) und `price_total` bereits gesenkt.
+ * 'payment_link_failed' zaehlt mit — der Link kam nie beim Kunden an, das Geld
+ * ist also erst recht nicht da.
+ */
+export function pendingAdjustmentAmount(
+  row: Pick<BookingRevenueRow, 'adjustment_status' | 'adjustment_amount'>,
+): number {
+  const st = (row.adjustment_status ?? '').toString().toLowerCase();
+  if (st !== 'pending_payment' && st !== 'payment_link_failed') return 0;
+  const amount = num(row.adjustment_amount);
+  return amount > 0 ? r2(amount) : 0;
+}
+
 export function computeBookingRevenue(
   row: BookingRevenueRow,
   opts?: { invoicePaid?: boolean | null; hasRefundColumn?: boolean },
@@ -151,6 +191,9 @@ export function computeBookingRevenue(
   const hasPriceTotal =
     priceTotalRaw !== null && priceTotalRaw !== undefined && Number.isFinite(Number(priceTotalRaw));
   const refund = Math.max(0, num(row.refund_amount));
+  // Noch offene Nachzahlung: in `price_total` schon enthalten, aber nicht
+  // geflossen — wird unten wieder abgezogen (Zufluss-Prinzip).
+  const pending = pendingAdjustmentAmount(row);
 
   const skip = (skipReason: BookingRevenueSkipReason): BookingRevenue => ({
     counts: false,
@@ -160,8 +203,10 @@ export function computeBookingRevenue(
     net: emptySplit(),
     discountCut: emptySplit(),
     refundCut: emptySplit(),
+    pendingCut: emptySplit(),
     discountTotal: 0,
     refundTotal: 0,
+    pendingTotal: 0,
     total: 0,
   });
 
@@ -172,7 +217,7 @@ export function computeBookingRevenue(
     const refundColumnAvailable = opts?.hasRefundColumn !== false;
     const noteSet = typeof row.refund_note === 'string' && row.refund_note.trim().length > 0;
     const documented = refundColumnAvailable && (noteSet || refund > 0);
-    const retained = r2(Math.max(0, priceTotal - refund));
+    const retained = r2(Math.max(0, priceTotal - refund - pending));
     if (!documented || retained <= 0) return skip('cancelled');
     return {
       counts: true,
@@ -181,8 +226,10 @@ export function computeBookingRevenue(
       net: emptySplit(),
       discountCut: emptySplit(),
       refundCut: emptySplit(),
+      pendingCut: emptySplit(),
       discountTotal: 0,
       refundTotal: r2(refund),
+      pendingTotal: pending,
       total: retained,
     };
   }
@@ -191,6 +238,7 @@ export function computeBookingRevenue(
   const net: RevenueSplit = { ...gross };
   const discountCut = emptySplit();
   const refundCut = emptySplit();
+  const pendingCut = emptySplit();
 
   // 1) Explizite Rabatt-Felder — anteilig auf Miete + Zubehoer (Haftung und
   //    Versand werden typischerweise nicht rabattiert).
@@ -242,6 +290,13 @@ export function computeBookingRevenue(
     applyWaterfall(net, refundCut, refund, ['rental', 'accessories', 'haftung', 'shipping']);
   }
 
+  // 4) Offene Nachzahlung: steckt bereits in `price_total` (Schritt 2 hat den
+  //    Umsatz darauf normiert), ist aber noch nicht geflossen. Gleicher
+  //    Wasserfall wie bei der Erstattung, damit keine Kategorie negativ wird.
+  if (pending > 0) {
+    applyWaterfall(net, pendingCut, pending, ['rental', 'accessories', 'haftung', 'shipping']);
+  }
+
   const total = sumSplit(net);
   return {
     counts: total > 0,
@@ -251,8 +306,10 @@ export function computeBookingRevenue(
     net,
     discountCut,
     refundCut,
+    pendingCut,
     discountTotal: sumSplit(discountCut),
     refundTotal: sumSplit(refundCut),
+    pendingTotal: sumSplit(pendingCut),
     total,
   };
 }

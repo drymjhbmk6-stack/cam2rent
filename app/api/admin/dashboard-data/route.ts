@@ -507,6 +507,44 @@ export async function GET() {
       // Dashboard laeuft ohne die offenen Positionen weiter.
     }
 
+    // ── Offene Nachzahlungen (Bestellbearbeitung) ───────────────────────────
+    // Wird eine Buchung nachtraeglich teurer, bekommt der Kunde einen Stripe-
+    // Zahlungslink. Zahlt er nicht, faellt das bisher nirgends auf: die
+    // Rechnung steht weiter auf "bezahlt" (nur der Betrag wurde nachgezogen),
+    // es gibt keinen offenen Posten und keine Mahnung. Deshalb hier als eigene
+    // Aufgabe — bewusst OHNE Status-Filter (auch eine abgeschlossene Buchung
+    // kann eine offene Nachzahlung haben; das Geld fehlt trotzdem).
+    // Eigener defensiver Block: fehlt die Migration, bleibt das Dashboard heil.
+    const openAdjustments: Array<{
+      id: string; customer_name: string; product_name: string;
+      amount: number; status: string; created_at: string | null;
+      user_id: string | null;
+    }> = [];
+    try {
+      const { data: adjRows } = await supabase
+        .from('bookings')
+        .select('id, customer_name, product_name, adjustment_amount, adjustment_status, created_at, user_id')
+        .eq('is_test', testMode)
+        .in('adjustment_status', ['pending_payment', 'payment_link_failed'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+      for (const b of adjRows ?? []) {
+        const amount = Number(b.adjustment_amount ?? 0);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        openAdjustments.push({
+          id: b.id as string,
+          customer_name: (b.customer_name as string) ?? '',
+          product_name: (b.product_name as string) ?? '',
+          amount,
+          status: (b.adjustment_status as string) ?? '',
+          created_at: (b.created_at as string | null) ?? null,
+          user_id: (b.user_id as string | null) ?? null,
+        });
+      }
+    } catch {
+      // Migration ausstehend o.ae. — Dashboard laeuft ohne diese Aufgabe weiter.
+    }
+
     // ── Trend-Deltas + 14-Tage-Sparkline (Dashboard 2.0) ─────────────────────
     // Vorperioden-Vergleich + tägliche Umsatz-/Buchungs-Serie. Eigener
     // allSettled-Block: schlägt hier etwas fehl, bleiben die Kernwerte oben
@@ -586,7 +624,7 @@ export async function GET() {
 
       camera_utilization: { products: utilizationProducts },
 
-      action_queue: { items: actionQueueItems, verifications: pendingVerifications, coordinations, open_returns: openReturns },
+      action_queue: { items: actionQueueItems, verifications: pendingVerifications, coordinations, open_returns: openReturns, open_adjustments: openAdjustments },
     };
 
     return NextResponse.json(data);

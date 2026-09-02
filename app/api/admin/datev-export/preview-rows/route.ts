@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
 
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
-  const previewCols = 'id, product_name, customer_name, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, payment_intent_id, status, created_at';
+  const previewCols = 'id, product_name, customer_name, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, adjustment_status, adjustment_amount, payment_intent_id, status, created_at';
   // Optionale Spalten, die je nach ausstehender Migration fehlen koennen.
-  const OPTIONAL_PREVIEW_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note'];
+  const OPTIONAL_PREVIEW_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note', ', adjustment_status', ', adjustment_amount'];
   const buildPreviewQuery = (cols: string) => supabase
     .from('bookings')
     .select(cols)
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   let hasRefundColumn = true;
   let { data: bookings, error: previewErr } = await buildPreviewQuery(previewCols);
-  if (previewErr && /refund_amount|refund_note|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(previewErr.message)) {
+  if (previewErr && /refund_amount|refund_note|early_bird_discount|special_discount|adjustment_status|adjustment_amount|column|schema cache|PGRST/i.test(previewErr.message)) {
     hasRefundColumn = false;
     let stripped = previewCols;
     for (const c of OPTIONAL_PREVIEW_COLS) stripped = stripped.replace(c, '');
@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
     discount_amount: number | null; duration_discount: number | null;
     loyalty_discount: number | null; early_bird_discount: number | null;
     special_discount: number | null; refund_amount: number | null;
-    refund_note: string | null; payment_intent_id: string | null;
+    refund_note: string | null;
+    adjustment_status: string | null; adjustment_amount: number | null;
+    payment_intent_id: string | null;
     status: string | null; created_at: string;
   };
   const previewRows = (bookings ?? []) as unknown as PreviewRow[];

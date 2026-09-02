@@ -124,12 +124,12 @@ export async function computeEuerData(
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
-  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, coupon_code, status, delivery_mode, payment_intent_id, created_at';
+  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, adjustment_status, adjustment_amount, coupon_code, status, delivery_mode, payment_intent_id, created_at';
   // Optionale Spalten, die je nach ausstehender Migration fehlen koennen
-  // (refund_amount/refund_note / early_bird_discount / special_discount). Beim
-  // Schema-Fehler werden sie aus der Select-Liste gestrippt und der Query
-  // wiederholt.
-  const OPTIONAL_BOOKING_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note'];
+  // (refund_amount/refund_note / early_bird_discount / special_discount /
+  // adjustment_status+adjustment_amount). Beim Schema-Fehler werden sie aus der
+  // Select-Liste gestrippt und der Query wiederholt.
+  const OPTIONAL_BOOKING_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note', ', adjustment_status', ', adjustment_amount'];
   // KEIN Status-Filter mehr in SQL: welche Buchung Umsatz erzeugt, entscheidet
   // ausschliesslich computeBookingRevenue() — inkl. stornierter Buchungen mit
   // einbehaltener Stornogebuehr und unbezahlter Belege (Zufluss-Prinzip).
@@ -144,7 +144,7 @@ export async function computeEuerData(
 
   let hasRefundColumn = true;
   let bookings = await fetchAllRows(buildBookingQuery(bookingCols));
-  if (bookings.error && /refund_amount|refund_note|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookings.error)) {
+  if (bookings.error && /refund_amount|refund_note|early_bird_discount|special_discount|adjustment_status|adjustment_amount|column|schema cache|PGRST/i.test(bookings.error)) {
     // Migration(en) noch nicht durch — ohne die optionalen Spalten weiterlaufen
     // (die betroffenen Werte werden dann als 0 behandelt).
     let stripped = bookingCols;
@@ -163,7 +163,9 @@ export async function computeEuerData(
     price_total: number | null; discount_amount: number | null;
     duration_discount: number | null; loyalty_discount: number | null;
     early_bird_discount: number | null; special_discount: number | null;
-    refund_amount: number | null; refund_note: string | null; coupon_code: string | null;
+    refund_amount: number | null; refund_note: string | null;
+    adjustment_status: string | null; adjustment_amount: number | null;
+    coupon_code: string | null;
     status: string | null; delivery_mode: string | null;
     payment_intent_id: string | null; created_at: string | null;
   };
@@ -239,9 +241,15 @@ export async function computeEuerData(
         date: dateIso,
         description: `${bookingId} · ${productName} · Storno-Einbehalt`,
         amount: rev.total,
-        note: rev.refundTotal > 0
-          ? `gezahlt ${Number(b.price_total ?? 0).toFixed(2)} EUR − ${rev.refundTotal.toFixed(2)} EUR erstattet`
-          : `gezahlt ${Number(b.price_total ?? 0).toFixed(2)} EUR − keine Erstattung`,
+        note: (() => {
+          const gross = Number(b.price_total ?? 0).toFixed(2);
+          const parts: string[] = [];
+          if (rev.refundTotal > 0) parts.push(`${rev.refundTotal.toFixed(2)} EUR erstattet`);
+          if (rev.pendingTotal > 0.005) parts.push(`${rev.pendingTotal.toFixed(2)} EUR Nachzahlung offen`);
+          return parts.length
+            ? `gezahlt ${gross} EUR − ${parts.join(' − ')}`
+            : `gezahlt ${gross} EUR − keine Erstattung`;
+        })(),
       });
       continue;
     }
@@ -253,10 +261,13 @@ export async function computeEuerData(
     haftung += rev.net.haftung;
     shipping += rev.net.shipping;
 
-    const buildNote = (gross: number, discountCut: number, refundCut: number): string | undefined => {
+    const buildNote = (
+      gross: number, discountCut: number, refundCut: number, pendingCut: number,
+    ): string | undefined => {
       const parts: string[] = [];
       if (discountCut > 0.005) parts.push(`${discountCut.toFixed(2)} EUR Rabatt${couponNote}`);
       if (refundCut > 0.005) parts.push(`${refundCut.toFixed(2)} EUR Erstattung`);
+      if (pendingCut > 0.005) parts.push(`${pendingCut.toFixed(2)} EUR Nachzahlung offen`);
       return parts.length ? `brutto ${gross.toFixed(2)} EUR − ${parts.join(' − ')}` : undefined;
     };
 
@@ -266,7 +277,7 @@ export async function computeEuerData(
         date: dateIso,
         description: `${bookingId} · ${productName} · ${days} ${days === 1 ? 'Tag' : 'Tage'} ab ${rentalFromShort}`,
         amount: rev.net.rental,
-        note: buildNote(rev.gross.rental, rev.discountCut.rental, rev.refundCut.rental),
+        note: buildNote(rev.gross.rental, rev.discountCut.rental, rev.refundCut.rental, rev.pendingCut.rental),
       });
     }
     if (rev.net.accessories > 0 || rev.gross.accessories > 0) {
@@ -275,7 +286,7 @@ export async function computeEuerData(
         date: dateIso,
         description: `${bookingId} · Zubehör/Set`,
         amount: rev.net.accessories,
-        note: buildNote(rev.gross.accessories, rev.discountCut.accessories, rev.refundCut.accessories),
+        note: buildNote(rev.gross.accessories, rev.discountCut.accessories, rev.refundCut.accessories, rev.pendingCut.accessories),
       });
     }
     if (rev.net.haftung > 0 || rev.gross.haftung > 0) {
@@ -284,7 +295,7 @@ export async function computeEuerData(
         date: dateIso,
         description: `${bookingId} · Haftungsschutz`,
         amount: rev.net.haftung,
-        note: buildNote(rev.gross.haftung, rev.discountCut.haftung, rev.refundCut.haftung),
+        note: buildNote(rev.gross.haftung, rev.discountCut.haftung, rev.refundCut.haftung, rev.pendingCut.haftung),
       });
     }
     if (rev.net.shipping > 0 || rev.gross.shipping > 0) {
@@ -293,7 +304,7 @@ export async function computeEuerData(
         date: dateIso,
         description: `${bookingId} · Versand`,
         amount: rev.net.shipping,
-        note: buildNote(rev.gross.shipping, rev.discountCut.shipping, rev.refundCut.shipping),
+        note: buildNote(rev.gross.shipping, rev.discountCut.shipping, rev.refundCut.shipping, rev.pendingCut.shipping),
       });
     }
   }

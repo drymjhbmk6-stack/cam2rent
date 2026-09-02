@@ -733,6 +733,18 @@ interface OpenReturnTask {
   total_value: number | null;
 }
 
+/** Nachzahlung aus der Bestellbearbeitung, die der Kunde noch nicht bezahlt hat. */
+interface OpenAdjustmentTask {
+  id: string;
+  customer_name: string;
+  product_name: string;
+  amount: number;
+  /** 'pending_payment' = Link verschickt, 'payment_link_failed' = kein Link erzeugt. */
+  status: string;
+  created_at: string | null;
+  user_id: string | null;
+}
+
 /** Kontext, den der Termin-Dialog zum Vorbefüllen + für die Mail braucht. */
 interface CoordContext {
   id: string;
@@ -1079,6 +1091,7 @@ export function ActionQueueWidget({ data, loading }: {
     verifications?: VerificationTask[];
     coordinations?: CoordinationTask[];
     open_returns?: OpenReturnTask[];
+    open_adjustments?: OpenAdjustmentTask[];
   } | null;
   loading: boolean;
 }) {
@@ -1151,6 +1164,29 @@ export function ActionQueueWidget({ data, loading }: {
     bucket: o.due_date ? bucketForDays(daysUntilDue(o.due_date, today)) : 0,
     bookingId: o.booking_id,
     openReturnId: o.id,
+  }));
+
+  // Offene Nachzahlungen aus der Bestellbearbeitung. Die Rechnung steht
+  // weiterhin auf "bezahlt" (nur der Betrag wurde nachgezogen) — ohne diese
+  // Aufgabe faellt eine nicht bezahlte Nachzahlung nirgends auf.
+  // weight 1 → direkt nach den Verifizierungen, Bucket "Heute" (Geld fehlt).
+  const openAdjustmentRows: QueueRow[] = (data?.open_adjustments ?? []).map((a) => ({
+    key: `adj-${a.id}`,
+    customerName: a.customer_name || 'Kunde',
+    detail: a.status === 'payment_link_failed'
+      ? `⚠ Nachzahlung ${formatCurrency(a.amount)} — Zahlungslink fehlgeschlagen, manuell einfordern`
+      : `💶 Nachzahlung ${formatCurrency(a.amount)} offen · ${a.product_name || 'Buchung'}`,
+    action: {
+      label: '💶 Nachzahlung prüfen',
+      href: `/admin/buchungen/${a.id}`,
+      color: C.yellow,
+      weight: 1,
+    },
+    sortDate: '',
+    dueDate: '',
+    bucket: 0,
+    customerId: a.user_id,
+    bookingId: a.id,
   }));
 
   // Verknüpfte Bestellungen (gemeinsamer Versand/Retoure): pro Buchung die
@@ -1386,7 +1422,7 @@ export function ActionQueueWidget({ data, loading }: {
   // innerhalb eines Buckets nach Datum, dann nach Dringlichkeit (weight).
   // Verifizierungen haben leeres sortDate + weight 0 → stehen im Heute-Bucket
   // ganz oben.
-  const rows: QueueRow[] = [...verificationRows, ...coordinationRows, ...openReturnRows, ...bookingRows]
+  const rows: QueueRow[] = [...verificationRows, ...coordinationRows, ...openReturnRows, ...openAdjustmentRows, ...bookingRows]
     .filter((r) => !doneIds.has(r.key))
     .sort((x, y) =>
       x.bucket - y.bucket ||
@@ -1672,6 +1708,7 @@ export function WidgetRenderer({ widgetId, data, loading }: {
       verifications?: VerificationTask[];
       coordinations?: CoordinationTask[];
       open_returns?: OpenReturnTask[];
+      open_adjustments?: OpenAdjustmentTask[];
     } | null} loading={loading} />;
   }
 

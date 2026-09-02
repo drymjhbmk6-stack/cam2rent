@@ -50,17 +50,19 @@ export async function GET(req: NextRequest) {
       payment_intent_id?: string | null;
       refund_amount?: number | null;
       refund_note?: string | null;
+      adjustment_status?: string | null;
+      adjustment_amount?: number | null;
     }> | null = null;
     let bookingsError: { message: string } | null = null;
     {
       const withCameras = await supabase
         .from('bookings')
-        .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, cameras, payment_intent_id, refund_amount, refund_note')
+        .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, cameras, payment_intent_id, refund_amount, refund_note, adjustment_status, adjustment_amount')
         .eq('is_test', false)
         .gte('created_at', fromIso)
         .lte('created_at', toIso)
         .order('created_at', { ascending: false });
-      if (withCameras.error && /cameras|refund_amount|refund_note|column|schema cache|PGRST/i.test(withCameras.error.message)) {
+      if (withCameras.error && /cameras|refund_amount|refund_note|adjustment_status|adjustment_amount|column|schema cache|PGRST/i.test(withCameras.error.message)) {
         const retry = await supabase
           .from('bookings')
           .select('id, product_name, price_total, status, created_at, days, rental_from, rental_to, payment_intent_id')
@@ -207,7 +209,7 @@ export async function GET(req: NextRequest) {
     const chartFromIso = getBerlinDayStartFromDateString(chartFrom) ?? `${chartFrom}T00:00:00Z`;
     const { data: chartBookings } = await supabase
       .from('bookings')
-      .select('id, price_total, status, payment_intent_id, refund_amount, refund_note, created_at')
+      .select('id, price_total, status, payment_intent_id, refund_amount, refund_note, adjustment_status, adjustment_amount, created_at')
       .eq('is_test', false)
       .gte('created_at', chartFromIso);
     const chartRows = (chartBookings ?? []) as Array<BookingRevenueRow & { id?: string; created_at?: string | null }>;

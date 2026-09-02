@@ -1648,6 +1648,16 @@ export async function PATCH(
       } catch (stripeErr) {
         console.error('[booking-edit] Stripe-Zahlungslink fehlgeschlagen:', stripeErr);
         adjustmentStatus = 'payment_link_failed';
+        // WICHTIG: auch hier die adjustment_*-Spalten schreiben. Ohne sie waere
+        // die offene Nachzahlung nirgends nachvollziehbar — `price_total` ist
+        // bereits erhoeht, die EÜR wuerde den Betrag als geflossen zaehlen und
+        // im Dashboard erschiene keine Aufgabe.
+        await writeAdjustment({
+          adjustment_amount: diff,
+          adjustment_status: 'payment_link_failed',
+          adjustment_note: `Nachzahlung ${diff.toFixed(2)} € — Zahlungslink fehlgeschlagen, manuell einfordern — ${reason}`.slice(0, 500),
+          notes: `${upd.notes as string} | ⚠ Nachzahlung ${diff.toFixed(2)} € — Zahlungslink fehlgeschlagen, manuell einfordern`,
+        });
         await createAdminNotification(supabase, {
           type: 'payment_failed',
           title: `Nachzahlungs-Link fehlgeschlagen (${id})`,

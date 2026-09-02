@@ -29,6 +29,8 @@ interface Booking {
   special_discount: number;
   refund_amount: number;
   refund_note: string | null;
+  adjustment_status: string | null;
+  adjustment_amount: number | null;
   payment_intent_id: string | null;
   status: string;
   created_at: string;
@@ -100,9 +102,9 @@ export async function GET(req: NextRequest) {
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
   // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
-  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, payment_intent_id, status, created_at';
+  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, early_bird_discount, special_discount, refund_amount, refund_note, adjustment_status, adjustment_amount, payment_intent_id, status, created_at';
   // Optionale Spalten, die je nach ausstehender Migration fehlen koennen.
-  const OPTIONAL_DATEV_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note'];
+  const OPTIONAL_DATEV_COLS = [', early_bird_discount', ', special_discount', ', refund_amount', ', refund_note', ', adjustment_status', ', adjustment_amount'];
   const buildDatevQuery = (cols: string) => supabase
     .from('bookings')
     .select(cols)
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest) {
 
   let hasRefundColumn = true;
   let { data: bookings, error: bookingsError } = await buildDatevQuery(datevCols);
-  if (bookingsError && /refund_amount|refund_note|early_bird_discount|special_discount|column|schema cache|PGRST/i.test(bookingsError.message)) {
+  if (bookingsError && /refund_amount|refund_note|early_bird_discount|special_discount|adjustment_status|adjustment_amount|column|schema cache|PGRST/i.test(bookingsError.message)) {
     hasRefundColumn = false;
     // Migration(en) noch nicht durch — ohne die optionalen Spalten exportieren
     // (die betroffenen Werte zaehlen dann als 0).

@@ -4134,6 +4134,71 @@ C2R-2631-005 (EÜR 32,90 € vs. gezahlt 24,67 €).
   listet die Buchungen mit inkonsistenten Feldern. **Keine Datenreparatur nötig**
   — die Reports normieren selbst.
 
+### Offene Nachzahlung mindert den Umsatz + wird sichtbar (Stand 2026-09-02)
+**Symptom:** Buchung C2R-2635-006 wurde über „Bestellung bearbeiten" von 25,52 €
+auf 33,42 € erhöht, der Kunde bekam einen Stripe-Zahlungslink über 7,90 €. In der
+Rechnungsliste stand die Buchung danach mit **33,42 € als „Bezahlt"** — obwohl nur
+25,52 € geflossen sind.
+
+**Ursache:** `booking_edit` erhöht `bookings.price_total` sofort und zieht über
+`syncInvoiceAmountForBooking` den Rechnungsbetrag nach — **den Zahlstatus aber
+bewusst nicht** (die Originalzahlung war ja echt). `computeBookingRevenue` normiert
+den Umsatz auf `price_total` und fragt „bezahlt?" nur an der `invoices`-Zeile →
+EÜR, DATEV, USt-Vorbereitung, Monatsabschluss und das Buchhaltungs-Cockpit zählten
+die vollen 33,42 € als Einnahme. Verstoß gegen das Zufluss-Prinzip (§ 11 EStG);
+zahlt der Kunde nie, bleibt die Zahl dauerhaft zu hoch.
+
+**Fix — drei Teile, keine Migration** (die `adjustment_*`-Spalten existieren seit
+`supabase-bookings-edit-adjustment.sql`):
+- **`lib/buchhaltung/booking-revenue.ts`:** neuer Export
+  `pendingAdjustmentAmount(row)` — eine **offene** Nachzahlung
+  (`adjustment_status` `pending_payment` | `payment_link_failed`, Betrag > 0) wird
+  wie eine Erstattung per Wasserfall (Miete → Zubehör → Haftung → Versand) vom
+  realisierten Umsatz abgezogen; im Storno-Zweig sinkt der Einbehalt entsprechend
+  (`price_total − refund − pending`). Neue Ergebnis-Felder `pendingCut`/
+  `pendingTotal` (additiv, Konsumenten müssen sie nicht lesen). Sobald der
+  Stripe-Webhook auf `paid` flippt, zählt automatisch der volle Betrag.
+  ⚠️ Die **Gegenrichtung** (`refund_pending` = Erstattung noch nicht abgeflossen)
+  wird bewusst NICHT gegengerechnet: `price_total` ist dort bereits gesenkt, der
+  Umsatz also eher zu niedrig — konservativ und damit unkritisch.
+- **Konsumenten** laden `adjustment_status`/`adjustment_amount` mit (jeweils im
+  bestehenden OPTIONAL-Spalten-Retry-Muster): `lib/buchhaltung/euer-data.ts`
+  (+ Item-Notiz „− X EUR Nachzahlung offen"), `datev-export` + `preview-rows`,
+  `buchhaltung/dashboard`. `ust-vorbereitung` + `period-close` laufen über
+  `computeEuerData()` und ziehen automatisch nach. Der Vorperioden-Vergleich im
+  Cockpit bleibt bewusst grob (selektiert wie bisher auch kein `refund_amount`).
+- **Stripe-Abgleich — neue Stufe 1c** in `lib/buchhaltung/stripe-sync.ts`: Der
+  Nachzahlungs-Link trägt `metadata.booking_type='price_adjustment'` +
+  `booking_id`, landet aber in **keiner** `bookings`-Spalte → Stufe 1 griff nicht
+  und die Zahlung blieb als „Stripe-Zahlung ohne Buchung" liegen. Wird jetzt wie
+  eine Verlängerung zugeordnet (`matchSource='adjustment'`, **kein**
+  `hasOtherLink`-Check — eine Nachzahlung ist eine legitime Zusatzzahlung, keine
+  Doppelzahlung). Bestand heilt beim nächsten Sync-Lauf.
+- **Dashboard-Aufgabe:** `GET /api/admin/dashboard-data` liefert neu
+  `action_queue.open_adjustments` (eigener defensiver Block, **bewusst ohne
+  Status-Filter** — auch eine abgeschlossene Buchung kann eine offene Nachzahlung
+  haben, das Geld fehlt trotzdem). `ActionQueueWidget` rendert daraus eine Karte
+  „💶 Nachzahlung X € offen" in Spalte **Heute** (`weight 1`, Link auf die
+  Buchung); bei `payment_link_failed` mit ⚠-Hinweis „manuell einfordern".
+  Bewusst **kein** Ein-Klick-Abhaken — erledigt wird die Aufgabe durch den
+  Zahlungseingang (Webhook) bzw. eine bewusste Admin-Entscheidung in der Buchung.
+
+**Mitgefixt:** Der `payment_link_failed`-Zweig in `booking_edit` schrieb die
+`adjustment_*`-Spalten **gar nicht** (nur eine Notification) — die offene
+Nachzahlung war damit weder in der EÜR noch im Dashboard sichtbar, obwohl
+`price_total` bereits erhöht war. Jetzt wird sie wie im Erfolgsfall dokumentiert
+(inkl. Notiz-Eintrag an der Buchung).
+
+**Wo der Admin die Nachzahlung sieht:** `/admin/buchungen/[id]` → Reiter
+**Bearbeiten** → **Bestellung & Haftung** → „Bestellung bearbeiten" zeigt
+„Letzte Anpassung: Nachzahlung offen (Zahlungslink verschickt) (X €)"; der
+Zahlungslink selbst steht in den Notizen (Reiter Übersicht). Neu zusätzlich als
+Aufgabe im Dashboard.
+
+Tests: `lib/buchhaltung/__tests__/booking-revenue.test.ts` (+6 Fälle — u.a. der
+Realfall 33,42 € / 7,90 € offen, „keine Kategorie negativ", Storno-Einbehalt,
+`refund_pending` ohne Gegenrechnung).
+
 ### Weitere Finanz-Korrekturen im selben Durchgang (Stand 2026-08-29)
 - **Gutschriften mindern jetzt den Umsatz.** `credit-notes/[id]/approve` löste
   den Stripe-Refund aus, schrieb aber nichts an die Buchung — und `credit_notes`
@@ -8340,6 +8405,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-bookings-edit-adjustment.sql`~~ (Bestellbearbeitung: `bookings.adjustment_payment_link_id/amount/status/note` — liegt in `erledigte supabase/`, war irrtümlich noch unter „Noch offen" gelistet)
 - ~~`supabase-profiles-country.sql`~~ (Lieferländer-Beschränkung nur DE / `profiles.country` — am 2026-07-15 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-customer-login-history.sql`~~ (Login-Verlauf pro Kundenkonto — am 2026-06-21 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-profiles-deviating-addresses.sql`~~ (Abweichende Liefer-/Rechnungsadresse pro Kunde — am 2026-06-10 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -9215,7 +9281,6 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
 - **Zuweisungs-RPC neu ausführen (Versand-Status `delivered`):** `supabase/supabase-unit-assignment-tester-isolation.sql` neu ausführen (idempotentes `CREATE OR REPLACE FUNCTION` — keine Datenänderung). Die RPC zählt jetzt `delivered` + `picked_up` als belegend. Ohne erneutes Ausführen könnte eine an einen Kunden zugestellte Kamera (`delivered`) bei einer überlappenden Neubuchung fälschlich erneut zugewiesen werden. `supabase/supabase-camera-unit-assignment.sql` ist ebenfalls angepasst — wird mit den ohnehin offenen Multi-Kamera-Migrationen mit ausgeführt.
-- **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Verkauf-Migration auszuführen:** `supabase/supabase-bookings-verkauf.sql` (idempotent). Legt `bookings.booking_type` (DEFAULT `miete`) + `bookings.sale_items` JSONB an. Ohne Migration liefert `POST /api/admin/verkauf` 503; die Miet-Ansichten laufen per defensivem Fallback unverändert weiter. Empfohlen ASAP ausführen, damit das Verkaufs-Tool nutzbar ist.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**
   `supabase/supabase-bookings-cameras.sql` (Spalte `bookings.cameras JSONB`),

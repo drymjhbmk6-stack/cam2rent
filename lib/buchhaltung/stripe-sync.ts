@@ -132,7 +132,7 @@ export async function runStripeSync({
         // Doppelzahlung" gesetzt. Die UI-Detection im GET-Endpoint erkennt das
         // zusaetzlich und bietet den Quick-Button "Als Doppelzahlung erfassen".
         let booking: { id: string; is_test?: boolean | null } | null = null;
-        let matchSource: 'pi' | 'extension' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null =
+        let matchSource: 'pi' | 'extension' | 'adjustment' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null =
           null;
         let duplicateNote: string | null = null;
 
@@ -198,6 +198,32 @@ export async function runStripeSync({
             if (b?.id) {
               booking = b;
               matchSource = 'extension';
+            }
+          }
+        }
+
+        // Stufe 1c: Nachzahlung aus der Bestellbearbeitung.
+        // Wird eine Buchung nachtraeglich teurer (booking_edit), entsteht ein
+        // EIGENER Stripe-Zahlungslink mit metadata.booking_type
+        // 'price_adjustment' + metadata.booking_id. Der zugehoerige
+        // PaymentIntent landet in KEINER bookings-Spalte — Stufe 1 greift also
+        // nicht und die Zahlung blieb "ohne Buchung" haengen.
+        // Wie bei der Verlaengerung KEIN hasOtherLink-Check: die Original-
+        // Zahlung derselben Buchung ist bereits verknuepft, die Nachzahlung ist
+        // eine legitime ZUSATZzahlung, keine Doppelzahlung.
+        if (!booking) {
+          const isAdjustment = pi.metadata?.booking_type === 'price_adjustment';
+          const adjBookingId =
+            typeof pi.metadata?.booking_id === 'string' ? pi.metadata.booking_id.trim() : '';
+          if (isAdjustment && adjBookingId) {
+            const { data: b } = await supabase
+              .from('bookings')
+              .select('id, is_test')
+              .eq('id', adjBookingId)
+              .maybeSingle();
+            if (b?.id) {
+              booking = b;
+              matchSource = 'adjustment';
             }
           }
         }

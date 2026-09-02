@@ -3,6 +3,7 @@ import {
   computeBookingRevenue,
   isBookingPaid,
   buildInvoicePaidMap,
+  pendingAdjustmentAmount,
   type BookingRevenueRow,
 } from '../booking-revenue';
 
@@ -212,5 +213,73 @@ describe('buildInvoicePaidMap', () => {
       base({ price_rental: 100, price_total: 100, payment_intent_id: 'pi_x' }),
       { invoicePaid: map.has('A') ? map.get('A') : null },
     ).total).toBe(100);
+  });
+});
+
+describe('offene Nachzahlung (Bestellbearbeitung)', () => {
+  it('erkennt nur positive, noch offene Anpassungen', () => {
+    expect(pendingAdjustmentAmount({ adjustment_status: 'pending_payment', adjustment_amount: 7.9 })).toBe(7.9);
+    expect(pendingAdjustmentAmount({ adjustment_status: 'payment_link_failed', adjustment_amount: 7.9 })).toBe(7.9);
+    // Bezahlt → zaehlt voll, kein Abzug mehr.
+    expect(pendingAdjustmentAmount({ adjustment_status: 'paid', adjustment_amount: 7.9 })).toBe(0);
+    // Erstattung: negativer Betrag, price_total ist bereits gesenkt.
+    expect(pendingAdjustmentAmount({ adjustment_status: 'refund_pending', adjustment_amount: -7.9 })).toBe(0);
+    expect(pendingAdjustmentAmount({ adjustment_status: null, adjustment_amount: null })).toBe(0);
+  });
+
+  it('zieht die offene Nachzahlung vom Umsatz ab (Zufluss-Prinzip)', () => {
+    // Realfall C2R-2635-006: 25,52 EUR gezahlt, Buchung auf 33,42 EUR erhoeht,
+    // 7,90 EUR Nachzahlung noch offen.
+    const rev = computeBookingRevenue(base({
+      price_rental: 27.43, price_accessories: 0, price_haftung: 0, shipping_price: 5.99,
+      price_total: 33.42,
+      adjustment_status: 'pending_payment', adjustment_amount: 7.9,
+    }));
+    expect(rev.counts).toBe(true);
+    expect(rev.total).toBe(25.52);
+    expect(rev.pendingTotal).toBe(7.9);
+    // Wasserfall: zuerst die Miete.
+    expect(rev.net.rental).toBe(19.53);
+    expect(rev.net.shipping).toBe(5.99);
+  });
+
+  it('zaehlt den vollen Betrag, sobald die Nachzahlung bezahlt ist', () => {
+    const rev = computeBookingRevenue(base({
+      price_rental: 27.43, shipping_price: 5.99, price_total: 33.42,
+      adjustment_status: 'paid', adjustment_amount: 7.9,
+    }));
+    expect(rev.total).toBe(33.42);
+    expect(rev.pendingTotal).toBe(0);
+  });
+
+  it('laesst keine Kategorie negativ werden', () => {
+    const rev = computeBookingRevenue(base({
+      price_rental: 10, price_total: 10,
+      adjustment_status: 'pending_payment', adjustment_amount: 40,
+    }));
+    expect(rev.total).toBe(0);
+    expect(rev.net.rental).toBe(0);
+    expect(rev.counts).toBe(false);
+  });
+
+  it('mindert auch den Storno-Einbehalt', () => {
+    const rev = computeBookingRevenue(base({
+      status: 'cancelled', price_rental: 100, price_total: 100,
+      refund_amount: 50, refund_note: 'Kulanz',
+      adjustment_status: 'pending_payment', adjustment_amount: 20,
+    }));
+    expect(rev.kind).toBe('cancelled_retained');
+    expect(rev.total).toBe(30);
+    expect(rev.pendingTotal).toBe(20);
+  });
+
+  it('rechnet eine noch nicht ausgefuehrte Erstattung NICHT gegen', () => {
+    // price_total ist bereits gesenkt — konservativ, kein Aufschlag.
+    const rev = computeBookingRevenue(base({
+      price_rental: 80, price_total: 80,
+      adjustment_status: 'refund_pending', adjustment_amount: -20,
+    }));
+    expect(rev.total).toBe(80);
+    expect(rev.pendingTotal).toBe(0);
   });
 });
