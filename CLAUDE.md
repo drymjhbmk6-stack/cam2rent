@@ -1204,6 +1204,40 @@ wenn jemand die Kategorie in die Whitelist einträgt (`NIEMALS_AUTOMATISCH` in
     etwas. Bewusste Architekturentscheidung: eine falsche Auskunft ist
     korrigierbar, eine fälschlich angelegte oder stornierte Buchung bewegt
     Inventar und Geld.
+- **Ton: schreibt als Person, nicht als System (Stand 2026-09-02).** Die
+  Antworten klangen nach Terminbot — auf „ich bin erst gg halb 7 bei dir" kam
+  „Kein Problem, dann bis gleich gegen 18:15 oder 18:30 Uhr!": korrekt, aber
+  die Uhrzeit in Ziffern zurückgerechnet und nur bestätigt. Ursache: der
+  System-Prompt hatte für Fakten/Werkzeuge sehr genaue Regeln, für den **Ton**
+  aber nur eine Zeile („Freundlich, knapp, konkret"). Drei Änderungen:
+  - **`SYSTEM_PROMPT` ist jetzt `buildSystemPrompt(absenderName)`**
+    (`lib/ai/kundenanfrage-antwort.ts`) mit zwei neuen Abschnitten: **„Wer du
+    bist"** (ein Mensch aus dem Team, Ich-Form statt „wir"/„Serviceabteilung",
+    optional mit Namen) und **„Wie du schreibst"** — zuerst auf den Menschen
+    reagieren, **die Sprache des Kunden spiegeln** („halb 7" bleibt „halb 7",
+    Angaben nie ins saubere Format umrechnen), nicht wiederholen was der Kunde
+    gerade schrieb, Länge an der Frage bemessen, höchstens ein Ausrufezeichen,
+    keine Emojis, Formulierungen variieren. Dazu ein Abschnitt **„Beispiele —
+    nur für den TON"** mit vier Gut/Schlecht-Paaren (der Screenshot-Fall ist
+    das erste). ⚠️ Die Zahlen dort sind erfunden und im Prompt ausdrücklich als
+    „nie verwenden" markiert. Mitgefixt: die Preisauskunfts-Punkte 1–6 sind
+    jetzt als **Inhalts-Checkliste** gekennzeichnet, nicht als Gliederung
+    (sonst widersprächen sie der neuen „kein Formular"-Regel), und das
+    Beispiel „Moin! Ja, …" hätte eine zweite Anrede gelehrt (die Anrede setzt
+    das Mail-Template) → entfernt.
+  - **Absender-Name** `ai_reply_config.absender_name` (String, Default leer,
+    `normalizeAiReplyConfig` lässt nur Buchstaben/Leerzeichen/`.'-` durch, 40
+    Zeichen). Gesetzt → die KI schreibt unter diesem Namen UND die Grußformel
+    der Mail wird persönlich. Eingabefeld in `AiReplySection`. **Keine
+    Migration** (lebt im bestehenden Setting-JSON).
+  - **`sendInboundReply` nimmt optional `signOffName`** (`lib/email.ts`):
+    „Viele Grüße / <Name> von cam2rent" statt „dein cam2rent Team". Ohne den
+    Parameter unverändert. Damit im selben Thread nicht mal eine Person und
+    mal „das Team" antwortet, setzt die **manuelle** Admin-Antwort
+    (`POST /api/admin/nachrichten/[conversationId]`) den **Vornamen des
+    antwortenden Mitarbeiters** (`admin_users.name`, Helper `firstName`),
+    Fallback `absender_name`, Fallback wie bisher. Der Vorschau-Endpoint und
+    `lib/email-previews.ts` sind unberührt (zeigen die neutrale Variante).
 - **Kosten:** ca. 0,01–0,03 € pro beantworteter Anfrage (Claude Sonnet, die
   Wissensbasis ist der größte Teil des Prompts). Bei 300 Anfragen/Monat ≤ 10 €.
 - **Bewusst NICHT im Scope:** Die KI führt **keine Aktionen** aus (keine

@@ -250,6 +250,28 @@ export default function AiReplySection() {
             </div>
           )}
 
+          {/* Absender-Name */}
+          <div>
+            <label htmlFor="ai-name" className="block text-sm font-heading font-semibold text-slate-200 mb-1">
+              Name, unter dem geantwortet wird (optional)
+            </label>
+            <input
+              id="ai-name"
+              type="text"
+              maxLength={40}
+              value={cfg.absender_name}
+              onChange={(e) => setCfg({ ...cfg, absender_name: e.target.value })}
+              placeholder="z.B. Lennart"
+              className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-base text-slate-100 focus:border-cyan-500 focus:outline-none"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Steht in der Grußformel (&bdquo;Viele Grüße, {cfg.absender_name.trim() || '…'} von
+              cam2rent&ldquo;) und die KI schreibt in der Ich-Form unter diesem Namen.
+              Leer = wie bisher &bdquo;dein cam2rent Team&ldquo;. Antwortest du selbst,
+              wird stattdessen dein eigener Vorname aus dem Mitarbeiterkonto verwendet.
+            </p>
+          </div>
+
           {/* Eigene Hinweise */}
           <div>
             <label htmlFor="ai-extra" className="block text-sm font-heading font-semibold text-slate-200 mb-1">

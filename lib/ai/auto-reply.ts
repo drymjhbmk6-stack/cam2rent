@@ -172,6 +172,7 @@ export async function verarbeiteKundenanfrage(
       wissensbasis,
       buchungen,
       extraKontext: config.extra_context,
+      absenderName: config.absender_name,
       // Zuordnung fuer das Buchungs-Werkzeug: kommt ausschliesslich aus der
       // Konversation, nie aus dem Text der KI oder des Kunden.
       kontext: {
@@ -312,6 +313,7 @@ export async function verarbeiteKundenanfrage(
         inReplyToMessageId: inReplyTo,
         fromAddress: conv.inbox_address ?? undefined,
         autoReply: true,
+        signOffName: config.absender_name || undefined,
       });
       if (resendId && msgId) {
         await supabase.from('messages').update({ email_message_id: resendId }).eq('id', msgId);

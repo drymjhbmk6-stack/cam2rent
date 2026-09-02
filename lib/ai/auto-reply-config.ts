@@ -95,6 +95,12 @@ export interface AiReplyConfig {
   max_auto_replies_per_day: number;
   /** Zusaetzlicher Kontext fuer die KI (Tonfall, Hinweise, Aktionen). */
   extra_context: string;
+  /**
+   * Vorname, unter dem die KI schreibt (z.B. "Lennart"). Erscheint in der
+   * Grussformel der Antwort und macht aus dem "Team" eine Person. Leer =
+   * bisheriges Verhalten ("dein cam2rent Team").
+   */
+  absender_name: string;
 }
 
 export const DEFAULT_AI_REPLY_CONFIG: AiReplyConfig = {
@@ -112,6 +118,7 @@ export const DEFAULT_AI_REPLY_CONFIG: AiReplyConfig = {
   max_auto_replies_per_thread: 2,
   max_auto_replies_per_day: 30,
   extra_context: '',
+  absender_name: '',
 };
 
 function clampNumber(raw: unknown, fallback: number, min: number, max: number): number {
@@ -151,6 +158,11 @@ export function normalizeAiReplyConfig(raw: unknown): AiReplyConfig {
       clampNumber(p.max_auto_replies_per_day, DEFAULT_AI_REPLY_CONFIG.max_auto_replies_per_day, 0, 500),
     ),
     extra_context: typeof p.extra_context === 'string' ? p.extra_context.slice(0, 4000) : '',
+    // Nur ein schlichter Name — er landet in der Grussformel einer Kundenmail.
+    absender_name:
+      typeof p.absender_name === 'string'
+        ? p.absender_name.replace(/[^\p{L} .'-]/gu, '').trim().slice(0, 40)
+        : '',
   };
 }
 

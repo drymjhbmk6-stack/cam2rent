@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendNewMessageNotificationToCustomer, sendInboundReply } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { loadAiReplyConfig } from '@/lib/ai/auto-reply-config';
 
 const SCHEMA_ERROR = /column|schema cache|PGRST|does not exist/i;
 
@@ -53,6 +54,11 @@ async function loadConversation(
     .eq('id', conversationId)
     .maybeSingle();
   return (fallback.data as ConvRow | null) ?? null;
+}
+
+/** Vorname aus dem Anzeigenamen eines Mitarbeiters ("Max Muster" -> "Max"). */
+function firstName(name: string | null | undefined): string {
+  return (name ?? '').trim().split(/\s+/)[0] ?? '';
 }
 
 /**
@@ -277,6 +283,11 @@ export async function POST(
           bookingId: conv.booking_id,
           inReplyToMessageId: inReplyTo,
           fromAddress: conv.inbox_address ?? undefined,
+          // Damit der Kunde im selben Thread nicht mal von einer Person und
+          // mal vom "Team" hoert: der antwortende Admin unterschreibt mit
+          // seinem Vornamen, sonst greift der in der KI-Config hinterlegte
+          // Name (leer = bisheriges "dein cam2rent Team").
+          signOffName: firstName(me?.name) || (await loadAiReplyConfig(supabase)).absender_name || undefined,
         });
         if (resendId) {
           await supabase
