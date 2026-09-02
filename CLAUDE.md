@@ -4729,6 +4729,15 @@ Bestellung erhalten, bis das Guthaben aufgebraucht ist.
   nie auf die alte `increment_coupon_if_available`-RPC zurück, sondern meldet
   bei fehlender RPC eine Admin-Notification zur manuellen Korrektur statt das
   Guthaben stillschweigend falsch zu verbuchen).
+- ⚠️ **Bugfix 2026-09-02:** Solange die Migration fehlte, liess sich
+  **gar kein** Gutschein mehr anlegen — die POST-Route schickte
+  `remaining_value` bei jedem Insert mit (auch als `null` bei Prozent-
+  Gutscheinen), und der defensive Retry haengte an
+  `remainingValueToStore != null`, griff also genau dort nicht. Die Spalte
+  wird jetzt nur noch bei tatsaechlich gesetztem Restguthaben mitgeschickt
+  (sonst greift der DB-Default NULL), der Retry am Inhalt des Insert-Objekts.
+  **Merksatz:** bei optionalen Spalten nie ein `null` mitschicken, wenn die
+  Migration noch aussteht — PostgREST bricht auch daran ab.
 
 ### Aktion `not_combinable` — analog zu Coupons (Stand 2026-05-20)
 Aktionen in `admin_settings.product_discounts` (JSON-Array) haben jetzt ein optionales `not_combinable: boolean`-Feld. Default `false` — bestehende Aktionen verhalten sich wie bisher.
