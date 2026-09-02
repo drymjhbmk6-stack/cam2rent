@@ -97,13 +97,18 @@ export async function POST(req: NextRequest) {
     max_uses: max_uses ? parseInt(max_uses) : null,
     min_order_value: min_order_value ? parseFloat(min_order_value) : null,
     active: active ?? true,
-    remaining_value: remainingValueToStore,
   };
+  // Die Spalte NUR mitschicken, wenn wirklich ein Restguthaben gesetzt wird.
+  // Fehlt die Migration supabase-coupons-remaining-value.sql, bricht schon ein
+  // mitgeschicktes remaining_value: null den Insert ab ("Could not find the
+  // 'remaining_value' column") — dann liesse sich z. B. gar kein
+  // Prozent-Gutschein mehr anlegen.
+  if (remainingValueToStore != null) insertRow.remaining_value = remainingValueToStore;
 
   let { data, error } = await supabase.from('coupons').insert(insertRow).select().single();
   // Defensiv: Migration supabase-coupons-remaining-value.sql evtl. noch nicht
   // ausgeführt — ohne die Spalte einmal ohne Restguthaben-Wert erneut versuchen.
-  if (error && remainingValueToStore != null && /remaining_value|column|schema cache|PGRST/i.test(error.message)) {
+  if (error && 'remaining_value' in insertRow && /remaining_value|column|schema cache|PGRST/i.test(error.message)) {
     delete insertRow.remaining_value;
     ({ data, error } = await supabase.from('coupons').insert(insertRow).select().single());
   }
