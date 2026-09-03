@@ -191,6 +191,9 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/client-errors', perm: 'berichte' },
   { prefix: '/admin/legal', perm: 'system' },
   { prefix: '/admin/einstellungen', perm: 'system' },
+  // Projektablage: zusaetzliche Schicht — das eigentliche Gate ist die
+  // Owner-Pruefung in lib/projektablage.ts (es gibt keinen owner-Perm-Key).
+  { prefix: '/admin/projektablage', perm: 'system' },
 ];
 
 // Spiegel der UI-Permissions auf API-Pfade. Bisher schuetzte die Middleware nur
@@ -305,6 +308,8 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/2fa', perm: 'system' },
   // /api/admin/settings: GET ist public (siehe isPublic oben), POST braucht system
   { prefix: '/api/admin/settings', perm: 'system' },
+  // Projektablage (Owner-only, siehe lib/projektablage.ts:guardOwner)
+  { prefix: '/api/admin/projektablage', perm: 'system' },
 ];
 
 function requiredPermission(pathname: string): string | null {

@@ -8288,6 +8288,92 @@ Gummibärchentüten, Füllmaterial). Kein Zusammenhang mit `accessories`/
     „Extra Akku", je Kamera) unterscheidbar. Auswahl bleibt id-basiert.
 - **Go-Live TODO:** siehe „Noch offen".
 
+### Projektablage — private Datei-Ablage im Admin (Stand 2026-09-03)
+Eigener Bereich `/admin/projektablage` (Sidebar-Sektion **„Privat"**), in dem
+der Owner Projektstände eines **fremden Nebenprojekts** hochlädt, durchsieht und
+wieder herunterlädt. Hat fachlich nichts mit dem Verleih zu tun — nutzt nur die
+vorhandene Admin-Hülle (Login, Design-Tokens, Supabase Storage).
+
+**Modell:** Projekt → Stände (v1, v2, v3 …) → Dateien. Jeder Upload ist ein
+**neuer Stand daneben**, alte bleiben unangetastet. Ordnerstruktur bleibt
+erhalten, alle Dateitypen erlaubt (php, py, Binaries …), Ansicht ist reines
+Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
+
+- **Migration `supabase/supabase-projektablage.sql`** (idempotent): drei Tabellen
+  `projekt_ablage_projekte` / `_staende` / `_dateien`, RLS aktiv **ohne** Policy
+  (nur service_role) + `REVOKE ALL … FROM anon, authenticated` gemäß
+  Sicherheits-Audit. Bucket `projekt-ablage` (privat) wird beim ersten Upload
+  vom Code selbst angelegt; die SQL enthält zusätzlich einen
+  `storage.buckets`-Fallback.
+- **⚠️ Die DB ist die Wahrheit über den Dateibaum, der Storage nur das
+  Blob-Lager.** Der echte relative Pfad (`src/lib/foo.php`) steht in
+  `dateien.rel_pfad`; im Storage liegt die Datei unter
+  `<projekt_id>/<stand_id>/<uuid>`. Grund: `storage.list()` listet nur EINE
+  Ebene pro Aufruf — ein tiefer Baum wäre Dutzende Roundtrips. Nebeneffekt:
+  Path-Traversal ist konstruktiv unmöglich, Umlaute/Leerzeichen/Länge können
+  den Storage nicht stören.
+- **⚠️ Direkt-Upload Browser → Supabase, NICHT über den Server.** Jeder andere
+  Upload im Repo zieht die Datei komplett in den RAM (`Buffer.from(await
+  file.arrayBuffer())`, höchstes Limit sonst 50 MB). Hier erzeugt der Server nur
+  signierte Upload-URLs (`createSignedUploadUrl`), der Browser lädt direkt hoch
+  (`uploadToSignedUrl`, 4 parallel, Batches à 100). **Erster Einsatz dieses
+  Musters im Repo** — bei künftigen Groß-Uploads hier abschauen.
+  Der Upload-Dialog baut sich dafür einen **eigenen** Supabase-Client mit
+  `persistSession: false`: der geteilte `createBrowserClient()` nutzt denselben
+  localStorage-Schlüssel wie der Kunden-Login und würde bei angemeldetem Kunden
+  dessen Token mitschicken.
+- **Ablauf:** `POST …/staende` (Metadaten + Datei-Zeilen) → `POST
+  …/staende/[id]/upload-urls` (Batch) → Direkt-Upload → `POST
+  …/staende/[id]/finalize`. **Finalize glaubt dem Browser nicht**, sondern
+  listet den Storage-Ordner und behält nur, was wirklich dort liegt — sonst
+  hätte ein abgebrochener Upload einen Stand hinterlassen, der vollständig
+  aussieht und Lücken hat. Ist der Storage beim Prüfen nicht erreichbar, wird
+  bewusst nichts verworfen (`storage_nicht_geprueft` in der Antwort).
+- **Abbruch mitten drin:** Der Stand bleibt auf `status='uploading'` und
+  erscheint gedämpft als „unvollständig" mit **Aufräumen**-Knopf (löscht
+  DB-Zeilen + Storage-Objekte). Kein Cron nötig.
+- **Ordner-Upload:** Drop-Zone mit `DataTransferItem.webkitGetAsEntry()`
+  (rekursiv, `readEntries` liefert nur Häppchen → Schleife) + Knopf „Ordner
+  wählen" (`webkitdirectory`) als Fallback. **Ignore-Liste** (`node_modules`,
+  `.git`, `.next`, `__pycache__`, `dist`, `vendor`, Logs …) ist per Häkchen
+  abschaltbar und zeigt „N übersprungen" — ohne sie landen zehntausende
+  Dateien in der Ablage.
+- **Download:** Einzeldatei über Signed-URL-**Redirect** (Datei geht nie durch
+  den Node-Prozess). Ganzer Stand als **Streaming-ZIP** (`lib/projektablage-zip.ts`,
+  neue Dependency **`fflate`** — ~800 KB, keine Sub-Dependencies): Signed URLs in
+  100er-Batches (6 h gültig), Dateien sequenziell durchgereicht, Rückstau über
+  `controller.desiredSize`. Speicherbedarf bleibt bei **einer** Datei, egal wie
+  groß der Stand ist. Bereits komprimierte Endungen (Bilder, Videos, .zip)
+  laufen als `ZipPassThrough` durch, alles andere als `ZipDeflate`. Nicht ladbare
+  Dateien landen als `_FEHLENDE-DATEIEN.txt` im Archiv statt den Download zu
+  zerstören. Kein `Content-Length` → kein Fortschrittsbalken im Browser
+  (bewusster Preis fürs Streaming).
+- **Downloads immer als `attachment`** (`createSignedUrl(..., { download })`):
+  im Bucket liegen `.html`/`.svg`/`.php` im Klartext, die der Supabase-Origin
+  sonst rendern würde.
+- **Owner-only:** `guardOwner()` in **jeder** Route (`me.role !== 'owner'` → 403)
+  — es gibt keinen Owner-Permission-Key, das ist im Repo durchgängig
+  route-intern gelöst. Zusätzlich als `system` in `middleware.ts` (beide
+  Tabellen) **und** in der zweiten Tabelle in `lib/admin-users.ts` gemappt.
+  Der Master-Passwort-Login (`legacy-env`) hat Rolle owner und kommt durch;
+  deshalb steht der Sidebar-Eintrag in einer eigenen `NavSection` **„Privat"**
+  und nicht in „Mein Bereich" (die Gruppe wird nur bei
+  `me.id !== 'legacy-env'` gerendert und wäre dann unsichtbar).
+- **Limits:** 1 GB pro Datei, 5 GB + 5 000 Dateien pro Stand, Pfad max. 400
+  Zeichen / 40 Ebenen. Rate-Limit auf die URL-Ausgabe.
+- **Dateien:** `lib/projektablage-shared.ts` (pure — auch im Browser nutzbar:
+  Sanitizer, Ignore-Liste, Limits, `fmtBytes`), `lib/projektablage.ts`
+  (server-only: Owner-Gate, Bucket, Storage-Aufräumen), `lib/projektablage-zip.ts`,
+  8 Routen unter `app/api/admin/projektablage/…`, Seite
+  `app/admin/projektablage/{page,UploadDialog}.tsx`.
+- **Tests:** `lib/__tests__/projektablage-shared.test.ts` (12 — Sanitizer inkl.
+  Zip-Slip: `../../etc/passwd`, `C:\…`, NUL-Bytes, Tiefe/Länge) +
+  `lib/__tests__/projektablage-zip.test.ts` (4 — echtes Archiv über lokalen
+  HTTP-Server erzeugt und wieder entpackt, inkl. 3-MB-Datei über viele Chunks).
+- **Audit:** `projektablage.projekt_create/_update/_delete`,
+  `projektablage.stand_upload/_delete` (Labels im Aktivitätsprotokoll).
+- **Go-Live TODO:** siehe „Noch offen".
+
 ## Offene Punkte
 
 ### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)
@@ -8881,6 +8967,19 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Nach Abschluss das vollständige Verifikationsskript aus `SECURITY-AUDIT.md`
   Abschnitt 8 einmal am Stück laufen lassen und die Ausgabe zusammen mit dem
   Bericht archivieren — das ist der Nachweis für den Versicherer.
+- **Projektablage — Migration + EINE Dashboard-Einstellung:**
+  1. `supabase/supabase-projektablage.sql` ausführen (idempotent, drei neue
+     Tabellen + Bucket-Fallback). Ohne sie lädt die Seite mit Hinweis, Schreiben
+     liefert 503 — der restliche Admin ist unberührt.
+  2. **⚠️ Supabase-Dashboard → Storage → Settings → „Upload file size limit"
+     erhöhen** (z.B. auf 1 GB). Der Projekt-Default liegt bei 50 MB und
+     übersteuert jedes Bucket-Limit — ohne diesen Schritt scheitert jeder große
+     Upload mit 413, obwohl im Code alles korrekt aussieht. Das ist der
+     wahrscheinlichste Stolperstein beim ersten Test.
+  3. Speicherplatz im Blick behalten: Supabase Pro enthält 100 GB, darüber wird
+     pro GB abgerechnet. Jeder Stand ist eine **volle Kopie** — zehn Stände
+     eines 500-MB-Projekts sind 5 GB. Alte Stände lassen sich einzeln löschen.
+  Siehe „Projektablage — private Datei-Ablage im Admin".
 - **KI-Beantwortung von Kundenanfragen — Migration auszuführen:**
   `supabase/supabase-ai-auto-reply.sql` (idempotent, additiv: 5 Spalten an
   `conversations`, `messages.ai_generated`, ein Teilindex). Ohne sie läuft das

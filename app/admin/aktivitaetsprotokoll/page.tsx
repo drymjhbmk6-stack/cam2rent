@@ -118,6 +118,11 @@ const ACTION_LABELS: Record<string, string> = {
   'nachricht.bulk_delete': 'Mehrere Konversationen gelöscht',
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
+  'projektablage.projekt_create': 'Projekt angelegt (Projektablage)',
+  'projektablage.projekt_update': 'Projekt geändert (Projektablage)',
+  'projektablage.projekt_delete': 'Projekt gelöscht (Projektablage)',
+  'projektablage.stand_upload': 'Projektstand hochgeladen',
+  'projektablage.stand_delete': 'Projektstand gelöscht',
   'env_mode.change': 'Test-/Live-Modus gewechselt',
   'email_template.update': 'E-Mail-Vorlage angepasst',
   'email_template.reset': 'E-Mail-Vorlage zurückgesetzt',
@@ -190,6 +195,7 @@ const ENTITY_LABELS: Record<string, string> = {
   firmware_check: 'Firmware-Check',
   verbrauchsartikel: 'Verbrauchsmaterial',
   nachricht: 'Konversation',
+  projektablage: 'Projektablage',
 };
 
 function humanizeAction(action: string): string {

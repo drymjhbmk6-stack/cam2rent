@@ -136,6 +136,10 @@ const iconVerbrauch = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>
 );
 
+const iconArchive = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+);
+
 // ============================================================
 // Navigation groups
 // ============================================================
@@ -143,6 +147,13 @@ const iconVerbrauch = (
 const MEIN_BEREICH_ITEMS: NavItem[] = [
   { href: '/admin/mein/notizen', label: 'Meine Notizen', icon: iconClipboard },
   { href: '/admin/mein/kalender', label: 'Mein Kalender', icon: iconCalendar },
+];
+
+// Owner-only. Bewusst NICHT in MEIN_BEREICH_ITEMS: diese Gruppe wird nur fuer
+// DB-Konten gerendert (me.id !== 'legacy-env') — beim Master-Passwort-Login
+// waere die Ablage sonst unsichtbar, obwohl der Zugriff erlaubt ist.
+const PRIVAT_ITEMS: NavItem[] = [
+  { href: '/admin/projektablage', label: 'Projektablage', icon: iconArchive },
 ];
 
 const TAGESGESCHAEFT_ITEMS: NavItem[] = [
@@ -254,7 +265,7 @@ const SYSTEM_ITEMS: NavItem[] = [
 // Flache Liste aller Nav-Items — nur zum Auflösen gepinnter Favoriten-Hrefs
 // (href → Item mit Icon/Label/Permission). Reihenfolge egal.
 const ALL_NAV_ITEMS: NavItem[] = [
-  ...MEIN_BEREICH_ITEMS, ...TAGESGESCHAEFT_ITEMS, ...KALENDER_ITEMS, ...VERKAUF_ITEMS,
+  ...MEIN_BEREICH_ITEMS, ...PRIVAT_ITEMS, ...TAGESGESCHAEFT_ITEMS, ...KALENDER_ITEMS, ...VERKAUF_ITEMS,
   ...KUNDEN_ITEMS, ...KATALOG_ITEMS, ...PREISE_ITEMS, ...CONTENT_TOP_ITEMS,
   ...BLOG_ITEMS, ...POSTS_ITEMS, ...REELS_ITEMS,
   ...FINANZEN_ITEMS, ...BERICHTE_ITEMS, ...SYSTEM_ITEMS,
@@ -670,6 +681,9 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me, t
             open={openGroup === 'mein'}
             onToggle={() => toggleGroup('mein')}
           />
+        )}
+        {me?.role === 'owner' && (
+          <NavSection label="Privat" items={PRIVAT_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         )}
         <NavGroupCollapse
           label="Tagesgeschäft"

@@ -33,6 +33,9 @@ export const ADMIN_NAV_INDEX: AdminNavEntry[] = [
   { label: 'Meine Notizen', href: '/admin/mein/notizen', group: 'Mein Bereich', keywords: 'todo aufgaben' },
   { label: 'Mein Kalender', href: '/admin/mein/kalender', group: 'Mein Bereich', keywords: 'termine' },
 
+  // Privat (nur Owner — die Seite lehnt Mitarbeiter serverseitig ab)
+  { label: 'Projektablage', href: '/admin/projektablage', group: 'Privat', keywords: 'dateien upload projekt code archiv zip ordner stand backup' },
+
   // Tagesgeschäft
   { label: 'Tagesgeschäft-Übersicht', href: '/admin/tagesgeschaeft', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'übersicht start' },
   { label: 'Buchungen', href: '/admin/buchungen', group: 'Tagesgeschäft', perm: 'tagesgeschaeft', keywords: 'orders bestellungen miete' },

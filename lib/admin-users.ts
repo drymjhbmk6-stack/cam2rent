@@ -40,6 +40,8 @@ type PermRule = { prefix: string; perm: PermissionKey };
 const PATH_PERMISSIONS: PermRule[] = [
   // System: Mitarbeiter-Unterseite braucht eigene Permission
   { prefix: '/admin/einstellungen/mitarbeiter', perm: 'mitarbeiter_verwalten' },
+  // Projektablage (Owner-only; Perm nur als zweite Schicht)
+  { prefix: '/admin/projektablage', perm: 'system' },
   // Tagesgeschaeft
   { prefix: '/admin/buchungen', perm: 'tagesgeschaeft' },
   { prefix: '/admin/verfuegbarkeit', perm: 'tagesgeschaeft' },

@@ -322,6 +322,18 @@ WITH checks AS (
                           WHERE schemaname='storage' AND tablename='objects'
                             AND policyname='Public read access for damage photos')),
          'Bucket damage-photos (+ signatures) privat, oeffentliche Lese-Policy weg (Audit K-5/N-10)'
+  UNION ALL
+  SELECT 'supabase-projektablage',
+         -- ERLEDIGT nur, wenn alle drei Tabellen da sind UND RLS aktiv ist.
+         -- Die Tabellen allein genuegen nicht: ohne RLS waeren sie mit dem
+         -- anon-Key aus dem Browser lesbar.
+         (   EXISTS (SELECT 1 FROM pg_tables
+                      WHERE tablename='projekt_ablage_projekte' AND rowsecurity)
+         AND EXISTS (SELECT 1 FROM pg_tables
+                      WHERE tablename='projekt_ablage_staende' AND rowsecurity)
+         AND EXISTS (SELECT 1 FROM pg_tables
+                      WHERE tablename='projekt_ablage_dateien' AND rowsecurity)),
+         'Projektablage: 3 Tabellen + RLS. Danach im Dashboard Storage -> Settings das Upload-Limit erhoehen (Default 50 MB)!'
 
 ), info AS (
 
