@@ -23,6 +23,23 @@ export const MAX_PATH_DEPTH = 40;
 export const UPLOAD_URL_BATCH = 100;
 
 /**
+ * Groesste ZIP-Datei, die der Browser beim Upload entpacken darf.
+ *
+ * Das Entpacken laeuft bewusst im Browser (nicht auf dem Server), damit die
+ * bestehende Direkt-Upload-Pipeline unveraendert greift und kein Archiv durch
+ * den RAM des Node-Prozesses wandert. Der Preis: das entpackte Archiv liegt
+ * kurz komplett im Browser-Speicher. 300 MB ist die Grenze, ab der ein Tab
+ * auf schwaecheren Geraeten kippen kann — darueber ist der Ordner-Upload
+ * (Datei fuer Datei, kein Zwischenspeicher) der richtige Weg.
+ */
+export const MAX_ZIP_BYTES = 300 * 1024 * 1024;
+
+/** Heisst diese Datei nach einem ZIP-Archiv? */
+export function isZipFileName(name: string): boolean {
+  return typeof name === 'string' && name.toLowerCase().endsWith('.zip');
+}
+
+/**
  * Ordner/Dateien, die beim Ordner-Upload standardmaessig uebersprungen werden.
  * Ohne diese Liste landen bei einem Node- oder Python-Projekt zehntausende
  * Dateien in der Ablage, die beim naechsten `npm install` ohnehin neu entstehen.

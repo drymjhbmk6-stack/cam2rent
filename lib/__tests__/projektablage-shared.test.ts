@@ -10,6 +10,7 @@ import {
   baseName,
   fmtBytes,
   MAX_PATH_DEPTH,
+  isZipFileName,
 } from '../projektablage-shared';
 
 describe('sanitizeRelPath', () => {
@@ -103,5 +104,20 @@ describe('baseName / fmtBytes', () => {
     expect(fmtBytes(1536)).toBe('1,5 KB');
     expect(fmtBytes(5 * 1024 * 1024)).toBe('5,0 MB');
     expect(fmtBytes(-1)).toBe('—');
+  });
+});
+
+describe('isZipFileName', () => {
+  it('erkennt .zip unabhaengig von Gross-/Kleinschreibung', () => {
+    expect(isZipFileName('projekt.zip')).toBe(true);
+    expect(isZipFileName('Projekt.ZIP')).toBe(true);
+    expect(isZipFileName('a/b/c.Zip')).toBe(true);
+  });
+
+  it('lehnt andere Dateien ab', () => {
+    expect(isZipFileName('projekt.zip.txt')).toBe(false);
+    expect(isZipFileName('archiv.tar.gz')).toBe(false);
+    expect(isZipFileName('zip')).toBe(false);
+    expect(isZipFileName('')).toBe(false);
   });
 });

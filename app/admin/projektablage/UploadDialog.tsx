@@ -7,17 +7,25 @@
  * Der Server bekommt nur die Metadaten zu sehen — anders waeren grosse
  * Dateien nicht machbar, weil jeder serverseitige Upload-Pfad die Datei
  * komplett in den RAM liest.
+ *
+ * ZIP-Archive werden aus demselben Grund ebenfalls im Browser entpackt und
+ * danach als normale Dateiliste durch dieselbe Pipeline geschickt — es gibt
+ * KEINEN serverseitigen Entpack-Pfad.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { unzip } from 'fflate';
 import { Button, Modal } from '@/components/admin/ui';
 import {
   shouldIgnorePath,
   sanitizeRelPath,
+  baseName,
   fmtBytes,
+  isZipFileName,
   UPLOAD_URL_BATCH,
   MAX_STAND_FILES,
+  MAX_ZIP_BYTES,
 } from '@/lib/projektablage-shared';
 
 /** Wie viele Dateien gleichzeitig hochgeladen werden. */
@@ -106,6 +114,43 @@ async function sammleAusEntry(
   }
 }
 
+/**
+ * Entpackt ein ZIP im Browser und liefert die enthaltenen Dateien mit ihrem
+ * Pfad aus dem Archiv. Ordner-Eintraege (Laenge 0, Pfad endet auf '/') fallen
+ * weg — die Ordnerstruktur steckt ohnehin in den Dateipfaden.
+ *
+ * Die Pfade laufen anschliessend durch `sanitizeRelPath` (Zip-Slip-Schutz),
+ * das passiert zentral in `anwendenFilter`.
+ */
+async function entpackeZip(file: File): Promise<GewaehlteDatei[]> {
+  if (file.size > MAX_ZIP_BYTES) {
+    throw new Error(
+      `„${file.name}" ist mit ${fmtBytes(file.size)} zu groß zum Entpacken im Browser ` +
+        `(Grenze: ${fmtBytes(MAX_ZIP_BYTES)}). Bitte stattdessen den Ordner hochladen.`
+    );
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  // Jedes ZIP beginnt mit "PK" — sonst ist es eine umbenannte andere Datei.
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error(`„${file.name}" ist keine gültige ZIP-Datei.`);
+  }
+
+  const entpackt = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(bytes, (err, data) => (err ? reject(err) : resolve(data)));
+  });
+
+  const raus: GewaehlteDatei[] = [];
+  for (const [pfad, inhalt] of Object.entries(entpackt)) {
+    if (pfad.endsWith('/')) continue; // Ordner-Eintrag
+    raus.push({
+      file: new File([inhalt as BlobPart], baseName(pfad)),
+      relPfad: pfad,
+    });
+  }
+  return raus;
+}
+
 export default function UploadDialog({
   projektId,
   projektName,
@@ -123,6 +168,7 @@ export default function UploadDialog({
   const [notiz, setNotiz] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanText, setScanText] = useState('Ordner wird gelesen …');
   const [laeuft, setLaeuft] = useState(false);
   const [fertigeDateien, setFertigeDateien] = useState(0);
   const [fertigeBytes, setFertigeBytes] = useState(0);
@@ -130,6 +176,7 @@ export default function UploadDialog({
   const [statusText, setStatusText] = useState('');
 
   const ordnerRef = useRef<HTMLInputElement>(null);
+  const zipRef = useRef<HTMLInputElement>(null);
   const abbrechenRef = useRef(false);
 
   // Rohliste ohne Filter behalten, damit das Haekchen ohne erneutes
@@ -171,6 +218,46 @@ export default function UploadDialog({
     [anwendenFilter, ignorieren]
   );
 
+  /**
+   * Nimmt die Rohauswahl entgegen und ersetzt enthaltene ZIP-Archive durch
+   * ihren Inhalt. Alles andere wandert unveraendert weiter.
+   */
+  const verarbeiteAuswahl = useCallback(
+    async (roh: GewaehlteDatei[]) => {
+      if (!roh.some((d) => isZipFileName(d.file.name))) {
+        uebernehmen(roh);
+        return;
+      }
+
+      setScanText('Archiv wird entpackt …');
+      setScanning(true);
+      try {
+        const raus: GewaehlteDatei[] = [];
+        for (const eintrag of roh) {
+          if (isZipFileName(eintrag.file.name)) {
+            raus.push(...(await entpackeZip(eintrag.file)));
+          } else {
+            raus.push(eintrag);
+          }
+        }
+        if (raus.length === 0) {
+          setFehler('Das Archiv enthält keine Dateien.');
+        }
+        uebernehmen(raus);
+      } catch (err) {
+        setFehler(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Das Archiv konnte nicht entpackt werden. Ist es passwortgeschützt?'
+        );
+      } finally {
+        setScanning(false);
+        setScanText('Ordner wird gelesen …');
+      }
+    },
+    [uebernehmen]
+  );
+
   function toggleIgnorieren(next: boolean) {
     setIgnorieren(next);
     anwendenFilter(rohRef.current, next);
@@ -181,6 +268,7 @@ export default function UploadDialog({
     setDragActive(false);
     if (laeuft) return;
 
+    setScanText('Ordner wird gelesen …');
     setScanning(true);
     setFehler(null);
     try {
@@ -204,9 +292,9 @@ export default function UploadDialog({
       }
 
       if (raus.length === 0) {
-        setFehler('Es wurden keine Dateien gefunden. Ziehe einen Ordner hinein.');
+        setFehler('Es wurden keine Dateien gefunden. Ziehe einen Ordner oder eine ZIP-Datei hinein.');
       }
-      uebernehmen(raus);
+      await verarbeiteAuswahl(raus);
     } catch {
       setFehler('Der Ordner konnte nicht gelesen werden. Nutze den Knopf „Ordner wählen".');
     } finally {
@@ -221,7 +309,18 @@ export default function UploadDialog({
       file,
       relPfad: file.webkitRelativePath || file.name,
     }));
-    uebernehmen(raus);
+    void verarbeiteAuswahl(raus);
+    e.target.value = '';
+  }
+
+  function handleZipWahl(e: React.ChangeEvent<HTMLInputElement>) {
+    const liste = e.target.files;
+    if (!liste || liste.length === 0) return;
+    const raus: GewaehlteDatei[] = Array.from(liste).map((file) => ({
+      file,
+      relPfad: file.name,
+    }));
+    void verarbeiteAuswahl(raus);
     e.target.value = '';
   }
 
@@ -402,14 +501,29 @@ export default function UploadDialog({
           >
             <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
             <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--admin-text)' }}>
-              {scanning ? 'Ordner wird gelesen …' : 'Projektordner hierher ziehen'}
+              {scanning ? scanText : 'Projektordner oder ZIP-Datei hierher ziehen'}
             </p>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--admin-text-dim)' }}>
-              Die Ordnerstruktur bleibt erhalten.
+              Die Ordnerstruktur bleibt erhalten. ZIP-Archive werden automatisch entpackt.
             </p>
-            <Button variant="secondary" size="sm" onClick={() => ordnerRef.current?.click()}>
-              Ordner wählen
-            </Button>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => ordnerRef.current?.click()}
+                disabled={scanning}
+              >
+                Ordner wählen
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => zipRef.current?.click()}
+                disabled={scanning}
+              >
+                ZIP wählen
+              </Button>
+            </div>
             <input
               ref={ordnerRef}
               type="file"
@@ -417,6 +531,14 @@ export default function UploadDialog({
               onChange={handleOrdnerWahl}
               style={{ display: 'none' }}
               {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+            />
+            <input
+              ref={zipRef}
+              type="file"
+              multiple
+              accept=".zip,application/zip,application/x-zip-compressed"
+              onChange={handleZipWahl}
+              style={{ display: 'none' }}
             />
           </div>
 

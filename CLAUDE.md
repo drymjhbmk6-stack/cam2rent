@@ -8338,6 +8338,25 @@ Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
   `.git`, `.next`, `__pycache__`, `dist`, `vendor`, Logs …) ist per Häkchen
   abschaltbar und zeigt „N übersprungen" — ohne sie landen zehntausende
   Dateien in der Ablage.
+- **ZIP-Upload (Stand 2026-09-03):** Ein ZIP kann per Drop oder Knopf **„ZIP
+  wählen"** gewählt werden und wird **im Browser** entpackt (`unzip` aus
+  `fflate` — schon als Dependency für den ZIP-Download da), danach läuft die
+  Dateiliste durch **exakt dieselbe** Pipeline wie ein Ordner-Upload
+  (Sanitizer → Ignore-Liste → signierte Direkt-Uploads). ⚠️ **Bewusst KEIN
+  serverseitiges Entpacken:** das würde das komplette Archiv in den RAM des
+  Node-Prozesses ziehen und damit genau das Muster brechen, wegen dem der
+  Upload überhaupt am Server vorbeigeht. Der Preis ist, dass das entpackte
+  Archiv kurz im Browser-Speicher liegt → **`MAX_ZIP_BYTES = 300 MB`**
+  (`lib/projektablage-shared.ts`), darüber verweist die Fehlermeldung auf den
+  Ordner-Upload. Vor dem Entpacken ein **Magic-Byte-Check** (`PK`) für eine
+  brauchbare Meldung statt eines fflate-Absturzes; ein passwortgeschütztes
+  Archiv wird abgefangen. Ordner-Einträge (Pfad endet auf `/`) werden
+  verworfen — die Struktur steckt in den Dateipfaden. Der Wurzelordner aus dem
+  Archiv bleibt erhalten (gleiches Verhalten wie beim Ordner-Upload, wo
+  `webkitRelativePath` ihn ebenfalls mitführt). Zip-Slip ist unmöglich, weil
+  jeder Pfad ohnehin durch `sanitizeRelPath` läuft und im Storage nur eine
+  UUID steht. Mischen erlaubt: ZIPs in der Auswahl werden ersetzt, andere
+  Dateien wandern unverändert mit.
 - **Download:** Einzeldatei über Signed-URL-**Redirect** (Datei geht nie durch
   den Node-Prozess). Ganzer Stand als **Streaming-ZIP** (`lib/projektablage-zip.ts`,
   neue Dependency **`fflate`** — ~800 KB, keine Sub-Dependencies): Signed URLs in
@@ -8366,7 +8385,7 @@ Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
   (server-only: Owner-Gate, Bucket, Storage-Aufräumen), `lib/projektablage-zip.ts`,
   8 Routen unter `app/api/admin/projektablage/…`, Seite
   `app/admin/projektablage/{page,UploadDialog}.tsx`.
-- **Tests:** `lib/__tests__/projektablage-shared.test.ts` (12 — Sanitizer inkl.
+- **Tests:** `lib/__tests__/projektablage-shared.test.ts` (14 — Sanitizer inkl.
   Zip-Slip: `../../etc/passwd`, `C:\…`, NUL-Bytes, Tiefe/Länge) +
   `lib/__tests__/projektablage-zip.test.ts` (4 — echtes Archiv über lokalen
   HTTP-Server erzeugt und wieder entpackt, inkl. 3-MB-Datei über viele Chunks).
