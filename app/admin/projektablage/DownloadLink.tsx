@@ -8,10 +8,10 @@
  * Homescreen gestarteten App (Standalone-Modus) zeigt iOS dafuer aber keine
  * Oberflaeche — der Tipp verpufft ohne jede Rueckmeldung.
  *
- * Deshalb: ausserhalb der App bleibt es der schlichte Link (der Browser
- * streamt direkt auf die Platte, kein Speicherverbrauch). In der App wird die
- * Datei per fetch geholt, mit Fortschritt angezeigt und danach ueber das
- * Teilen-Blatt („In Dateien sichern") angeboten. Das Teilen muss auf einen
+ * Deshalb: am Rechner bleibt es der schlichte Link (der Browser streamt
+ * direkt auf die Platte, kein Speicherverbrauch). In der App und generell auf
+ * Handy/Tablet wird die Datei per fetch geholt, mit Fortschritt angezeigt und
+ * danach ueber das Teilen-Blatt („In Dateien sichern") angeboten. Das Teilen muss auf einen
  * eigenen Tipp reagieren, weil Safari `navigator.share` nur innerhalb einer
  * Nutzer-Aktion erlaubt — nach dem asynchronen Laden waere die verstrichen.
  */
@@ -24,6 +24,19 @@ import { fmtBytes } from '@/lib/projektablage-shared';
 const MAX_APP_DOWNLOAD_BYTES = 600 * 1024 * 1024;
 
 type Status = 'idle' | 'laedt' | 'bereit' | 'fehler' | 'zu_gross';
+
+/**
+ * Handy oder Tablet? Dort ist das Teilen-Blatt („In Dateien sichern") der
+ * verlaesslichere Weg als der Browser-Download — auch im Safari-Tab landet
+ * ein Download sonst leicht unbemerkt im Download-Manager. iPadOS meldet sich
+ * als Mac, ist aber am Touch-Screen erkennbar.
+ */
+export function istMobilesGeraet(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
+  return /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+}
 
 export function istStandaloneApp(): boolean {
   if (typeof window === 'undefined') return false;
@@ -61,7 +74,7 @@ interface Props extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'hre
 
 export default function DownloadLink({ href, dateiname, groesseBytes, children, onClick, ...rest }: Props) {
   // Erster Render immer als Link (kein Hydration-Mismatch), danach umschalten.
-  const [standalone, setStandalone] = useState(false);
+  const [appPfad, setAppPfad] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
   const [empfangen, setEmpfangen] = useState(0);
   const [fehler, setFehler] = useState('');
@@ -70,7 +83,7 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
   const objectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setStandalone(istStandaloneApp());
+    setAppPfad(istStandaloneApp() || istMobilesGeraet());
   }, []);
 
   useEffect(() => {
@@ -200,7 +213,7 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
     typeof navigator !== 'undefined' &&
     typeof (navigator as Navigator & { share?: unknown }).share === 'function';
 
-  if (!standalone) {
+  if (!appPfad) {
     return (
       <a href={href} onClick={onClick} {...rest}>
         {children}

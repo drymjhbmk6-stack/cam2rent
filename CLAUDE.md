@@ -8372,9 +8372,11 @@ Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
   App (Standalone-Modus) **gar nichts** — iOS hat dort keinen Download-Manager,
   der Tipp verpufft ohne Rückmeldung (betraf „Als ZIP" **und** jede Einzeldatei
   im Dateibaum). Neue Komponente `app/admin/projektablage/DownloadLink.tsx`:
-  außerhalb der App bleibt es der schlichte Link (Browser streamt direkt auf die
-  Platte); in der App (`navigator.standalone` / `display-mode: standalone`,
-  erst nach dem Mount ermittelt → kein Hydration-Mismatch) holt sie die Datei
+  am Rechner bleibt es der schlichte Link (Browser streamt direkt auf die
+  Platte); in der App (`navigator.standalone` / `display-mode: standalone`)
+  **und generell auf Handy/Tablet** (`istMobilesGeraet`: iPhone/iPad/Android
+  per UA, iPadOS über Mac-UA + Touch; erst nach dem Mount ermittelt → kein
+  Hydration-Mismatch) holt sie die Datei
   per `fetch` mit Fortschritt in ein Modal und bietet sie danach über
   `navigator.share({ files })` an → Teilen-Blatt → „In Dateien sichern".
   ⚠️ **Das Teilen hängt an einem eigenen Tipp** („📥 Sichern / Teilen"), nicht
