@@ -14,6 +14,7 @@ import { useToast, useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { fmtBytes } from '@/lib/projektablage-shared';
 import { fmtDateTimeShort } from '@/lib/format-utils';
 import UploadDialog from './UploadDialog';
+import DownloadLink from './DownloadLink';
 
 interface Projekt {
   id: string;
@@ -133,9 +134,11 @@ function OrdnerZeile({
       })}
 
       {dateien.map((datei) => (
-        <a
+        <DownloadLink
           key={datei.id}
           href={`/api/admin/projektablage/datei/${datei.id}`}
+          dateiname={datei.name}
+          groesseBytes={datei.groesse}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '6px 8px', paddingLeft: 8 + tiefe * 16 + 18,
@@ -151,7 +154,7 @@ function OrdnerZeile({
             {fmtBytes(datei.groesse)}
           </span>
           <span style={{ color: 'var(--admin-accent)', fontSize: 13, flexShrink: 0 }}>⬇</span>
-        </a>
+        </DownloadLink>
       ))}
     </>
   );
@@ -507,9 +510,14 @@ export default function ProjektablageSeite() {
                               <Button variant="secondary" size="sm" onClick={() => oeffneStand(s)}>
                                 Dateien
                               </Button>
-                              <a href={`/api/admin/projektablage/staende/${s.id}/zip`} style={{ textDecoration: 'none' }}>
+                              <DownloadLink
+                                href={`/api/admin/projektablage/staende/${s.id}/zip`}
+                                dateiname={`${aktivesProjekt.name}-v${s.version_nr}.zip`}
+                                groesseBytes={s.bytes_gesamt}
+                                style={{ textDecoration: 'none' }}
+                              >
                                 <Button size="sm">⬇ Als ZIP</Button>
-                              </a>
+                              </DownloadLink>
                             </>
                           )}
                           <Button variant="ghost" size="sm" onClick={() => standLoeschen(s)}>
@@ -535,9 +543,14 @@ export default function ProjektablageSeite() {
               <h2 className="font-heading" style={{ margin: 0, flex: 1, minWidth: 150, fontSize: 18, fontWeight: 700, color: 'var(--admin-heading)' }}>
                 {aktivesProjekt.name} · v{aktiverStand.version_nr}
               </h2>
-              <a href={`/api/admin/projektablage/staende/${aktiverStand.id}/zip`} style={{ textDecoration: 'none' }}>
+              <DownloadLink
+                href={`/api/admin/projektablage/staende/${aktiverStand.id}/zip`}
+                dateiname={`${aktivesProjekt.name}-v${aktiverStand.version_nr}.zip`}
+                groesseBytes={aktiverStand.bytes_gesamt}
+                style={{ textDecoration: 'none' }}
+              >
                 <Button size="sm">⬇ Alles als ZIP</Button>
-              </a>
+              </DownloadLink>
             </div>
 
             <input

@@ -8367,6 +8367,24 @@ Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
   Dateien landen als `_FEHLENDE-DATEIEN.txt` im Archiv statt den Download zu
   zerstören. Kein `Content-Length` → kein Fortschrittsbalken im Browser
   (bewusster Preis fürs Streaming).
+- **Download in der installierten iOS-App (Stand 2026-09-04):** Ein reiner
+  `<a href>` auf eine `attachment`-Antwort tut in der vom Homescreen gestarteten
+  App (Standalone-Modus) **gar nichts** — iOS hat dort keinen Download-Manager,
+  der Tipp verpufft ohne Rückmeldung (betraf „Als ZIP" **und** jede Einzeldatei
+  im Dateibaum). Neue Komponente `app/admin/projektablage/DownloadLink.tsx`:
+  außerhalb der App bleibt es der schlichte Link (Browser streamt direkt auf die
+  Platte); in der App (`navigator.standalone` / `display-mode: standalone`,
+  erst nach dem Mount ermittelt → kein Hydration-Mismatch) holt sie die Datei
+  per `fetch` mit Fortschritt in ein Modal und bietet sie danach über
+  `navigator.share({ files })` an → Teilen-Blatt → „In Dateien sichern".
+  ⚠️ **Das Teilen hängt an einem eigenen Tipp** („📥 Sichern / Teilen"), nicht
+  am ursprünglichen Klick: Safari erlaubt `navigator.share` nur innerhalb einer
+  Nutzer-Aktion, nach dem asynchronen Laden wäre die verstrichen. Ohne
+  Share-API Fallback auf Objekt-URL + `<a download>`. Speicher-Schutz: über
+  600 MB (`MAX_APP_DOWNLOAD_BYTES`) wird in der App nicht geladen, sondern auf
+  Safari/Rechner verwiesen (die Datei müsste komplett in den Browser-Speicher).
+  Nebeneffekt: Server-Fehler (503 Migration, 404 …) werden jetzt als Meldung
+  angezeigt statt als nackte JSON-Seite.
 - **Downloads immer als `attachment`** (`createSignedUrl(..., { download })`):
   im Bucket liegen `.html`/`.svg`/`.php` im Klartext, die der Supabase-Origin
   sonst rendern würde.
