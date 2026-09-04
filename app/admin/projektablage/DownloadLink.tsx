@@ -18,12 +18,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Modal } from '@/components/admin/ui';
-import { fmtBytes } from '@/lib/projektablage-shared';
+import { fmtBytes, zipAbschlussAusTeilen } from '@/lib/projektablage-shared';
 
 /** Oberhalb davon wird in der App nicht in den Speicher geladen. */
 const MAX_APP_DOWNLOAD_BYTES = 600 * 1024 * 1024;
 
 type Status = 'idle' | 'laedt' | 'bereit' | 'fehler' | 'zu_gross';
+
+/**
+ * Ergebnis der Abschluss-Pruefung eines geladenen ZIPs. `eintraege` ist die
+ * Zahl der Eintraege laut Archiv-Ende; fehlt das Ende, war die Uebertragung
+ * unvollstaendig (siehe `zipAbschlussPruefen`).
+ */
+interface ArchivPruefung {
+  eintraege: number;
+}
 
 /**
  * Handy oder Tablet? Dort ist das Teilen-Blatt („In Dateien sichern") der
@@ -67,18 +76,30 @@ interface Props extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'hre
   href: string;
   /** Name, unter dem die Datei gespeichert wird (Fallback zum Header). */
   dateiname: string;
-  /** Bekannte Groesse — nur fuer Fortschritt und Speicher-Schutz. */
+  /**
+   * Bekannte Groesse der Datei, wie sie ankommt — fuer Fortschritt und
+   * Speicher-Schutz. Bei einem Streaming-ZIP ist die Endgroesse unbekannt;
+   * dann stattdessen `archiv` setzen.
+   */
   groesseBytes?: number;
+  /**
+   * Der Download ist ein beim Laden gepacktes ZIP. `inhaltBytes` ist die
+   * Summe der Dateien VOR dem Packen — das Archiv wird deutlich kleiner,
+   * darf also nicht als Fortschritts-Ziel dienen. `dateien` = erwartete
+   * Anzahl, gegen die das Archiv-Ende geprueft wird.
+   */
+  archiv?: { inhaltBytes: number; dateien: number };
   children: React.ReactNode;
 }
 
-export default function DownloadLink({ href, dateiname, groesseBytes, children, onClick, ...rest }: Props) {
+export default function DownloadLink({ href, dateiname, groesseBytes, archiv, children, onClick, ...rest }: Props) {
   // Erster Render immer als Link (kein Hydration-Mismatch), danach umschalten.
   const [appPfad, setAppPfad] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
   const [empfangen, setEmpfangen] = useState(0);
   const [fehler, setFehler] = useState('');
   const [datei, setDatei] = useState<File | null>(null);
+  const [pruefung, setPruefung] = useState<ArchivPruefung | null>(null);
   const abbruchRef = useRef<AbortController | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -101,19 +122,25 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
       objectUrlRef.current = null;
     }
     setDatei(null);
+    setPruefung(null);
     setEmpfangen(0);
     setFehler('');
     setStatus('idle');
   }
 
+  // Obergrenze fuer den Speicher-Schutz: bei einem Archiv ist der Inhalt vor
+  // dem Packen die sichere Obergrenze (das ZIP wird nicht groesser).
+  const erwarteteObergrenze = archiv ? archiv.inhaltBytes : groesseBytes;
+
   async function laden() {
-    if (groesseBytes != null && groesseBytes > MAX_APP_DOWNLOAD_BYTES) {
+    if (erwarteteObergrenze != null && erwarteteObergrenze > MAX_APP_DOWNLOAD_BYTES) {
       setStatus('zu_gross');
       return;
     }
     setStatus('laedt');
     setEmpfangen(0);
     setFehler('');
+    setPruefung(null);
 
     const ac = new AbortController();
     abbruchRef.current = ac;
@@ -134,6 +161,8 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
       const typ = res.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
       const name = dateinameAusHeader(res, dateiname);
       const teile: BlobPart[] = [];
+      // Fuer die Archiv-Pruefung: die reinen Stream-Bloecke (ohne Blob-Fallback).
+      const bloecke: Uint8Array[] = [];
       let summe = 0;
 
       if (res.body) {
@@ -143,6 +172,7 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
           if (done) break;
           if (value && value.length > 0) {
             teile.push(value);
+            bloecke.push(value);
             summe += value.length;
             setEmpfangen(summe);
             if (summe > MAX_APP_DOWNLOAD_BYTES) {
@@ -161,6 +191,25 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
       }
 
       if (summe === 0) throw new Error('Die Antwort war leer.');
+
+      // Streaming-ZIP: der Server schickt kein Content-Length, also wird hier
+      // am Archiv-Ende geprueft, ob wirklich alles angekommen ist. Fehlt der
+      // Abschluss, liesse sich die Datei ohnehin nicht oeffnen — dann lieber
+      // sofort sagen, dass man es erneut versuchen muss.
+      if (archiv) {
+        // Ohne Stream-Bloecke (Blob-Fallback) den Schwanz aus dem Blob lesen.
+        const zuPruefen = bloecke.length > 0
+          ? bloecke
+          : [new Uint8Array(await (teile[0] as Blob).slice(-(22 + 65535)).arrayBuffer())];
+        const ende = zipAbschlussAusTeilen(zuPruefen);
+        if (!ende) {
+          throw new Error(
+            'Die Übertragung wurde unterbrochen — das Archiv ist unvollständig und ließe sich nicht öffnen. Bitte erneut versuchen.'
+          );
+        }
+        setPruefung(ende);
+      }
+
       setDatei(new File(teile, name, { type: typ }));
       setStatus('bereit');
     } catch (err) {
@@ -244,25 +293,53 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
             <p style={{ margin: '0 0 6px', fontWeight: 600, color: 'var(--admin-text)' }}>
               Wird geladen …
             </p>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--admin-text-dim)' }}>
-              {fmtBytes(empfangen)}
-              {groesseBytes ? ` von etwa ${fmtBytes(groesseBytes)}` : ''}
-            </p>
-            {groesseBytes ? (
-              <div style={{ marginTop: 12, height: 6, borderRadius: 3, background: 'var(--admin-surface-2)', overflow: 'hidden' }}>
+            {archiv ? (
+              <>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--admin-text-dim)' }}>
+                  {fmtBytes(empfangen)} geladen
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--admin-text-dim)' }}>
+                  Inhalt vor dem Packen: {fmtBytes(archiv.inhaltBytes)} · {archiv.dateien} Dateien
+                </p>
+                {/* Endgroesse unbekannt → keine Prozentanzeige, sondern Laufbalken. */}
                 <div
-                  style={{
-                    height: '100%',
-                    width: `${Math.min(100, Math.round((empfangen / groesseBytes) * 100))}%`,
-                    background: 'var(--admin-accent)',
-                    transition: 'width .2s',
-                  }}
-                />
-              </div>
-            ) : null}
-            <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--admin-text-dim)' }}>
-              Ein ZIP wird beim Laden gepackt, die Anzeige kann deshalb etwas unter der Endgröße liegen.
-            </p>
+                  aria-hidden
+                  style={{ marginTop: 12, height: 6, borderRadius: 3, background: 'var(--admin-surface-2)', overflow: 'hidden', position: 'relative' }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute', top: 0, bottom: 0, width: '35%',
+                      background: 'var(--admin-accent)', borderRadius: 3,
+                      animation: 'c2r-dl-indeterminate 1.4s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+                <style>{`@keyframes c2r-dl-indeterminate{0%{left:-35%}100%{left:100%}}`}</style>
+                <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--admin-text-dim)' }}>
+                  Das ZIP wird beim Laden gepackt und ist deshalb deutlich kleiner als sein Inhalt.
+                  Die Endgröße steht erst am Schluss fest.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--admin-text-dim)' }}>
+                  {fmtBytes(empfangen)}
+                  {groesseBytes ? ` von ${fmtBytes(groesseBytes)}` : ''}
+                </p>
+                {groesseBytes ? (
+                  <div style={{ marginTop: 12, height: 6, borderRadius: 3, background: 'var(--admin-surface-2)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, Math.round((empfangen / groesseBytes) * 100))}%`,
+                        background: 'var(--admin-accent)',
+                        transition: 'width .2s',
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </>
+            )}
             <div style={{ marginTop: 16 }}>
               <Button variant="ghost" size="sm" onClick={schliessen}>
                 Abbrechen
@@ -277,9 +354,22 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
             <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--admin-text)', wordBreak: 'break-all' }}>
               {datei.name}
             </p>
-            <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--admin-text-dim)' }}>
+            <p style={{ margin: archiv && pruefung ? '0 0 6px' : '0 0 16px', fontSize: 14, color: 'var(--admin-text-dim)' }}>
               {fmtBytes(datei.size)}
+              {archiv ? ` · gepackt aus ${fmtBytes(archiv.inhaltBytes)}` : ''}
             </p>
+            {archiv && pruefung && (
+              pruefung.eintraege >= archiv.dateien ? (
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#22c55e', fontWeight: 600 }}>
+                  ✓ Vollständig — {pruefung.eintraege} Dateien im Archiv
+                </p>
+              ) : (
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#f59e0b', fontWeight: 600 }}>
+                  ⚠ Nur {pruefung.eintraege} von {archiv.dateien} Dateien im Archiv — Details stehen
+                  in der Datei _FEHLENDE-DATEIEN.txt im ZIP.
+                </p>
+              )
+            )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button onClick={() => void teilen()}>
                 {kannTeilen ? '📥 Sichern / Teilen' : '📥 Speichern'}
@@ -313,7 +403,7 @@ export default function DownloadLink({ href, dateiname, groesseBytes, children, 
         {status === 'zu_gross' && (
           <div style={{ padding: '4px 0' }}>
             <p style={{ margin: '0 0 8px', color: 'var(--admin-text)' }}>
-              Dieser Download ist mit {groesseBytes ? fmtBytes(groesseBytes) : 'seiner Größe'} zu groß,
+              Dieser Download ist mit {erwarteteObergrenze ? fmtBytes(erwarteteObergrenze) : 'seiner Größe'} zu groß,
               um ihn in der App zwischenzuspeichern.
             </p>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--admin-text-dim)' }}>

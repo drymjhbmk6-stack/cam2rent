@@ -513,7 +513,7 @@ export default function ProjektablageSeite() {
                               <DownloadLink
                                 href={`/api/admin/projektablage/staende/${s.id}/zip`}
                                 dateiname={`${aktivesProjekt.name}-v${s.version_nr}.zip`}
-                                groesseBytes={s.bytes_gesamt}
+                                archiv={{ inhaltBytes: s.bytes_gesamt, dateien: s.datei_anzahl }}
                                 style={{ textDecoration: 'none' }}
                               >
                                 <Button size="sm">⬇ Als ZIP</Button>
@@ -546,7 +546,7 @@ export default function ProjektablageSeite() {
               <DownloadLink
                 href={`/api/admin/projektablage/staende/${aktiverStand.id}/zip`}
                 dateiname={`${aktivesProjekt.name}-v${aktiverStand.version_nr}.zip`}
-                groesseBytes={aktiverStand.bytes_gesamt}
+                archiv={{ inhaltBytes: aktiverStand.bytes_gesamt, dateien: aktiverStand.datei_anzahl }}
                 style={{ textDecoration: 'none' }}
               >
                 <Button size="sm">⬇ Alles als ZIP</Button>

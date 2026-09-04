@@ -158,3 +158,54 @@ export function fmtBytes(bytes: number): string {
   const rounded = value >= 100 ? value.toFixed(0) : value.toFixed(1);
   return `${rounded.replace('.', ',')} ${units[unitIndex]}`;
 }
+
+/**
+ * Prueft, ob ein (komplett empfangenes) ZIP sauber abgeschlossen ist.
+ *
+ * Jedes ZIP endet mit dem „End of Central Directory"-Eintrag (Signatur
+ * `50 4b 05 06`), der unter anderem die Anzahl der enthaltenen Eintraege
+ * traegt. Fehlt er, wurde die Uebertragung mittendrin abgebrochen — das
+ * Archiv laesst sich dann nicht oeffnen. Hinter dem Eintrag darf noch ein
+ * Kommentar von bis zu 65535 Bytes stehen, deshalb wird der Schwanz der
+ * Datei rueckwaerts durchsucht.
+ *
+ * Liefert die Eintragszahl, oder `null`, wenn kein Abschluss zu finden ist.
+ * Reine Funktion — laeuft im Browser wie im Test.
+ */
+export function zipAbschlussPruefen(bytes: Uint8Array): { eintraege: number } | null {
+  const MIN = 22; // feste Laenge des EOCD ohne Kommentar
+  if (bytes.length < MIN) return null;
+  const start = Math.max(0, bytes.length - MIN - 65535);
+  for (let i = bytes.length - MIN; i >= start; i--) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+      const kommentarLaenge = bytes[i + 20] | (bytes[i + 21] << 8);
+      // Der Kommentar muss exakt bis zum Dateiende reichen, sonst ist das
+      // nur ein zufaelliges Byte-Muster mitten in den Daten.
+      if (i + MIN + kommentarLaenge !== bytes.length) continue;
+      const eintraege = bytes[i + 10] | (bytes[i + 11] << 8);
+      return { eintraege };
+    }
+  }
+  return null;
+}
+
+/**
+ * Wie `zipAbschlussPruefen`, aber fuer die Stueckliste eines Streaming-
+ * Downloads: es wird nur der Schwanz zusammengefuegt, nicht die ganze Datei.
+ */
+export function zipAbschlussAusTeilen(teile: Uint8Array[]): { eintraege: number } | null {
+  const BEDARF = 22 + 65535;
+  const schwanz: Uint8Array[] = [];
+  let summe = 0;
+  for (let i = teile.length - 1; i >= 0 && summe < BEDARF; i--) {
+    schwanz.unshift(teile[i]);
+    summe += teile[i].length;
+  }
+  const buf = new Uint8Array(summe);
+  let pos = 0;
+  for (const t of schwanz) {
+    buf.set(t, pos);
+    pos += t.length;
+  }
+  return zipAbschlussPruefen(buf);
+}

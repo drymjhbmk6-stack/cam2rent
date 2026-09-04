@@ -11,6 +11,8 @@ import {
   fmtBytes,
   MAX_PATH_DEPTH,
   isZipFileName,
+  zipAbschlussPruefen,
+  zipAbschlussAusTeilen,
 } from '../projektablage-shared';
 
 describe('sanitizeRelPath', () => {
@@ -119,5 +121,54 @@ describe('isZipFileName', () => {
     expect(isZipFileName('archiv.tar.gz')).toBe(false);
     expect(isZipFileName('zip')).toBe(false);
     expect(isZipFileName('')).toBe(false);
+  });
+});
+
+describe('zipAbschlussPruefen', () => {
+  /** Baut ein minimales, gueltiges ZIP-Ende (EOCD) mit N Eintraegen. */
+  function eocd(eintraege: number, kommentar = ''): Uint8Array {
+    const k = new TextEncoder().encode(kommentar);
+    const b = new Uint8Array(22 + k.length);
+    b.set([0x50, 0x4b, 0x05, 0x06], 0);
+    b[8] = eintraege & 0xff; b[9] = eintraege >> 8;   // Eintraege auf dieser Disk
+    b[10] = eintraege & 0xff; b[11] = eintraege >> 8; // Eintraege gesamt
+    b[20] = k.length & 0xff; b[21] = k.length >> 8;
+    b.set(k, 22);
+    return b;
+  }
+
+  it('erkennt ein sauber abgeschlossenes Archiv samt Eintragszahl', () => {
+    const daten = new Uint8Array([...new Array(100).fill(0x41), ...eocd(37)]);
+    expect(zipAbschlussPruefen(daten)).toEqual({ eintraege: 37 });
+  });
+
+  it('findet das Ende auch hinter einem Archiv-Kommentar', () => {
+    const daten = new Uint8Array([...new Array(10).fill(1), ...eocd(3, 'hallo welt')]);
+    expect(zipAbschlussPruefen(daten)).toEqual({ eintraege: 3 });
+  });
+
+  it('meldet ein abgeschnittenes Archiv als unvollstaendig', () => {
+    const komplett = new Uint8Array([...new Array(100).fill(0x41), ...eocd(5)]);
+    const abgeschnitten = komplett.slice(0, komplett.length - 7);
+    expect(zipAbschlussPruefen(abgeschnitten)).toBeNull();
+    expect(zipAbschlussPruefen(new Uint8Array(0))).toBeNull();
+  });
+
+  it('faellt nicht auf eine Signatur mitten in den Daten herein', () => {
+    // Signatur + falsche Kommentarlaenge, danach weitere Daten.
+    const falsch = new Uint8Array([...eocd(9), ...new Array(50).fill(0x42)]);
+    expect(zipAbschlussPruefen(falsch)).toBeNull();
+  });
+
+  it('setzt den Schwanz aus mehreren Stream-Teilen zusammen', () => {
+    const ende = eocd(12);
+    const teile = [
+      new Uint8Array(new Array(5000).fill(7)),
+      new Uint8Array(new Array(3000).fill(8)),
+      ende.slice(0, 9),
+      ende.slice(9),
+    ];
+    expect(zipAbschlussAusTeilen(teile)).toEqual({ eintraege: 12 });
+    expect(zipAbschlussAusTeilen(teile.slice(0, 3))).toBeNull();
   });
 });

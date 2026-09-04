@@ -8387,6 +8387,26 @@ Durchsehen + Herunterladen (bewusst **kein** Code-Viewer).
   Safari/Rechner verwiesen (die Datei müsste komplett in den Browser-Speicher).
   Nebeneffekt: Server-Fehler (503 Migration, 404 …) werden jetzt als Meldung
   angezeigt statt als nackte JSON-Seite.
+- **ZIP-Download: Fortschritt gegen Inhalt, nicht gegen Endgröße (Stand 2026-09-04):**
+  Das Modal zeigte beim Streaming-ZIP „5,5 MB von etwa 38,1 MB" und danach
+  „13,1 MB" — sah aus wie ein Abbruch bei einem Drittel. Tatsächlich ist
+  `bytes_gesamt` die Summe der Dateien **vor** dem Packen; das ZIP wird beim
+  Streamen mit Deflate komprimiert und ist bei Quellcode typisch ein Drittel
+  so groß. Der Download war vollständig, nur die Anzeige log. Fix in
+  `DownloadLink.tsx`: neue Prop `archiv={{ inhaltBytes, dateien }}` statt
+  `groesseBytes` für die beiden ZIP-Stellen. Während des Ladens steht „X
+  geladen · Inhalt vor dem Packen: Y · N Dateien" mit **Laufbalken** (keine
+  Prozentzahl — die Endgröße ist erst am Schluss bekannt). Danach prüft
+  `zipAbschlussAusTeilen()` (`lib/projektablage-shared.ts`, pure, 5 Tests)
+  den Schwanz der empfangenen Bytes auf den ZIP-Abschluss (EOCD-Signatur
+  `50 4b 05 06`, Kommentarlänge muss exakt bis zum Ende reichen — sonst ist
+  es ein zufälliges Muster mitten in den Daten) und liest die Eintragszahl:
+  **„✓ Vollständig — N Dateien im Archiv"**, bei weniger Einträgen als
+  erwartet ein amber Hinweis auf `_FEHLENDE-DATEIEN.txt`, ohne Abschluss ein
+  Fehler („Übertragung unterbrochen") statt einer Datei, die sich nicht
+  öffnen ließe. Einzeldateien (exakte Größe bekannt) behalten den
+  Prozentbalken. Der Speicher-Schutz nutzt bei Archiven `inhaltBytes` als
+  Obergrenze (das ZIP wird nie größer als sein Inhalt).
 - **Downloads immer als `attachment`** (`createSignedUrl(..., { download })`):
   im Bucket liegen `.html`/`.svg`/`.php` im Klartext, die der Supabase-Origin
   sonst rendern würde.
