@@ -37,6 +37,7 @@ export const NOTIFICATION_TYPES: NotificationTypeDef[] = [
   { type: 'return_coordination', label: 'Rückgabetermin vereinbaren', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'return_arrived', label: 'Retoure eingetroffen', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
   { type: 'return_open_items', label: 'Nicht zurückgegeben (Ersatz/Nachsendung)', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
+  { type: 'contract_sign_failed', label: 'Unterschrift fehlgeschlagen', permission: 'tagesgeschaeft', group: 'Tagesgeschäft' },
 
   // ── Kunden & Kommunikation ────────────────────────────────
   { type: 'verification_pending', label: 'Ausweis-Verifizierung offen', permission: 'kunden', group: 'Kunden & Kommunikation' },

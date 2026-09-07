@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
@@ -10,6 +10,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
 import { getStripePromise } from '@/lib/stripe-client';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
+import SignatureField, { type SignatureFieldChange } from '@/components/booking/SignatureField';
 
 const stripePromise = getStripePromise();
 
@@ -327,90 +328,56 @@ interface SignModalProps {
 }
 
 function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasDrawn, setHasDrawn] = useState(false);
+  const [sig, setSig] = useState<SignatureFieldChange>({ method: 'canvas', dataUrl: null });
   const [signerName, setSignerName] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Canvas drawing
-  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
-    };
-  };
+  const nameOk = signerName.trim().length >= 2;
+  // Im Tipp-Modus IST der eingegebene Name die Unterschrift, im Zeichen-Modus
+  // braucht es einen Strich auf dem Feld.
+  const hasSignature = sig.method === 'typed' ? nameOk : !!sig.dataUrl;
 
-  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    setIsDrawing(true);
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
-    const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-  };
+  // Was noch fehlt — wird sichtbar angezeigt, statt den Button nur stumm
+  // auszugrauen. Genau daran ist zuvor ein Kunde haengengeblieben: Name
+  // eingetragen, Haken gesetzt, Button trotzdem grau und kein Hinweis warum.
+  const missing: string[] = [];
+  if (!nameOk) missing.push('Vollständigen Namen eintragen');
+  if (!hasSignature) missing.push(sig.method === 'typed' ? 'Name als Unterschrift eintragen' : 'Unterschreiben');
+  if (!accepted) missing.push('Mietbedingungen bestätigen');
 
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
-    const pos = getPos(e);
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    setHasDrawn(true);
-  };
-
-  const endDraw = () => setIsDrawing(false);
-
-  const clearCanvas = () => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-    setHasDrawn(false);
-  };
+  const canSubmit = missing.length === 0 && !submitting;
 
   const handleSubmit = async () => {
-    if (!hasDrawn || !signerName.trim() || !accepted) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setError('');
 
     try {
-      const signatureDataUrl = canvasRef.current!.toDataURL('image/png');
-
       const res = await fetch('/api/contracts/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingId: booking.id,
-          signatureDataUrl,
+          signatureDataUrl: sig.method === 'canvas' ? sig.dataUrl : null,
           customerName: signerName.trim(),
           agreedToTerms: true,
-          signatureMethod: 'canvas',
+          signatureMethod: sig.method,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || 'Unterschrift fehlgeschlagen.');
+        setError(data.error || 'Unterschrift fehlgeschlagen. Bitte versuche es erneut.');
         return;
       }
 
       setSuccess(true);
       setTimeout(() => onSuccess(), 1500);
     } catch {
-      setError('Netzwerkfehler.');
+      setError('Netzwerkfehler. Bitte prüfe deine Internetverbindung und versuche es erneut.');
     } finally {
       setSubmitting(false);
     }
@@ -471,29 +438,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
 
         {/* Signature pad */}
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-heading font-semibold text-brand-black dark:text-white">Unterschrift</label>
-            {hasDrawn && (
-              <button onClick={clearCanvas} className="text-xs text-accent-blue hover:underline">Löschen</button>
-            )}
-          </div>
-          <canvas
-            ref={canvasRef}
-            width={400}
-            height={150}
-            className="w-full border border-brand-border dark:border-white/10 rounded-[10px] bg-white dark:bg-brand-dark cursor-crosshair touch-none"
-            style={{ height: 120 }}
-            onMouseDown={startDraw}
-            onMouseMove={draw}
-            onMouseUp={endDraw}
-            onMouseLeave={endDraw}
-            onTouchStart={startDraw}
-            onTouchMove={draw}
-            onTouchEnd={endDraw}
-          />
-          {!hasDrawn && (
-            <p className="text-xs text-brand-muted dark:text-gray-500 mt-1">Unterschreibe hier mit der Maus oder dem Finger.</p>
-          )}
+          <SignatureField signerName={signerName} allowTyped onChange={setSig} />
         </div>
 
         {/* Accept checkbox */}
@@ -509,6 +454,14 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
           </span>
         </label>
 
+        {/* Sichtbar machen, was noch fehlt — sonst bleibt der Button ohne
+            erkennbaren Grund grau. */}
+        {missing.length > 0 && (
+          <p className="text-xs text-brand-muted dark:text-gray-400 mb-2">
+            Noch offen: {missing.join(' · ')}
+          </p>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={onClose}
@@ -518,13 +471,19 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!hasDrawn || !signerName.trim() || !accepted || submitting}
+            disabled={!canSubmit}
             className="flex-1 px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white rounded-btn text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             Unterschreiben
           </button>
         </div>
+
+        <p className="text-xs text-brand-muted dark:text-gray-500 mt-3 text-center">
+          Klappt es nicht? Schreib uns an{' '}
+          <a href={`mailto:${KONTAKT_EMAIL}`} className="text-accent-blue hover:underline">{KONTAKT_EMAIL}</a> —
+          wir schalten den Vertrag manuell frei.
+        </p>
       </div>
     </div>
   );
@@ -533,11 +492,11 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
 // ─── Postpone modal (Verlegung, Kunden-Self-Service) ─────────────────────────
 
 function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onClose: () => void; onSuccess: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [newFrom, setNewFrom] = useState<string | null>(null);
   const [newTo, setNewTo] = useState<string | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasDrawn, setHasDrawn] = useState(false);
+  // Kein Tipp-Modus: der Verlege-Endpoint verlangt zwingend eine gezeichnete
+  // Unterschrift (`data:image/png;base64,`).
+  const [sig, setSig] = useState<SignatureFieldChange>({ method: 'canvas', dataUrl: null });
   const [signerName, setSignerName] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [ackCancel, setAckCancel] = useState(false);
@@ -548,29 +507,7 @@ function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onCl
   const deliveryMode: 'versand' | 'abholung' = booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
   const days = booking.days || 1;
 
-  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
-  };
-  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); setIsDrawing(true);
-    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
-    const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-  };
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return; e.preventDefault();
-    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
-    const pos = getPos(e); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#1a1a1a';
-    ctx.lineTo(pos.x, pos.y); ctx.stroke(); setHasDrawn(true);
-  };
-  const endDraw = () => setIsDrawing(false);
-  const clearCanvas = () => {
-    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
-    ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height); setHasDrawn(false);
-  };
+  const hasDrawn = !!sig.dataUrl;
 
   const handleRange = (range: CalendarRange) => {
     setNewFrom(range.from);
@@ -581,7 +518,7 @@ function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onCl
     if (!newFrom || !hasDrawn || !signerName.trim() || !accepted || !ackCancel) return;
     setSubmitting(true); setError('');
     try {
-      const signatureDataUrl = canvasRef.current!.toDataURL('image/png');
+      const signatureDataUrl = sig.dataUrl!;
       const res = await fetch(`/api/booking/${booking.id}/postpone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -660,18 +597,7 @@ function PostponeModal({ booking, onClose, onSuccess }: { booking: Booking; onCl
                 placeholder="Vor- und Nachname"
                 className="w-full px-4 py-3 mb-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-blue text-base"
               />
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-heading font-semibold text-brand-black dark:text-white">Unterschrift</label>
-                <button type="button" onClick={clearCanvas} className="text-xs text-brand-steel dark:text-gray-400 hover:underline">Löschen</button>
-              </div>
-              <canvas
-                ref={canvasRef}
-                width={500}
-                height={160}
-                className="w-full border border-brand-border dark:border-white/10 rounded-lg bg-white touch-none cursor-crosshair"
-                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
-                onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
-              />
+              <SignatureField signerName={signerName} onChange={setSig} />
             </div>
 
             <label className="flex items-start gap-2 mb-2 cursor-pointer">

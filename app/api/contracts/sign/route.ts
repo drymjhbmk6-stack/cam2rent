@@ -7,6 +7,7 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
 import { getClientIp } from '@/lib/rate-limit';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * H-12 (2026-08-01): Mappt den Haftungswert ('standard' | 'premium' | 'none')
@@ -21,9 +22,12 @@ function haftungOptionLabel(h: string | null | undefined): string | undefined {
 }
 
 export async function POST(request: NextRequest) {
+  // Ausserhalb des try, damit der catch-Block die Buchung benennen kann.
+  let failedBookingId = '';
   try {
     const body = await request.json();
     const { bookingId, signatureDataUrl, customerName, agreedToTerms, signatureMethod } = body;
+    failedBookingId = typeof bookingId === 'string' ? bookingId.slice(0, 64) : '';
 
     // 1. Validierungen
     if (!bookingId || !customerName) {
@@ -205,8 +209,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, contractUrl });
   } catch (err) {
     console.error('[contracts/sign] Fehler:', err);
+
+    // Scheitert die Vertragserstellung (PDF-Rendering, Storage, DB), sah der
+    // Kunde bisher nur eine allgemeine Fehlermeldung — im Admin blieb der
+    // Fehlschlag unsichtbar, die Buchung stand weiter auf "nicht
+    // unterschrieben" und niemand wusste warum. Best-effort-Meldung an den
+    // Admin, damit der Fall auffaellt und manuell freigegeben werden kann.
+    try {
+      const detail = err instanceof Error ? err.message : String(err);
+      await createAdminNotification(createServiceClient(), {
+        type: 'contract_sign_failed',
+        title: 'Kunde konnte Mietvertrag nicht unterschreiben',
+        message: `${failedBookingId || 'Unbekannte Buchung'}: ${detail.slice(0, 300)}`,
+        link: failedBookingId ? `/admin/buchungen/${failedBookingId}` : '/admin/buchungen',
+      });
+    } catch {
+      // Benachrichtigung ist nur Diagnose — darf die Antwort nie blockieren.
+    }
+
     return NextResponse.json(
-      { error: 'Vertrag konnte nicht erstellt werden. Bitte versuche es erneut.' },
+      { error: 'Vertrag konnte nicht erstellt werden. Bitte versuche es erneut oder melde dich bei uns.' },
       { status: 500 }
     );
   }

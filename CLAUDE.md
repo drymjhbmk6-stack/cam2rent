@@ -1541,6 +1541,61 @@ Tablet über `/admin/buchungen/[id]/vertrag-unterschreiben`.
 
 **Keine Migration.** Reiner Reihenfolge-Fix + zwei zusätzlich persistierte Felder.
 
+### Kunde konnte im Konto nicht unterschreiben — Canvas ersetzt + Tipp-Option (Stand 2026-09-07)
+**Kundenmeldung:** „Ich kann den Vertrag nicht unterschreiben, egal ob von Hand
+oder mit dem Namen tippen." (Buchung C2R-2635-001, `confirmed`,
+`contract_signed=false`).
+
+**Zwei Ursachen im Kunden-Dialog** (`SignContractModal` in
+`app/konto/buchungen/page.tsx`) — der Server war NICHT beteiligt
+(`/api/contracts/sign` unterstützt `signatureMethod: 'typed'` seit jeher
+vollständig):
+1. **Handgeschriebener Canvas statt der erprobten Bibliothek.** Der Dialog
+   zeichnete über eigene `onMouseDown`/`onTouchStart`-Handler mit manuellem
+   `e.preventDefault()`. React hängt `touchstart`/`touchmove` am Root als
+   **passive** Listener an — `preventDefault()` ist dort wirkungslos, und je
+   nach Gerät/Browser kam kein Strich an. Der **Checkout** (`SignatureStep`)
+   nutzt dagegen seit jeher `react-signature-canvas` (Pointer-Events + korrekte
+   DPI-Skalierung) und funktionierte deshalb.
+2. **Keine Tipp-Alternative + stumm grauer Button.** Der Dialog bot **nur**
+   Zeichnen an (anders als Checkout und Admin-Tablet). Der Button war auf
+   `!hasDrawn || !signerName || !accepted` gegated, **ohne jeden Hinweis warum
+   er grau bleibt** — Name eintragen und Haken setzen reichte nicht, und der
+   Kunde konnte den Grund nicht sehen. (Der Checkout zeigt die fehlenden
+   Schritte immerhin als Hover-Tooltip — auf dem Handy ebenfalls unsichtbar.)
+
+**Fix:**
+- **Neu `components/booking/SignatureField.tsx`** — geteiltes Unterschrift-Feld
+  auf Basis von `react-signature-canvas` (bereits Dependency). Prop
+  `allowTyped` blendet den Umschalter „Stattdessen Namen eintippen" ein; im
+  Tipp-Modus **ist der oben eingegebene Name die Unterschrift** (wird als
+  Vorschau angezeigt). Bewusst **ereignisgesteuert statt `useEffect` +
+  `onChange`** — ein Effekt mit inline übergebenem Callback würde bei jedem
+  Eltern-Render neu feuern und eine Render-Schleife auslösen.
+- **Vertrags-Dialog** nutzt `allowTyped` → der Kunde hat einen Weg, der **ohne
+  Canvas** funktioniert. Zusätzlich eine sichtbare Zeile „Noch offen: …" statt
+  des stumm grauen Buttons und ein Kontakt-Hinweis („wir schalten den Vertrag
+  manuell frei").
+- **Verlege-Dialog** (`PostponeModal`, identischer Canvas-Defekt) nutzt dieselbe
+  Komponente — aber **ohne** `allowTyped`: `POST /api/booking/[id]/postpone`
+  verlangt zwingend `data:image/png;base64,`.
+- **Fehlschläge werden sichtbar:** der `catch` in `/api/contracts/sign` feuert
+  jetzt best-effort die neue Benachrichtigung **`contract_sign_failed`**
+  (Permission `tagesgeschaeft`, Deep-Link auf die Buchung) mit dem echten
+  Fehlertext. Vorher lief ein PDF-/Storage-Crash still in einen generischen 500
+  — der Kunde hing fest, im Admin war nichts zu sehen. Registriert in
+  `lib/notification-types.ts`, `NotificationDropdown` (Icon) und der
+  Create-Whitelist.
+
+**Sofortweg für eine hängende Buchung (unabhängig vom Deploy):**
+`/admin/buchungen/[id]/vertrag-unterschreiben` — die Admin-Seite nutzt
+`SignatureStep` (inkl. Tipp-Option) und den **eigenen** Endpoint
+`/api/admin/sign-contract`. Klappt es dort, war die Ursache der Kunden-Client
+(dieser Fix); scheitert es auch dort, liegt es serverseitig am PDF-/Storage-Pfad
+— dann zeigt die neue Benachrichtigung den Grund.
+
+Keine Migration, kein Schema-Change.
+
 ### Mietvertrag zurücksetzen → Kunde unterschreibt neu (Stand 2026-06-14)
 Hintergrund: vereinzelt wurde ein Vertrags-PDF **ohne** Unterschrift erzeugt
 (PDF-/Signatur-Glitch). Der Admin kann den Vertrag jetzt komplett zurücksetzen,

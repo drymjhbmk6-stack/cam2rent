@@ -196,6 +196,13 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
         </svg>
       );
+    case 'contract_sign_failed':
+      // Dokument mit Warnung — Kunde konnte den Mietvertrag nicht unterschreiben
+      return (
+        <svg style={iconStyle} fill="none" stroke="#ef4444" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h3m-3 4h6m3 1V7a2 2 0 00-2-2h-3.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 009.586 3H6a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2zm3-9v4m0 3h.01" />
+        </svg>
+      );
     default:
       return (
         <svg style={iconStyle} fill="none" stroke="#64748b" viewBox="0 0 24 24">
