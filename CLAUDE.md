@@ -4254,6 +4254,52 @@ Tests: `lib/buchhaltung/__tests__/booking-revenue.test.ts` (+6 Fälle — u.a. d
 Realfall 33,42 € / 7,90 € offen, „keine Kategorie negativ", Storno-Einbehalt,
 `refund_pending` ohne Gegenrechnung).
 
+#### Aufgabe „Nachzahlung prüfen" ging trotz Zahlungseingang nicht weg (Stand 2026-09-10)
+**Symptom:** Kunde zahlt die Nachzahlung (C2R-2635-006, 16,48 €), der
+Stripe-Abgleich zeigt sie sauber als **„Verknüpft"** — die Dashboard-Karte
+„💶 Nachzahlung prüfen" blieb trotzdem stehen, dauerhaft.
+
+**Ursache:** `bookings.adjustment_status` wurde **ausschließlich** vom
+Stripe-Webhook (`checkout.session.completed` / `async_payment_succeeded`) auf
+`paid` geflippt. Lief der nicht durch — Event am Endpoint nicht abonniert,
+Zustellfehler, Endpoint kurz down —, blieb der Status für immer auf
+`pending_payment`. Zwei Lücken verschärften das:
+- Der **Stripe-Abgleich erkennt die Nachzahlung längst** (Stufe 1c,
+  `matchSource='adjustment'`, siehe „Verlaengerungs-Zahlungen automatisch
+  zuordnen"), verknüpfte sie aber nur in `stripe_transactions` und **sagte der
+  Buchung nichts**. Der eine Ort, der wusste „das Geld ist da", meldete es dem
+  anderen nicht.
+- Es gab **keinen manuellen Weg**, den Posten abzuhaken (die Buchungsdetail-
+  Seite zeigte `adjustment_status` nur read-only an) — bewusst so gebaut, aber
+  dadurch ohne Notausgang, wenn der Webhook ausfällt oder der Kunde gar nicht
+  über den Zahlungslink zahlt (Überweisung/bar) bzw. der Link fehlgeschlagen ist.
+
+**Fix (zwei Ebenen, keine Migration):**
+1. **Der Abgleich heilt selbst** (`lib/buchhaltung/stripe-sync.ts`): bei
+   `matchSource === 'adjustment'` wird zusätzlich `adjustment_status='paid'`
+   gesetzt — atomarer Guard `.in('adjustment_status',
+   ['pending_payment','payment_link_failed'])`, damit `paid`/`refunded`/
+   `refund_pending` unangetastet bleiben und ein Doppellauf nichts doppelt tut.
+   Beim Flip feuert dieselbe `adjustment_paid`-Benachrichtigung wie im Webhook.
+   Spalten-Fehler (Migration ausstehend) wird geloggt, der Abgleich läuft weiter.
+   ⚠️ Greift **rückwirkend für den Bestand**: der Sync verarbeitet bereits
+   `matched`-Zeilen bei jedem Lauf neu (nur `manual`/`refunded` sind gesperrt) →
+   ein Klick auf „Synchronisieren" bzw. der nächste Cron-Lauf schließt alte Fälle.
+2. **Manueller Notausgang** — neuer Endpoint
+   `POST /api/admin/booking/[id]/mark-adjustment-paid` (`{paid?:boolean}`,
+   Permission über den Prefix `/api/admin/booking` → `tagesgeschaeft`): setzt
+   den Status von Hand auf `paid`, `{paid:false}` öffnet ihn wieder
+   (nur aus `paid` heraus). Atomarer Guard + idempotent (Doppelklick/Webhook-
+   Race → `unchanged:true` statt Fehler), 503 bei fehlender Migration. Audit
+   `booking.adjustment_mark_paid` / `booking.adjustment_mark_open`. UI: die
+   „Letzte Anpassung"-Zeile in „Bestellung bearbeiten" wird bei offenem Posten
+   amber und bekommt den Button **„✓ Nachzahlung als bezahlt markieren"**.
+   **Reine Markierung** — kein Stripe-Charge, keine E-Mail, kein Refund.
+
+**Weiterhin bewusst NICHT im Dashboard abhakbar:** Die Aufgabe verschwindet
+durch den Zahlungseingang oder eine bewusste Entscheidung **in der Buchung** —
+nicht per Klick aus der Kachel.
+
 ### Weitere Finanz-Korrekturen im selben Durchgang (Stand 2026-08-29)
 - **Gutschriften mindern jetzt den Umsatz.** `credit-notes/[id]/approve` löste
   den Stripe-Refund aus, schrieb aber nichts an die Buchung — und `credit_notes`

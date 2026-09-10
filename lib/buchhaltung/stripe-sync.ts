@@ -3,6 +3,7 @@ import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { getStripeSecretKey, isTestMode } from '@/lib/env-mode';
 import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * Stripe-Reconciliation-Sync — geteilte Kernlogik fuer den manuellen
@@ -328,6 +329,37 @@ export async function runStripeSync({
             .from('bookings')
             .update({ payment_intent_id: pi.id })
             .eq('id', booking.id);
+        }
+
+        // Nachzahlung erkannt → offenen Posten an der Buchung schliessen.
+        // Ohne diesen Schritt bleibt `bookings.adjustment_status` fuer immer auf
+        // 'pending_payment' stehen, sobald der Stripe-Webhook nicht durchlief
+        // (checkout.session.completed nicht abonniert, Zustellfehler, Endpoint
+        // down). Die Zahlung ist dann hier zwar sauber verknuepft, die
+        // Dashboard-Aufgabe "Nachzahlung pruefen" verschwindet aber NIE.
+        // Der Webhook bleibt der schnelle Pfad, der Abgleich ist das Sicherheitsnetz.
+        if (booking && matchSource === 'adjustment') {
+          const flip = await supabase
+            .from('bookings')
+            .update({ adjustment_status: 'paid' })
+            .eq('id', booking.id)
+            // Atomarer Guard: nur ein wirklich OFFENER Posten wird geschlossen.
+            // 'paid'/'refunded'/'refund_pending' bleiben unangetastet.
+            .in('adjustment_status', ['pending_payment', 'payment_link_failed'])
+            .select('id, customer_name')
+            .maybeSingle();
+          if (flip.error) {
+            // Migration ausstehend o.ae. — Abgleich laeuft ohne den Flip weiter.
+            console.warn('[stripe-sync] adjustment_status-Flip fehlgeschlagen:', flip.error.message);
+          } else if (flip.data) {
+            const adjName = (flip.data as { customer_name?: string }).customer_name || 'Kunde';
+            await createAdminNotification(supabase, {
+              type: 'adjustment_paid',
+              title: `Nachzahlung eingegangen: ${booking.id}`,
+              message: `${adjName} — Differenz aus der Bestellbearbeitung ist bezahlt (beim Stripe-Abgleich erkannt).`,
+              link: `/admin/buchungen/${booking.id}`,
+            }).catch((e) => console.error('[stripe-sync] adjustment_paid-Notification-Fehler:', e));
+          }
         }
 
         // reconciliation_note nur setzen wenn Duplikats-Verdacht UND keine

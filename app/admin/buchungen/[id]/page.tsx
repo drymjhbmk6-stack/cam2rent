@@ -3505,6 +3505,35 @@ function BookingEditSection({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<string | null>(null);
+  // Offene Nachzahlung von Hand abhaken (Webhook lief nicht durch / Kunde hat
+  // anders bezahlt). Eigener Busy-/Fehler-State, damit der Bearbeiten-Flow
+  // darueber unberuehrt bleibt.
+  const [adjBusy, setAdjBusy] = useState(false);
+  const [adjErr, setAdjErr] = useState('');
+
+  const adjustmentOpen =
+    booking.adjustment_status === 'pending_payment' ||
+    booking.adjustment_status === 'payment_link_failed';
+
+  async function markAdjustmentPaid() {
+    setAdjBusy(true);
+    setAdjErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/mark-adjustment-paid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Markieren fehlgeschlagen.');
+      setDone('Nachzahlung als bezahlt markiert.');
+      onSaved();
+    } catch (e) {
+      setAdjErr(e instanceof Error ? e.message : 'Markieren fehlgeschlagen.');
+    } finally {
+      setAdjBusy(false);
+    }
+  }
 
   function start() {
     setRentalFrom(String(booking.rental_from).slice(0, 10));
@@ -3646,15 +3675,35 @@ function BookingEditSection({
             <p className="text-xs text-green-700 bg-green-50 rounded-lg p-2">{done}</p>
           )}
           {booking.adjustment_status && (
-            <p className="text-xs text-brand-muted bg-brand-bg-soft rounded-lg p-2">
-              Letzte Anpassung:{' '}
-              {booking.adjustment_status === 'pending_payment' && 'Nachzahlung offen (Zahlungslink verschickt)'}
-              {booking.adjustment_status === 'paid' && 'Nachzahlung bezahlt'}
-              {booking.adjustment_status === 'refunded' && 'Erstattung ausgeführt'}
-              {booking.adjustment_status === 'refund_pending' && '⚠ Erstattung manuell ausführen'}
-              {booking.adjustment_status === 'payment_link_failed' && '⚠ Zahlungslink fehlgeschlagen'}
-              {booking.adjustment_amount != null && ` (${fmtEuro(booking.adjustment_amount)})`}
-            </p>
+            <div className={`text-xs rounded-lg p-2 ${adjustmentOpen ? 'bg-amber-50 text-amber-900' : 'text-brand-muted bg-brand-bg-soft'}`}>
+              <p>
+                Letzte Anpassung:{' '}
+                {booking.adjustment_status === 'pending_payment' && 'Nachzahlung offen (Zahlungslink verschickt)'}
+                {booking.adjustment_status === 'paid' && 'Nachzahlung bezahlt'}
+                {booking.adjustment_status === 'refunded' && 'Erstattung ausgeführt'}
+                {booking.adjustment_status === 'refund_pending' && '⚠ Erstattung manuell ausführen'}
+                {booking.adjustment_status === 'payment_link_failed' && '⚠ Zahlungslink fehlgeschlagen'}
+                {booking.adjustment_amount != null && ` (${fmtEuro(booking.adjustment_amount)})`}
+              </p>
+              {adjustmentOpen && (
+                <>
+                  <p className="mt-1 leading-relaxed">
+                    Solange das offen steht, erscheint die Aufgabe
+                    &bdquo;Nachzahlung prüfen&ldquo; im Dashboard. Ist das Geld
+                    da (Stripe, Überweisung, bar), hier abhaken.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={markAdjustmentPaid}
+                    disabled={adjBusy}
+                    className="mt-2 px-3 py-1.5 rounded-lg bg-green-600 text-white font-heading font-semibold disabled:opacity-50"
+                  >
+                    {adjBusy ? 'Wird gespeichert…' : '✓ Nachzahlung als bezahlt markieren'}
+                  </button>
+                  {adjErr && <p className="mt-1 text-red-700">{adjErr}</p>}
+                </>
+              )}
+            </div>
           )}
         </div>
       </Section>
