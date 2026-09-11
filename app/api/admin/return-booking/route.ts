@@ -25,6 +25,11 @@ import {
  * 2. Kamera-Lagerbestand in admin_config erhöhen (+1)
  * 3. Zubehör-Lagerbestand in accessories-Tabelle erhöhen (+qty)
  *
+ * Fehlende BESTANDTEILE (`kind: 'part'`, z.B. ein Rund-Adapter der
+ * Lenkerhalterung) laufen bewusst an allen Bestands- und Exemplar-Zweigen
+ * vorbei: das Zubehör selbst ist zurück und bleibt vermietbar. Sie erzeugen nur
+ * die Forderung (Ersatzrechnung) bzw. die Nachsende-Bitte.
+ *
  * Nicht zurückgegebene Positionen (`openItems`) werden dabei ausgenommen:
  * ihr Bestand wird NICHT hochgezählt, ihre Exemplare NICHT freigegeben.
  *   'replace'   → Exemplar auf 'lost', optional Rechnung + Zahlungslink
@@ -403,9 +408,16 @@ export async function POST(req: NextRequest) {
       const summary = openItems
         .map((it) => `${it.qty}× ${it.label} (${it.resolution === 'replace' ? 'Ersatz' : 'kommt nach'})`)
         .join(', ');
+      const partCount = openItems.filter((it) => it.kind === 'part').length;
+      const wholeCount = openItems.length - partCount;
+      const title = wholeCount === 0
+        ? `Unvollständig zurück: ${partCount} Teil(e) fehlen`
+        : partCount === 0
+          ? `Nicht zurückgegeben: ${wholeCount} Position(en)`
+          : `Nicht zurückgegeben: ${wholeCount} Position(en) + ${partCount} Teil(e)`;
       createAdminNotification(supabase, {
         type: 'return_open_items',
-        title: `Nicht zurückgegeben: ${openItems.length} Position(en)`,
+        title,
         message: `Buchung ${bookingId} · ${summary}`,
         link: '/admin/retouren?tab=offen',
       }).catch(() => {});
@@ -423,6 +435,7 @@ export async function POST(req: NextRequest) {
           count: openItems.length,
           replace: openItems.filter((it) => it.resolution === 'replace').length,
           follow_up: openItems.filter((it) => it.resolution === 'follow_up').length,
+          parts: openItems.filter((it) => it.kind === 'part').length,
           replacement_total: totalReplacementValue(openItems),
           sale_booking_id: saleBookingId,
         } : undefined,

@@ -153,11 +153,31 @@ function daysUntil(due: Date): number {
 
 type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'offen' | 'abgeschlossen';
 
+/**
+ * Markiert ein fehlendes BESTANDTEIL. Wichtig für den Admin: „Eingetroffen"
+ * gibt hier kein Exemplar frei — das Zubehör selbst ist längst zurück.
+ */
+function PartBadge() {
+  return (
+    <span
+      title="Bestandteil — das Zubehör selbst ist zurück"
+      style={{
+        display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 999,
+        fontSize: 11, fontWeight: 600, background: '#a1620722', color: '#fbbf24',
+        verticalAlign: 'middle',
+      }}
+    >
+      🧩 Teil
+    </span>
+  );
+}
+
 /** Nicht zurückgegebene Position (aus `GET /api/admin/return-open-items`). */
 interface OpenReturnItem {
   id: string;
   booking_id: string;
-  kind: 'camera' | 'accessory';
+  /** 'part' = die Position kam zurück, es fehlt nur ein Bestandteil davon. */
+  kind: 'camera' | 'accessory' | 'part';
   label: string;
   qty: number;
   resolution: 'replace' | 'follow_up';
@@ -645,6 +665,7 @@ function OpenItemsTable({
             >
               <div style={{ fontSize: 15, color: 'var(--admin-text)' }}>
                 <strong>{it.qty}×</strong> {it.label}
+                {it.kind === 'part' && <PartBadge />}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -733,6 +754,7 @@ function OpenItemsTable({
                 <tr key={it.id} style={{ borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--admin-border)' }}>
                   <td style={{ padding: '12px 16px', fontSize: 14, color: 'var(--admin-text)' }}>
                     <strong>{it.qty}×</strong> {it.label}
+                    {it.kind === 'part' && <PartBadge />}
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--admin-text-2)' }}>
                     {it.booking?.customer_name || '—'}

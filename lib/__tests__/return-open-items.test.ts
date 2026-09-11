@@ -4,6 +4,7 @@ import {
   totalReplacementValue,
   splitAccessoryUnitIds,
   isMissingOpenItemsTable,
+  isMissingPartKind,
   type OpenItemInput,
 } from '../return-open-items';
 
@@ -96,6 +97,98 @@ describe('sanitizeOpenItems', () => {
 
   it('kürzt überlange Labels', () => {
     expect(sanitizeOpenItems([{ ...base, label: 'x'.repeat(500) }])[0].label).toHaveLength(200);
+  });
+});
+
+describe('sanitizeOpenItems — fehlende Bestandteile (kind: part)', () => {
+  const part = {
+    kind: 'part',
+    accessoryId: 'lenkerhalterung',
+    label: 'Lenkerhalterung — orangener Rund-Adapter',
+    qty: 1,
+    resolution: 'follow_up',
+    dueDate: '2026-09-25',
+  };
+
+  it('nimmt ein Bestandteil an, wenn das Eltern-Zubehör gebucht ist', () => {
+    const caps = new Map([['accessory:lenkerhalterung', 1]]);
+    const out = sanitizeOpenItems([part], caps);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      kind: 'part',
+      accessoryId: 'lenkerhalterung',
+      label: 'Lenkerhalterung — orangener Rund-Adapter',
+      qty: 1,
+      resolution: 'follow_up',
+    });
+  });
+
+  it('verwirft ein Bestandteil ohne Eltern-Zubehör', () => {
+    expect(sanitizeOpenItems([{ ...part, accessoryId: '' }], new Map())).toEqual([]);
+  });
+
+  it('verwirft ein Bestandteil, dessen Eltern-Zubehör gar nicht gebucht wurde', () => {
+    const caps = new Map([['accessory:akku', 1]]);
+    expect(sanitizeOpenItems([part], caps)).toEqual([]);
+  });
+
+  it('deckelt das Bestandteil NICHT gegen die Buchungsmenge des Zubehörs', () => {
+    // Die Halterung ist 1× gebucht, kann aber zwei Adapter enthalten.
+    const caps = new Map([['accessory:lenkerhalterung', 1]]);
+    const out = sanitizeOpenItems([{ ...part, qty: 2 }], caps);
+    expect(out[0].qty).toBe(2);
+  });
+
+  it('deckelt die Menge eines Bestandteils auf 99', () => {
+    const caps = new Map([['accessory:lenkerhalterung', 1]]);
+    const out = sanitizeOpenItems([{ ...part, qty: 5000 }], caps);
+    expect(out[0].qty).toBe(99);
+  });
+
+  it('setzt bei einem Bestandteil keine product_id', () => {
+    const caps = new Map([['accessory:lenkerhalterung', 1]]);
+    const out = sanitizeOpenItems([{ ...part, productId: 'gopro-13' }], caps);
+    expect(out[0].productId).toBeNull();
+  });
+
+  it('trägt auch beim Bestandteil den Ersatzbetrag nur bei replace', () => {
+    const caps = new Map([['accessory:lenkerhalterung', 1]]);
+    const out = sanitizeOpenItems(
+      [{ ...part, resolution: 'replace', unitValue: 4.5, dueDate: '2026-09-25' }],
+      caps,
+    );
+    expect(out[0]).toMatchObject({ unitValue: 4.5, dueDate: null });
+  });
+});
+
+describe('splitAccessoryUnitIds — Bestandteile', () => {
+  it('gibt einem Bestandteil kein Exemplar (das Zubehör ist ja zurück)', () => {
+    const items = [
+      { kind: 'part', accessoryId: 'halterung', label: 'Adapter', qty: 1, resolution: 'follow_up' },
+    ] as OpenItemInput[];
+    const { perItem, releasable } = splitAccessoryUnitIds(
+      items,
+      ['u1', 'u2'],
+      new Map([['u1', 'halterung'], ['u2', 'halterung']]),
+    );
+    expect(perItem[0]).toEqual([]);
+    // Beide Exemplare bleiben freigebbar — die Halterung ist wieder vermietbar.
+    expect(releasable).toEqual(['u1', 'u2']);
+  });
+});
+
+describe('isMissingPartKind', () => {
+  it('erkennt den CHECK-Verstoß einer Migration ohne kind=part', () => {
+    expect(isMissingPartKind({
+      code: '23514',
+      message: 'new row violates check constraint "booking_return_open_items_kind_check"',
+    })).toBe(true);
+  });
+
+  it('schluckt keine fremden CHECK-Verstöße', () => {
+    expect(isMissingPartKind({ code: '23514', message: 'qty check violated' })).toBe(false);
+    expect(isMissingPartKind({ code: '23505', message: 'kind duplicate' })).toBe(false);
+    expect(isMissingPartKind(null)).toBe(false);
   });
 });
 

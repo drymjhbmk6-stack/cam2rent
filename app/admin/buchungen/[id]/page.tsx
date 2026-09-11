@@ -88,6 +88,8 @@ interface BookingDetail {
   /** Nicht zurückgegebene Positionen aus der Rückgabe-Prüfung. */
   open_return_items?: {
     id: string;
+    /** 'part' = Position kam zurück, es fehlt nur ein Bestandteil davon. */
+    kind?: 'camera' | 'accessory' | 'part';
     label: string;
     qty: number;
     resolution: 'replace' | 'follow_up';
@@ -1410,7 +1412,7 @@ export default function BuchungDetailPage() {
                   Nicht zurückgegeben
                 </h3>
                 <p className="text-xs text-amber-200/70 mb-3">
-                  Bei der Rückgabe-Prüfung fehlten diese Positionen.
+                  Bei der Rückgabe-Prüfung fehlten diese Positionen bzw. Teile davon.
                 </p>
                 <div className="space-y-2">
                   {booking.open_return_items!.map((it) => {
@@ -1423,6 +1425,14 @@ export default function BuchungDetailPage() {
                         <div className="min-w-0">
                           <div className={done ? 'text-slate-400 line-through' : 'text-slate-100 font-medium'}>
                             {it.qty}× {it.label}
+                            {it.kind === 'part' && (
+                              <span
+                                title="Bestandteil — das Zubehör selbst ist zurück"
+                                className="ml-2 align-middle text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300"
+                              >
+                                🧩 Teil
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-400 mt-0.5">
                             {it.resolution === 'replace'

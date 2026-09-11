@@ -65,6 +65,24 @@ interface OpenResolution {
   dueDate: string;
 }
 
+/**
+ * Auflösung eines fehlenden BESTANDTEILS (z.B. ein Rund-Adapter der
+ * Lenkerhalterung). Das Zubehör selbst ist zurück und bleibt vermietbar —
+ * es fehlt nur ein Teil davon. Deshalb eigener State neben `OpenResolution`:
+ * keine Slot-Menge, dafür ein frei editierbarer Text, der so in der
+ * Nachsende-Mail landet.
+ */
+interface PartResolution {
+  resolution: OpenItemResolution;
+  /** Eltern-Zubehör (accessory_id) — die Gruppe, an der das Teil hängt. */
+  accessoryId: string;
+  /** Wortlaut für Mail + Liste, vorbelegt mit „<Zubehör> — <Bestandteil>". */
+  label: string;
+  qty: number;
+  unitValue: number;
+  dueDate: string;
+}
+
 /** Heute + N Tage als YYYY-MM-DD (Berlin-nah, reicht für eine Vorbelegung). */
 function isoInDays(days: number): string {
   const d = new Date();
@@ -127,6 +145,8 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
 
   // Nicht zurückgegebene Positionen: pro Gruppe eine Auflösung.
   const [openResolutions, setOpenResolutions] = useState<Record<string, OpenResolution>>({});
+  // Fehlende Bestandteile: Key `<groupKey>::<partIndex>`.
+  const [partResolutions, setPartResolutions] = useState<Record<string, PartResolution>>({});
   const [chargeReplacement, setChargeReplacement] = useState(true);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
 
@@ -180,15 +200,68 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
     ({ g, missing }) => (openResolutions[g.groupKey]?.qty ?? 0) >= missing,
   );
 
-  const replacementTotal = missingGroups.reduce((sum, { g }) => {
+  const groupReplacementTotal = missingGroups.reduce((sum, { g }) => {
     const r = openResolutions[g.groupKey];
     return r?.resolution === 'replace' ? sum + r.unitValue * r.qty : sum;
   }, 0);
 
   const openCount = missingGroups.reduce((n, { missing }) => n + missing, 0);
-  const hasReplace = missingGroups.some(({ g }) => openResolutions[g.groupKey]?.resolution === 'replace');
-  const hasFollowUp = missingGroups.some(({ g }) => openResolutions[g.groupKey]?.resolution === 'follow_up');
+  const hasGroupReplace = missingGroups.some(({ g }) => openResolutions[g.groupKey]?.resolution === 'replace');
+  const hasGroupFollowUp = missingGroups.some(({ g }) => openResolutions[g.groupKey]?.resolution === 'follow_up');
   const hasCustomerEmail = !!booking?.customer_email;
+
+  // Gruppen, bei denen ein BESTANDTEIL gemeldet werden kann: Zubehör mit
+  // hinterlegten Bestandteilen, von dem mindestens ein Stück zurückgekommen
+  // ist. Fehlt die Position komplett, ist sie oben schon als „nicht
+  // zurückgegeben" erfasst — ein zusätzlicher Teil-Posten wäre Doppelmeldung.
+  const partGroups = useMemo(
+    () => groups.filter(
+      (g) => g.type === 'accessory'
+        && (g.includedParts?.length ?? 0) > 0
+        && g.slotKeys.some((k) => checked[k]),
+    ),
+    [groups, checked],
+  );
+
+  const partEntries = Object.entries(partResolutions);
+  const partReplacementTotal = partEntries.reduce(
+    (sum, [, r]) => (r.resolution === 'replace' ? sum + r.unitValue * r.qty : sum),
+    0,
+  );
+  const hasPartReplace = partEntries.some(([, r]) => r.resolution === 'replace');
+  const hasPartFollowUp = partEntries.some(([, r]) => r.resolution === 'follow_up');
+
+  // Ganze Positionen und fehlende Bestandteile laufen in denselben Abschluss:
+  // eine Ersatzforderung, eine Nachsende-Mail.
+  const replacementTotal = groupReplacementTotal + partReplacementTotal;
+  const hasReplace = hasGroupReplace || hasPartReplace;
+  const hasFollowUp = hasGroupFollowUp || hasPartFollowUp;
+
+  function togglePart(g: GroupedItem, partIndex: number, partLabel: string) {
+    const key = `${g.groupKey}::${partIndex}`;
+    setPartResolutions((prev) => {
+      if (prev[key]) {
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      }
+      return {
+        ...prev,
+        [key]: {
+          resolution: 'follow_up',
+          accessoryId: g.groupKey,
+          label: `${g.label} — ${partLabel}`,
+          qty: 1,
+          unitValue: 0,
+          dueDate: isoInDays(14),
+        },
+      };
+    });
+  }
+
+  function patchPart(key: string, patch: Partial<PartResolution>) {
+    setPartResolutions((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], ...patch } } : prev));
+  }
 
   function setResolution(groupKey: string, resolution: OpenItemResolution, missing: number) {
     setOpenResolutions((prev) => {
@@ -218,7 +291,23 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
   // nicht automatisch — die Menge wird beim Absenden ohnehin auf die echte
   // Fehlmenge gedeckelt (siehe buildOpenItems).
   function buildOpenItems() {
-    return missingGroups.flatMap(({ g, missing }) => {
+    // Fehlende Bestandteile: eigener Typ, damit der Server weder Lagerbestand
+    // noch Exemplar-Status anfasst (das Zubehör ist ja zurück).
+    const parts = partEntries.flatMap(([, r]) => {
+      const label = r.label.trim();
+      if (!label) return [];
+      return [{
+        kind: 'part' as const,
+        accessoryId: r.accessoryId,
+        label,
+        qty: r.qty,
+        resolution: r.resolution,
+        unitValue: r.resolution === 'replace' ? r.unitValue : undefined,
+        dueDate: r.resolution === 'follow_up' ? r.dueDate : undefined,
+      }];
+    });
+
+    return [...parts, ...missingGroups.flatMap(({ g, missing }) => {
       const r = openResolutions[g.groupKey];
       if (!r) return [];
       const isCamera = g.type === 'camera';
@@ -232,7 +321,7 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
         unitValue: r.resolution === 'replace' ? r.unitValue : undefined,
         dueDate: r.resolution === 'follow_up' ? r.dueDate : undefined,
       }];
-    });
+    })];
   }
 
   // Ref spiegelt checked-State synchron — handleScan wird im continuous-
@@ -521,51 +610,230 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
               })}
             </div>
 
+          </div>
+        )}
+
+        {/* Bestandteil fehlt — die Position ist zurueck, aber unvollstaendig.
+            Bewusst OPTIONAL: blockiert den Abschluss nicht (anders als eine
+            komplett fehlende Position), weil hier keine Slot-Menge offen ist. */}
+        {partGroups.length > 0 && (
+          <div className="bg-admin-surface border border-admin-border rounded-xl p-5 sm:p-6 mb-6">
+            <h2 className="text-sm font-semibold text-admin-text-2 mb-1 uppercase tracking-wider">
+              Teil fehlt (optional)
+            </h2>
+            <p className="text-sm text-admin-muted mb-4">
+              Der Artikel ist zurück, aber unvollständig? Tippe das fehlende Teil an.
+            </p>
+
+            <div className="space-y-4">
+              {partGroups.map((g) => (
+                <div key={g.groupKey}>
+                  <div className="text-sm font-semibold text-admin-text mb-2">{g.label}</div>
+                  <div className="space-y-2">
+                    {(g.includedParts ?? []).map((partLabel, pi) => {
+                      const key = `${g.groupKey}::${pi}`;
+                      const r = partResolutions[key];
+                      const img = g.includedPartsImages?.[pi];
+                      return (
+                        <div
+                          key={key}
+                          className={`rounded-lg border p-3 ${
+                            r ? 'border-amber-500/40 bg-amber-500/5' : 'border-admin-border'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => togglePart(g, pi, partLabel)}
+                            className="w-full flex items-center gap-3 text-left"
+                          >
+                            {img ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={img}
+                                alt=""
+                                className="w-10 h-10 rounded object-cover flex-shrink-0 bg-white"
+                              />
+                            ) : (
+                              <span className="w-10 h-10 rounded border border-dashed border-admin-border flex-shrink-0" />
+                            )}
+                            <span className="flex-1 min-w-0 text-sm text-admin-text">{partLabel}</span>
+                            <span
+                              className="text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
+                              style={{
+                                background: r ? '#f9731622' : 'transparent',
+                                color: r ? '#fb923c' : 'var(--admin-muted)',
+                                border: `1px solid ${r ? '#f97316' : 'var(--admin-border)'}`,
+                              }}
+                            >
+                              {r ? '✓ fehlt' : 'fehlt'}
+                            </span>
+                          </button>
+
+                          {r && (
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <label className="block text-xs font-semibold text-admin-muted mb-1.5">
+                                  Was genau fehlt (steht so in der E-Mail)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={r.label}
+                                  onChange={(e) => patchPart(key, { label: e.target.value })}
+                                  placeholder="z. B. Lenkerhalterung — orangener Rund-Adapter"
+                                  className="w-full px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded-lg text-base text-admin-text outline-none"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-admin-muted">Anzahl</span>
+                                <button
+                                  type="button"
+                                  onClick={() => patchPart(key, { qty: Math.max(1, r.qty - 1) })}
+                                  aria-label="Anzahl verringern"
+                                  className="w-7 h-7 rounded border border-admin-border text-admin-muted hover:text-admin-text"
+                                >
+                                  −
+                                </button>
+                                <span className="text-sm font-mono tabular-nums w-8 text-center text-admin-text">
+                                  {r.qty}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => patchPart(key, { qty: Math.min(99, r.qty + 1) })}
+                                  aria-label="Anzahl erhöhen"
+                                  className="w-7 h-7 rounded border border-admin-border text-admin-muted hover:text-admin-text"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => patchPart(key, { resolution: 'replace' })}
+                                  className="flex-1 py-2.5 px-3 rounded-lg text-sm font-semibold border-2 transition-colors"
+                                  style={{
+                                    borderColor: r.resolution === 'replace' ? '#f97316' : 'var(--admin-border)',
+                                    background: r.resolution === 'replace' ? '#f9731622' : 'transparent',
+                                    color: r.resolution === 'replace' ? '#fb923c' : 'var(--admin-muted)',
+                                  }}
+                                >
+                                  💶 Kunde ersetzt
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => patchPart(key, { resolution: 'follow_up' })}
+                                  className="flex-1 py-2.5 px-3 rounded-lg text-sm font-semibold border-2 transition-colors"
+                                  style={{
+                                    borderColor: r.resolution === 'follow_up' ? '#06b6d4' : 'var(--admin-border)',
+                                    background: r.resolution === 'follow_up' ? '#06b6d422' : 'transparent',
+                                    color: r.resolution === 'follow_up' ? '#22d3ee' : 'var(--admin-muted)',
+                                  }}
+                                >
+                                  📦 Kommt nach
+                                </button>
+                              </div>
+
+                              {r.resolution === 'replace' && (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={String(r.unitValue).replace('.', ',')}
+                                    onChange={(e) => {
+                                      const v = Number(e.target.value.replace(',', '.'));
+                                      patchPart(key, { unitValue: Number.isFinite(v) && v >= 0 ? v : 0 });
+                                    }}
+                                    aria-label="Wert pro Stück"
+                                    className="w-32 px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded-lg text-base text-admin-text outline-none"
+                                  />
+                                  <span className="text-sm text-admin-muted">€ pro Stück</span>
+                                  {r.qty > 1 && (
+                                    <span className="text-sm text-admin-muted">
+                                      = <strong className="text-admin-text">{fmtEuro(r.unitValue * r.qty)}</strong>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {r.resolution === 'follow_up' && (
+                                <div>
+                                  <label className="block text-xs font-semibold text-admin-muted mb-1.5">
+                                    Erwartet bis
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={r.dueDate}
+                                    onChange={(e) => patchPart(key, { dueDate: e.target.value })}
+                                    className="px-3 py-2 bg-[var(--admin-input-bg)] border border-[var(--admin-input-border)] rounded-lg text-base text-admin-text outline-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Gemeinsamer Abschluss fuer fehlende Positionen UND Bestandteile:
+            eine Ersatzforderung, eine Nachsende-Mail. */}
+        {(hasReplace || hasFollowUp) && (
+          <div className="bg-admin-surface border-2 border-amber-500/40 rounded-xl p-5 sm:p-6 mb-6">
+            <h2 className="text-sm font-semibold text-amber-300 mb-3 uppercase tracking-wider">
+              Was der Kunde bekommt
+            </h2>
+
+            {hasReplace && (
+              <div className="flex items-center justify-between text-sm mb-2">
+                <span className="text-admin-muted">Ersatzforderung gesamt</span>
+                <strong className="text-amber-300 text-base">{fmtEuro(replacementTotal)}</strong>
+              </div>
+            )}
+
+            {!hasCustomerEmail && (
+              <p className="text-xs text-amber-400 mb-2">
+                ⚠ Keine E-Mail bei dieser Buchung hinterlegt — es kann weder eine Rechnung
+                noch eine Nachsende-Erinnerung verschickt werden.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {hasReplace && (
+                <Check
+                  label="Rechnung + Zahlungslink an den Kunden senden"
+                  checked={chargeReplacement && hasCustomerEmail}
+                  onChange={setChargeReplacement}
+                  disabled={!hasCustomerEmail}
+                />
+              )}
+              {hasFollowUp && (
+                <Check
+                  label="Kunden an die Nachsendung erinnern (mit Frist)"
+                  checked={notifyCustomer && hasCustomerEmail}
+                  onChange={setNotifyCustomer}
+                  disabled={!hasCustomerEmail}
+                />
+              )}
+            </div>
+
             {/* Haftungs-Hinweis: reine Information, der Betrag wird NICHT gedeckelt. */}
             {hasReplace && booking.liability_summary?.customer_max_label && (
-              <p className="text-xs text-admin-muted mt-4 leading-relaxed">
+              <p className="text-xs text-admin-muted mt-4 pt-4 border-t border-admin-border leading-relaxed">
                 ℹ Haftungsoption des Kunden: <strong className="text-admin-text-2">
                   {booking.liability_summary.customer_max_label}
                 </strong>
                 {typeof booking.liability_summary.customer_max_liability === 'number' && (
                   <> · Höchstbetrag der Ersatzpflicht {fmtEuro(booking.liability_summary.customer_max_liability)}</>
                 )}
-                . Nicht zurückgegeben ist kein Schadensfall — der Betrag oben ist der volle
+                . Nicht zurückgegeben ist kein Schadensfall — die Beträge sind der volle
                 Wiederbeschaffungswert und von dir frei änderbar.
               </p>
-            )}
-
-            {(hasReplace || hasFollowUp) && (
-              <div className="mt-4 pt-4 border-t border-admin-border space-y-2">
-                {hasReplace && (
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-admin-muted">Ersatzforderung gesamt</span>
-                    <strong className="text-amber-300 text-base">{fmtEuro(replacementTotal)}</strong>
-                  </div>
-                )}
-                {!hasCustomerEmail && (
-                  <p className="text-xs text-amber-400">
-                    ⚠ Keine E-Mail bei dieser Buchung hinterlegt — es kann weder eine Rechnung
-                    noch eine Nachsende-Erinnerung verschickt werden.
-                  </p>
-                )}
-                {hasReplace && (
-                  <Check
-                    label="Rechnung + Zahlungslink an den Kunden senden"
-                    checked={chargeReplacement && hasCustomerEmail}
-                    onChange={setChargeReplacement}
-                    disabled={!hasCustomerEmail}
-                  />
-                )}
-                {hasFollowUp && (
-                  <Check
-                    label="Kunden an die Nachsendung erinnern (mit Frist)"
-                    checked={notifyCustomer && hasCustomerEmail}
-                    onChange={setNotifyCustomer}
-                    disabled={!hasCustomerEmail}
-                  />
-                )}
-              </div>
             )}
           </div>
         )}

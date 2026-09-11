@@ -14,7 +14,15 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type OpenItemKind = 'camera' | 'accessory';
+/**
+ * 'camera' / 'accessory' = die ganze Position kam nicht zurueck.
+ * 'part' = die Position kam zurueck, ist aber UNVOLLSTAENDIG (ein Bestandteil
+ *          fehlt, z.B. ein Rund-Adapter der Lenkerhalterung). Bestandteile sind
+ *          reine Anzeige-Eintraege am Zubehoer ohne eigenes Inventar — eine
+ *          'part'-Zeile fasst deshalb weder Lagerbestand noch Exemplar-Status
+ *          an, sondern dokumentiert nur die Forderung.
+ */
+export type OpenItemKind = 'camera' | 'accessory' | 'part';
 export type OpenItemResolution = 'replace' | 'follow_up';
 export type OpenItemStatus = 'open' | 'received' | 'charged' | 'waived';
 
@@ -24,6 +32,7 @@ export const OPEN_ITEM_STATUSES: OpenItemStatus[] = ['open', 'received', 'charge
 /** Vom Client gemeldete Auflösung einer offenen Position. */
 export interface OpenItemInput {
   kind: OpenItemKind;
+  /** Bei 'accessory' das Zubehoer, bei 'part' das ELTERN-Zubehoer. */
   accessoryId?: string | null;
   productId?: string | null;
   label: string;
@@ -58,6 +67,8 @@ export interface OpenItemRow {
 
 const MAX_ITEMS = 50;
 const MAX_QTY = 999;
+/** Bestandteile haben keine Buchungsmenge — eigener, engerer Deckel. */
+const MAX_PART_QTY = 99;
 const MAX_LABEL = 200;
 const MAX_VALUE = 100_000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -78,12 +89,28 @@ export function isMissingOpenItemsTable(
 }
 
 /**
+ * Erkennt den CHECK-Verstoss einer Migration, die kind='part' noch nicht kennt
+ * (Tabelle existiert, erlaubt aber nur 'camera'/'accessory').
+ */
+export function isMissingPartKind(
+  error: { code?: string; message?: string } | null | undefined,
+): boolean {
+  if (!error) return false;
+  const msg = String(error.message ?? '');
+  return error.code === '23514' && /kind/i.test(msg);
+}
+
+/**
  * Saeubert die vom Client gemeldeten Positionen.
  *
  * `caps` deckelt die Menge pro Position auf das, was die Buchung ueberhaupt
  * enthaelt (Key: `accessory:<id>` bzw. `camera:<lowercase name>`) — ein
  * manipulierter Client kann so keine Fantasie-Mengen als „fehlend" melden.
  * Ohne passenden Cap-Eintrag greift nur der harte MAX_QTY-Deckel.
+ *
+ * Bestandteile ('part') haben keine eigene Buchungsmenge — dort wird stattdessen
+ * geprueft, dass das ELTERN-Zubehoer ueberhaupt in der Buchung steckt, und die
+ * Menge auf MAX_PART_QTY gedeckelt.
  */
 export function sanitizeOpenItems(
   raw: unknown,
@@ -96,29 +123,45 @@ export function sanitizeOpenItems(
     if (!entry || typeof entry !== 'object') continue;
     const o = entry as Record<string, unknown>;
 
-    const kind: OpenItemKind = o.kind === 'camera' ? 'camera' : 'accessory';
+    const kind: OpenItemKind = o.kind === 'camera' ? 'camera'
+      : o.kind === 'part' ? 'part'
+      : 'accessory';
     const resolution = String(o.resolution ?? '');
     if (!OPEN_ITEM_RESOLUTIONS.includes(resolution as OpenItemResolution)) continue;
 
     const label = String(o.label ?? '').trim().slice(0, MAX_LABEL);
     if (!label) continue;
 
-    const accessoryId = kind === 'accessory'
-      ? (String(o.accessoryId ?? '').trim().slice(0, 200) || null)
-      : null;
+    const accessoryId = kind === 'camera'
+      ? null
+      : (String(o.accessoryId ?? '').trim().slice(0, 200) || null);
     const productId = kind === 'camera'
       ? (String(o.productId ?? '').trim().slice(0, 200) || null)
       : null;
 
+    // Ein Bestandteil haengt zwingend an einem Zubehoer der Buchung. Sind Caps
+    // bekannt und das Eltern-Zubehoer steckt nicht drin, ist der Eintrag
+    // erfunden — verwerfen.
+    if (kind === 'part') {
+      if (!accessoryId) continue;
+      if (caps && !caps.has(`accessory:${accessoryId}`)) continue;
+    }
+
     // Menge: mindestens 1, gegen den echten Buchungsbestand gedeckelt.
     let qty = Math.floor(Number(o.qty));
     if (!Number.isFinite(qty) || qty < 1) qty = 1;
-    const capKey = kind === 'accessory'
-      ? `accessory:${accessoryId ?? ''}`
-      : `camera:${label.toLowerCase()}`;
-    const cap = caps?.get(capKey);
-    if (typeof cap === 'number' && cap >= 0) qty = Math.min(qty, cap);
-    qty = Math.min(qty, MAX_QTY);
+    if (kind === 'part') {
+      // Bestandteile zaehlen nicht gegen den Buchungsbestand (die Position
+      // selbst ist ja zurueck) — nur harter Deckel.
+      qty = Math.min(qty, MAX_PART_QTY);
+    } else {
+      const capKey = kind === 'accessory'
+        ? `accessory:${accessoryId ?? ''}`
+        : `camera:${label.toLowerCase()}`;
+      const cap = caps?.get(capKey);
+      if (typeof cap === 'number' && cap >= 0) qty = Math.min(qty, cap);
+      qty = Math.min(qty, MAX_QTY);
+    }
     if (qty < 1) continue;
 
     // Betrag nur bei 'replace'; nie negativ.
@@ -194,6 +237,24 @@ export async function persistOpenItems(
 
   if (error) {
     if (isMissingOpenItemsTable(error)) return { rows: [], migrationPending: true };
+
+    // Aeltere Fassung der Migration ohne kind='part': der CHECK schlaegt zu.
+    // Dann die Bestandteil-Zeilen abtrennen und wenigstens den Rest speichern —
+    // die Nachsende-Mail geht ohnehin raus, nur der Posten fehlt in der Liste.
+    if (isMissingPartKind(error) && payload.some((r) => r.kind === 'part')) {
+      const rest = payload.filter((r) => r.kind !== 'part');
+      if (rest.length === 0) return { rows: [], migrationPending: true };
+      const retry = await supabase
+        .from('booking_return_open_items')
+        .insert(rest)
+        .select('*');
+      if (retry.error) {
+        console.error('[return-open-items] insert retry failed:', retry.error);
+        return { rows: [], migrationPending: false, error: retry.error.message };
+      }
+      return { rows: (retry.data ?? []) as OpenItemRow[], migrationPending: true };
+    }
+
     console.error('[return-open-items] insert failed:', error);
     return { rows: [], migrationPending: false, error: error.message };
   }
@@ -239,6 +300,9 @@ export async function loadOpenItems(
  *
  * Pro Zubehoer-Position werden bis zu `qty` Exemplare beansprucht; der Rest
  * bleibt uebrig und wird vom Aufrufer regulaer freigegeben.
+ *
+ * 'part'-Positionen bekommen bewusst KEINE Exemplare: das Zubehoer selbst ist
+ * ja zurueckgekommen und bleibt vermietbar — es fehlt nur ein Bestandteil.
  */
 export function splitAccessoryUnitIds(
   items: OpenItemInput[],

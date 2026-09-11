@@ -2731,10 +2731,58 @@ wird frei) — die offenen Positionen leben in einer eigenen Tabelle.
   Karte im Reiter „Übersicht" — pro offener Position ebenfalls mit den
   Buttons „✓ Eingetroffen" / „Erledigt", damit der Admin direkt dort
   handeln kann und nicht erst in den Tab wechseln muss).
-- **Tests:** `lib/__tests__/return-open-items.test.ts` (21 Tests — Mengen-Cap
+- **Tests:** `lib/__tests__/return-open-items.test.ts` (31 Tests — Mengen-Cap
   gegen den Buchungsbestand, ≤ 50 Positionen, negative/ungültige Beträge,
   Datumsformat, Feld-Trennung replace/follow_up, Exemplar-Verteilung ohne
-  Doppelvergabe, Missing-Table-Erkennung).
+  Doppelvergabe, Missing-Table-Erkennung, Bestandteil-Regeln).
+
+#### Fehlendes Bestandteil nachfordern (`kind='part'`, Stand 2026-09-11)
+Bisher liess sich nur eine **ganze** Position als fehlend melden. Kommt das
+Zubehör aber zurück und ist nur **unvollständig** (Screenshot-Fall: Lenkerhalterung
+da, einer der beiden orangenen Rund-Adapter fehlt), gab es keinen Weg — die
+`included_parts` sind reine Anzeige-Einträge ohne eigenes Inventar.
+- **Neuer Typ `kind='part'`** in `booking_return_open_items`. `accessory_id` zeigt
+  auf das **Eltern-Zubehör**, `label` ist der (frei editierbare) Wortlaut, der so
+  in der Nachsende-Mail landet. **Invariante:** eine `part`-Zeile fasst weder
+  Lagerbestand noch Exemplar-Status an — das Zubehör ist ja zurück und bleibt
+  vermietbar. Sie dokumentiert nur die Forderung. Trägt automatisch, weil alle
+  Bestands-/Exemplar-Zweige in `return-booking` auf `kind === 'accessory'` bzw.
+  `'camera'` prüfen und `splitAccessoryUnitIds` `part` leer lässt.
+- **Sanitizer** (`lib/return-open-items.ts`): `part` braucht zwingend eine
+  `accessoryId`, und sind Caps bekannt, muss das Eltern-Zubehör **in der Buchung
+  stecken** (sonst verworfen → kein erfundener Posten aus einem manipulierten
+  Client). Die Menge wird **NICHT** gegen die Buchungsmenge gedeckelt (eine
+  einmal gebuchte Halterung kann zwei Adapter enthalten), sondern auf
+  `MAX_PART_QTY = 99`.
+- **UI** (`/admin/retouren/[id]/pruefen`): neue Sektion **„Teil fehlt
+  (optional)"** unter „Nicht zurückgegeben". Sie erscheint für jede
+  Zubehör-Gruppe mit hinterlegten Bestandteilen, **von der mindestens ein Stück
+  abgehakt ist** (fehlt die Position ganz, ist sie oben schon erfasst — sonst
+  Doppelmeldung). Pro Bestandteil eine antippbare Zeile mit Thumbnail; danach
+  Wortlaut (vorbelegt „<Zubehör> — <Bestandteil>"), Anzahl, Ersatz/Nachsendung,
+  Betrag bzw. Frist. **Bewusst optional** — blockiert den Abschluss nicht, weil
+  hier keine Slot-Menge offen ist (`allSlotsAccountedFor` unverändert).
+- **Abschluss-Block herausgezogen:** „Ersatzforderung gesamt" + die zwei
+  Checkboxen („Rechnung + Zahlungslink senden" / „Kunden erinnern") sassen
+  INNERHALB der `missingGroups`-Sektion und wären bei einem reinen
+  Bestandteil-Fall nie gerendert worden. Jetzt eigene Karte **„Was der Kunde
+  bekommt"** unter beiden Sektionen, gespeist aus `hasReplace`/`hasFollowUp`
+  (= Gruppen **oder** Teile). Damit geht eine Nachsende-Bitte für ein
+  Bestandteil über dieselbe Mail (`sendReturnFollowUpRequest`) und eine
+  Ersatzforderung über dieselbe Verkaufsrechnung (`createSale`).
+- **Kennzeichnung:** Badge **„🧩 Teil"** im Tab „Offene Rückgaben" (Karten- +
+  Tabellenansicht) und in der Buchungsdetail-Karte — wichtig, weil
+  „✓ Eingetroffen" dort **kein Exemplar freigibt**. Admin-Notification
+  unterscheidet im Titel („Unvollständig zurück: N Teil(e) fehlen" vs.
+  „Nicht zurückgegeben: N Position(en)"), Audit-Log zählt `parts` mit.
+- **Migration:** `supabase/supabase-return-open-items.sql` wurde erweitert
+  (CHECK auf `kind` += `'part'`) + ein idempotenter DO-Block am Dateiende, der
+  den Constraint auch dann austauscht, wenn die Migration **vorher schon
+  gelaufen** ist. **Defensiv:** läuft eine alte Fassung ohne `'part'`, erkennt
+  `isMissingPartKind` den CHECK-Verstoss (`23514`), speichert die übrigen
+  Positionen und meldet `migration_pending` — die Nachsende-Mail geht trotzdem
+  raus, nur der Posten fehlt in der Liste.
+
 - ⚠️ **Bekannte, akzeptierte Grenze:** `deductConsumablesForBooking(…, 'return')`
   rechnet weiter mit den **gebuchten** (nicht den tatsächlich zurückgekommenen)
   Mengen — bei fehlenden Halterungen kann ein Klebepad zu viel abgezogen werden.
@@ -9161,9 +9209,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   versendeten Buchungen den Carrier einmal auf „DHL Express" umstellen, damit
   der Verfolgungs-Link aufs richtige Portal zeigt. Siehe „DHL Express — extern
   erzeugte Etiketten".
-- **Unvollständige Rückgabe — Migration auszuführen:**
+- **Unvollständige Rückgabe — Migration auszuführen (bzw. ERNEUT):**
   `supabase/supabase-return-open-items.sql` (idempotent, additiv: Tabelle
-  `booking_return_open_items`). Ohne sie läuft der Rückgabe-Flow **exakt wie
+  `booking_return_open_items`). **Die Datei wurde am 2026-09-11 um `kind='part'`
+  erweitert** (fehlendes Bestandteil nachfordern) — falls sie schon einmal lief,
+  bitte erneut ausführen: der DO-Block am Dateiende tauscht nur den CHECK aus,
+  keine Datenänderung. Ohne ihn wird die Bestandteil-Zeile nicht gespeichert
+  (Mail geht trotzdem raus, Antwort meldet `migration_pending`).
+  Ohne die Migration insgesamt läuft der Rückgabe-Flow **exakt wie
   bisher** — alle Schreib-/Lesepfade fangen die fehlende Tabelle ab
   (`migration_pending`), der Abschluss-Button bleibt auf „alles abhaken"
   gegated, der Tab „Offene Rückgaben" bleibt leer und der Verwaltungs-Endpoint

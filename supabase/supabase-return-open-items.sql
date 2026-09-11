@@ -12,6 +12,13 @@
 --                               Stripe-Zahlungslink erzeugt, sale_booking_id)
 --   resolution = 'follow_up' -> Kunde bringt/schickt es nach (due_date = Frist)
 --
+-- kind = 'part' deckt den Fall ab, dass die Position selbst zurueckkam, aber
+-- UNVOLLSTAENDIG ist (z.B. Lenkerhalterung da, einer der beiden Rund-Adapter
+-- fehlt). Bestandteile sind reine Anzeige-Eintraege am Zubehoer und haben
+-- KEIN eigenes Inventar: eine 'part'-Zeile beeinflusst deshalb weder den
+-- Lagerbestand noch den Status eines Exemplars — sie dokumentiert die
+-- Forderung und speist die Nachsende-Mail.
+--
 -- Eigene Tabelle statt JSONB an `bookings`, weil quer ueber alle Buchungen
 -- abgefragt wird (Tab „Offene Rueckgaben", Dashboard-Aufgaben-Widget, Push).
 --
@@ -23,10 +30,10 @@ CREATE TABLE IF NOT EXISTS booking_return_open_items (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   booking_id         TEXT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
 
-  -- 'camera' | 'accessory'
+  -- 'camera' | 'accessory' | 'part' (fehlendes Bestandteil eines Zubehoers)
   kind               TEXT NOT NULL DEFAULT 'accessory'
-                       CHECK (kind IN ('camera', 'accessory')),
-  accessory_id       TEXT,        -- bei kind='accessory'
+                       CHECK (kind IN ('camera', 'accessory', 'part')),
+  accessory_id       TEXT,        -- bei kind='accessory'; bei 'part' das Eltern-Zubehoer
   product_id         TEXT,        -- bei kind='camera'
 
   -- Anzeigename als Snapshot (Katalog kann sich spaeter aendern)
@@ -76,3 +83,20 @@ CREATE INDEX IF NOT EXISTS idx_return_open_items_booking
 -- RLS: service-role-only (Muster wie damage_reports). Der Zugriff laeuft
 -- ausschliesslich ueber die Admin-APIs mit Permission 'tagesgeschaeft'.
 ALTER TABLE booking_return_open_items ENABLE ROW LEVEL SECURITY;
+
+-- Nachtrag fuer Umgebungen, in denen diese Migration VOR der Einfuehrung von
+-- kind='part' schon gelaufen ist: den CHECK austauschen. Idempotent — bei einer
+-- frisch angelegten Tabelle ersetzt er den Constraint durch einen identischen.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'booking_return_open_items'
+  ) THEN
+    ALTER TABLE booking_return_open_items
+      DROP CONSTRAINT IF EXISTS booking_return_open_items_kind_check;
+    ALTER TABLE booking_return_open_items
+      ADD CONSTRAINT booking_return_open_items_kind_check
+      CHECK (kind IN ('camera', 'accessory', 'part'));
+  END IF;
+END $$;
