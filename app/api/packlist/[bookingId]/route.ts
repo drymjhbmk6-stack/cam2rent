@@ -9,6 +9,7 @@ import { PacklistPDF, type PacklistData } from '@/lib/packlist-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { loadBufferDays, computeShipDate, toIsoDate } from '@/lib/booking-buffer';
+import { parseStoredPhotos } from '@/lib/photo-slots';
 
 export async function GET(
   _req: NextRequest,
@@ -248,6 +249,9 @@ export async function GET(
     checkedItems: Array.isArray(booking.pack_checked_items) ? booking.pack_checked_items : null,
     checkedNotes: booking.pack_checked_notes ?? null,
     photoStoragePath: booking.pack_photo_url ?? null,
+    // Anzahl aller Fotos der Kontrolle. Ohne die `pack_photos`-Migration ist
+    // das Feld leer → Fallback auf das eine Gesamtfoto (Verhalten wie bisher).
+    photoCount: parseStoredPhotos(booking.pack_photos).length || (booking.pack_photo_url ? 1 : 0),
   };
 
   const pdfBuffer = await renderToBuffer(

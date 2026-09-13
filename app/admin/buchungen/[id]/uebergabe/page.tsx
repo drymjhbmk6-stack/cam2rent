@@ -7,6 +7,16 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
 import { BUSINESS } from '@/lib/business-config';
 import { normalizeHandoverAddresses } from '@/components/admin/HandoverAddressesSection';
+import PhotoSlotUploader from '@/components/admin/PhotoSlotUploader';
+import { compressPhotoIfLarge } from '@/lib/compress-photo-client';
+import {
+  buildPhotoSlots,
+  extraPhotoFieldName,
+  parseStoredPhotos,
+  photoFieldName,
+  type PhotoSlot,
+  type StoredPhoto,
+} from '@/lib/photo-slots';
 import {
   expandItems,
   groupItems,
@@ -67,7 +77,10 @@ interface HandoverData {
   location: string;
   condition: { tested: boolean; noDamage: boolean; otherNote?: string };
   items: Array<{ name: string; ok: boolean }>;
+  /** Gesamtfoto — Altbestand hat nur dieses Feld. */
   photoPath?: string;
+  /** Alle Fotos (Gesamtfoto + je Kamera vorne/hinten + Extras). */
+  photos?: StoredPhoto[];
   // Abholung durch eine dritte Person (nicht der Kunde). byThirdParty=false
   // (oder Feld fehlt) = Kunde holt selbst ab, wie bisher.
   pickup?: {
@@ -141,9 +154,28 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [tested, setTested] = useState(false);
   const [noDamage, setNoDamage] = useState(false);
   const [otherNote, setOtherNote] = useState('');
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Pflicht-Fotos: 1x Gesamtfoto + pro Kamera je vorne/hinten. Die Slot-Liste
+  // ist nur die UI-Sicht — massgeblich prueft der Server (er baut sie aus der
+  // Buchung neu auf).
+  const photoSlots = useMemo<PhotoSlot[]>(
+    () => buildPhotoSlots(booking.cameras_resolved ?? []),
+    [booking.cameras_resolved],
+  );
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
+  const [photoExtras, setPhotoExtras] = useState<File[]>([]);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  function setPhotoFile(slotKey: string, file: File | null) {
+    setPhotoFiles((prev) => {
+      if (!file) {
+        const next = { ...prev };
+        delete next[slotKey];
+        return next;
+      }
+      return { ...prev, [slotKey]: file };
+    });
+  }
+  const allPhotosTaken = photoSlots.every((s) => !!photoFiles[s.key]);
 
   // Scanner-State (analog zum Versand-Pack-Workflow)
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -322,7 +354,8 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   }, [scannerOpen, checkedPackable, totalPackable]);
 
   const allItemsChecked = items.every((it) => checked[it.key]);
-  const canProceedFromStep1 = allItemsChecked && location.trim().length > 0 && tested && noDamage && !!photoFile;
+  const canProceedFromStep1 =
+    allItemsChecked && location.trim().length > 0 && tested && noDamage && allPhotosTaken;
 
   // Vermieter-Name aus admin/me vorausfüllen
   useEffect(() => {
@@ -341,7 +374,11 @@ function Wizard({ booking }: { booking: BookingDetail }) {
       setSubmitError('Bei Abholung durch eine dritte Person: Vollmacht + Ausweisprüfung bestätigen.');
       return;
     }
-    if (!photoFile) { setSubmitError('Foto ist Pflicht.'); return; }
+    const missingPhotos = photoSlots.filter((sl) => !photoFiles[sl.key]);
+    if (missingPhotos.length > 0) {
+      setSubmitError(`Es fehlen Pflicht-Fotos: ${missingPhotos.map((sl) => sl.title).join(', ')}.`);
+      return;
+    }
 
     setSaving(true);
     setSubmitError('');
@@ -350,19 +387,28 @@ function Wizard({ booking }: { booking: BookingDetail }) {
         .filter((it) => it.type !== 'return-label')
         .map((it) => ({ name: it.label, ok: !!checked[it.key] }));
 
-      // Foto vor dem Upload client-seitig komprimieren — iPhone-Fotos sind
-      // oft 3–8 MB (HEIC/JPEG), Mobile-5G/Roaming reißt während 10-MB-Uploads
-      // gerne mit "Netzwerkfehler" ab. Zielgröße ~1 MB reicht für Doku.
-      let photoToUpload = photoFile;
-      try {
-        photoToUpload = await compressPhotoIfLarge(photoFile);
-      } catch (e) {
-        // Bei Kompressionsfehler unverändert hochladen — Original ist fallback
-        console.warn('[handover] photo compression failed, uploading original:', e);
-      }
+      // Fotos vor dem Upload client-seitig komprimieren — iPhone-Fotos sind
+      // oft 3–8 MB (HEIC/JPEG), Mobile-5G/Roaming reißt während großer Uploads
+      // gerne mit "Netzwerkfehler" ab. Zielgröße ~1 MB reicht für Doku. Bei
+      // mehreren Pflicht-Fotos ist das umso wichtiger.
+      const shrink = async (f: File) => {
+        try {
+          return await compressPhotoIfLarge(f);
+        } catch (e) {
+          // Bei Kompressionsfehler unverändert hochladen — Original ist Fallback
+          console.warn('[handover] photo compression failed, uploading original:', e);
+          return f;
+        }
+      };
 
       const formData = new FormData();
-      formData.append('photo', photoToUpload);
+      for (const slot of photoSlots) {
+        const f = photoFiles[slot.key];
+        if (f) formData.append(photoFieldName(slot.key), await shrink(f));
+      }
+      for (let i = 0; i < photoExtras.length; i++) {
+        formData.append(extraPhotoFieldName(i), await shrink(photoExtras[i]));
+      }
       formData.append('data', JSON.stringify({
         location: location.trim(),
         condition: { tested, noDamage, otherNote: otherNote.trim() || undefined },
@@ -457,7 +503,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
             totalPackable, checkedPackable,
             location, setLocation, savedAddresses,
             tested, setTested, noDamage, setNoDamage,
-            photoFile, setPhotoFile, photoPreview, setPhotoPreview,
+            photoSlots, photoFiles, setPhotoFile, photoExtras, setPhotoExtras,
             otherNote, setOtherNote,
             pickerGroup, setPickerGroup,
             scannedAccessoryUnitIds, scannedCameraUnitIds,
@@ -628,10 +674,11 @@ function Step1(props: {
   setTested: (v: boolean) => void;
   noDamage: boolean;
   setNoDamage: (v: boolean) => void;
-  photoFile: File | null;
-  setPhotoFile: (f: File | null) => void;
-  photoPreview: string | null;
-  setPhotoPreview: (u: string | null) => void;
+  photoSlots: PhotoSlot[];
+  photoFiles: Record<string, File>;
+  setPhotoFile: (slotKey: string, f: File | null) => void;
+  photoExtras: File[];
+  setPhotoExtras: (files: File[]) => void;
   otherNote: string;
   setOtherNote: (v: string) => void;
   pickerGroup: GroupedItem | null;
@@ -644,15 +691,6 @@ function Step1(props: {
   canProceed: boolean;
   onNext: () => void;
 }) {
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { alert('Foto zu gross (max 10 MB).'); return; }
-    props.setPhotoFile(f);
-    const reader = new FileReader();
-    reader.onload = () => props.setPhotoPreview(reader.result as string);
-    reader.readAsDataURL(f);
-  }
   return (
     <div className="bg-[var(--admin-input-bg)] border border-admin-border rounded-xl p-6">
       <h2 className="font-bold text-lg mb-1">1. Zustand bei Übergabe</h2>
@@ -780,61 +818,16 @@ function Step1(props: {
         </div>
       </div>
 
-      {/* Foto-Upload (Pflicht) */}
-      <div className="mb-5">
-        <label className="block text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1.5">Foto der Übergabe *</label>
-        <p className="text-xs text-[var(--admin-text-dim)] mb-2">Pflicht: mindestens ein Foto vom Mietgegenstand bei der Übergabe (Zustand dokumentieren).</p>
-        {/* Kamera (öffnet direkt die Rückkamera auf Mobile) */}
-        <input
-          id="handover-photo-camera"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={onFile}
-          className="hidden"
-        />
-        {/* Galerie / Datei (ohne capture → Foto-Mediathek bzw. Datei-Dialog) */}
-        <input
-          id="handover-photo-gallery"
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-          onChange={onFile}
-          className="hidden"
-        />
-        {props.photoPreview ? (
-          <div className="space-y-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={props.photoPreview} alt="Übergabe-Foto" className="w-full max-h-64 object-contain rounded-lg bg-[var(--admin-bg)] border border-admin-border" />
-            <button
-              type="button"
-              onClick={() => { props.setPhotoFile(null); props.setPhotoPreview(null); }}
-              className="text-xs text-admin-muted hover:text-admin-text underline"
-            >
-              Foto entfernen / neu aufnehmen
-            </button>
-          </div>
-        ) : (
-          <div className="w-full p-6 rounded-lg bg-[var(--admin-bg)] border-2 border-dashed border-[var(--admin-faint)]">
-            <div className="flex flex-col items-center justify-center mb-4">
-              <svg className="w-8 h-8 mb-2 text-[var(--admin-text-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="text-xs text-[var(--admin-text-dim)]">JPEG, PNG, WebP, HEIC · max 10 MB</span>
-            </div>
-            <div className="flex gap-2">
-              <label htmlFor="handover-photo-camera" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-admin-accent hover:bg-admin-accent-hover text-slate-950 text-sm font-medium cursor-pointer transition-colors">
-                <span>📷</span>
-                <span>Foto aufnehmen</span>
-              </label>
-              <label htmlFor="handover-photo-gallery" className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-admin-surface-2 hover:bg-[var(--admin-faint)] border border-[var(--admin-input-border)] text-admin-text text-sm font-medium cursor-pointer transition-colors">
-                <span>🖼</span>
-                <span>Galerie</span>
-              </label>
-            </div>
-          </div>
-        )}
-      </div>
+      <PhotoSlotUploader
+        slots={props.photoSlots}
+        files={props.photoFiles}
+        onSetFile={props.setPhotoFile}
+        extras={props.photoExtras}
+        onSetExtras={props.setPhotoExtras}
+        idPrefix="handover-photo"
+        title="Fotos der Übergabe *"
+        intro="Pflicht: ein Gesamtfoto von allem, was der Kunde mitbekommt — und pro Kamera je ein Foto von vorne und von der Rückseite (Zustand dokumentieren)."
+      />
 
       {/* Sonstige Anmerkungen */}
       <div className="mb-6">
@@ -1053,14 +1046,21 @@ function DoneStep({ bookingId }: { bookingId: string }) {
 
 function DoneView({ booking, handover }: { booking: BookingDetail; handover: HandoverData }) {
   const completedDate = new Date(handover.completedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  // Alle Fotos (Gesamtfoto + je Kamera vorne/hinten + Extras). Altbestand hat
+  // nur `photoPath` — die Route liefert dann eine Ein-Element-Liste.
+  const storedPhotos = useMemo(() => parseStoredPhotos(handover.photos), [handover.photos]);
+  const hasPhotos = storedPhotos.length > 0 || !!handover.photoPath;
+  const [photoUrls, setPhotoUrls] = useState<Array<StoredPhoto & { url: string }>>([]);
   useEffect(() => {
-    if (!handover.photoPath) return;
+    if (!hasPhotos) return;
     fetch(`/api/admin/handover/${booking.id}/photo-url`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.url) setPhotoUrl(d.url); })
+      .then((d) => {
+        if (Array.isArray(d?.photos)) setPhotoUrls(d.photos.filter((p: { url?: string }) => p?.url));
+        else if (d?.url) setPhotoUrls([{ path: '', kind: 'overview', title: 'Foto der Übergabe', url: d.url }]);
+      })
       .catch(() => {});
-  }, [booking.id, handover.photoPath]);
+  }, [booking.id, hasPhotos]);
   return (
     <div className="min-h-screen text-admin-text">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
@@ -1120,14 +1120,29 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             </ul>
           </div>
 
-          {handover.photoPath && (
+          {hasPhotos && (
             <div className="mb-4">
-              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-1">Foto der Übergabe</div>
-              {photoUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={photoUrl} alt="Übergabe-Foto" className="w-full max-h-72 object-contain rounded-lg bg-[var(--admin-bg)] border border-admin-border" />
+              <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">
+                Fotos der Übergabe{photoUrls.length > 0 ? ` (${photoUrls.length})` : ''}
+              </div>
+              {photoUrls.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {photoUrls.map((p, i) => (
+                    <figure key={p.path || i} className="min-w-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.url}
+                        alt={p.title}
+                        className="w-full max-h-56 object-contain rounded-lg bg-[var(--admin-bg)] border border-admin-border"
+                      />
+                      <figcaption className="text-xs text-[var(--admin-text-dim)] mt-1 truncate">
+                        {p.title}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
               ) : (
-                <div className="text-xs text-[var(--admin-text-dim)]">Foto wird geladen…</div>
+                <div className="text-xs text-[var(--admin-text-dim)]">Fotos werden geladen…</div>
               )}
             </div>
           )}
@@ -1152,48 +1167,4 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
       </div>
     </div>
   );
-}
-
-// ─── Foto-Kompression vor Upload ─────────────────────────────────────────────
-//
-// iPhone-Fotos sind oft 3–8 MB (HEIC oder JPEG). Auf instabilem Mobilfunk
-// (Tower-Wechsel, 5G→4G, Roaming) reißt der Upload großer Bodies mit
-// "TypeError: NetworkError"/Connection-Reset gerne ab. ~1 MB als Zieldatei
-// reicht für Doku-Foto-Qualität und kommt zuverlässig durch.
-//
-// Strategie: createImageBitmap akzeptiert auch HEIC/HEIF auf iOS Safari und
-// konvertiert intern. Skaliert auf max 1920×1920 (long edge) und encodiert
-// als JPEG quality 0.85. Bei Fehler wird das Original zurückgegeben — die
-// Funktion ist non-blocking.
-async function compressPhotoIfLarge(file: File): Promise<File> {
-  // Schon klein genug → unverändert lassen
-  if (file.size <= 1.2 * 1024 * 1024) return file;
-  // Browser-Support-Check
-  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
-
-  const bitmap = await createImageBitmap(file);
-  try {
-    const MAX_DIM = 1920;
-    let width = bitmap.width;
-    let height = bitmap.height;
-    if (width > MAX_DIM || height > MAX_DIM) {
-      const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
-      width = Math.round(width * ratio);
-      height = Math.round(height * ratio);
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
-    );
-    if (!blob || blob.size >= file.size) return file;
-    const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
-    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
-  } finally {
-    if (typeof bitmap.close === 'function') bitmap.close();
-  }
 }

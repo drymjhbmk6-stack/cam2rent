@@ -27,6 +27,8 @@ import {
 } from '@/lib/booking-cameras';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { collectPhotoPaths } from '@/lib/photo-slots';
+import { clearPackPhotos, loadPackPhotosRaw } from '@/lib/photo-slot-upload';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -56,16 +58,22 @@ function fmtDay(iso: string): string {
 
 async function packResetFields(
   supabase: SupabaseClient,
-  booking: { pack_status?: unknown; pack_photo_url?: unknown },
+  booking: { id?: unknown; pack_status?: unknown; pack_photo_url?: unknown },
 ): Promise<Record<string, unknown>> {
   const ps = booking.pack_status;
   if (!ps || ps === 'checked') return {};
-  if (booking.pack_photo_url) {
+  // ALLE Fotos entfernen (Gesamtfoto + Kamera-Fotos vorne/hinten + Extras).
+  // `pack_photos` wird defensiv nachgeladen (Migration ggf. ausstehend).
+  const photosRaw = await loadPackPhotosRaw(supabase, booking.id);
+  const paths = collectPhotoPaths(booking.pack_photo_url, photosRaw);
+  if (paths.length > 0) {
     await supabase.storage
       .from('packing-photos')
-      .remove([booking.pack_photo_url as string])
+      .remove(paths)
       .catch(() => { /* best-effort */ });
   }
+  // Foto-Liste leeren — sonst zeigt sie nach dem Reset auf geloeschte Dateien.
+  await clearPackPhotos(supabase, booking.id);
   return { ...PACK_RESET_FIELDS };
 }
 

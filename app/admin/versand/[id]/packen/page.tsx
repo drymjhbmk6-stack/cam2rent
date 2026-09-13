@@ -7,6 +7,15 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
 import { useConfirm } from '@/components/admin/ui/FeedbackProvider';
 import { fmtDateWeekday } from '@/lib/format-utils';
+import PhotoSlotUploader from '@/components/admin/PhotoSlotUploader';
+import { compressPhotoIfLarge } from '@/lib/compress-photo-client';
+import {
+  buildPhotoSlots,
+  extraPhotoFieldName,
+  photoFieldName,
+  type PhotoSlot,
+  type StoredPhoto,
+} from '@/lib/photo-slots';
 import {
   expandItems,
   groupItems,
@@ -617,8 +626,14 @@ function CheckStep({
   );
   const sigRef = useRef<SignatureCanvas>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Pflicht-Fotos: 1x Gesamtfoto + pro Kamera je vorne/hinten. Nur die UI-Sicht —
+  // massgeblich prueft der Server (er baut die Liste aus der Buchung neu auf).
+  const photoSlots = useMemo<PhotoSlot[]>(
+    () => buildPhotoSlots(booking.cameras_resolved ?? []),
+    [booking.cameras_resolved],
+  );
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
+  const [photoExtras, setPhotoExtras] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -703,17 +718,24 @@ function CheckStep({
   // gepackt hat (sonst koennte ein anderer Mitarbeiter mit gleichem Namen
   // berechtigt sein und wir wuerden ihn faelschlich blocken).
   const isSamePerson = idMatchesPacker || (!booking.pack_packed_by_user_id && nameMatchesPacker);
-  const canSubmit = allChecked && name.trim().length >= 2 && !isSamePerson && hasDrawn && !!photo && !submitting;
+  const missingPhotos = photoSlots.filter((sl) => !photoFiles[sl.key]);
+  const allPhotosTaken = missingPhotos.length === 0;
+  const canSubmit =
+    allChecked && name.trim().length >= 2 && !isSamePerson && hasDrawn && allPhotosTaken && !submitting;
 
-  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setPhoto(f);
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(f ? URL.createObjectURL(f) : null);
+  function setPhotoFile(slotKey: string, file: File | null) {
+    setPhotoFiles((prev) => {
+      if (!file) {
+        const next = { ...prev };
+        delete next[slotKey];
+        return next;
+      }
+      return { ...prev, [slotKey]: file };
+    });
   }
 
   async function submit() {
-    if (!canSubmit || !photo) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setErr('');
     try {
@@ -724,7 +746,23 @@ function CheckStep({
       fd.append('notes', notes.trim());
       { const w = parseFloat(weightKg.replace(',', '.')); if (w > 0) fd.append('packWeightKg', String(w)); }
       fd.append('signatureDataUrl', sig);
-      fd.append('photo', photo);
+      // Fotos vor dem Upload verkleinern — bei 3+ Handy-Fotos waeren das sonst
+      // schnell 20-40 MB pro Absenden (Abbruchrisiko auf Mobilfunk).
+      const shrink = async (f: File) => {
+        try {
+          return await compressPhotoIfLarge(f);
+        } catch (e) {
+          console.warn('[versand/pack] photo compression failed, uploading original:', e);
+          return f;
+        }
+      };
+      for (const slot of photoSlots) {
+        const f = photoFiles[slot.key];
+        if (f) fd.append(photoFieldName(slot.key), await shrink(f));
+      }
+      for (let i = 0; i < photoExtras.length; i++) {
+        fd.append(extraPhotoFieldName(i), await shrink(photoExtras[i]));
+      }
       const res = await fetch(`/api/admin/versand/${booking.id}/check`, {
         method: 'POST',
         body: fd,
@@ -814,26 +852,18 @@ function CheckStep({
         </div>
       </div>
 
-      {/* Foto-Upload */}
       <div className="mt-5 border-t border-admin-border pt-4">
-        <label className="block text-sm font-semibold text-admin-text-2 mb-2">
-          Foto vom gepackten Paket (Pflicht)
-        </label>
-        <p className="text-xs text-[var(--admin-text-dim)] mb-3">
-          Mach ein Handy-Foto vom Paketinhalt als Nachweis. Das Foto wird intern gespeichert
-          (nicht im PDF) und ist später im Admin-Detail abrufbar.
-        </p>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={onPhotoChange}
-          className="block w-full text-sm text-admin-text-2 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-admin-accent file:text-slate-950 file:font-semibold file:cursor-pointer"
+        <PhotoSlotUploader
+          slots={photoSlots}
+          files={photoFiles}
+          onSetFile={setPhotoFile}
+          extras={photoExtras}
+          onSetExtras={setPhotoExtras}
+          idPrefix="pack-photo"
+          title="Fotos vom gepackten Paket (Pflicht)"
+          intro="Pflicht: ein Gesamtfoto vom kompletten Paketinhalt — und pro Kamera je ein Foto von vorne und von der Rückseite. Die Fotos werden intern gespeichert (nicht im PDF) und sind später im Admin-Detail abrufbar."
+          disabled={submitting}
         />
-        {photoPreview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoPreview} alt="Vorschau" className="mt-3 max-h-48 rounded-lg border border-[var(--admin-faint)]" />
-        )}
       </div>
 
       <SignatureBlock
@@ -857,8 +887,10 @@ function CheckStep({
       {!allChecked && (
         <p className="text-xs text-amber-400 mt-2">⚠ Bitte alle Items prüfen und abhaken.</p>
       )}
-      {!photo && (
-        <p className="text-xs text-amber-400 mt-2">⚠ Bitte ein Foto vom Paket aufnehmen.</p>
+      {!allPhotosTaken && (
+        <p className="text-xs text-amber-400 mt-2">
+          ⚠ Es fehlen noch {missingPhotos.length} Pflicht-Foto(s): {missingPhotos.map((sl) => sl.title).join(' · ')}
+        </p>
       )}
       {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
 
@@ -867,7 +899,7 @@ function CheckStep({
         disabled={!canSubmit}
         className="w-full mt-5 bg-emerald-500 disabled:bg-[var(--admin-faint)] disabled:cursor-not-allowed text-slate-950 font-bold py-3 rounded-lg"
       >
-        {submitting ? 'Speichere + lade Foto hoch …' : 'Fertig — Versand freigeben'}
+        {submitting ? 'Speichere + lade Fotos hoch …' : 'Fertig — Versand freigeben'}
       </button>
     </div>
   );
@@ -877,7 +909,7 @@ function CheckStep({
 
 function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: CurrentAdminUser | null; onReset: () => void }) {
   const confirm = useConfirm();
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<Array<StoredPhoto & { url: string }>>([]);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
   // Über den In-App-PDF-Viewer öffnen → eigener Zurück-Button (iOS-PWA-Sackgasse
@@ -887,16 +919,21 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
   // gar nicht erst (Server prueft zusaetzlich, falls jemand die UI umgeht).
   const canReset = me?.role === 'owner';
 
+  // Alle Fotos (Gesamtfoto + je Kamera vorne/hinten + Extras). Altbestand und
+  // Umgebungen ohne die `pack_photos`-Migration liefern eine Ein-Element-Liste.
   useEffect(() => {
     if (!booking.pack_photo_url) return;
     fetch(`/api/admin/versand/${booking.id}/photo-url`)
-      .then((r) => r.json())
-      .then((d) => { if (d.url) setPhotoUrl(d.url); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d?.photos)) setPhotoUrls(d.photos.filter((p: { url?: string }) => p?.url));
+        else if (d?.url) setPhotoUrls([{ path: '', kind: 'overview', title: 'Verpackungs-Foto', url: d.url }]);
+      })
       .catch(() => {});
   }, [booking.id, booking.pack_photo_url]);
 
   async function resetWorkflow() {
-    if (!(await confirm({ message: 'Pack-Workflow neu starten? Alle Signaturen + Foto werden gelöscht.', danger: true }))) return;
+    if (!(await confirm({ message: 'Pack-Workflow neu starten? Alle Signaturen + Fotos werden gelöscht.', danger: true }))) return;
     setResetting(true);
     setResetError('');
     try {
@@ -948,21 +985,36 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
         >
           📄 Packliste-PDF öffnen / drucken
         </a>
-        {photoUrl ? (
-          <a
-            href={photoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block bg-admin-surface-2 border border-[var(--admin-faint)] text-admin-text font-semibold py-3 px-4 rounded-lg text-center hover:bg-[var(--admin-faint)]"
-          >
-            📷 Verpackungs-Foto ansehen
-          </a>
-        ) : booking.pack_photo_url ? (
-          <div className="block bg-admin-surface-2 border border-[var(--admin-faint)] text-[var(--admin-text-dim)] font-semibold py-3 px-4 rounded-lg text-center">
-            📷 Foto wird geladen…
-          </div>
-        ) : null}
       </div>
+
+      {photoUrls.length > 0 ? (
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wider text-[var(--admin-text-dim)] mb-2">
+            Fotos der Verpackungskontrolle ({photoUrls.length})
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {photoUrls.map((p, i) => (
+              <a
+                key={p.path || i}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block min-w-0 group"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt={p.title}
+                  className="w-full aspect-square object-cover rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-faint)] group-hover:border-admin-accent transition-colors"
+                />
+                <span className="block text-[11px] text-[var(--admin-text-dim)] mt-1 truncate">{p.title}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : booking.pack_photo_url ? (
+        <div className="mt-4 text-xs text-[var(--admin-text-dim)]">📷 Fotos werden geladen…</div>
+      ) : null}
 
       {canReset && (
         <div className="mt-4">
@@ -973,7 +1025,7 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
           >
             {resetting ? 'Setze zurück…' : 'Workflow zurücksetzen (neu packen)'}
           </button>
-          <p className="text-[11px] text-admin-muted-2 mt-1">Nur für Owner. Löscht Signaturen + Foto und startet den Pack-Workflow neu.</p>
+          <p className="text-[11px] text-admin-muted-2 mt-1">Nur für Owner. Löscht Signaturen + Fotos und startet den Pack-Workflow neu.</p>
           {resetError && <p className="text-xs text-red-400 mt-1">{resetError}</p>}
         </div>
       )}

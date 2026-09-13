@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 import { getClientIp } from '@/lib/rate-limit';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { buildPhotoSlots, overviewPhotoPath, type StoredPhoto } from '@/lib/photo-slots';
+import { uploadPhotoSlots } from '@/lib/photo-slot-upload';
 import { applyScannedUnits, parseScannedUnits } from '@/lib/scan-substitutions';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 import { propagateShipmentStatus } from '@/lib/shipment-group';
-
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
 /**
  * GET /api/admin/handover/[bookingId]
@@ -16,11 +16,20 @@ const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
  *
  * POST /api/admin/handover/[bookingId]
  *   → multipart/form-data mit:
- *     - data:  JSON-String mit Form-Daten (location, condition, items, signatures)
- *     - photo: File (Pflicht, JPEG/PNG/WebP/HEIC, max 10 MB)
+ *     - data: JSON-String mit Form-Daten (location, condition, items, signatures)
+ *     - photo_overview / photo_cam<N>_front / photo_cam<N>_back: Pflicht-Fotos
+ *       (JPEG/PNG/WebP/HEIC, je max 10 MB)
+ *     - photo_extra_<i>: freiwillige Zusatzfotos
+ *     - photo: Legacy-Feld eines alten Clients = Gesamtfoto
  *
- * Speichert das Übergabeprotokoll und legt das Foto im Storage-Bucket
- * `handover-photos` ab (Pfad in handover_data.photoPath gemerkt).
+ * Pflicht ist EIN Gesamtfoto plus pro Kamera je ein Foto von vorne und von
+ * hinten. Welche Fotos verlangt werden, leitet der Server AUS DER BUCHUNG ab
+ * (`resolveBookingCameras`) — nicht aus dem Request.
+ *
+ * Alle Fotos landen im Storage-Bucket `handover-photos`; die Liste steht in
+ * handover_data.photos, das Gesamtfoto zusätzlich weiterhin in
+ * handover_data.photoPath (Rückwärtskompatibilität für Altbestand + die
+ * bestehende photo-url-Route).
  */
 export async function GET(
   _req: NextRequest,
@@ -60,14 +69,6 @@ export async function POST(
   }
 
   const dataJson = String(formData.get('data') ?? '');
-  const photo = formData.get('photo');
-
-  if (!(photo instanceof File) || photo.size === 0) {
-    return NextResponse.json({ error: 'Foto ist Pflicht.' }, { status: 400 });
-  }
-  if (photo.size > MAX_PHOTO_SIZE) {
-    return NextResponse.json({ error: 'Foto zu gross (max 10 MB).' }, { status: 400 });
-  }
 
   let body: {
     location?: string;
@@ -137,54 +138,54 @@ export async function POST(
   // uebergeben wurde.
   await applyScannedUnits(supabase, bookingId, parseScannedUnits(body.scannedUnits));
 
-  // Foto pruefen + hochladen
-  const photoBuffer = Buffer.from(await photo.arrayBuffer());
-  if (!isAllowedImage(photoBuffer)) {
-    return NextResponse.json({
-      error: 'Foto-Format nicht unterstuetzt (JPEG/PNG/WebP/HEIC erlaubt).',
-    }, { status: 400 });
-  }
-  const detectedType = detectImageType(photoBuffer);
-  const ext = detectedType === 'jpeg' ? 'jpg' :
-              detectedType === 'png' ? 'png' :
-              detectedType === 'webp' ? 'webp' :
-              (detectedType === 'heic' || detectedType === 'heif') ? 'heic' : 'bin';
-  const mime = detectedType === 'jpeg' ? 'image/jpeg' :
-               detectedType === 'png' ? 'image/png' :
-               detectedType === 'webp' ? 'image/webp' : 'image/heic';
-  const storagePath = `${bookingId}/${Date.now()}.${ext}`;
-
-  const HANDOVER_BUCKET = 'handover-photos';
-  const doUpload = () =>
-    supabase.storage
-      .from(HANDOVER_BUCKET)
-      .upload(storagePath, photoBuffer, { contentType: mime, upsert: true });
-
-  let { error: uploadError } = await doUpload();
-
-  // Bucket existiert nicht (nie manuell angelegt) → einmalig anlegen +
-  // Upload wiederholen. Privat (photo-url nutzt Signed URLs).
-  if (uploadError && /bucket not found|not found/i.test(uploadError.message || '')) {
-    const { error: createErr } = await supabase.storage.createBucket(HANDOVER_BUCKET, {
-      public: false,
-      fileSizeLimit: MAX_PHOTO_SIZE,
-      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
-    });
-    // "already exists" = Race mit parallelem Request → trotzdem retry
-    if (createErr && !/already exists|exists/i.test(createErr.message || '')) {
-      console.error('[handover/save] bucket create error:', createErr);
-      return NextResponse.json(
-        { error: `Foto-Upload fehlgeschlagen: Bucket konnte nicht angelegt werden (${createErr.message}).` },
-        { status: 500 },
-      );
-    }
-    ({ error: uploadError } = await doUpload());
+  // Pflicht-Fotos: 1x Gesamtfoto + pro Kamera je vorne/hinten. Die Kamera-
+  // Liste kommt aus der Buchung (autoritativ) — NACH applyScannedUnits, damit
+  // ein substituiertes Exemplar mit der richtigen unit_id am Foto haengt.
+  // Defensiv: die Multi-Kamera-Migration (`bookings.cameras`) steht noch aus —
+  // faellt der Select darauf, einmal ohne die Spalte laden. resolveBookingCameras
+  // greift dann auf den product_name-Komma-Split zurueck (Legacy-Pfad).
+  const camFirst = await supabase
+    .from('bookings')
+    .select('product_id, product_name, unit_id, cameras')
+    .eq('id', bookingId)
+    .maybeSingle();
+  // `cameras` optional: der Retry laedt die Spalte nicht mit (Migration offen).
+  let camRow: {
+    product_id?: string | null;
+    product_name?: string | null;
+    unit_id?: string | null;
+    cameras?: unknown;
+  } | null = camFirst.data;
+  if (camFirst.error && /cameras|column|schema cache|PGRST/i.test(camFirst.error.message || '')) {
+    const retry = await supabase
+      .from('bookings')
+      .select('product_id, product_name, unit_id')
+      .eq('id', bookingId)
+      .maybeSingle();
+    camRow = retry.data;
   }
 
-  if (uploadError) {
-    console.error('[handover/save] photo upload error:', uploadError);
-    return NextResponse.json({ error: `Foto-Upload fehlgeschlagen: ${uploadError.message}` }, { status: 500 });
+  const slots = buildPhotoSlots(
+    resolveBookingCameras(camRow ?? null).map((c) => ({
+      product_name: c.product_name,
+      unit_id: c.unit_id,
+    })),
+  );
+
+  const upload = await uploadPhotoSlots(supabase, {
+    bucket: 'handover-photos',
+    bookingId,
+    formData,
+    slots,
+    // Bucket existiert evtl. nie manuell angelegt → einmalig anlegen (privat,
+    // photo-url liefert Signed URLs). Verhalten wie bisher.
+    createBucketIfMissing: true,
+  });
+  if (!upload.ok) {
+    return NextResponse.json({ error: upload.error }, { status: upload.status });
   }
+  const photos: StoredPhoto[] = upload.photos;
+  const storagePath = overviewPhotoPath(photos) ?? '';
 
   const ipFromHelper = getClientIp(req);
   const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
@@ -204,7 +205,10 @@ export async function POST(
           ok: !!it.ok,
         }))
       : [],
+    // Rueckwaertskompatibel: `photoPath` bleibt das Gesamtfoto (Altbestand +
+    // photo-url-Route lesen es weiterhin). Vollstaendige Liste in `photos`.
     photoPath: storagePath,
+    photos,
     pickup,
     signatures: {
       landlord: { dataUrl: landlordSig, name: landlordName.slice(0, 120), signedAt: now, ip },
@@ -281,6 +285,7 @@ export async function POST(
         renterName,
         location: handoverData.location || null,
         photoPath: storagePath,
+        photoCount: photos.length,
         pickupByThirdParty: pickupByThirdParty,
         pickupPersonName: pickupByThirdParty ? pickup.personName : null,
         statusSetToPickedUp: statusUpdated,

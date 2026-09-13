@@ -56,9 +56,12 @@ export interface PacklistData {
   /** Vom Kontrolleur abgehakte Item-Keys (selbe Schluessel wie packedItems). */
   checkedItems?: string[] | null;
   checkedNotes?: string | null;
-  /** Storage-Pfad des Verpackungs-Fotos. Wird als Hinweistext ausgegeben,
+  /** Storage-Pfad des Gesamtfotos. Wird als Hinweistext ausgegeben,
    *  das Foto selbst landet NICHT im PDF (Datenschutz + Dateigroesse). */
   photoStoragePath?: string | null;
+  /** Anzahl aller Fotos der Kontrolle (Gesamtfoto + pro Kamera vorne/hinten
+   *  + Extras). 0/undefined → nur der Pfad-Hinweis wie bisher. */
+  photoCount?: number | null;
 }
 
 // ─── Colors (identisch mit Rechnung) ─────────────────────────────────────────
@@ -459,7 +462,15 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             <Text style={s.sectionTitle}>4. Verpackungskontrolle</Text>
             <View style={s.checkRow}><Checkbox checked={checkerDone} /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
             <View style={s.checkRow}><Checkbox checked={checkerDone} /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
-            <View style={s.checkRow}><Checkbox checked={!!data.photoStoragePath} /><Text style={s.checkLabel}>Foto-Nachweis vom Kontrolleur erstellt</Text></View>
+            <View style={s.checkRow}>
+              <Checkbox checked={!!data.photoStoragePath} />
+              <Text style={s.checkLabel}>
+                Foto-Nachweis vom Kontrolleur erstellt
+                {data.photoCount && data.photoCount > 1
+                  ? ` (${data.photoCount} Fotos: Gesamtaufnahme + Kameras vorne/hinten)`
+                  : ''}
+              </Text>
+            </View>
             {data.checkedNotes && (
               <Text style={{ fontSize: 9, color: C.grayText, marginTop: 4, marginLeft: 16 }}>
                 Notiz Kontrolleur: {data.checkedNotes}

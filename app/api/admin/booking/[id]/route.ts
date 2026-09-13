@@ -30,6 +30,8 @@ import { computeCancellationSuggestion, refundBelowSuggestion, normalizeCancella
 import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { deductConsumablesForBooking } from '@/lib/verbrauch-deduct';
 import { propagateShipmentFields, propagateShipmentStatus } from '@/lib/shipment-group';
+import { collectPhotoPaths } from '@/lib/photo-slots';
+import { clearPackPhotos, loadPackPhotosRaw } from '@/lib/photo-slot-upload';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -67,16 +69,24 @@ const PACK_RESET_FIELDS = {
  */
 async function resetPackWorkflow(
   supabase: ReturnType<typeof createServiceClient>,
-  booking: { pack_status?: unknown; pack_photo_url?: unknown },
+  booking: { id?: unknown; pack_status?: unknown; pack_photo_url?: unknown },
 ): Promise<Record<string, unknown>> {
   const ps = booking.pack_status;
   if (!ps || ps === 'checked') return {};
-  if (booking.pack_photo_url) {
+  // ALLE Fotos entfernen (Gesamtfoto + Kamera-Fotos vorne/hinten + Extras) —
+  // sonst bleiben die Kamera-Fotos als verwaiste Objekte im Bucket liegen.
+  // `pack_photos` wird hier defensiv nachgeladen, damit die (aelteren) Selects
+  // der Aufrufer unveraendert bleiben koennen — die Migration steht ggf. aus.
+  const photosRaw = await loadPackPhotosRaw(supabase, booking.id);
+  const paths = collectPhotoPaths(booking.pack_photo_url, photosRaw);
+  if (paths.length > 0) {
     await supabase.storage
       .from('packing-photos')
-      .remove([booking.pack_photo_url as string])
+      .remove(paths)
       .catch(() => { /* best-effort */ });
   }
+  // Foto-Liste leeren — sonst zeigt sie nach dem Reset auf geloeschte Dateien.
+  await clearPackPhotos(supabase, booking.id);
   return { ...PACK_RESET_FIELDS };
 }
 

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { createServiceClient } from '@/lib/supabase';
+import { parseStoredPhotos, type StoredPhoto } from '@/lib/photo-slots';
 
 /**
  * GET /api/admin/handover/[bookingId]/photo-url
  *
- * Liefert eine Signed URL fuer das hochgeladene Uebergabefoto (5 Min gueltig).
- * Service-Role-only Bucket → Foto kann nicht direkt vom Browser geladen
- * werden, deshalb dieser Helper-Endpoint.
+ * Liefert Signed URLs (5 Min gueltig) fuer die Uebergabefotos.
+ * Service-Role-only Bucket → die Fotos koennen nicht direkt vom Browser
+ * geladen werden, deshalb dieser Helper-Endpoint.
+ *
+ * Antwort:
+ *   { url, photos: [{ path, kind, title, cameraLabel?, url }] }
+ *
+ * `url` ist das Gesamtfoto und bleibt aus Rueckwaertskompatibilitaet erhalten
+ * (Altbestand hat nur `handover_data.photoPath`, keine `photos`-Liste).
  */
 export async function GET(
   _req: NextRequest,
@@ -25,17 +32,34 @@ export async function GET(
     .eq('id', bookingId)
     .maybeSingle();
 
-  const path = (booking?.handover_data as { photoPath?: string } | null)?.photoPath;
-  if (!path) {
+  const handover = (booking?.handover_data ?? null) as
+    | { photoPath?: string; photos?: unknown }
+    | null;
+
+  // Neue Welt: vollstaendige Liste. Altbestand: nur der eine photoPath.
+  let photos: StoredPhoto[] = parseStoredPhotos(handover?.photos);
+  if (photos.length === 0 && handover?.photoPath) {
+    photos = [{ path: handover.photoPath, kind: 'overview', title: 'Foto der Übergabe' }];
+  }
+
+  if (photos.length === 0) {
     return NextResponse.json({ error: 'Kein Foto vorhanden.' }, { status: 404 });
   }
 
-  const { data, error } = await supabase.storage
-    .from('handover-photos')
-    .createSignedUrl(path, 60 * 5);
+  const signed = await Promise.all(
+    photos.map(async (p) => {
+      const { data } = await supabase.storage
+        .from('handover-photos')
+        .createSignedUrl(p.path, 60 * 5);
+      return { ...p, url: data?.signedUrl ?? null };
+    }),
+  );
 
-  if (error || !data?.signedUrl) {
-    return NextResponse.json({ error: error?.message ?? 'Signed URL fehlgeschlagen.' }, { status: 500 });
+  const usable = signed.filter((p) => p.url);
+  if (usable.length === 0) {
+    return NextResponse.json({ error: 'Signed URL fehlgeschlagen.' }, { status: 500 });
   }
-  return NextResponse.json({ url: data.signedUrl });
+
+  const overview = usable.find((p) => p.kind === 'overview') ?? usable[0];
+  return NextResponse.json({ url: overview.url, photos: usable });
 }

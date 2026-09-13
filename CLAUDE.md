@@ -5160,6 +5160,95 @@ Vertragspartner und Haftender — die dritte Person unterschreibt nur den Erhalt
   Bestätigung „geprüft"), keine strukturierte Vollmacht-Datei — der Admin prüft
   physisch vor Ort. Kann bei Bedarf später ergänzt werden.
 
+### Pflicht-Fotos bei Übergabe + Versand: Gesamtbild + jede Kamera vorne/hinten (Stand 2026-09-13)
+
+Vorher war bei der **Übergabe** (`/admin/buchungen/[id]/uebergabe`, Schritt 1)
+und in der **Verpackungskontrolle** (`/admin/versand/[id]/packen`, Schritt 2)
+jeweils genau EIN Foto Pflicht. Für die Zustandsdokumentation reicht das nicht:
+bei einem späteren Schaden lässt sich daraus nicht belegen, in welchem Zustand
+eine bestimmte Kamera rausgegangen ist. Jetzt sind es in beiden Workflows
+
+> **1× Gesamtfoto von allem, was rausgeht + pro Kamera je ein Foto von VORNE
+> und von der RÜCKSEITE** (= `1 + 2 × Anzahl Kameras`), dazu beliebig viele
+> freiwillige Zusatzfotos.
+
+- **Slot-Logik zentral + pure:** `lib/photo-slots.ts` → `buildPhotoSlots(cameras)`
+  erzeugt die Positionen (`overview`, `cam<i>_front`, `cam<i>_back`) inkl.
+  Titel/Hinweis/Seriennummer; dazu `parseStoredPhotos`, `storedPhotoFromSlot`,
+  `overviewPhotoPath`, `collectPhotoPaths`, `missingPhotoTitles`. Keine DB, kein
+  React → im Browser UND serverseitig nutzbar, 18 Unit-Tests
+  (`lib/__tests__/photo-slots.test.ts`).
+  ⚠️ **Maßgeblich ist IMMER die Server-Seite:** beide Routen bauen die Slot-Liste
+  aus `resolveBookingCameras(booking)` neu auf und vertrauen NICHT dem Request —
+  ein manipulierter Client kann die Pflichtfotos nicht wegdefinieren. Die
+  UI-Liste ist nur die Anzeige (aus `booking.cameras_resolved`, gespeist vom
+  **selben** Resolver → gleiche Anzahl, kein Auseinanderlaufen).
+  Ohne auflösbare Kamera (kaputte/leere Daten) bleibt defensiv nur das
+  Gesamtfoto übrig — die Übergabe scheitert nie an einer Datenlücke.
+- **Geteilte UI** `components/admin/PhotoSlotUploader.tsx`: pro Position eine
+  Karte mit „📷 Foto aufnehmen" (`capture="environment"` → direkt die
+  Rückkamera) und „🖼 Galerie", Vorschau, Fortschrittszähler (`3/5`), Liste der
+  noch offenen Positionen. Darunter „Weitere Fotos (optional)" (max 10).
+  Vorschau über `createObjectURL` statt FileReader/Base64 — bei mehreren 5-MB-
+  Handyfotos sonst unnötiger Speicher-Blowup.
+  ⚠️ Der Vorschau-Hook hat bewusst **keinen** „schon gesehen"-Ref-Guard: unter
+  React StrictMode läuft der Effekt doppelt, ein Guard würde die Object-URL im
+  ersten Durchlauf freigeben und im zweiten keine neue erzeugen → leere Vorschau.
+- **Geteilter Server-Upload** `lib/photo-slot-upload.ts` → `uploadPhotoSlots()`:
+  sammelt erst alle Dateien ein und prüft die **Vollständigkeit, bevor** das
+  erste Byte in den Storage geht (sonst lägen bei fehlendem Foto schon Dateien
+  herum); dann pro Datei Größen- + **Magic-Byte**-Check (`isAllowedImage`) und
+  Upload nach `<bookingId>/<timestamp>-<slot>.<ext>`. Schlägt ein Upload mitten
+  in der Schleife fehl, werden die bereits hochgeladenen Dateien wieder entfernt
+  (der Upload ist nicht transaktional). Feldnamen: `photo_<slotKey>` bzw.
+  `photo_extra_<i>`; ein alter Client, der nur `photo` schickt, wird als
+  Gesamtfoto gelesen und läuft dann in die klare Meldung „Es fehlen
+  Pflicht-Fotos: …".
+- **Client-Kompression** wurde aus der Übergabe-Seite nach
+  `lib/compress-photo-client.ts` (`compressPhotoIfLarge`) gezogen und gilt jetzt
+  auch für den Pack-Flow (der hatte **gar keine**). Bei 3+ Handy-Fotos wären das
+  sonst schnell 20–40 MB pro Absenden → Abbruch auf Mobilfunk. Abgrenzung zu
+  `lib/shrink-image-client.ts`: das ist der Beleg-/OCR-Pfad mit eigener
+  Ziel-Byte-Logik (Claude-Vision-Limit) und bleibt bewusst getrennt.
+- **Speicherung — Übergabe:** keine Migration nötig (`handover_data` ist freies
+  JSONB). Neu `handover_data.photos = [{path, kind, title, cameraIndex?,
+  cameraLabel?, unitId?}]`; `handover_data.photoPath` bleibt das **Gesamtfoto**
+  (Rückwärtskompatibilität für Altbestand). Die Kamera-Liste wird **nach**
+  `applyScannedUnits` gelesen, damit ein substituiertes Exemplar mit der
+  richtigen `unit_id` am Foto hängt.
+- **Speicherung — Versand:** Migration `supabase/supabase-pack-photos.sql`
+  (idempotent, additiv) legt `bookings.pack_photos JSONB DEFAULT '[]'` an.
+  `pack_photo_url` bleibt unverändert das **Gesamtfoto** — alle bestehenden
+  Leser (photo-url-Route, Packliste-PDF, `pack-reset`, `resetPackWorkflow` in
+  `booking/[id]` + `booking-postpone`) laufen damit 1:1 weiter.
+  **Ohne die Migration** wird `pack_photos` beim Update defensiv gestrippt und
+  einmal ohne die Spalte wiederholt; die Antwort trägt dann
+  `warnings: ['migration_pending:pack_photos']` — alle Fotos liegen im Storage,
+  nachvollziehbar ist aber nur das Gesamtfoto. **Der Versand wird nie blockiert.**
+- **Anzeige:** `GET /api/admin/handover/[bookingId]/photo-url` und
+  `GET /api/admin/versand/[id]/photo-url` liefern jetzt
+  `{ url, photos: [{path, kind, title, cameraLabel?, url}] }` — `url` bleibt das
+  Gesamtfoto (Altbestand + alte Consumer). Beide Seiten rendern daraus eine
+  Galerie mit Beschriftung je Position.
+- **Aufräumen:** `pack-reset` und beide `resetPackWorkflow`-Helfer löschen jetzt
+  **alle** Fotos (`collectPhotoPaths` = Liste + Legacy-Einzelfeld, dedupliziert)
+  — vorher wäre nur das Gesamtfoto entfernt worden und die Kamera-Fotos blieben
+  als verwaiste Objekte im Bucket. Zusätzlich leert `clearPackPhotos()` die
+  Liste in einem **eigenen** best-effort Update (nicht im Merge-Payload der
+  Aufrufer — ein unbekanntes Feld würde dort sonst den fachlich wichtigen
+  Update mitreißen); sonst zeigte die Liste nach einem Reset auf gelöschte
+  Dateien. `pack_photos` wird in den Helfern **defensiv nachgeladen**
+  (`loadPackPhotosRaw`), damit die bestehenden expliziten Selects der Aufrufer
+  unangetastet bleiben.
+- **Packliste-PDF** zeigt bei mehreren Fotos „(N Fotos: Gesamtaufnahme +
+  Kameras vorne/hinten)". Die Fotos selbst landen weiterhin NICHT im PDF
+  (Datenschutz + Dateigröße), nur der Nachweis-Haken + Pfad.
+- **Multi-Kamera-Migration:** beide Routen lesen `bookings.cameras` mit
+  **Select-Retry ohne die Spalte** (die Migration steht laut „Noch offen" aus) →
+  `resolveBookingCameras` fällt dann auf den `product_name`-Komma-Split zurück.
+  Eine 2-Kamera-Buchung verlangt also auch ohne die Migration 5 Fotos.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Übergabeprotokoll-Wizard mit Scanner (Stand 2026-05-16)
 Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard: Zustand → Vermieter → Mieter → Fertig) nutzt in Schritt 1 jetzt denselben Scanner-Workflow wie das Versand-Packen. Statt der reinen Checkbox-Liste: `<ScannerBar>` + `<ItemList>` (gruppiert, Mengen-Counter) + `<SerialScanner continuous>` + `<ScannerLiveList>` aus `components/admin/scan-workflow.tsx`. Kamera-Seriennummer / Zubehör-Exemplar-Code wird gescannt → Slot automatisch abgehakt, Toast-Feedback (grün/amber/rot), Auto-Close wenn alle scanbaren Stücke erfasst sind, Substitution erlaubt (analog Pack-Schritt 1). `bookingToScanInput()` setzt `skipReturnLabel: true` (Abholung → kein Rücksendeetikett). Manuelles Abhaken per Klick auf die Item-Zeile bleibt parallel möglich.
 
@@ -9188,6 +9277,17 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      pro GB abgerechnet. Jeder Stand ist eine **volle Kopie** — zehn Stände
      eines 500-MB-Projekts sind 5 GB. Alte Stände lassen sich einzeln löschen.
   Siehe „Projektablage — private Datei-Ablage im Admin".
+- **Pflicht-Fotos (Übergabe + Versand) — Migration auszuführen:**
+  `supabase/supabase-pack-photos.sql` (idempotent, additiv:
+  `bookings.pack_photos JSONB DEFAULT '[]'`). Ohne sie funktioniert der neue
+  Foto-Zwang **vollständig** — alle Fotos werden hochgeladen und der Versand
+  läuft durch; gespeichert und später anzeigbar ist dann aber nur das
+  **Gesamtfoto** (`pack_photo_url`), die Kamera-Fotos wären nur noch im Bucket
+  auffindbar. Die Kontroll-Route meldet das als
+  `warnings: ['migration_pending:pack_photos']`. Das Übergabeprotokoll
+  (Abholung) braucht **keine** Migration (`handover_data` ist freies JSONB).
+  Empfohlen ASAP ausführen. Details siehe „Pflicht-Fotos bei Übergabe +
+  Versand".
 - **KI-Beantwortung von Kundenanfragen — Migration auszuführen:**
   `supabase/supabase-ai-auto-reply.sql` (idempotent, additiv: 5 Spalten an
   `conversations`, `messages.ai_generated`, ein Teilindex). Ohne sie läuft das
