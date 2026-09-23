@@ -235,7 +235,8 @@ function calcBreakdown(
 
   const subtotal = rentalPrice + accessoryPrice + haftungPrice;
   const shippingCfg = dynPrices?.shipping ?? shippingConfig;
-  const shipping = calcShipping(subtotal, shippingMethod, deliveryMode, shippingCfg);
+  // Gratis-Schwelle ohne Haftungsschutz (Miete + Zubehoer + Sets)
+  const shipping = calcShipping(rentalPrice + accessoryPrice, shippingMethod, deliveryMode, shippingCfg);
 
   // Produkt-Rabatte (Aktionen wie "Release50") — gelten auch im Einzel-Buchungs-
   // flow. Vorher wurden sie nur im Cart angewendet, das Single-Product /buchen

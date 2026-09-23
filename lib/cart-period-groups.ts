@@ -145,6 +145,16 @@ export function distributeAmount(total: number, weights: number[]): number[] {
  *   Rabatten — die Gratis-Schwelle wird bewusst auf den Originalwert geprueft
  *   (kundenfreundlich, wie bisher).
  */
+/**
+ * Warenwert, gegen den die Gratis-Versand-Schwelle geprueft wird:
+ * Miete + Zubehoer + Sets — OHNE Haftungsschutz (und ohne Kaution/Versand).
+ * `subtotal` eines Warenkorb-Items enthaelt die Haftung, deshalb wird sie
+ * hier wieder abgezogen.
+ */
+export function shippingBasisForItem(it: { subtotal?: number; priceHaftung?: number }): number {
+  return Math.max(0, (Number(it.subtotal) || 0) - (Number(it.priceHaftung) || 0));
+}
+
 export function shippingPerGroup(
   groupSubtotals: number[],
   method: ShippingMethod,

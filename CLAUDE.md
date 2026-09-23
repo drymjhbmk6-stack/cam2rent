@@ -1447,6 +1447,18 @@ Enthält `value.items` mehrere `rentalFrom/rentalTo`-Paare → betroffen. Korrek
 **manuell** im Admin (zweite Buchung anlegen, Vertrag über „Mietvertrag zurücksetzen" neu
 unterschreiben lassen) — bewusst keine automatische Migration.
 
+### Gratis-Versand-Schwelle OHNE Haftungsschutz (Fix, Stand 2026-09-23)
+Die Schwelle „Kostenloser Versand ab X €" wird laut Admin-Text gegen
+**Miete + Zubehör + Sets** geprüft — der Code prüfte aber `item.subtotal`, das
+den **Haftungsschutz enthält**. Folge: 48 € Miete + 20 € Haftung = 68 € ≥ 49 €
+→ Versand fälschlich gratis. Jetzt zieht jede Stelle die Haftung ab: neuer
+Helper `shippingBasisForItem()` in `lib/cart-period-groups.ts` (Warenkorb +
+Checkout), `priceRental + priceAccessories` in `confirm-cart` + Stripe-Webhook
+(nur die Versand-Basis — `groupSubtotals` für Preis-/Rabatt-Verteilung bleibt
+unverändert), Einzel-Buchungsflow, Bestellbearbeitung (`booking_edit`),
+Preisrechner (`lib/quote.ts`) und `create-pending-booking`. Keine Migration.
+Bereits abgeschlossene Buchungen werden nicht rückwirkend korrigiert.
+
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
 - **Sets gefiltert** nach `product_ids` (Kamera-Kompatibilität) — nur passende Sets werden angezeigt

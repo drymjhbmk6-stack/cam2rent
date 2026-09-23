@@ -1318,7 +1318,7 @@ export async function PATCH(
       shipOverrideProvided && shipOverrideVal !== null && Number.isFinite(shipOverrideVal) && shipOverrideVal >= 0;
     const shippingPrice = shipOverrideValid
       ? Math.round((shipOverrideVal as number) * 100) / 100
-      : Math.round(calcShipping(subtotal, shipMethod, deliveryMode, shipCfg).price * 100) / 100;
+      : Math.round(calcShipping(priceRental + priceAccessories, shipMethod, deliveryMode, shipCfg).price * 100) / 100;
 
     // Rabatt-Behandlung:
     //  - Setzt der Admin einen manuellen Rabatt (Prozent/Festbetrag), ERSETZT

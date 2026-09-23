@@ -25,7 +25,7 @@ import ExpressSignup from '@/components/checkout/ExpressSignup';
 import { CountryField } from '@/components/checkout/CountryField';
 import { DEFAULT_COUNTRY, isAllowedCountry, countryName } from '@/lib/allowed-countries';
 import { useAllowedCountries } from '@/lib/use-allowed-countries';
-import { groupByPeriod, shippingPerGroup } from '@/lib/cart-period-groups';
+import { groupByPeriod, shippingPerGroup, shippingBasisForItem } from '@/lib/cart-period-groups';
 import { haftungShortLabel } from '@/lib/haftung-labels';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import EarlyServiceConsentCheckbox from '@/components/booking/EarlyServiceConsentCheckbox';
@@ -665,7 +665,7 @@ export default function CheckoutPage() {
   // kundenfreundlich, wie bisher.
   const shippingSplit = useMemo(
     () => shippingPerGroup(
-      periodGroups.map((g) => g.items.reduce((sum, it) => sum + it.subtotal, 0)),
+      periodGroups.map((g) => g.items.reduce((sum, it) => sum + shippingBasisForItem(it), 0)),
       shippingMethod,
       deliveryMode,
       dynShipping,

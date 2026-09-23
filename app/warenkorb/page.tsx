@@ -7,7 +7,7 @@ import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
 import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
-import { groupByPeriod, shippingPerGroup } from '@/lib/cart-period-groups';
+import { groupByPeriod, shippingPerGroup, shippingBasisForItem } from '@/lib/cart-period-groups';
 import { haftungShortLabel } from '@/lib/haftung-labels';
 
 export default function WarenkorbPage() {
@@ -63,13 +63,14 @@ export default function WarenkorbPage() {
   // eigenes Paket (raus + zurueck). Die Gratis-Schwelle greift deshalb je
   // Buchung, nicht auf dem Gesamtwert — sonst fuhren zwei Kameras a 45 EUR in
   // verschiedenen Zeitraeumen gratis, obwohl zwei Sendungen anfallen.
-  const groupSubtotals = useMemo(
-    () => periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0)),
+  // Gratis-Schwelle ohne Haftungsschutz (Miete + Zubehoer + Sets)
+  const groupShippingBases = useMemo(
+    () => periodGroups.map((g) => g.items.reduce((s, it) => s + shippingBasisForItem(it), 0)),
     [periodGroups],
   );
   const shippingSplit = useMemo(
-    () => shippingPerGroup(groupSubtotals, cartShippingMethod, cartDeliveryMode, dynShipping),
-    [groupSubtotals, cartShippingMethod, cartDeliveryMode, dynShipping],
+    () => shippingPerGroup(groupShippingBases, cartShippingMethod, cartDeliveryMode, dynShipping),
+    [groupShippingBases, cartShippingMethod, cartDeliveryMode, dynShipping],
   );
   const shipping = useMemo(
     () => ({ price: shippingSplit.total, isFree: shippingSplit.total === 0 }),

@@ -851,8 +851,12 @@ async function handleCartBooking(
   const groupSubtotals = periodGroups.map((g) =>
     g.items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0),
   );
+  // Gratis-Schwelle gegen Miete + Zubehoer + Sets — ohne Haftungsschutz.
+  const groupShippingBases = periodGroups.map((g) =>
+    g.items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0),
+  );
   const groupShippings = shippingPerGroup(
-    groupSubtotals,
+    groupShippingBases,
     shippingMethod as ShippingMethod,
     deliveryMode as 'versand' | 'abholung',
     shippingCfg,

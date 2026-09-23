@@ -251,6 +251,7 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
   // ── Zeilen berechnen ────────────────────────────────────────────────────────
   const lines: QuoteLine[] = [];
   let subtotalItems = 0;
+  let haftungSum = 0;
   let discountBase = 0;
   let depositSum = 0;
 
@@ -318,6 +319,7 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
       haftungPerCam = calcHaftungTieredPrice(haftungConfig.premium, haftungConfig.premiumIncrement, days);
     }
     const haftungPrice = round2(haftungPerCam * qty);
+    haftungSum = round2(haftungSum + haftungPrice);
 
     const lineSubtotal = round2(rentalTotal + accSum + haftungPrice);
     subtotalItems = round2(subtotalItems + lineSubtotal);
@@ -374,7 +376,8 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
   }
 
   // ── Versand ─────────────────────────────────────────────────────────────────
-  const shippingBasis = round2(subtotalItems - discountAmount);
+  // Gratis-Schwelle ohne Haftungsschutz (Miete + Zubehoer + Sets)
+  const shippingBasis = round2(subtotalItems - haftungSum - discountAmount);
   const shipping = calcShipping(shippingBasis, input.shippingMethod, input.deliveryMode, shippingConfig);
 
   const grandTotal = round2(subtotalItems - discountAmount + shipping.price);

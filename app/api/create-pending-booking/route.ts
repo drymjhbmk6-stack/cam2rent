@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
       const groupLoyaltyDiscount = Math.round(safeLoyaltyDiscount * ratio * 100) / 100;
       // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
       const groupShippingResult = calcShipping(
-        groupSubtotal,
+        groupItems.reduce((s, it) => s + Math.max(0, (it.subtotal || 0) - (it.priceHaftung || 0)), 0),
         shippingMethod as ShippingMethod,
         deliveryMode as 'versand' | 'abholung',
         shippingCfg

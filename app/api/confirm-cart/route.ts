@@ -759,8 +759,10 @@ export async function POST(req: NextRequest) {
     // Client und Server MUESSEN hier dieselbe Funktion nutzen, sonst traegt die
     // Buchung einen anderen Versand als kassiert wurde.
     const groupSubtotals = periodGroups.map((g) => g.items.reduce((s, it) => s + it.subtotal, 0));
+    // Gratis-Schwelle gegen Miete + Zubehoer + Sets — ohne Haftungsschutz.
+    const groupShippingBases = periodGroups.map((g) => g.items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0));
     const groupShippings = shippingPerGroup(
-      groupSubtotals,
+      groupShippingBases,
       r_shippingMethod as ShippingMethod,
       r_deliveryMode as 'versand' | 'abholung',
       shippingCfg,
