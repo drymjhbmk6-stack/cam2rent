@@ -2257,6 +2257,8 @@ export interface ReturnFollowUpEmailData {
   items: { label: string; qty: number }[];
   /** Späteste Frist über alle Positionen (YYYY-MM-DD), optional. */
   dueDate?: string | null;
+  /** true = erneute Erinnerung (Kunde hat bisher nichts geschickt). */
+  reminder?: boolean;
 }
 
 /**
@@ -2272,9 +2274,11 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
   const url = `${BASE_URL}/konto/buchungen`;
 
   const subject = stripSubject(
-    data.items.length === 1
-      ? `Bitte noch nachsenden: ${data.items[0].label}`
-      : `Bitte noch nachsenden: ${data.items.length} Teile deiner Buchung`,
+    (data.reminder ? 'Erinnerung: ' : '') + (
+      data.items.length === 1
+        ? `Bitte noch nachsenden: ${data.items[0].label}`
+        : `Bitte noch nachsenden: ${data.items.length} Teile deiner Buchung`
+    ),
   );
 
   const rows = data.items.map((it) => `
@@ -2300,11 +2304,12 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
           <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
         </td></tr>
         <tr><td style="padding:32px;">
-          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Da fehlt noch etwas 📦</h1>
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">${data.reminder ? 'Erinnerung: Da fehlt noch etwas 📦' : 'Da fehlt noch etwas 📦'}</h1>
           <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
             Hallo ${h(data.customerName)},<br><br>
-            deine Rückgabe ist bei uns angekommen — vielen Dank! Diese Teile waren allerdings
-            nicht dabei:
+            ${data.reminder
+              ? 'wir haben bisher leider noch nichts von dir erhalten. Diese Teile fehlen weiterhin:'
+              : 'deine Rückgabe ist bei uns angekommen — vielen Dank! Diese Teile waren allerdings nicht dabei:'}
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
             <tr><td style="padding:18px 22px;">
@@ -2317,6 +2322,9 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
             Bitte sende sie uns nach oder bring sie vorbei. Falls du sie schon unterwegs hast,
             kannst du diese E-Mail ignorieren. Melde dich einfach bei uns, wenn etwas unklar ist.
           </p>
+          ${data.reminder ? `<p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Kommen die Teile bis zur Frist nicht bei uns an, müssen wir dir den Ersatz in Rechnung stellen.
+          </p>` : ''}
           <a href="${url}" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
             Meine Buchung ansehen
           </a>
@@ -2337,7 +2345,7 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
     subject,
     html,
     bookingId: data.bookingId,
-    emailType: 'return_follow_up',
+    emailType: data.reminder ? 'return_follow_up_reminder' : 'return_follow_up',
   });
 }
 

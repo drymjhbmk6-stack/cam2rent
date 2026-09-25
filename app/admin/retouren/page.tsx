@@ -8,6 +8,7 @@ import { getCached, setCached } from '@/lib/use-cached-fetch';
 import { usePersistentState } from '@/lib/use-persistent-state';
 import { useToast } from '@/components/admin/ui/FeedbackProvider';
 import { useIsNarrow } from '@/components/admin/ui/DataTable';
+import { Modal } from '@/components/admin/ui/Modal';
 
 const RETOUREN_BOOKINGS_KEY = 'admin:retouren-bookings';
 
@@ -200,6 +201,8 @@ export default function AdminVersandRueckgabePage() {
   // Buchungen geladen — sie überleben den Abschluss der Buchung.
   const [openItems, setOpenItems] = useState<OpenReturnItem[]>([]);
   const [openItemsBusy, setOpenItemsBusy] = useState<string | null>(null);
+  /** Position, für die „Nichts erhalten?"-Fenster offen ist. */
+  const [nextStepsItem, setNextStepsItem] = useState<OpenReturnItem | null>(null);
 
   // Sendcloud-Etikett-Modal nur fuer das HIN-Etikett. Das Retour-Etikett
   // wird via separates Upload-Modal manuell hochgeladen (JPG/PNG/PDF) —
@@ -408,6 +411,55 @@ export default function AdminVersandRueckgabePage() {
     }
   }
 
+  /** Kunde hat nichts geschickt → erneut erinnern (optional neue Frist). */
+  async function remindOpenItem(id: string, dueDate: string) {
+    setOpenItemsBusy(id);
+    try {
+      const res = await fetch('/api/admin/return-open-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'remind', dueDate: dueDate || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erinnerung fehlgeschlagen.');
+      setOpenItems((prev) => prev.map((it) => (it.id === id ? { ...it, due_date: data.due_date ?? it.due_date } : it)));
+      setNextStepsItem(null);
+      toast.success('Erinnerung an den Kunden gesendet.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erinnerung fehlgeschlagen.');
+    } finally {
+      setOpenItemsBusy(null);
+    }
+  }
+
+  /** Kunde schickt nicht → Ersatz in Rechnung stellen (Rechnung + Zahlungslink). */
+  async function billOpenItem(id: string, unitValue: number) {
+    setOpenItemsBusy(id);
+    try {
+      const res = await fetch('/api/admin/return-open-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'bill', unitValue }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Rechnung konnte nicht erstellt werden.');
+      setOpenItems((prev) => prev.map((it) => (it.id === id ? {
+        ...it,
+        resolution: 'replace' as const,
+        unit_value: unitValue,
+        total_value: Math.round(unitValue * it.qty * 100) / 100,
+        sale_booking_id: data.sale_booking_id ?? null,
+        due_date: it.due_date,
+      } : it)));
+      setNextStepsItem(null);
+      toast.success('Rechnung mit Zahlungslink an den Kunden geschickt.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Rechnung konnte nicht erstellt werden.');
+    } finally {
+      setOpenItemsBusy(null);
+    }
+  }
+
   async function loadBuffer() {
     try {
       const res = await fetch('/api/admin/settings?key=booking_buffer_days');
@@ -525,11 +577,21 @@ export default function AdminVersandRueckgabePage() {
 
       {/* Tabelle */}
       {tab === 'offen' ? (
-        <OpenItemsTable
-          items={openItems}
-          busyId={openItemsBusy}
-          onResolve={resolveOpenItem}
-        />
+        <>
+          <OpenItemsTable
+            items={openItems}
+            busyId={openItemsBusy}
+            onResolve={resolveOpenItem}
+            onNextSteps={setNextStepsItem}
+          />
+          <NextStepsModal
+            item={nextStepsItem}
+            busy={!!nextStepsItem && openItemsBusy === nextStepsItem.id}
+            onClose={() => setNextStepsItem(null)}
+            onRemind={remindOpenItem}
+            onBill={billOpenItem}
+          />
+        </>
       ) : loading ? (
         <div className="text-center py-16" style={{ color: 'var(--admin-text-dim)' }}>Lädt…</div>
       ) : displayed.length === 0 ? (
@@ -625,11 +687,12 @@ function emptyText(tab: Tab): string {
  *   'follow_up' — Kunde sendet nach (Frist, wird rot wenn überfällig)
  */
 function OpenItemsTable({
-  items, busyId, onResolve,
+  items, busyId, onResolve, onNextSteps,
 }: {
   items: OpenReturnItem[];
   busyId: string | null;
   onResolve: (id: string, action: 'received' | 'waived') => void;
+  onNextSteps: (item: OpenReturnItem) => void;
 }) {
   // Vor dem fruehen Return aufrufen — Rules of Hooks.
   const isNarrow = useIsNarrow();
@@ -698,6 +761,22 @@ function OpenItemsTable({
                 >
                   Rechnung ansehen →
                 </Link>
+              )}
+
+              {!isReplace && (
+                <button
+                  onClick={() => onNextSteps(it)}
+                  disabled={busy}
+                  style={{
+                    padding: '10px 12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+                    background: overdue ? '#f59e0b' : 'transparent',
+                    color: overdue ? '#0a0a0a' : '#fbbf24',
+                    border: overdue ? 'none' : '1px solid #f59e0b66',
+                    cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  Nichts erhalten? Erinnern oder in Rechnung stellen →
+                </button>
               )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
@@ -785,6 +864,22 @@ function OpenItemsTable({
                     )}
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {!isReplace && (
+                      <button
+                        onClick={() => onNextSteps(it)}
+                        disabled={busy}
+                        title="Kunde hat nichts geschickt: erneut erinnern oder Ersatz in Rechnung stellen"
+                        style={{
+                          padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                          background: overdue ? '#f59e0b' : 'transparent',
+                          color: overdue ? '#0a0a0a' : '#fbbf24',
+                          border: overdue ? 'none' : '1px solid #f59e0b66',
+                          cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1, marginRight: 6,
+                        }}
+                      >
+                        Nichts erhalten?
+                      </button>
+                    )}
                     <button
                       onClick={() => onResolve(it.id, 'received')}
                       disabled={busy}
@@ -816,6 +911,123 @@ function OpenItemsTable({
         </table>
       </div>
     </div>
+  );
+}
+
+/**
+ * „Nichts erhalten?" — nächste Schritte für eine „Kommt nach"-Position:
+ *   1. erneut erinnern (optional mit neuer Frist)
+ *   2. Ersatz in Rechnung stellen (Rechnung + Stripe-Zahlungslink per E-Mail)
+ */
+function NextStepsModal({
+  item, busy, onClose, onRemind, onBill,
+}: {
+  item: OpenReturnItem | null;
+  busy: boolean;
+  onClose: () => void;
+  onRemind: (id: string, dueDate: string) => void;
+  onBill: (id: string, unitValue: number) => void;
+}) {
+  const [dueDate, setDueDate] = useState('');
+  const [amount, setAmount] = useState('');
+
+  // Beim Öffnen: neue Frist = heute + 7 Tage, Betrag leer.
+  useEffect(() => {
+    if (!item) return;
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setDueDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    setAmount(item.unit_value ? String(item.unit_value).replace('.', ',') : '');
+  }, [item]);
+
+  if (!item) return null;
+  const unitValue = Number(amount.replace(/\./g, '').replace(',', '.'));
+  const validAmount = Number.isFinite(unitValue) && unitValue > 0;
+  const total = validAmount ? Math.round(unitValue * item.qty * 100) / 100 : 0;
+
+  const box: React.CSSProperties = {
+    border: '1px solid var(--admin-border)', borderRadius: 10, padding: 14,
+    display: 'flex', flexDirection: 'column', gap: 10,
+  };
+  const input: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 16,
+    background: 'var(--admin-input-bg)', border: '1px solid var(--admin-input-border)',
+    color: 'var(--admin-text)',
+  };
+
+  return (
+    <Modal open={!!item} onClose={onClose} title="Kunde hat nichts geschickt" maxWidth={480}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ fontSize: 14, color: 'var(--admin-text-2)' }}>
+          <strong style={{ color: 'var(--admin-text)' }}>{item.qty}× {item.label}</strong>
+          <br />
+          {item.booking?.customer_name || '—'} · {item.booking_id}
+          {item.due_date && <><br />Bisherige Frist: {isoToDE(item.due_date)}</>}
+        </div>
+
+        <div style={box}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--admin-text)' }}>📨 1. Nochmal erinnern</div>
+          <div style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>
+            Der Kunde bekommt eine Erinnerungs-Mail mit neuer Frist und dem Hinweis,
+            dass sonst der Ersatz berechnet wird.
+          </div>
+          <label style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
+            Neue Frist
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={{ ...input, marginTop: 4 }} />
+          </label>
+          <button
+            onClick={() => onRemind(item.id, dueDate)}
+            disabled={busy}
+            style={{
+              padding: '11px 12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+              background: '#06b6d4', color: '#0a0a0a', border: 'none',
+              cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+            }}
+          >
+            Erinnerung senden
+          </button>
+        </div>
+
+        <div style={box}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--admin-text)' }}>💶 2. Ersatz in Rechnung stellen</div>
+          <div style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>
+            Der Kunde bekommt eine Rechnung mit Zahlungslink per E-Mail. Die Position wechselt
+            auf „Ersatz“; wenn bezahlt, hier mit „Erledigt“ abhaken.
+          </div>
+          <label style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
+            Betrag pro Stück (€)
+            <input
+              type="text" inputMode="decimal" placeholder="z. B. 14,90"
+              value={amount} onChange={(e) => setAmount(e.target.value)}
+              style={{ ...input, marginTop: 4 }}
+            />
+          </label>
+          {validAmount && item.qty > 1 && (
+            <div style={{ fontSize: 13, color: 'var(--admin-text-2)' }}>Gesamt: {fmtEuro(total)}</div>
+          )}
+          <button
+            onClick={() => {
+              if (!validAmount) return;
+              if (!window.confirm(`Rechnung über ${fmtEuro(total)} an den Kunden senden?`)) return;
+              onBill(item.id, unitValue);
+            }}
+            disabled={busy || !validAmount}
+            style={{
+              padding: '11px 12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+              background: '#f97316', color: '#0a0a0a', border: 'none',
+              cursor: busy || !validAmount ? 'not-allowed' : 'pointer', opacity: busy || !validAmount ? 0.5 : 1,
+            }}
+          >
+            Rechnung senden
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
+          Soll nichts mehr passieren (z. B. Kulanz)? Fenster schließen und „Erledigt“ drücken.
+        </div>
+      </div>
+    </Modal>
   );
 }
 

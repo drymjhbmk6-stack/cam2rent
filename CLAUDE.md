@@ -2795,6 +2795,28 @@ da, einer der beiden orangenen Rund-Adapter fehlt), gab es keinen Weg — die
   Positionen und meldet `migration_pending` — die Nachsende-Mail geht trotzdem
   raus, nur der Posten fehlt in der Liste.
 
+#### „Nichts erhalten?" — Nachfassen bei „Kommt nach" (Stand 2026-09-25)
+Schickt der Kunde eine „Kommt nach"-Position nicht, gab es nur „Eingetroffen"
+oder „Erledigt". Jetzt hat jede `follow_up`-Position im Tab „Offene Rückgaben"
+einen Button **„Nichts erhalten?"** (amber gefüllt, sobald die Frist
+überschritten ist) → Fenster mit zwei Schritten:
+- **📨 Nochmal erinnern** — `POST /api/admin/return-open-items`
+  `{action:'remind', dueDate?}`: Erinnerungs-Mail (`sendReturnFollowUpRequest`
+  mit neuem Flag `reminder:true` → Betreff „Erinnerung: …", Satz „bisher nichts
+  erhalten" + Hinweis auf Ersatzrechnung, emailType
+  `return_follow_up_reminder`, im Vorlagen-Katalog + `/admin/emails`), neue
+  Frist (Default heute+7) wird gespeichert, Notiz-Zeile an der Position.
+  Position bleibt offen.
+- **💶 Ersatz in Rechnung stellen** — `{action:'bill', unitValue}`:
+  `createSale()` (Rechnung + Stripe-Zahlungslink per Mail), Position wechselt auf
+  `resolution='replace'` + `sale_booking_id` (409 bei bereits vorhandener
+  Rechnung). Zurückgehaltene Zubehör-Exemplare → `lost` + `syncAccessoryQty`,
+  Kamera → `product_units.status='retired'`; Bestandteile (`part`) fassen kein
+  Inventar an. Position bleibt offen, bis der Admin sie nach Zahlung mit
+  „Erledigt" abhakt.
+Beide Aktionen brauchen eine Kunden-E-Mail an der Buchung (sonst 422). Audit
+`return_open_item.remind` / `.bill`. Keine Migration.
+
 - ⚠️ **Bekannte, akzeptierte Grenze:** `deductConsumablesForBooking(…, 'return')`
   rechnet weiter mit den **gebuchten** (nicht den tatsächlich zurückgekommenen)
   Mengen — bei fehlenden Halterungen kann ein Klebepad zu viel abgezogen werden.

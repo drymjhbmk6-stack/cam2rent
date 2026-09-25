@@ -948,6 +948,20 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     }),
   },
   {
+    id: 'return_follow_up_reminder',
+    name: 'Erinnerung: Nachsendung offener Teile',
+    description: 'Manuell unter Versand & Rückgabe → Offene Rückgaben → „Erinnern", wenn der Kunde die fehlenden Teile bis zur Frist nicht geschickt hat — mit neuer Frist und Hinweis auf die Ersatzrechnung.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendReturnFollowUpRequest, {
+      bookingId: DUMMY_BOOKING_ID,
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      items: [{ label: 'Brusthalterung', qty: 1 }],
+      dueDate: '2026-06-12',
+      reminder: true,
+    }),
+  },
+  {
     id: 'return_reminder_2d',
     name: 'Rückgabe-Erinnerung (2 Tage vorher)',
     description: 'Cron-basiert: 2 Tage vor dem Mietende — Erinnerung an die bevorstehende Rückgabe (Paket rechtzeitig aufgeben).',
