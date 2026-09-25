@@ -2817,6 +2817,25 @@ einen Button **„Nichts erhalten?"** (amber gefüllt, sobald die Frist
 Beide Aktionen brauchen eine Kunden-E-Mail an der Buchung (sonst 422). Audit
 `return_open_item.remind` / `.bill`. Keine Migration.
 
+**Rückmelde-Buttons („Lesebestätigung") in der Nachsende-Mail (Stand 2026-09-25):**
+Jede Nachsende-Mail (erste Mail aus `return-booking` UND Erinnerung) enthält zwei
+Buttons: **„✓ Gelesen – ich schicke es zurück"** und **„Habe ich nicht mehr"**.
+Sie führen auf die öffentliche Seite `/rueckgabe/bestaetigen?b=<booking>&t=<token>&c=<wahl>`
+(noindex), die die Wahl nur **vorbelegt** — gespeichert wird erst per Klick auf
+„Bestätigen" (`POST /api/return-ack`). ⚠️ Bewusst kein Speichern per GET-Link:
+Link-Scanner in Mailprogrammen (Outlook Safe Links) rufen Links automatisch auf
+und würden eine falsche Bestätigung erzeugen. Token: `lib/return-ack-token.ts`
+(HMAC wie `survey-token`, eigener Zweck-Präfix, 60 Tage gültig; ohne Secret
+entfällt der Button-Block). Die Antwort gilt für alle offenen „Kommt nach"-
+Positionen der Buchung, landet in `customer_ack_at`/`customer_ack_choice` +
+Notiz-Zeile und löst die Benachrichtigung **`return_ack`** aus (Permission
+`tagesgeschaeft`). Im Tab „Offene Rückgaben" zeigt jede Position „Noch keine
+Rückmeldung" bzw. die Antwort mit Datum (auch im „Nichts erhalten?"-Fenster).
+Rate-Limit 20/h pro IP. Migration `supabase/supabase-return-open-items-ack.sql`
+— ohne sie wird die Antwort nur als Notiz gespeichert (Benachrichtigung kommt
+trotzdem). Hinweis: ein echtes „geöffnet"-Tracking (Zählpixel) gibt es bewusst
+nicht (unzuverlässig durch Bild-Blocker/Apple-Mail-Vorladen + Datenschutz).
+
 - ⚠️ **Bekannte, akzeptierte Grenze:** `deductConsumablesForBooking(…, 'return')`
   rechnet weiter mit den **gebuchten** (nicht den tatsächlich zurückgekommenen)
   Mengen — bei fehlenden Halterungen kann ein Klebepad zu viel abgezogen werden.
@@ -9311,6 +9330,10 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      pro GB abgerechnet. Jeder Stand ist eine **volle Kopie** — zehn Stände
      eines 500-MB-Projekts sind 5 GB. Alte Stände lassen sich einzeln löschen.
   Siehe „Projektablage — private Datei-Ablage im Admin".
+- **Rückmelde-Buttons in der Nachsende-Mail — Migration auszuführen:**
+  `supabase/supabase-return-open-items-ack.sql` (idempotent, additiv:
+  `customer_ack_at` + `customer_ack_choice`). Ohne sie landet die Antwort des
+  Kunden nur als Notiz an der Position; die Benachrichtigung kommt trotzdem.
 - **Pflicht-Fotos (Übergabe + Versand) — Migration auszuführen:**
   `supabase/supabase-pack-photos.sql` (idempotent, additiv:
   `bookings.pack_photos JSONB DEFAULT '[]'`). Ohne sie funktioniert der neue

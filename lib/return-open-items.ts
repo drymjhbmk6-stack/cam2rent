@@ -60,6 +60,9 @@ export interface OpenItemRow {
   status: OpenItemStatus;
   accessory_unit_ids: string[];
   sale_booking_id: string | null;
+  /** Rückmeldung des Kunden auf die Nachsende-Mail (Migration ...-ack.sql). */
+  customer_ack_at?: string | null;
+  customer_ack_choice?: 'will_return' | 'please_bill' | null;
   notes: string | null;
   created_at: string;
   resolved_at: string | null;

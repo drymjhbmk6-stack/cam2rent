@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { generateReturnAckToken } from '@/lib/return-ack-token';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -2295,6 +2296,26 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
     ? `<p style="margin:14px 0 0;font-size:14px;font-weight:700;color:#78350f;">Bitte bis spätestens ${h(fmtDate(data.dueDate))} bei uns.</p>`
     : '';
 
+  // Rückmelde-Buttons (Lesebestätigung). Token-geschützt; ohne HMAC-Secret
+  // entfällt der Block einfach, die Mail geht trotzdem raus.
+  let ackBlock = '';
+  try {
+    const t = generateReturnAckToken(data.bookingId);
+    const base = `${BASE_URL}/rueckgabe/bestaetigen?b=${encodeURIComponent(data.bookingId)}&t=${encodeURIComponent(t)}`;
+    ackBlock = `
+          <p style="margin:24px 0 10px;font-size:14px;font-weight:700;color:#0a0a0a;">Kurze Rückmeldung an uns:</p>
+          <table cellpadding="0" cellspacing="0" style="margin:0 0 8px;"><tr>
+            <td style="padding:0 8px 8px 0;">
+              <a href="${h(base)}&c=will_return" style="display:inline-block;padding:12px 20px;background:#16a34a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">✓ Gelesen – ich schicke es zurück</a>
+            </td>
+            <td style="padding:0 0 8px 0;">
+              <a href="${h(base)}&c=please_bill" style="display:inline-block;padding:12px 20px;background:#ffffff;color:#0a0a0a;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;border:1px solid #d1d5db;">Habe ich nicht mehr</a>
+            </td>
+          </tr></table>`;
+  } catch {
+    ackBlock = '';
+  }
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
@@ -2325,7 +2346,8 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
           ${data.reminder ? `<p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
             Kommen die Teile bis zur Frist nicht bei uns an, müssen wir dir den Ersatz in Rechnung stellen.
           </p>` : ''}
-          <a href="${url}" style="display:inline-block;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+          ${ackBlock}
+          <a href="${url}" style="display:inline-block;margin-top:8px;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
             Meine Buchung ansehen
           </a>
           <p style="margin:22px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">

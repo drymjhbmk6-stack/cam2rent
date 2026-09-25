@@ -196,6 +196,13 @@ function TypeIcon({ type }: { type: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
         </svg>
       );
+    case 'return_ack':
+      // Haken — Kunde hat auf die Nachsende-Mail geantwortet
+      return (
+        <svg style={iconStyle} fill="none" stroke="#22d3ee" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      );
     case 'contract_sign_failed':
       // Dokument mit Warnung — Kunde konnte den Mietvertrag nicht unterschreiben
       return (

@@ -173,6 +173,28 @@ function PartBadge() {
   );
 }
 
+/** Rückmeldung des Kunden auf die Nachsende-Mail („Lesebestätigung"). */
+function AckBadge({ item }: { item: { customer_ack_at?: string | null; customer_ack_choice?: string | null } }) {
+  if (!item.customer_ack_at || !item.customer_ack_choice) {
+    return (
+      <span style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
+        Noch keine Rückmeldung vom Kunden
+      </span>
+    );
+  }
+  const willReturn = item.customer_ack_choice === 'will_return';
+  return (
+    <span style={{
+      display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+      background: willReturn ? '#10b98122' : '#f9731622',
+      color: willReturn ? '#34d399' : '#fb923c',
+    }}>
+      {willReturn ? '✓ Gelesen – schickt zurück' : 'Hat es nicht mehr – bittet um Rechnung'}
+      {' · '}{fmtDate(item.customer_ack_at)}
+    </span>
+  );
+}
+
 /** Nicht zurückgegebene Position (aus `GET /api/admin/return-open-items`). */
 interface OpenReturnItem {
   id: string;
@@ -186,6 +208,9 @@ interface OpenReturnItem {
   total_value: number | null;
   due_date: string | null;
   sale_booking_id: string | null;
+  /** Rückmeldung des Kunden aus der Nachsende-Mail. */
+  customer_ack_at?: string | null;
+  customer_ack_choice?: 'will_return' | 'please_bill' | null;
   created_at: string;
   booking: { customer_name: string | null; product_name: string | null } | null;
 }
@@ -754,6 +779,8 @@ function OpenItemsTable({
                 </Link>
               </div>
 
+              {!isReplace && <div><AckBadge item={it} /></div>}
+
               {isReplace && it.sale_booking_id && (
                 <Link
                   href={`/admin/buchungen/${it.sale_booking_id}`}
@@ -854,6 +881,7 @@ function OpenItemsTable({
                     }}>
                       {isReplace ? `💶 Ersatz ${fmtEuro(it.total_value ?? 0)}` : '📦 Kommt nach'}
                     </span>
+                    {!isReplace && <div style={{ marginTop: 4 }}><AckBadge item={it} /></div>}
                     {isReplace && it.sale_booking_id && (
                       <Link
                         href={`/admin/buchungen/${it.sale_booking_id}`}
@@ -964,6 +992,7 @@ function NextStepsModal({
           <br />
           {item.booking?.customer_name || '—'} · {item.booking_id}
           {item.due_date && <><br />Bisherige Frist: {isoToDE(item.due_date)}</>}
+          <div style={{ marginTop: 6 }}><AckBadge item={item} /></div>
         </div>
 
         <div style={box}>
