@@ -269,6 +269,82 @@ export async function persistOpenItems(
  * Laedt offene Positionen. Ohne `status` werden nur `open`-Zeilen geliefert;
  * `status: 'all'` liefert alle. Defensiv → leere Liste + migrationPending.
  */
+/**
+ * Schliesst offene Ersatz-Positionen automatisch ab, sobald ihre Ersatz-
+ * Rechnung (Verkaufs-Buchung `sale_booking_id`) bezahlt ist.
+ *
+ * Bezahlt = Verkaufs-Buchung steht auf 'confirmed' (Stripe-Webhook bzw.
+ * „Als bezahlt markieren" im Verkauf) ODER ihre `invoices`-Zeile ist 'paid'
+ * (Bezahlt-Haken in Buchhaltung/Buchungsdetail). Damit greift es fuer jeden
+ * Zahlungsweg, auch wenn ein Webhook verloren geht.
+ *
+ * `saleBookingIds` gesetzt → nur diese pruefen (Webhook-Pfad), sonst alle
+ * offenen Positionen mit Rechnung. Atomar ueber `.eq('status','open')`,
+ * wirft nie. Liefert die abgeschlossenen Positionen.
+ */
+export async function closePaidReplacementItems(
+  supabase: SupabaseClient,
+  saleBookingIds?: string[],
+): Promise<{ id: string; booking_id: string; label: string; qty: number; sale_booking_id: string }[]> {
+  try {
+    let q = supabase
+      .from('booking_return_open_items')
+      .select('id, booking_id, label, qty, sale_booking_id, notes')
+      .eq('status', 'open')
+      .not('sale_booking_id', 'is', null)
+      .limit(500);
+    if (saleBookingIds) {
+      if (saleBookingIds.length === 0) return [];
+      q = q.in('sale_booking_id', saleBookingIds);
+    }
+    const { data: rows, error } = await q;
+    if (error || !rows || rows.length === 0) return [];
+
+    const saleIds = [...new Set(rows.map((r) => r.sale_booking_id as string))];
+    const [{ data: sales }, { data: invoices }] = await Promise.all([
+      supabase.from('bookings').select('id, status').in('id', saleIds),
+      supabase.from('invoices').select('booking_id, status, payment_status').in('booking_id', saleIds),
+    ]);
+    const paid = new Set<string>();
+    for (const b of sales ?? []) if (b.status === 'confirmed' || b.status === 'completed') paid.add(b.id as string);
+    for (const inv of invoices ?? []) {
+      if (inv.status === 'paid' || inv.payment_status === 'paid') paid.add(inv.booking_id as string);
+    }
+
+    const today = new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    const closed: { id: string; booking_id: string; label: string; qty: number; sale_booking_id: string }[] = [];
+    for (const r of rows) {
+      if (!paid.has(r.sale_booking_id as string)) continue;
+      const line = `Ersatz bezahlt (${today}) — automatisch abgehakt`;
+      const prev = String(r.notes ?? '').trim();
+      const { data: upd } = await supabase
+        .from('booking_return_open_items')
+        .update({
+          status: 'charged',
+          resolved_at: new Date().toISOString(),
+          notes: (prev ? `${prev}\n${line}` : line).slice(0, 2000),
+        })
+        .eq('id', r.id)
+        .eq('status', 'open')
+        .select('id')
+        .maybeSingle();
+      if (upd) {
+        closed.push({
+          id: r.id as string,
+          booking_id: r.booking_id as string,
+          label: r.label as string,
+          qty: Number(r.qty) || 1,
+          sale_booking_id: r.sale_booking_id as string,
+        });
+      }
+    }
+    return closed;
+  } catch (err) {
+    console.error('[return-open-items] closePaidReplacementItems failed:', err);
+    return [];
+  }
+}
+
 export async function loadOpenItems(
   supabase: SupabaseClient,
   opts: { bookingIds?: string[]; status?: OpenItemStatus | 'all'; limit?: number } = {},
@@ -277,6 +353,12 @@ export async function loadOpenItems(
   // spart aber den Roundtrip).
   if (opts.bookingIds && opts.bookingIds.length === 0) {
     return { rows: [], migrationPending: false };
+  }
+
+  // Selbstheilung: bezahlte Ersatz-Rechnungen vor dem Anzeigen abhaken
+  // (faengt jeden Zahlungsweg ab, auch einen verlorenen Webhook).
+  if (opts.status === undefined || opts.status === 'open' || opts.status === 'all') {
+    await closePaidReplacementItems(supabase);
   }
 
   let q = supabase

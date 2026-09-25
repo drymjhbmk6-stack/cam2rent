@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { closePaidReplacementItems } from '@/lib/return-open-items';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
@@ -107,6 +108,8 @@ export async function POST(
         await stripe.paymentLinks.update(booking.stripe_payment_link_id, { active: false });
       } catch { /* best-effort */ }
     }
+    // Ersatzrechnung einer fehlenden Rückgabe? → Position abhaken.
+    await closePaidReplacementItems(supabase, [id]);
     await logAudit({ action: 'verkauf.mark_paid', entityType: 'booking', entityId: id, request: req });
     return NextResponse.json({ ok: true });
   }

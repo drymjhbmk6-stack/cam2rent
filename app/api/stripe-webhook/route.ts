@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { closePaidReplacementItems } from '@/lib/return-open-items';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId, incrementBookingIdSuffix } from '@/lib/booking-id';
@@ -407,6 +408,16 @@ export async function POST(req: NextRequest) {
           });
         } catch (e) {
           console.error('[Webhook] Verkauf-Notification fehlgeschlagen:', e);
+        }
+        // War es eine Ersatzrechnung für eine fehlende Rückgabe? → abhaken.
+        const closedItems = await closePaidReplacementItems(supabase, [meta.booking_id]);
+        if (closedItems.length > 0) {
+          createAdminNotification(supabase, {
+            type: 'return_open_items',
+            title: 'Ersatz bezahlt — offene Rückgabe erledigt',
+            message: `Buchung ${closedItems[0].booking_id} · ${closedItems.map((c) => `${c.qty}× ${c.label}`).join(', ')}`,
+            link: `/admin/buchungen/${closedItems[0].booking_id}`,
+          }).catch(() => {});
         }
         console.log(`[Webhook] Verkauf ${meta.booking_id} nach Zahlung bestätigt.`);
       }

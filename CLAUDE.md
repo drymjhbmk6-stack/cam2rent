@@ -2812,10 +2812,23 @@ einen Button **„Nichts erhalten?"** (amber gefüllt, sobald die Frist
   `resolution='replace'` + `sale_booking_id` (409 bei bereits vorhandener
   Rechnung). Zurückgehaltene Zubehör-Exemplare → `lost` + `syncAccessoryQty`,
   Kamera → `product_units.status='retired'`; Bestandteile (`part`) fassen kein
-  Inventar an. Position bleibt offen, bis der Admin sie nach Zahlung mit
-  „Erledigt" abhakt.
+  Inventar an. Position bleibt offen, bis die Rechnung bezahlt ist — dann wird
+  sie **automatisch** abgehakt (siehe unten).
 Beide Aktionen brauchen eine Kunden-E-Mail an der Buchung (sonst 422). Audit
 `return_open_item.remind` / `.bill`. Keine Migration.
+
+**Automatisch abhaken bei Zahlungseingang (Stand 2026-09-25):**
+`closePaidReplacementItems(supabase, saleBookingIds?)` in
+`lib/return-open-items.ts` setzt offene Positionen mit `sale_booking_id` auf
+`status='charged'` (+ Notiz „Ersatz bezahlt — automatisch abgehakt"), sobald die
+Ersatzrechnung bezahlt ist: Verkaufs-Buchung `confirmed`/`completed` ODER
+`invoices` bezahlt. Aufgerufen (1) im Stripe-Webhook (`booking_type='kauf'`,
+sofort + Benachrichtigung „Ersatz bezahlt — offene Rückgabe erledigt"),
+(2) bei „Als bezahlt markieren" im Verkauf, (3) als **Selbstheilung** in
+`loadOpenItems` (Tab, Dashboard, Buchungsdetail) — fängt damit jeden
+Zahlungsweg ab, auch Bar/Überweisung über den Bezahlt-Haken der Buchhaltung und
+einen verlorenen Webhook. Gilt für die ganze Position (auch bei Teilzahlung
+gibt es keine Teil-Erledigung). Keine Migration.
 
 **Rückmelde-Buttons („Lesebestätigung") in der Nachsende-Mail (Stand 2026-09-25):**
 Jede Nachsende-Mail (erste Mail aus `return-booking` UND Erinnerung) enthält zwei

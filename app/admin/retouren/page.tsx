@@ -1022,7 +1022,7 @@ function NextStepsModal({
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--admin-text)' }}>💶 2. Ersatz in Rechnung stellen</div>
           <div style={{ fontSize: 13, color: 'var(--admin-text-dim)' }}>
             Der Kunde bekommt eine Rechnung mit Zahlungslink per E-Mail. Die Position wechselt
-            auf „Ersatz“; wenn bezahlt, hier mit „Erledigt“ abhaken.
+            auf „Ersatz“ und wird automatisch abgehakt, sobald bezahlt ist.
           </div>
           <label style={{ fontSize: 12, color: 'var(--admin-text-dim)' }}>
             Betrag pro Stück (€)
