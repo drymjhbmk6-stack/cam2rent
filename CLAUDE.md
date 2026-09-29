@@ -1989,8 +1989,18 @@ Buchungen, deren Versand/Rückgabe hineinfällt, damit man sie vorher/nachher er
   hinter den Urlaub). Neuer Param `ignoreVacation` — gesetzt bei **Admin-Verlegung**.
   **Manuelle Admin-Buchungen** (`/admin/buchungen/neu`) nutzen diesen Check nicht
   und bleiben im Urlaub möglich.
-- Bewusst NICHT: Zubehör-Verfügbarkeit/Gantt zeigen den Urlaub nicht an (ohne
-  buchbare Kamera ist Zubehör ohnehin nicht buchbar).
+- **Anzeige im Admin (Stand 2026-09-29):** `GET /api/admin/availability-gantt`
+  liefert zusätzlich `vacations` (Zeiträume im angezeigten Bereich). Der
+  Verfügbarkeits-Kalender (`/admin/verfuegbarkeit`) färbt die Tages-Köpfe aller
+  drei Reiter amber mit 🌴 (Tooltip mit Zeitraum/Hinweis), freie Kamera-Zellen im
+  Urlaub werden amber statt grün („für Kunden gesperrt"), dazu Legenden-Eintrag +
+  Hinweisbox mit Link auf `/admin/urlaub`. Gezeigt werden nur die echten
+  Urlaubstage, NICHT die gesperrten Puffertage davor/danach. Belegte Zellen
+  (Buchungen im Urlaub) bleiben unverändert. Der Auftragskalender
+  (`/admin/auftragskalender`, Monatsansicht) lädt `/api/admin/urlaub` und tönt die
+  Urlaubstage ebenfalls amber mit „🌴 Urlaub".
+- Bewusst NICHT: Zubehör-/Sets-Zellen werden nicht umgefärbt (nur der Tageskopf) —
+  ohne buchbare Kamera ist Zubehör ohnehin nicht buchbar.
 
 ### Warenkorb-Reservierungen (Cart-Holds, Stand 2026-05-31)
 Sobald ein **eingeloggter** Kunde eine Kamera in den Warenkorb legt, wird der gewählte Mietzeitraum (inkl. Puffer) **serverseitig für 30 Minuten für ALLE anderen Kunden reserviert**. Läuft die Buchung nicht durch, verfällt der Hold automatisch (`expires_at`) und gibt den Zeitraum wieder frei. Behebt: ein offener Warenkorb konnte vorher zwei Kunden parallel denselben Slot bis zur Zahlung durchlaufen lassen (Überbuchungs-Race), und ein nie abgeschickter Warenkorb blockierte nie etwas für andere (Browser-only-Hold).

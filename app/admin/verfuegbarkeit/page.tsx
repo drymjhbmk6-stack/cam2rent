@@ -75,6 +75,8 @@ interface GanttData {
   products: GanttProduct[];
   accessories: GanttAccessory[];
   sets: GanttSet[];
+  /** Urlaubsmodus-Zeitraeume im angezeigten Bereich (/admin/urlaub). */
+  vacations?: { id: string; from: string; to: string; note?: string }[];
 }
 
 interface GanttAccessory {
@@ -400,6 +402,25 @@ export default function AdminVerfuegbarkeitPage() {
   }, [ganttData, rangeFrom, rangeTo, todayStr]);
 
   // Monats-Gruppen für Top-Header
+  // Urlaubsmodus: Tag → Urlaub (nur die echten Urlaubstage, ohne Puffer).
+  const vacationByDay = useMemo(() => {
+    const map = new Map<string, { from: string; to: string; note?: string }>();
+    for (const v of ganttData?.vacations ?? []) {
+      for (const d of days) {
+        if (d.dateStr >= v.from && d.dateStr <= v.to) map.set(d.dateStr, v);
+      }
+    }
+    return map;
+  }, [ganttData, days]);
+  const fmtVac = (iso: string) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
+  const vacationTitle = (dateStr: string): string | undefined => {
+    const v = vacationByDay.get(dateStr);
+    if (!v) return undefined;
+    return `🌴 Urlaub ${fmtVac(v.from)} – ${fmtVac(v.to)}${v.note ? ` · ${v.note}` : ''}\nNeue Kundenbuchungen gesperrt`;
+  };
+  const vacationHeadStyle = (dateStr: string): React.CSSProperties =>
+    vacationByDay.has(dateStr) ? { background: '#78350f', color: '#fde68a' } : {};
+
   const monthGroups = useMemo(() => {
     const groups: { label: string; span: number }[] = [];
     for (const d of days) {
@@ -1159,7 +1180,19 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#c2410c' }} /> Rückversand</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#991b1b' }} /> Wartung</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#374151' }} /> Ausgemustert</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#451a03', border: '1px solid #b45309' }} /> 🌴 Urlaub (für Kunden gesperrt)</span>
               </div>
+
+              {(ganttData.vacations?.length ?? 0) > 0 && (
+                <div className="rounded-xl px-4 py-2.5 text-xs flex flex-wrap items-center gap-x-3 gap-y-1"
+                  style={{ background: 'rgba(245, 158, 11, 0.10)', border: '1px solid rgba(245, 158, 11, 0.4)', color: 'var(--admin-text)' }}>
+                  <span className="font-heading font-semibold">🌴 Urlaub im Zeitraum:</span>
+                  {ganttData.vacations!.map((v) => (
+                    <span key={v.id}>{fmtVac(v.from)} – {fmtVac(v.to)}{v.note ? ` (${v.note})` : ''}</span>
+                  ))}
+                  <a href="/admin/urlaub" className="underline" style={{ color: 'var(--admin-accent)' }}>verwalten</a>
+                </div>
+              )}
 
               {/* Legende: tatsächlicher Paketlauf (weicht vom geplanten Puffer ab) */}
               <div className="flex flex-wrap gap-4 text-[11px] font-body mb-3" style={{ color: 'var(--admin-text-dim)' }}>
@@ -1228,6 +1261,7 @@ export default function AdminVerfuegbarkeitPage() {
                           return (
                             <th key={d.dateStr}
                               data-today={d.isToday || undefined}
+                              title={vacationTitle(d.dateStr)}
                               className="text-center px-0 py-1 font-heading font-semibold"
                               style={{
                                 color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
@@ -1235,8 +1269,9 @@ export default function AdminVerfuegbarkeitPage() {
                                 background: weekBg,
                                 borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
                                 borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none',
+                                ...vacationHeadStyle(d.dateStr),
                               }}>
-                              <div className="text-[9px]">{d.dayName}</div>
+                              <div className="text-[9px]">{vacationByDay.has(d.dateStr) ? '🌴' : d.dayName}</div>
                               <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
                             </th>
                           );
@@ -1270,11 +1305,15 @@ export default function AdminVerfuegbarkeitPage() {
                               </td>
                               {days.map((d) => {
                                 const info = getCellInfo(unit, d.dateStr, product, ganttData.bufferDays);
-                                const cs = cellStyle(info);
+                                const baseCs = cellStyle(info);
+                                // Urlaub: freie Zellen sind fuer Kunden gesperrt → amber statt gruen.
+                                const vacFree = info.type === 'free' && vacationByDay.has(d.dateStr);
+                                const cs = vacFree ? { ...baseCs, background: '#451a03', color: '#fbbf24' } : baseCs;
                                 return (
                                   <td
                                     key={d.dateStr}
                                     className="px-0 py-0.5 text-center"
+                                    title={vacFree ? vacationTitle(d.dateStr) : undefined}
                                     onMouseEnter={(e) => handleCellHover(e, info, d.dateStr)}
                                     onMouseLeave={() => setTooltip(null)}
                                     onClick={() => {
@@ -1309,6 +1348,7 @@ export default function AdminVerfuegbarkeitPage() {
                                         <span style={{ fontSize: '8px' }}> {MARKER_SYMBOLS[info.marker]}</span>
                                       )}
                                       {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
+                                      {vacFree && <span style={{ fontSize: '9px' }}>🌴</span>}
                                     </div>
                                   </td>
                                 );
@@ -1406,9 +1446,10 @@ export default function AdminVerfuegbarkeitPage() {
                     {/* Tage */}
                     <tr style={{ borderBottom: '1px solid #1e293b' }}>
                       {days.map((d) => (
-                        <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
-                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none' }}>
-                          <div className="text-[9px]">{d.dayName}</div>
+                        <th key={d.dateStr} data-today={d.isToday || undefined}
+                              title={vacationTitle(d.dateStr)} className="text-center px-0 py-1 font-heading font-semibold"
+                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none', ...vacationHeadStyle(d.dateStr) }}>
+                          <div className="text-[9px]">{vacationByDay.has(d.dateStr) ? '🌴' : d.dayName}</div>
                           <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
                         </th>
                       ))}
@@ -1588,9 +1629,10 @@ export default function AdminVerfuegbarkeitPage() {
                     {/* Tage */}
                     <tr style={{ borderBottom: '1px solid #1e293b' }}>
                       {days.map((d) => (
-                        <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
-                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none' }}>
-                          <div className="text-[9px]">{d.dayName}</div>
+                        <th key={d.dateStr} data-today={d.isToday || undefined}
+                              title={vacationTitle(d.dateStr)} className="text-center px-0 py-1 font-heading font-semibold"
+                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none', ...vacationHeadStyle(d.dateStr) }}>
+                          <div className="text-[9px]">{vacationByDay.has(d.dateStr) ? '🌴' : d.dayName}</div>
                           <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
                         </th>
                       ))}

@@ -6,6 +6,7 @@ import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { loadBufferDays, isMissingLogisticsColumn } from '@/lib/booking-buffer';
 import { getBerlinDateKey } from '@/lib/timezone';
 import { normalizeReservationItems } from '@/lib/reservation-holds';
+import { loadVacationPeriods } from '@/lib/vacation-mode';
 
 /** Timestamp → Kalendertag in Berlin-Zeit (YYYY-MM-DD), null wenn leer/ungueltig. */
 function berlinDayOrNull(value?: string | null): string | null {
@@ -547,10 +548,16 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Urlaubsmodus: Zeitraeume, die den angezeigten Bereich beruehren.
+  const vacations = (await loadVacationPeriods(supabase)).filter(
+    (p) => p.to >= firstDay && p.from <= lastDay,
+  );
+
   return NextResponse.json({
     from: firstDay,
     to: lastDay,
     bufferDays: buf,
+    vacations,
     products: productData,
     accessories: accessoryData,
     sets: setData,

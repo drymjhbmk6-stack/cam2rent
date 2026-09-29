@@ -49,6 +49,7 @@ const C = {
   cellNormal: '#1e293b',
   cellOther: '#162133',
   cellSpecial: '#3a2530',
+  cellVacation: '#3a2a10',
   cellToday: '#1e3a52',
   border: 'var(--admin-faint)',
 };
@@ -153,6 +154,28 @@ export default function AuftragskalenderPage() {
     }
     return map;
   }, [gridStart, gridEnd]);
+
+  // Urlaubsmodus (/admin/urlaub) — nur zur Anzeige im Monatsraster.
+  const [vacations, setVacations] = useState<{ from: string; to: string; note?: string }[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/urlaub', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setVacations(Array.isArray(d?.periods) ? d.periods : []))
+      .catch(() => {});
+  }, []);
+  const vacationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const v of vacations) {
+      if (v.to < gridStart || v.from > gridEnd) continue;
+      let cur = v.from < gridStart ? gridStart : v.from;
+      const end = v.to > gridEnd ? gridEnd : v.to;
+      while (cur <= end) {
+        map.set(cur, v.note ? `Urlaub · ${v.note}` : 'Urlaub');
+        cur = addD(cur, 1);
+      }
+    }
+    return map;
+  }, [vacations, gridStart, gridEnd]);
 
   const loadData = useCallback(async () => {
     const key = akCacheKey(gridStart, gridEnd);
@@ -384,6 +407,7 @@ export default function AuftragskalenderPage() {
             bookings={visibleBookings}
             notes={notes}
             holidayMap={holidayMap}
+            vacationMap={vacationMap}
             onOpen={(id) => router.push(`/admin/buchungen/${id}`)}
             onDayClick={(d) => setNoteModalDate(d)}
           />
@@ -430,6 +454,13 @@ export default function AuftragskalenderPage() {
             Sonn-/Feiertag
           </span>
           <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-3 h-3 rounded"
+              style={{ background: C.cellVacation, border: '1px solid rgba(251,191,36,0.5)' }}
+            />
+            🌴 Urlaub
+          </span>
+          <span className="flex items-center gap-1.5">
             📦 Versand · 🤝 Abholung · 📝 Notiz
           </span>
         </div>
@@ -462,6 +493,7 @@ function MonthView({
   bookings,
   notes,
   holidayMap,
+  vacationMap,
   onOpen,
   onDayClick,
 }: {
@@ -471,6 +503,7 @@ function MonthView({
   bookings: Booking[];
   notes: CalendarNote[];
   holidayMap: Map<string, string>;
+  vacationMap: Map<string, string>;
   onOpen: (id: string) => void;
   onDayClick: (day: string) => void;
 }) {
@@ -555,10 +588,13 @@ function MonthView({
                 const isSunday = dObj.getDay() === 0;
                 const holiday = holidayMap.get(day) ?? null;
                 const isSpecial = isSunday || !!holiday;
+                const vacation = vacationMap.get(day) ?? null;
                 const nCount = noteCount(day);
 
                 const bg = isToday
                   ? C.cellToday
+                  : vacation
+                  ? C.cellVacation
                   : isSpecial
                   ? C.cellSpecial
                   : isOtherMonth
@@ -604,6 +640,11 @@ function MonthView({
                       {holiday && (
                         <span className="text-[10px] leading-tight text-red-300 truncate">
                           {holiday}
+                        </span>
+                      )}
+                      {vacation && (
+                        <span className="text-[10px] leading-tight truncate" style={{ color: '#fcd34d' }} title={vacation}>
+                          🌴 {vacation}
                         </span>
                       )}
                     </span>
