@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+/** Nach einem Deploy fehlen die alten JS-Dateien → Laden schlägt fehl. */
+function isStaleDeployError(error: Error): boolean {
+  const txt = `${error?.name ?? ''} ${error?.message ?? ''}`;
+  return /ChunkLoadError|Loading chunk|Loading CSS chunk|dynamically imported module|Failed to fetch dynamically|Importing a module script failed|Failed to load server action|was not found on the server/i.test(txt);
+}
+
 export default function ErrorPage({
   error,
   reset,
@@ -14,6 +20,21 @@ export default function ErrorPage({
 
   useEffect(() => {
     console.error('Page error:', error);
+
+    // Veraltete App-Version nach einem Update: einmal komplett neu laden.
+    if (isStaleDeployError(error) && typeof window !== 'undefined') {
+      try {
+        const key = 'cam2rent_stale_reload';
+        const last = Number(sessionStorage.getItem(key) || '0');
+        if (Date.now() - last > 30_000) {
+          sessionStorage.setItem(key, String(Date.now()));
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // sessionStorage gesperrt → normale Fehlerseite
+      }
+    }
 
     const url = typeof window !== 'undefined' ? window.location.href : null;
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
@@ -69,6 +90,12 @@ export default function ErrorPage({
                     <code className="font-mono">{error.digest}</code>
                   </div>
                 )}
+                {error.message && (
+                  <div>
+                    <span className="font-semibold text-brand-black dark:text-white">Fehler:</span>{' '}
+                    <code className="font-mono">{error.message.slice(0, 300)}</code>
+                  </div>
+                )}
                 {url && (
                   <div>
                     <span className="font-semibold text-brand-black dark:text-white">Seite:</span>{' '}
@@ -85,7 +112,11 @@ export default function ErrorPage({
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
-            onClick={reset}
+            onClick={() => {
+              // Kompletter Neuladen behebt auch veraltete App-Stände nach einem Update.
+              if (isStaleDeployError(error) && typeof window !== 'undefined') window.location.reload();
+              else reset();
+            }}
             className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors"
           >
             Erneut versuchen

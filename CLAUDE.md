@@ -1964,6 +1964,16 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Sofortmaßnahme bei stale Stock:** `/admin/preise/kameras/[id]` öffnen + speichern synct den Config-`stock` an `bridge.active` (Live-Inventarzählung). Seit Schicht 1 ist der Config-Wert aber ohnehin nicht mehr lasttragend.
 - **Wichtig:** Bereits bestehende Doppelbuchungen werden NICHT automatisch aufgelöst — die müssen manuell storniert/umgebucht werden. Die Fixes verhindern nur NEUE Überbuchungen.
 
+### Fehlerseite: veraltete App nach Update lädt automatisch neu (Stand 2026-09-29)
+`app/error.tsx` erkennt Ladefehler nach einem Deploy (ChunkLoadError, „Loading
+chunk…", „Failed to load server action" usw., Helper `isStaleDeployError`) und
+lädt die Seite **einmal automatisch komplett neu** (Guard `sessionStorage`
+`cam2rent_stale_reload`, 30 s). „Erneut versuchen" macht in diesem Fall einen
+echten Reload statt nur `reset()`. Unter „Details" steht jetzt zusätzlich die
+Fehlermeldung. Anlass: `/admin/urlaub` zeigte direkt nach dem Deploy die
+Fehlerseite (ohne Fehler-ID = Browser-Fehler, lokal nicht reproduzierbar).
+Fehlertext steht außerdem unter `/admin/client-errors`.
+
 ### Urlaubsmodus — alle freien Kameras für einen Zeitraum sperren (Stand 2026-09-29)
 Neue Seite **`/admin/urlaub`** (Sidebar „Kalender & Verfügbarkeit" → „Urlaubsmodus",
 Permission `tagesgeschaeft`). Der Admin trägt Urlaube ein (von/bis + optionaler
