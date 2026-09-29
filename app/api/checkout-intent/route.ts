@@ -8,6 +8,7 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
+import { fmtVacationDay } from '@/lib/vacation-mode';
 import { isAllowedCountry, DEFAULT_COUNTRY, countryName, loadAllowedCountryCodes } from '@/lib/allowed-countries';
 import { isTestMode } from '@/lib/env-mode';
 import { getOrCreateStripeCustomer, createPaymentElementSession } from '@/lib/stripe-customer';
@@ -124,7 +125,9 @@ export async function POST(req: NextRequest) {
       if (conflict) {
         return NextResponse.json(
           {
-            error: `"${it.productName ?? 'Diese Kamera'}" ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte passe deinen Warenkorb an.`,
+            error: conflict.vacation
+              ? `Wir sind vom ${fmtVacationDay(conflict.vacation.from)} bis ${fmtVacationDay(conflict.vacation.to)} im Urlaub — "${it.productName ?? 'Diese Kamera'}" kann in diesem Zeitraum nicht versendet oder zurückgenommen werden. Bitte passe deinen Warenkorb an.`
+              : `"${it.productName ?? 'Diese Kamera'}" ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte passe deinen Warenkorb an.`,
             code: 'NOT_AVAILABLE',
             productId: it.productId,
           },

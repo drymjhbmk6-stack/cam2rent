@@ -18,6 +18,7 @@ interface AuditEntry {
 }
 
 const ACTION_LABELS: Record<string, string> = {
+  'vacation.update': 'Urlaubsmodus geändert',
   // Buchungen
   'booking.cancel': 'Buchung storniert',
   'booking.resend_cancellation': 'Storno-Doku erneut gesendet',

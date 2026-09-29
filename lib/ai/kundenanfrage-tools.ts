@@ -353,7 +353,9 @@ async function toolFindeAlternativtermine(supabase: SB, input: Record<string, un
       // überlappende Vorschläge heraus.
       start = isoAddDays(ende, 1);
     } else {
-      start = isoAddDays(conflict.day, 1);
+      start = conflict.resumeFrom && conflict.resumeFrom > start
+        ? conflict.resumeFrom
+        : isoAddDays(conflict.day, 1);
     }
   }
 

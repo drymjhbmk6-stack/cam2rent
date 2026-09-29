@@ -127,7 +127,16 @@ export async function applyPostponeDateMove(
       excludeBookingId: id,
       excludeUserId: opts.excludeUserId ?? null,
       neededUnits: needed,
+      // Admin darf bewusst in/über einen Urlaub verlegen.
+      ignoreVacation: opts.source === 'admin',
     });
+    if (conflict?.vacation) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Im neuen Zeitraum sind wir im Urlaub (${fmtDay(conflict.vacation.from)} bis ${fmtDay(conflict.vacation.to)}) — Versand und Rückgabe sind dann nicht möglich. Bitte einen anderen Termin wählen.`,
+      };
+    }
     if (conflict) {
       return {
         ok: false,

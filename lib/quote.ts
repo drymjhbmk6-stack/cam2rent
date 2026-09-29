@@ -205,7 +205,9 @@ export async function computeQuote(supabase: SupabaseClient, input: QuoteInput):
     });
     if (conflict) {
       cameraAvail.set(productId, { available: false, free: conflict.available, day: conflict.day });
-      conflicts.push(`${conflict.productName}: nur ${conflict.available} frei am ${conflict.day} (benötigt ${needed})`);
+      conflicts.push(conflict.vacation
+        ? `${conflict.productName}: Urlaub ${conflict.vacation.from} bis ${conflict.vacation.to}`
+        : `${conflict.productName}: nur ${conflict.available} frei am ${conflict.day} (benötigt ${needed})`);
     } else {
       cameraAvail.set(productId, { available: true, free: null, day: null });
     }

@@ -14,6 +14,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { getProductById, getProducts } from '@/lib/get-products';
 import { loadActiveHoldsForProduct, holdsToBlockedDayCount } from '@/lib/cart-holds';
 import { loadActiveReservations, reservationsToCameraBlockedDays } from '@/lib/reservation-holds';
+import { loadVacationPeriods, vacationOverlappingSpan, type VacationPeriod } from '@/lib/vacation-mode';
 
 /**
  * Harte, serverseitige Ueberbuchungs-Sperre fuer Kameras.
@@ -39,6 +40,10 @@ export interface AvailabilityConflict {
   day: string;
   available: number;
   totalStock: number;
+  /** Gesetzt, wenn der Konflikt durch den Urlaubsmodus entsteht. */
+  vacation?: VacationPeriod;
+  /** Erster Starttag, ab dem eine erneute Suche sinnvoll ist (sonst day+1). */
+  resumeFrom?: string;
 }
 
 export async function findCameraOverbookingConflict(
@@ -57,6 +62,8 @@ export async function findCameraOverbookingConflict(
      *  Multi-Kamera-Buchungen mit mehreren gleichen Modellen > 1: der Tag gilt
      *  erst dann als frei, wenn `bookedCount + neededUnits <= totalStock`. */
     neededUnits?: number;
+    /** Urlaubsmodus ignorieren (z.B. wenn der Admin bewusst bucht/verlegt). */
+    ignoreVacation?: boolean;
   },
 ): Promise<AvailabilityConflict | null> {
   const { productId, rentalFrom, rentalTo } = args;
@@ -88,6 +95,35 @@ export async function findCameraOverbookingConflict(
     abholung_before: 0,
     abholung_after: 1,
   });
+
+  // Urlaubsmodus: faellt Versand-/Uebergabetag … Rueckgabe-Soll-Tag der neuen
+  // Buchung in einen Urlaub, ist sie nicht moeglich (niemand da zum Versenden
+  // bzw. Annehmen). Abschaltbar fuer Admin-Pfade via ignoreVacation.
+  if (!args.ignoreVacation) {
+    const vacations = await loadVacationPeriods(supabase);
+    if (vacations.length > 0) {
+      const abh = args.deliveryMode === 'abholung';
+      const before = abh ? buf.abholung_before : buf.versand_before;
+      const after = abh ? buf.abholung_after : buf.versand_after;
+      const v = vacationOverlappingSpan(
+        isoAddDays(rentalFrom, -before),
+        isoAddDays(rentalTo, after),
+        vacations,
+      );
+      if (v) {
+        const firstDay = v.from > rentalFrom ? (v.from > rentalTo ? rentalTo : v.from) : rentalFrom;
+        return {
+          productId,
+          productName: product.name,
+          day: firstDay,
+          available: 0,
+          totalStock,
+          vacation: v,
+          resumeFrom: isoAddDays(v.to, before + 1),
+        };
+      }
+    }
+  }
 
   const globalTest = await isTestMode();
 

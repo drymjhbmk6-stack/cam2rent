@@ -49,6 +49,7 @@ export const ADMIN_NAV_INDEX: AdminNavEntry[] = [
   { label: 'Kalender', href: '/admin/verfuegbarkeit', group: 'Kalender & Verfügbarkeit', perm: 'tagesgeschaeft', keywords: 'verfügbarkeit gantt belegung' },
   { label: 'Auftragskalender', href: '/admin/auftragskalender', group: 'Kalender & Verfügbarkeit', perm: 'tagesgeschaeft', keywords: 'termine planung' },
   { label: 'Verfügbarkeits-Alerts', href: '/admin/verfuegbarkeit-alerts', group: 'Kalender & Verfügbarkeit', perm: 'tagesgeschaeft', keywords: 'warnung ausgebucht' },
+  { label: 'Urlaubsmodus', href: '/admin/urlaub', group: 'Kalender & Verfügbarkeit', perm: 'tagesgeschaeft', keywords: 'urlaub ferien sperren abwesend geschlossen' },
 
   // Verkauf & Reservierung
   { label: 'Preisrechner', href: '/admin/preisrechner', group: 'Verkauf & Reservierung', perm: 'tagesgeschaeft', keywords: 'angebot quote preis' },

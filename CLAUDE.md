@@ -1964,6 +1964,34 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Sofortmaßnahme bei stale Stock:** `/admin/preise/kameras/[id]` öffnen + speichern synct den Config-`stock` an `bridge.active` (Live-Inventarzählung). Seit Schicht 1 ist der Config-Wert aber ohnehin nicht mehr lasttragend.
 - **Wichtig:** Bereits bestehende Doppelbuchungen werden NICHT automatisch aufgelöst — die müssen manuell storniert/umgebucht werden. Die Fixes verhindern nur NEUE Überbuchungen.
 
+### Urlaubsmodus — alle freien Kameras für einen Zeitraum sperren (Stand 2026-09-29)
+Neue Seite **`/admin/urlaub`** (Sidebar „Kalender & Verfügbarkeit" → „Urlaubsmodus",
+Permission `tagesgeschaeft`). Der Admin trägt Urlaube ein (von/bis + optionaler
+Kunden-Hinweis); in dieser Zeit ist jede **neue** Kundenbuchung gesperrt.
+**Bestehende Buchungen bleiben unangetastet** — die Seite listet pro Urlaub die
+Buchungen, deren Versand/Rückgabe hineinfällt, damit man sie vorher/nachher erledigt.
+- **Speicherung:** `admin_settings.vacation_mode = { periods: [{id, from, to, note?}] }`
+  — **keine Migration**. Lib `lib/vacation-mode.ts` (pure Helfer + `loadVacationPeriods`
+  mit 30-s-Cache, `invalidateVacationCache` beim Speichern). API
+  `GET/PUT /api/admin/urlaub` (Audit `vacation.update`). Tests
+  `lib/__tests__/vacation-mode.test.ts`.
+- **Regel:** Im Urlaub kann weder versendet/übergeben noch zurückgenommen werden.
+  Eine neue Buchung ist gesperrt, sobald ihre Spanne **Versand-/Übergabetag …
+  Rückgabe-Soll-Tag** (Puffer aus `booking_buffer_days`) den Urlaub berührt.
+- **Kunden-Kalender** (`/api/availability/[productId]`): Tage im Bereich
+  [Urlaubsbeginn − Puffer nachher, Urlaubsende + Puffer vorher] kommen als
+  `status:'blocked'` + `reason` („Urlaub vom … bis …") — `AvailabilityCalendar` zeigt
+  den Grund als Tooltip, und gesperrte Tage wirken als Grenze für die Endauswahl.
+- **Harte Sperre** `findCameraOverbookingConflict` liefert bei Urlaub einen Konflikt
+  mit `vacation` + `resumeFrom` → greift in `checkout-intent`, `create-payment-intent`
+  (eigene Urlaubs-Fehlermeldung), Kunden-Verlegung, Preisrechner/48-h-Reservierung
+  und der KI-Terminsuche (`finde_alternativtermine` springt über `resumeFrom` direkt
+  hinter den Urlaub). Neuer Param `ignoreVacation` — gesetzt bei **Admin-Verlegung**.
+  **Manuelle Admin-Buchungen** (`/admin/buchungen/neu`) nutzen diesen Check nicht
+  und bleiben im Urlaub möglich.
+- Bewusst NICHT: Zubehör-Verfügbarkeit/Gantt zeigen den Urlaub nicht an (ohne
+  buchbare Kamera ist Zubehör ohnehin nicht buchbar).
+
 ### Warenkorb-Reservierungen (Cart-Holds, Stand 2026-05-31)
 Sobald ein **eingeloggter** Kunde eine Kamera in den Warenkorb legt, wird der gewählte Mietzeitraum (inkl. Puffer) **serverseitig für 30 Minuten für ALLE anderen Kunden reserviert**. Läuft die Buchung nicht durch, verfällt der Hold automatisch (`expires_at`) und gibt den Zeitraum wieder frei. Behebt: ein offener Warenkorb konnte vorher zwei Kunden parallel denselben Slot bis zur Zahlung durchlaufen lassen (Überbuchungs-Race), und ein nie abgeschickter Warenkorb blockierte nie etwas für andere (Browser-only-Hold).
 - **Migration `supabase/supabase-cart-holds.sql`** (idempotent): Tabelle `cart_holds` (user_id, cart_item_id, product_id, rental_from/to, delivery_mode, is_test, expires_at default now()+30min). Unique-Index `(user_id, cart_item_id)` → Upsert-Ziel. RLS service-role-only.

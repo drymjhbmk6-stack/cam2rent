@@ -45,6 +45,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   // Tagesgeschaeft
   { prefix: '/admin/buchungen', perm: 'tagesgeschaeft' },
   { prefix: '/admin/verfuegbarkeit', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/urlaub', perm: 'tagesgeschaeft' },
   { prefix: '/admin/versand', perm: 'tagesgeschaeft' },
   { prefix: '/admin/retouren', perm: 'tagesgeschaeft' },
   { prefix: '/admin/schaeden', perm: 'tagesgeschaeft' },

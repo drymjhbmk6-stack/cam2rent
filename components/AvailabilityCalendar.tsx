@@ -10,6 +10,8 @@ interface DayInfo {
   status: 'available' | 'partial' | 'booked' | 'blocked' | 'past';
   available: number;
   total: number;
+  /** Grund einer Sperre (z.B. Urlaub) — erscheint als Tooltip */
+  reason?: string;
 }
 
 interface BufferConfig {
@@ -568,7 +570,10 @@ export default function AvailabilityCalendar({
 
             const dayDate = parseDate(dateStr);
             let blockReason: string | null = null;
-            if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
+            if (info.status === 'blocked' && info.reason) {
+              blockReason = info.reason;
+            }
+            if (!blockReason && deliveryMode === 'versand' && isChoosingEnd && !selectable) {
               blockReason = getShippingBlockReason(dayDate, true);
             }
             // Pauschal-Modus (forceDays): der Klick setzt automatisch Start+Ende.

@@ -7,6 +7,7 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { calcPriceFromTable, getActiveSpecialDiscountPercent, type AdminProduct } from '@/lib/price-config';
 import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
+import { fmtVacationDay } from '@/lib/vacation-mode';
 import { isTestMode } from '@/lib/env-mode';
 import { getOrCreateStripeCustomer, createPaymentElementSession } from '@/lib/stripe-customer';
 
@@ -142,7 +143,9 @@ export async function POST(req: NextRequest) {
       if (conflict) {
         return NextResponse.json(
           {
-            error: 'Diese Kamera ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte wähle einen anderen Zeitraum.',
+            error: conflict.vacation
+              ? `Wir sind vom ${fmtVacationDay(conflict.vacation.from)} bis ${fmtVacationDay(conflict.vacation.to)} im Urlaub — in diesem Zeitraum sind Versand, Übergabe und Rückgabe nicht möglich. Bitte wähle einen anderen Zeitraum.`
+              : 'Diese Kamera ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte wähle einen anderen Zeitraum.',
             code: 'NOT_AVAILABLE',
           },
           { status: 409 },

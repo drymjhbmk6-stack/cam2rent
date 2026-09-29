@@ -9,6 +9,7 @@ import { resolveBookingCameras } from '@/lib/booking-cameras';
 import { getHoldBlockedDays } from '@/lib/cart-holds';
 import { getReservationCameraBlockedDays } from '@/lib/reservation-holds';
 import { getBerlinDateKey } from '@/lib/timezone';
+import { loadVacationPeriods, vacationBlockingDay, fmtVacationDay } from '@/lib/vacation-mode';
 import {
   loadBufferDays,
   computeEffectiveBookingSpan,
@@ -258,7 +259,13 @@ export async function GET(
     status: 'available' | 'partial' | 'booked' | 'blocked' | 'past';
     available: number;
     total: number;
+    reason?: string;
   }[] = [];
+
+  // Urlaubsmodus: sperrt alle noch freien Kameras. Ein Tag ist als Start/Ende
+  // gesperrt, wenn Versand oder Ruecksendung der neuen Buchung in den Urlaub
+  // fiele (gleiche Viewer-Puffer-Logik wie bei echten Buchungen).
+  const vacations = await loadVacationPeriods(supabase);
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${month}-${String(d).padStart(2, '0')}`;
@@ -275,6 +282,20 @@ export async function GET(
     // starten/enden würde, braucht sie ebenfalls Puffertage — diese müssen frei sein.
     const viewerBefore = viewerMode === 'abholung' ? buf.abholung_before : buf.versand_before;
     const viewerAfter = viewerMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
+    const vacation = vacations.length > 0
+      ? vacationBlockingDay(dateStr, vacations, viewerBefore, viewerAfter)
+      : null;
+    if (vacation) {
+      days.push({
+        date: dateStr,
+        status: 'blocked',
+        available: 0,
+        total: totalStock,
+        reason: `Urlaub vom ${fmtVacationDay(vacation.from)} bis ${fmtVacationDay(vacation.to)}${vacation.note ? ` – ${vacation.note}` : ''}`,
+      });
+      continue;
+    }
 
     let bookedCount = 0;
     if (bookings) {
