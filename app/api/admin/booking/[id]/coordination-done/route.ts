@@ -63,6 +63,7 @@ export async function POST(
     done?: unknown;
     appointment?: unknown;
     notifyCustomer?: unknown;
+    customerEmail?: unknown;
   };
   try {
     body = await req.json();
@@ -152,7 +153,7 @@ export async function POST(
       .from('bookings')
       .update(payload)
       .eq('id', id)
-      .select('id, customer_name, customer_email, product_name, rental_from, rental_to')
+      .select('id, user_id, customer_name, customer_email, product_name, rental_from, rental_to')
       .maybeSingle();
   }
 
@@ -191,7 +192,21 @@ export async function POST(
   const notify = body.notifyCustomer !== false;
 
   if (done && appointment && notify) {
-    const to = (updated.customer_email as string | null) ?? '';
+    // Empfänger: im Dialog eingetragene Adresse > Buchung > Konto-E-Mail.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const bodyEmail = typeof body.customerEmail === 'string' ? body.customerEmail.trim().slice(0, 254) : '';
+    const bookingEmail = ((updated.customer_email as string | null) ?? '').trim();
+    let to = EMAIL_RE.test(bodyEmail) ? bodyEmail : bookingEmail;
+    if (!to && updated.user_id) {
+      try {
+        const { data: u } = await supabase.auth.admin.getUserById(updated.user_id as string);
+        to = u?.user?.email ?? '';
+      } catch { /* best-effort */ }
+    }
+    // Fehlte die Adresse an der Buchung, dort nachtragen (best-effort).
+    if (to && !bookingEmail) {
+      await supabase.from('bookings').update({ customer_email: to }).eq('id', id);
+    }
     if (!to) {
       emailError = 'Keine E-Mail-Adresse bei der Buchung hinterlegt.';
     } else {

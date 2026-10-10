@@ -764,6 +764,8 @@ export interface AppointmentInput {
   location: string;
   note: string;
   notifyCustomer: boolean;
+  /** Empfänger der Bestätigung (vorbelegt aus der Buchung, editierbar). */
+  customerEmail: string;
 }
 
 /**
@@ -785,6 +787,9 @@ function AppointmentModal({ coord, busy, error, onCancel, onSubmit }: {
   const [location, setLocation] = useState('');
   const [note, setNote] = useState('');
   const [notify, setNotify] = useState(true);
+  // Empfänger editierbar: fehlt die Adresse an der Buchung, kann der Admin sie
+  // hier eintragen (wird dann an der Buchung gespeichert).
+  const [email, setEmail] = useState(coord.customerEmail || '');
 
   // Hinterlegte Übergabe-Adressen (Einstellungen) als anhakbare Auswahl —
   // gleiche Quelle wie der Übergabe-Wizard.
@@ -809,8 +814,8 @@ function AppointmentModal({ coord, busy, error, onCancel, onSubmit }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [busy, onCancel]);
 
-  const hasEmail = Boolean(coord.customerEmail);
-  const canSave = Boolean(date && timeFrom && location.trim()) && !busy;
+  const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const canSave = Boolean(date && timeFrom && location.trim()) && (!notify || hasEmail) && !busy;
 
   const label = { display: 'block', fontSize: 11, fontWeight: 700 as const, color: C.textDim, textTransform: 'uppercase' as const, letterSpacing: 0.3, marginBottom: 5 };
   const field = {
@@ -918,26 +923,38 @@ function AppointmentModal({ coord, busy, error, onCancel, onSubmit }: {
         </div>
 
         {/* E-Mail-Bestätigung */}
-        <label style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13,
-          color: hasEmail ? C.text : C.textDim, cursor: hasEmail ? 'pointer' : 'default',
-        }}>
-          <input
-            type="checkbox"
-            checked={notify && hasEmail}
-            disabled={!hasEmail}
-            onChange={(e) => setNotify(e.target.checked)}
-            style={{ marginTop: 2 }}
-          />
-          <span>
-            Bestätigung an den Kunden senden
-            <span style={{ display: 'block', fontSize: 11, color: hasEmail ? C.textDim : C.yellow, marginTop: 2 }}>
-              {hasEmail
-                ? `E-Mail mit Ort, Datum und Uhrzeit an ${coord.customerEmail}`
-                : 'Keine E-Mail-Adresse bei der Buchung hinterlegt — es geht keine Bestätigung raus.'}
-            </span>
-          </span>
-        </label>
+        <div>
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13,
+            color: C.text, cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={notify}
+              onChange={(e) => setNotify(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>Bestätigung an den Kunden senden</span>
+          </label>
+          {notify && (
+            <div style={{ marginTop: 8 }}>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="kunde@beispiel.de"
+                style={field}
+              />
+              <p style={{ margin: '5px 0 0', fontSize: 11, color: hasEmail ? C.textDim : C.yellow }}>
+                {hasEmail
+                  ? 'E-Mail mit Ort, Datum und Uhrzeit geht an diese Adresse.'
+                  : coord.customerEmail
+                    ? 'Bitte eine gültige E-Mail-Adresse eingeben.'
+                    : 'Bei der Buchung ist keine E-Mail hinterlegt — bitte hier eintragen (wird an der Buchung gespeichert).'}
+              </p>
+            </div>
+          )}
+        </div>
 
         {error && (
           <p style={{ margin: 0, fontSize: 12, color: C.red, background: 'rgba(239,68,68,0.12)', padding: '8px 10px', borderRadius: 8 }}>
@@ -962,7 +979,7 @@ function AppointmentModal({ coord, busy, error, onCancel, onSubmit }: {
           <button
             type="button"
             disabled={!canSave}
-            onClick={() => onSubmit({ date, timeFrom, timeTo, location: location.trim(), note: note.trim(), notifyCustomer: notify && hasEmail })}
+            onClick={() => onSubmit({ date, timeFrom, timeTo, location: location.trim(), note: note.trim(), notifyCustomer: notify && hasEmail, customerEmail: email.trim() })}
             style={{
               fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 8,
               border: `1px solid ${C.green}40`, background: `${C.green}1a`, color: C.green,
@@ -1367,6 +1384,7 @@ export function ActionQueueWidget({ data, loading }: {
             note: input.note || undefined,
           },
           notifyCustomer: input.notifyCustomer,
+          customerEmail: input.notifyCustomer ? input.customerEmail : undefined,
         }),
       });
       const payload = await res.json().catch(() => null);

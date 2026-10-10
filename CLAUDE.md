@@ -2540,6 +2540,15 @@ vereinbart).
     Filter) und im Vorlagen-Katalog `lib/email-previews.ts` (vorab ansehbar +
     per Override anpassbar). **Mailversand ist best-effort:** schlägt er fehl,
     bleibt der Termin gespeichert und das Modal nennt den Grund.
+  - **Empfänger-E-Mail editierbar (Stand 2026-10-10):** Der Haken „Bestätigung
+    an den Kunden senden" war gesperrt, sobald an der Buchung keine
+    `customer_email` stand. Jetzt ist er immer anhakbar; darunter steht ein
+    E-Mail-Feld (vorbelegt aus der Buchung, sonst leer). Speichern ist erst
+    möglich, wenn bei aktivem Haken eine gültige Adresse drinsteht.
+    `dashboard-data` fällt bei fehlender Buchungs-E-Mail auf die Konto-E-Mail
+    (`auth.admin.getUserById(user_id)`) zurück. `coordination-done` nimmt
+    `customerEmail` an (Reihenfolge: Dialog → Buchung → Konto) und trägt die
+    Adresse an der Buchung nach, wenn dort keine stand.
   - **Anzeige in der Buchung:** neue read-only Karte `AgreedAppointmentsCard`
     im Reiter „Versand & Rückgabe" von `/admin/buchungen/[id]` (grün, über den
     Termin-Overrides) mit Wochentag/Datum/Uhrzeit, Ort und Notiz. Ohne

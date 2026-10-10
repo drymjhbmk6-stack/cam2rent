@@ -472,6 +472,19 @@ export async function GET() {
       }
     }
 
+    // Fehlt die E-Mail an der Buchung, auf die Konto-E-Mail zurückfallen —
+    // sonst lässt sich im Termin-Dialog keine Bestätigung verschicken.
+    for (const c of coordinations) {
+      if (c.customer_email) continue;
+      const row = aqRows.find((b) => b.id === c.id);
+      const uid = typeof row?.user_id === 'string' ? row.user_id : '';
+      if (!uid) continue;
+      try {
+        const { data: u } = await supabase.auth.admin.getUserById(uid);
+        c.customer_email = u?.user?.email ?? null;
+      } catch { /* best-effort */ }
+    }
+
     // ── Nicht zurueckgegebene Positionen ────────────────────────────────────
     // Eigener defensiver Block: schlaegt er fehl (oder fehlt die Migration),
     // bleibt das Kern-Dashboard unberuehrt.
