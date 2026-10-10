@@ -1447,6 +1447,30 @@ Enthält `value.items` mehrere `rentalFrom/rentalTo`-Paare → betroffen. Korrek
 **manuell** im Admin (zweite Buchung anlegen, Vertrag über „Mietvertrag zurücksetzen" neu
 unterschreiben lassen) — bewusst keine automatische Migration.
 
+### Abholung wurde als Versand gespeichert — Checkout-Kontext jetzt verbindlich (Fix, Stand 2026-10-10)
+**Symptom:** Kunde bucht Insta360 X5 mit **Abholung**, zahlt 20,58 € — die Buchung
+(C2R-2641-001) steht aber auf **Versand** mit 15,99 € Versand, und die Rechnung
+zeigt einen riesigen „Rabatt" (22,31 €), der den erfundenen Versand mit schluckt.
+**Ursache:** `confirm-cart` nahm Lieferart, Versandart, Rabatte, Adresse etc. aus
+dem **Request-Body** (= sessionStorage `cam2rent_checkout_context` im Browser) und
+nutzte den verbindlichen DB-Kontext `admin_settings.checkout_<pi>` (von
+`checkout-intent` zusammen mit genau diesem PaymentIntent gespeichert) **nur**, wenn
+der Body gar keine Items hatte. Geht der sessionStorage beim Stripe-Redirect
+verloren (PayPal/3DS, iOS-App, anderer Tab), schickt `/buchung-bestaetigt` die
+Live-Warenkorb-Items mit **Default `deliveryMode='versand'`** und **0 Rabatt**.
+Server rechnete daraufhin Versand dazu, Stripe-Betrag ist aber die Abholung →
+die Differenz (echter Rabatt + Versand) landete komplett als „unerklärter Rabatt"
+in `discount_amount`.
+**Fix:** Der DB-Kontext ist jetzt **immer vorrangig** (Items, Lieferart, Versandart,
+Land, Rabatte, Adressen, § 356-Zustimmung, `verification_required`), der Body ist
+nur noch Fallback ohne DB-Kontext; die erwartete Gruppen-Anzahl kommt ebenfalls
+aus dem DB-Kontext. **Nebenbefund mitgefixt:** im Normalfall (Body vorhanden)
+wurden § 356-Zustimmung, `verification_required` und das Lieferland bisher **nie**
+gespeichert, weil sie nur im DB-Fallback-Zweig gelesen wurden. Der Stripe-Webhook
+las schon immer den DB-Kontext und war nicht betroffen.
+**Altfälle:** `supabase/diagnose-lieferart-checkout-kontext.sql` (lesend, mit
+auskommentierter Reparatur-Vorlage). Keine Migration.
+
 ### Gratis-Versand-Schwelle OHNE Haftungsschutz (Fix, Stand 2026-09-23)
 Die Schwelle „Kostenloser Versand ab X €" wird laut Admin-Text gegen
 **Miete + Zubehör + Sets** geprüft — der Code prüfte aber `item.subtotal`, das

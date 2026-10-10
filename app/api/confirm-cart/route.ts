@@ -221,9 +221,10 @@ export async function POST(req: NextRequest) {
     // Stripe-Webhook den gesamten Warenkorb vorher als EINE Buchung angelegt
     // hatte, entstanden die restlichen Gruppen nie. Zwei Kameras mit zwei
     // Zeitraeumen landeten so in einer Buchung mit nur einem Zeitraum.
-    const itemsForCount = (items?.length
-      ? items
-      : (((await loadCheckoutCtx())?.items ?? []) as CartItem[]));
+    // Der in checkout-intent gespeicherte Kontext ist verbindlich (er gehoert
+    // exakt zum bezahlten PaymentIntent). Body-Items nur als Fallback.
+    const ctxItemsForCount = ((await loadCheckoutCtx())?.items ?? []) as CartItem[];
+    const itemsForCount = ctxItemsForCount.length ? ctxItemsForCount : (items ?? []);
     const expectedGroups = groupByPeriod(itemsForCount);
     const expectedGroupCount = Math.max(1, expectedGroups.length);
     let bookingsComplete = (existingRows?.length ?? 0) >= expectedGroupCount;
@@ -478,10 +479,19 @@ export async function POST(req: NextRequest) {
     let r_preBookingId: string | null =
       (typeof intent.metadata?.pre_booking_id === 'string' && intent.metadata.pre_booking_id) || null;
 
-    if (!r_items?.length) {
-      // Gecachter Kontext (wurde fuer Signatur-Fallback + Gruppen-Anzahl bereits geladen)
+    // Der in checkout-intent gespeicherte Kontext (admin_settings.checkout_<pi>)
+    // ist VERBINDLICH — er wurde zusammen mit genau diesem PaymentIntent
+    // angelegt und passt damit zum kassierten Betrag. Frueher wurde er nur
+    // genutzt, wenn der Body keine Items hatte. Ging dem Browser beim
+    // Stripe-Redirect (PayPal/3DS, App, anderer Tab) der sessionStorage-Kontext
+    // verloren, schickte /buchung-bestaetigt die Live-Warenkorb-Items mit dem
+    // Default deliveryMode='versand' und ohne Rabatte → eine bezahlte
+    // ABHOLUNG wurde als VERSAND gespeichert, die Versandkosten wurden
+    // erfunden und landeten zusammen mit dem echten Rabatt als „Rabatt" auf
+    // der Rechnung. Body-Werte sind jetzt nur noch Fallback ohne DB-Kontext.
+    {
       const ctx = await loadCheckoutCtx();
-      if (ctx) {
+      if (ctx && Array.isArray(ctx.items) && ctx.items.length) {
         try {
           r_items = (ctx.items ?? []) as CartItem[];
           r_name = ctx.customerName ?? r_name;
