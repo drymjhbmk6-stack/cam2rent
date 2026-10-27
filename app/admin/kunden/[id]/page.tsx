@@ -10,6 +10,8 @@ import { fmtDate, fmtDateTime, formatCurrency } from '@/lib/format-utils';
 interface CustomerProfile {
   id: string;
   full_name: string;
+  /** Optionaler Firmenname — leer = Privatkunde. */
+  company_name?: string;
   email: string;
   phone: string;
   address_street: string;
@@ -211,7 +213,7 @@ export default function KundenDetailPage() {
   const [editProfile, setEditProfile] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
-    vorname: '', nachname: '', email: '', phone: '',
+    vorname: '', nachname: '', company_name: '', email: '', phone: '',
     address_street: '', address_zip: '', address_city: '',
   });
 
@@ -369,6 +371,7 @@ export default function KundenDetailPage() {
     setProfileForm({
       vorname: vor,
       nachname: nach,
+      company_name: customer.company_name || '',
       email: customer.email || '',
       phone: customer.phone || '',
       address_street: customer.address_street || '',
@@ -392,7 +395,14 @@ export default function KundenDetailPage() {
         return;
       }
       setEditProfile(false);
-      showToast('success', 'Kundendaten gespeichert.');
+      // Fehlt die Migration supabase-profiles-company-name.sql, wurde alles
+      // ausser dem Firmennamen gespeichert — das muss der Admin sehen, sonst
+      // sucht er den Wert spaeter vergeblich.
+      if (Array.isArray(json?.warnings) && json.warnings.includes('migration_pending_company_name')) {
+        showToast('error', 'Gespeichert — aber die Firma nicht: dafür fehlt noch die Datenbank-Migration.');
+      } else {
+        showToast('success', 'Kundendaten gespeichert.');
+      }
       fetchData();
     } catch {
       showToast('error', 'Netzwerk- oder Server-Fehler.');
@@ -808,6 +818,7 @@ export default function KundenDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                 <EditField label="Vorname" value={profileForm.vorname} onChange={(v) => setProfileForm((p) => ({ ...p, vorname: v }))} />
                 <EditField label="Nachname" value={profileForm.nachname} onChange={(v) => setProfileForm((p) => ({ ...p, nachname: v }))} />
+                <EditField label="Firma (optional)" value={profileForm.company_name} onChange={(v) => setProfileForm((p) => ({ ...p, company_name: v }))} />
                 <EditField label="E-Mail" value={profileForm.email} onChange={(v) => setProfileForm((p) => ({ ...p, email: v }))} type="email" />
                 <EditField label="Telefon" value={profileForm.phone} onChange={(v) => setProfileForm((p) => ({ ...p, phone: v }))} type="tel" />
                 <EditField label="Straße & Nr." value={profileForm.address_street} onChange={(v) => setProfileForm((p) => ({ ...p, address_street: v }))} />
@@ -841,6 +852,10 @@ export default function KundenDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20 }}>
                 <InfoField label="Vorname" value={splitName(customer.full_name).vor || '—'} />
                 <InfoField label="Nachname" value={splitName(customer.full_name).nach || '—'} />
+                {/* Firma nur zeigen, wenn hinterlegt — bei Privatkunden waere ein dauerhaftes "—" nur Rauschen. */}
+                {customer.company_name?.trim() && (
+                  <InfoField label="Firma" value={customer.company_name.trim()} />
+                )}
                 <InfoField label="E-Mail" value={customer.email || '—'} />
                 <InfoField label="Telefon" value={customer.phone || '—'} />
                 <InfoField label="Adresse" value={

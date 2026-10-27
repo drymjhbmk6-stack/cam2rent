@@ -29,6 +29,8 @@ type Body = {
   fullName?: string;
   firstName?: string;
   lastName?: string;
+  /** Optionaler Firmenname (Geschaeftskunden) — nie Pflicht. */
+  company?: string;
   phone?: string | null;
   street?: string;
   zip?: string;
@@ -64,6 +66,8 @@ export async function POST(req: NextRequest) {
   const fullName = firstName || lastName
     ? `${firstName} ${lastName}`.trim()
     : (body.fullName ?? '').trim().slice(0, 120);
+  // Firmenname ist optional — leer bedeutet Privatkunde.
+  const company = (body.company ?? '').trim().slice(0, 150);
   const phone = (body.phone ?? '')?.toString().trim().slice(0, 30) || null;
   const street = (body.street ?? '').trim().slice(0, 120);
   const zip = (body.zip ?? '').trim();
@@ -180,16 +184,27 @@ export async function POST(req: NextRequest) {
       address_city: city || null,
       verification_status: 'unverified',
     };
+    // Spalten, deren Migration noch ausstehen kann. Schlägt der Upsert wegen
+    // einer fehlenden Spalte fehl, wird genau diese entfernt und erneut
+    // versucht — die übrigen Stammdaten landen so auch ohne die Migration.
+    // country: supabase-profiles-country.sql (Länder-Sperre greift ohnehin
+    // über die App-Liste), company_name: supabase-profiles-company-name.sql.
+    const optionalCols: Record<string, unknown> = { country, company_name: company || null };
     try {
-      const { error: upsertErr } = await supabase.from('profiles').upsert(
-        { ...profileBase, country },
-        { onConflict: 'id', ignoreDuplicates: false },
-      );
-      // Defensiv: fehlt die country-Migration (supabase-profiles-country.sql)
-      // → ohne die Spalte erneut versuchen, damit die Stammdaten trotzdem
-      // gespeichert werden. Die Länder-Sperre greift über die App-Liste weiter.
-      if (upsertErr && /country/i.test(upsertErr.message)) {
-        await supabase.from('profiles').upsert(profileBase, { onConflict: 'id', ignoreDuplicates: false });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error: upsertErr } = await supabase.from('profiles').upsert(
+          { ...profileBase, ...optionalCols },
+          { onConflict: 'id', ignoreDuplicates: false },
+        );
+        if (!upsertErr) break;
+        const missing = Object.keys(optionalCols).find((col) =>
+          new RegExp(col, 'i').test(upsertErr.message ?? ''),
+        );
+        if (!missing) {
+          console.error('[express-signup] Profil-Upsert fehlgeschlagen (nicht kritisch):', upsertErr);
+          break;
+        }
+        delete optionalCols[missing];
       }
     } catch (err) {
       console.error('[express-signup] Profil-Upsert fehlgeschlagen (nicht kritisch):', err);
@@ -200,7 +215,7 @@ export async function POST(req: NextRequest) {
   createAdminNotification(supabase, {
     type: 'new_customer',
     title: fullName ? `Neuer Kunde: ${fullName}` : 'Neuer Kunde registriert',
-    message: `${email}${phone ? ` · Tel ${phone}` : ''}${street && city ? ` · ${street}, ${zip} ${city}` : ''}`,
+    message: `${company ? `${company} · ` : ''}${email}${phone ? ` · Tel ${phone}` : ''}${street && city ? ` · ${street}, ${zip} ${city}` : ''}`,
     link: userId ? `/admin/kunden/${userId}` : '/admin/kunden',
   }).catch((err) => console.error('[express-signup] admin notification failed:', err));
 

@@ -127,6 +127,9 @@ export async function GET(
       customer: {
         id: profile.id,
         full_name: profile.full_name || '',
+        // Optional, Migration supabase-profiles-company-name.sql.
+        // Fehlt die Spalte, ist der Wert schlicht leer.
+        company_name: profile.company_name || '',
         email,
         phone: profile.phone || '',
         address_street: profile.address_street || '',
@@ -214,16 +217,36 @@ export async function PATCH(
 
     const profileUpdate: Record<string, string> = {};
     if (fullName !== undefined) profileUpdate.full_name = fullName;
+    if (typeof body.company_name === 'string') profileUpdate.company_name = clean(body.company_name, 150);
     if (typeof body.phone === 'string') profileUpdate.phone = clean(body.phone, 50);
     if (typeof body.address_street === 'string') profileUpdate.address_street = clean(body.address_street, 200);
     if (typeof body.address_zip === 'string') profileUpdate.address_zip = clean(body.address_zip, 20);
     if (typeof body.address_city === 'string') profileUpdate.address_city = clean(body.address_city, 100);
 
+    // Fehlt die Migration supabase-profiles-company-name.sql, soll der Rest der
+    // Stammdaten trotzdem gespeichert werden — der Firmenname wird dann
+    // weggelassen und der Admin per `warnings` darauf hingewiesen.
+    const warnings: string[] = [];
     if (Object.keys(profileUpdate).length > 0) {
-      const { error: updErr } = await supabase
+      let { error: updErr } = await supabase
         .from('profiles')
         .update(profileUpdate)
         .eq('id', customerId);
+      if (
+        updErr &&
+        'company_name' in profileUpdate &&
+        /company_name|column|schema cache|PGRST|42703/i.test(updErr.message ?? '')
+      ) {
+        const { company_name: _dropped, ...withoutCompany } = profileUpdate;
+        void _dropped;
+        warnings.push('migration_pending_company_name');
+        if (Object.keys(withoutCompany).length > 0) {
+          const retry = await supabase.from('profiles').update(withoutCompany).eq('id', customerId);
+          updErr = retry.error;
+        } else {
+          updErr = null;
+        }
+      }
       if (updErr) {
         console.error('PATCH customer profile update error:', updErr);
         return NextResponse.json({ error: 'Stammdaten konnten nicht gespeichert werden.' }, { status: 500 });
@@ -264,7 +287,7 @@ export async function PATCH(
       request: req,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...(warnings.length ? { warnings } : {}) });
   } catch (err) {
     console.error('PATCH /api/admin/customer/[id] error:', err);
     return NextResponse.json({ error: 'Serverfehler.' }, { status: 500 });

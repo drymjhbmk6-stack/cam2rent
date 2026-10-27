@@ -52,6 +52,8 @@ export default function ExpressSignup({
   // Stammdaten
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  // Optional — nur für Geschäftskunden, nie Pflicht.
+  const [company, setCompany] = useState('');
   const [email, setEmail] = useState(defaultEmail ?? '');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -207,6 +209,7 @@ export default function ExpressSignup({
         password,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        company: company.trim(),
         phone: phone.trim() || null,
         street: street.trim(),
         zip: zip.trim(),
@@ -727,6 +730,23 @@ export default function ExpressSignup({
                 required
               />
             </div>
+          </div>
+        )}
+
+        {mode === 'signup' && (
+          <div>
+            <label className={labelClass}>Firma (optional)</label>
+            <input
+              type="text"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              className={inputClass}
+              placeholder="Mustermann GmbH"
+              autoComplete="organization"
+            />
+            <p className="mt-1 text-xs text-brand-muted dark:text-gray-500">
+              Nur ausfüllen, wenn die Rechnung auf eine Firma laufen soll.
+            </p>
           </div>
         )}
 

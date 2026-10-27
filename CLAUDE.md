@@ -5031,6 +5031,72 @@ Buchung im Checkout überschreibbar.
   verschoben). Default-Verhalten ohne sie wäre: Profil-UI zeigt die Felder,
   speichert sie aber nicht; Buchungen nutzen die Hauptadresse.
 
+### Optionaler Firmenname pro Kunde (Stand 2026-10-27)
+Ein Kunde kann freiwillig einen **Firmennamen** hinterlegen — bei der
+Registrierung, später im Kundenkonto oder durch den Admin in den Stammdaten.
+Leer = Privatkunde, bisheriges Verhalten vollständig unverändert. Der
+Firmenname ist **nie Pflicht** und geht in keine Pflichtfeld-Prüfung ein
+(insbesondere nicht in das Stammdaten-Gate vor der Ausweis-Verifizierung).
+- **Migration `supabase/supabase-profiles-company-name.sql`** (idempotent,
+  additiv): `profiles.company_name TEXT` + `GRANT UPDATE (company_name) ON
+  profiles TO authenticated` (der Kunde speichert sein Profil per
+  Browser-Client direkt → ohne den Column-Level-GRANT könnte er das Feld im
+  Konto nicht speichern, siehe `supabase-profiles-rls-column-level.sql`).
+- **Erfasst an drei Stellen:** (1) `components/checkout/ExpressSignup.tsx` —
+  Feld „Firma (optional)" im signup-Modus (greift damit in `/registrierung`
+  **und** in der Checkout-Schnellregistrierung), geht als `company` an
+  `POST /api/auth/express-signup`; (2) `/konto/uebersicht` → Profil
+  bearbeiten; (3) `/admin/kunden/[id]` → Kundendaten (`EditField` „Firma
+  (optional)", `PATCH /api/admin/customer/[id]` nimmt `company_name`).
+- **Wirkung — Rechnungsempfänger:** Ist eine Firma hinterlegt, wird sie zum
+  **Rechnungsempfänger**; der Personenname rutscht in die **erste
+  Adresszeile** (übliche Geschäftsbrief-Form — das PDF splittet
+  `customerAddress` ohnehin an Kommas in einzelne Zeilen):
+  ```
+  Mustermann GmbH
+  Lennart Schickel
+  Heimbrunner Straße 12
+  12349 Berlin
+  ```
+  ⚠️ **Eine abweichende Rechnungsadresse hat weiterhin Vorrang und schaltet
+  die Firma komplett ab** — sobald `bookings.invoice_name` ODER
+  `invoice_address` gesetzt ist (per Buchung oder aus `profiles.billing_*`
+  übernommen), greift ausschließlich der Override. Begründung: der Override
+  ist eine bewusste Admin-/Kunden-Entscheidung und soll nicht halb von der
+  Profil-Firma überlagert werden.
+- **Drei Rechnungs-Pfade angepasst** (dieselbe Regel, bewusst dreimal, weil
+  alle drei ihren Empfänger seit jeher selbst auflösen):
+  `lib/build-invoice-data.ts` (Live-Rechnung + archivierte Fassungen +
+  Verkauf), `app/api/admin/booking/[id]/send-email/route.ts` (manueller
+  PDF-Versand aus den Buchungsdetails) und `lib/email.ts`
+  (Rechnungs-Anhang der Buchungsbestätigung — dort wird zusätzlich
+  `customerAddress` mit dem Personennamen gefüllt, das Feld war in dieser
+  PDF-Variante vorher leer). **Bei künftigen Änderungen am
+  Rechnungsempfänger alle drei pflegen.**
+- **`build-invoice-data.ts` lädt das Profil jetzt einmal** (`company_name` +
+  Adresse in EINER Abfrage) statt nur im Adress-Fallback — mit defensivem
+  Retry ohne `company_name`, sonst würde ein Schema-Fehler bei fehlender
+  Migration auch die Fallback-Adresse verlieren.
+- **Fingerprint-Folge:** `lib/invoice-versions.ts` nimmt `customerName` +
+  `customerAddress` in den Fingerprint. Bei einer Buchung eines Kunden **mit**
+  Firma erzeugt die nächste Bearbeitung einmalig eine zusätzliche
+  Rechnungsversion — gewollt, die Rechnung sieht ja tatsächlich anders aus.
+- **Defensiv ohne Migration:** Signup-Upsert und Admin-PATCH entfernen die
+  Spalte bei einem Schema-Fehler und speichern den Rest (der Admin bekommt
+  dabei den Hinweis-Toast „…aber die Firma nicht"); das Konto-Profil retryt
+  **gestuft** (erst ohne `company_name`, dann ohne die abweichenden Adressen —
+  sonst würde eine fehlende company-Spalte die `delivery_*`/`billing_*`-Werte
+  stillschweigend verschlucken); die Rechnungs-Pfade behandeln die fehlende
+  Spalte als „keine Firma".
+- **Bewusst NICHT im Scope:** Lieferadresse/Versandetikett (dafür gibt es
+  bereits die abweichende Lieferadresse mit eigenem Namensfeld,
+  `profiles.delivery_name`), USt-IdNr. des Kunden + Reverse-Charge,
+  Firmenname in der Kundenliste `/admin/kunden` (deren Spalten-Select hat
+  einen zweistufigen Fallback, der dafür umgebaut werden müsste — damit ist
+  die Liste auch **nicht nach Firmennamen durchsuchbar**), und der Mietvertrag
+  (läuft weiter auf die natürliche Person, die ihn unterschreibt).
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Konto-Feedback schreibt in `beta_feedback` (Fix, Stand 2026-06-10)
 `/konto/feedback` → „Feedback senden" lieferte „Feedback konnte nicht gesendet
 werden", weil `POST /api/feedback` in eine Tabelle `feedback` schrieb, die **nie
@@ -9411,6 +9477,14 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Nach Abschluss das vollständige Verifikationsskript aus `SECURITY-AUDIT.md`
   Abschnitt 8 einmal am Stück laufen lassen und die Ausgabe zusammen mit dem
   Bericht archivieren — das ist der Nachweis für den Versicherer.
+- **Optionaler Firmenname — Migration auszuführen:**
+  `supabase/supabase-profiles-company-name.sql` (idempotent, additiv:
+  `profiles.company_name TEXT` + Column-Level-`GRANT UPDATE` an
+  `authenticated`). Ohne sie ist das Feld überall sichtbar, wird aber **nicht
+  gespeichert** — alle Schreibpfade entfernen die Spalte defensiv und sichern
+  den Rest (der Admin bekommt dabei einen Hinweis-Toast, dass die Firma nicht
+  gespeichert wurde). Kein Cron, kein Bucket, keine Env-Variable nötig. Siehe
+  „Optionaler Firmenname pro Kunde". Empfohlen ASAP ausführen.
 - **Projektablage — Migration + EINE Dashboard-Einstellung:**
   1. `supabase/supabase-projektablage.sql` ausführen (idempotent, drei neue
      Tabellen + Bucket-Fallback). Ohne sie lädt die Seite mit Hinweis, Schreiben

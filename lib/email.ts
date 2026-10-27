@@ -250,6 +250,12 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
   // (Aktion / Frühbucher / Sonderkondition ...). Defensiv: fehlt die Spalte
   // early_bird_discount (Migration ausstehend), bleibt der Wert 0.
   let discountBreakdown: Partial<InvoiceData> = {};
+  // Rechnungsempfaenger: ist im Profil eine Firma hinterlegt und fuer diese
+  // Buchung KEINE abweichende Rechnungsadresse gesetzt, wird die Firma zum
+  // Empfaenger und der Personenname rutscht darunter — gleiche Regel wie in
+  // lib/build-invoice-data.ts. Ohne Firma bleibt alles wie bisher.
+  let invoiceRecipient = data.customerName;
+  let invoiceRecipientSubline: string | undefined;
   try {
     const sb = createServiceClient();
     const { data: bk } = await sb
@@ -258,6 +264,23 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
       .eq('id', data.bookingId)
       .maybeSingle();
     if (bk) {
+      const hasInvoiceOverride =
+        ((bk.invoice_name as string | null)?.trim().length ?? 0) > 0 ||
+        ((bk.invoice_address as string | null)?.trim().length ?? 0) > 0;
+      if (!hasInvoiceOverride && bk.user_id) {
+        // Defensiv: fehlt die Migration supabase-profiles-company-name.sql,
+        // liefert der Select einen Fehler -> Firma bleibt leer.
+        const { data: prof } = await sb
+          .from('profiles')
+          .select('company_name')
+          .eq('id', bk.user_id as string)
+          .maybeSingle();
+        const company = ((prof?.company_name as string | null) ?? '').trim();
+        if (company) {
+          invoiceRecipient = company;
+          invoiceRecipientSubline = data.customerName || undefined;
+        }
+      }
       const lines = await computeInvoiceLines(sb, bk);
       cameraLines = lines.cameraLines;
       accessoryLines = lines.accessoryLines;
@@ -289,7 +312,10 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
       invoiceDate,
       cameraLines,
       accessoryLines,
-      customerName: data.customerName,
+      customerName: invoiceRecipient,
+      // Nur gesetzt, wenn eine Firma als Empfaenger steht — dann traegt die
+      // erste Adresszeile den Personennamen. Sonst undefined wie bisher.
+      customerAddress: invoiceRecipientSubline,
       customerEmail: data.customerEmail,
       productName: data.productName,
       rentalFrom: data.rentalFrom,

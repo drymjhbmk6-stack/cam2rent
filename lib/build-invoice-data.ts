@@ -44,9 +44,49 @@ export async function buildInvoiceData(
   const invoiceNameOverride = (booking.invoice_name as string | null | undefined) ?? null;
   const invoiceAddressOverride = (booking.invoice_address as string | null | undefined) ?? null;
 
+  const hasInvoiceOverride =
+    (invoiceNameOverride?.trim().length ?? 0) > 0 || (invoiceAddressOverride?.trim().length ?? 0) > 0;
+
+  // Profil einmal laden: liefert den optionalen Firmennamen UND die
+  // Fallback-Adresse. Defensiver Retry ohne company_name, falls die Migration
+  // supabase-profiles-company-name.sql noch nicht gelaufen ist — sonst wuerde
+  // ein Schema-Fehler auch die Adresse verlieren.
+  type ProfileRow = {
+    company_name?: string | null;
+    address_street?: string | null;
+    address_zip?: string | null;
+    address_city?: string | null;
+  };
+  let profileRow: ProfileRow | null = null;
+  if (booking.user_id) {
+    const userId = booking.user_id as string;
+    const sel = await supabase
+      .from('profiles')
+      .select('company_name, address_street, address_zip, address_city')
+      .eq('id', userId)
+      .maybeSingle();
+    if (sel.error && /company_name|column|schema cache|PGRST|42703/i.test(sel.error.message ?? '')) {
+      const retry = await supabase
+        .from('profiles')
+        .select('address_street, address_zip, address_city')
+        .eq('id', userId)
+        .maybeSingle();
+      profileRow = (retry.data as ProfileRow) ?? null;
+    } else {
+      profileRow = (sel.data as ProfileRow) ?? null;
+    }
+  }
+
+  const personName = (booking.customer_name as string) ?? '';
+  // Firma greift nur, wenn fuer diese Buchung KEINE abweichende
+  // Rechnungsadresse gesetzt ist — ein Override ist eine bewusste
+  // Entscheidung und regiert vollstaendig.
+  const companyName = hasInvoiceOverride ? '' : (profileRow?.company_name ?? '').trim();
+
+  // Rechnungsempfaenger: Override > Firma > Personenname.
   const customerName = invoiceNameOverride && invoiceNameOverride.trim().length > 0
     ? invoiceNameOverride.trim()
-    : ((booking.customer_name as string) ?? '');
+    : (companyName || personName);
 
   // Kundenadresse: invoice_address > shipping_address > Profil
   let customerAddress = '';
@@ -54,15 +94,14 @@ export async function buildInvoiceData(
     customerAddress = invoiceAddressOverride.trim();
   } else {
     customerAddress = (booking.shipping_address as string) ?? '';
-    if (!customerAddress && booking.user_id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('address_street, address_zip, address_city')
-        .eq('id', booking.user_id as string)
-        .maybeSingle();
-      if (profile?.address_street) {
-        customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
-      }
+    if (!customerAddress && profileRow?.address_street) {
+      customerAddress = `${profileRow.address_street}, ${profileRow.address_zip} ${profileRow.address_city}`;
+    }
+    // Steht die Firma als Empfaenger, rutscht der Personenname in die erste
+    // Adresszeile (uebliche Geschaeftsbrief-Form) — er darf nicht wegfallen.
+    // Das PDF splittet customerAddress an Kommas in einzelne Zeilen.
+    if (companyName && personName) {
+      customerAddress = customerAddress ? `${personName}, ${customerAddress}` : personName;
     }
   }
 

@@ -9,6 +9,8 @@ type VerificationStatus = 'none' | 'pending' | 'verified' | 'rejected';
 
 interface Profile {
   full_name: string;
+  // Optional — nur für Geschäftskunden, nie Pflicht.
+  company_name: string;
   phone: string;
   address_street: string;
   address_zip: string;
@@ -96,6 +98,7 @@ function ProfilEdit() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile>({
     full_name: '',
+    company_name: '',
     phone: '',
     address_street: '',
     address_zip: '',
@@ -128,6 +131,7 @@ function ProfilEdit() {
         if (data) {
           setProfile({
             full_name: data.full_name ?? user.user_metadata?.full_name ?? '',
+            company_name: data.company_name ?? '',
             phone: data.phone ?? '',
             address_street: data.address_street ?? '',
             address_zip: data.address_zip ?? '',
@@ -185,16 +189,32 @@ function ProfilEdit() {
       billing_city: billingDiffers ? profile.billing_city : '',
     };
 
+    // Firmenname separat: braucht die Migration
+    // `supabase-profiles-company-name.sql` samt Column-GRANT.
+    const companyFields = { company_name: profile.company_name };
+
+    const isSchemaError = (msg?: string) =>
+      /column|schema cache|PGRST|permission|42703|42501/i.test(msg ?? '');
+
     let { error: dbError } = await supabase
       .from('profiles')
-      .update({ ...baseFields, ...deviatingFields })
+      .update({ ...baseFields, ...companyFields, ...deviatingFields })
       .eq('id', user.id);
 
-    // Defensiver Fallback: laeuft die Migration
-    // `supabase-profiles-deviating-addresses.sql` noch nicht, fehlen die
-    // delivery_*/billing_*-Spalten (bzw. ihr Column-GRANT) -> Update ohne sie
-    // wiederholen, damit das Profil-Speichern nicht bricht.
-    if (dbError && /column|schema cache|PGRST|permission|42703|42501/i.test(dbError.message ?? '')) {
+    // Defensiver Fallback in zwei Stufen: fehlt eine der neueren Migrationen
+    // (`supabase-profiles-company-name.sql` bzw.
+    // `supabase-profiles-deviating-addresses.sql`), fehlen die jeweiligen
+    // Spalten bzw. ihr Column-GRANT. Erst nur den Firmennamen weglassen —
+    // sonst wuerde eine fehlende company_name-Spalte auch die abweichenden
+    // Adressen stillschweigend verschlucken. Dann notfalls nur die Basisdaten.
+    if (dbError && isSchemaError(dbError.message)) {
+      const retry = await supabase
+        .from('profiles')
+        .update({ ...baseFields, ...deviatingFields })
+        .eq('id', user.id);
+      dbError = retry.error;
+    }
+    if (dbError && isSchemaError(dbError.message)) {
       const retry = await supabase.from('profiles').update(baseFields).eq('id', user.id);
       dbError = retry.error;
     }
@@ -239,6 +259,12 @@ function ProfilEdit() {
         <div>
           <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Vollständiger Name</label>
           <input type="text" value={profile.full_name} onChange={handleChange('full_name')} className={inputCls} placeholder="Max Mustermann" autoComplete="name" />
+        </div>
+
+        <div>
+          <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Firma (optional)</label>
+          <input type="text" value={profile.company_name} onChange={handleChange('company_name')} className={inputCls} placeholder="Mustermann GmbH" autoComplete="organization" />
+          <p className="text-xs text-brand-muted dark:text-gray-500 mt-1">Ist eine Firma hinterlegt, läuft die Rechnung auf diese Firma.</p>
         </div>
 
         <div>
