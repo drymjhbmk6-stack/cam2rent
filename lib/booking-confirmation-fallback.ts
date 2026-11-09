@@ -25,7 +25,9 @@ export async function hasBookingConfirmation(
     .from('email_log')
     .select('id')
     .eq('booking_id', bookingId)
-    .eq('email_type', 'booking_confirmation')
+    // Eine manuell verschickte Dokumenten-Mail (Admin → „E-Mail senden")
+    // zaehlt ebenfalls als erledigt.
+    .in('email_type', ['booking_confirmation', 'manual_documents'])
     .eq('status', 'sent')
     .limit(1)
     .maybeSingle();

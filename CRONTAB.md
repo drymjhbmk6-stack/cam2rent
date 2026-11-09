@@ -23,7 +23,7 @@ sofort, wo die neue Zeile hingehört, ohne den Code neu durchzugehen.
 `blog-generate` und `blog-publish` sind **POST-only**. Alle übrigen können GET **und** POST
 (wir nutzen POST).
 
-## Vollständige Crontab (Stand 2026-08-09 — 31 Jobs)
+## Vollständige Crontab (Stand 2026-11-09 — 32 Jobs)
 
 ```cron
 TZ=Europe/Berlin
@@ -61,6 +61,9 @@ CRON_SECRET=DEIN_CRON_SECRET_HIER
 0 8 * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/return-checklist-reminder # taeglich 08:00
 30 8 * * * curl -s --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/reminder-emails                # taeglich 08:30 [GET]
 */10 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/sendcloud-status-sync # alle 10 Min
+
+# — Buchungsbestaetigung (Sicherheitsnetz) —
+*/15 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/booking-confirmation-sweep # alle 15 Min
 
 # — Warenkorb / Reservierungen —
 */15 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/cart-holds-cleanup   # alle 15 Min

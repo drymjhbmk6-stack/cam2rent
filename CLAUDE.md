@@ -1593,9 +1593,14 @@ vorhanden) nur, wenn im `email_log` noch keine `booking_confirmation`
 (status `sent`) steht. Eingehängt in `confirm-cart` an drei Stellen:
 Normalpfad bei nicht selbst angelegten Gruppen, Idempotenz-Pfad mit Signatur
 (statt der reinen Vertrags-Folgemail) und Idempotenz-Pfad ohne Signatur.
-⚠️ **Bleibt offen:** Schließt der Kunde den Tab vor `/buchung-bestaetigt`,
-läuft `confirm-cart` nie → keine Bestätigung. Dann manuell über
-`/admin/buchungen/[id]` → „E-Mail senden". Keine Migration.
+**Sicherheitsnetz-Cron** `/api/cron/booking-confirmation-sweep` (alle 15 Min):
+fängt den Fall ab, dass der Kunde den Tab vor `/buchung-bestaetigt` schließt
+(`confirm-cart` läuft nie). Prüft bezahlte Stripe-Buchungen (`pi_…`, nicht
+storniert, kein Verkauf, `is_test` = aktueller Modus) der letzten 3 Tage, die
+älter als 15 Min sind, und schickt die Bestätigung (mit gespeichertem
+Mietvertrag aus `rental_agreements.pdf_url`) nach. Als „erledigt" zählt auch
+eine manuell verschickte Dokumenten-Mail (`manual_documents`). Keine Migration.
+**Go-Live TODO:** Crontab-Zeile siehe `CRONTAB.md`.
 
 ### Kunde konnte im Konto nicht unterschreiben — Canvas ersetzt + Tipp-Option (Stand 2026-09-07)
 **Kundenmeldung:** „Ich kann den Vertrag nicht unterschreiben, egal ob von Hand
