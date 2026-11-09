@@ -17,6 +17,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { ensureBookingConfirmationSent } from '@/lib/booking-confirmation-fallback';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -417,14 +418,15 @@ export async function POST(req: NextRequest) {
             try {
               const { sendAndLog } = await import('@/lib/email');
               for (const fb of fullBookings ?? []) {
-                if (fb.contract_signed) continue;
                 if (!fb.customer_email) continue;
                 const year = new Date().getUTCFullYear();
                 const storagePath = `${year}/${fb.id}.pdf`;
                 const { data: file } = await supabase.storage.from('contracts').download(storagePath);
-                if (!file) continue;
-                const arrayBuffer = await file.arrayBuffer();
-                const pdfBuffer = Buffer.from(arrayBuffer);
+                const pdfBuffer = file ? Buffer.from(await file.arrayBuffer()) : undefined;
+                // Noch keine Buchungsbestaetigung? Dann die volle Bestaetigung
+                // (mit Vertrag) statt nur der Vertrags-Folgemail schicken.
+                if (await ensureBookingConfirmationSent(supabase, fb.id, pdfBuffer)) continue;
+                if (fb.contract_signed || !pdfBuffer) continue;
                 await sendAndLog({
                   to: fb.customer_email,
                   subject: `Dein unterschriebener Mietvertrag ${fb.id}`,
@@ -440,6 +442,13 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             console.error('[confirm-cart] Idempotent (after) error:', err);
           }
+        });
+      } else {
+        // Ohne Signatur kein Vertrag — die Buchungsbestaetigung muss der Kunde
+        // trotzdem bekommen, falls der Webhook die Buchung angelegt hat.
+        const ids = existingRows.map((r) => r.id);
+        after(async () => {
+          for (const id of ids) await ensureBookingConfirmationSent(supabase, id);
         });
       }
       return NextResponse.json({
@@ -1596,7 +1605,10 @@ export async function POST(req: NextRequest) {
             // Ab hier nur noch der Mailversand — Doppel-Mail-Schutz (siehe oben).
             // Der Vertrag ist zu diesem Zeitpunkt bereits geprueft/erzeugt.
             if (!isFresh) {
-              console.log(`[confirm-cart] Mail-Skip: ${bookingIds[gi]} wurde nicht von diesem Request angelegt (Webhook oder parallel-Call hat schon).`);
+              // Der Webhook verschickt bei Warenkorb-Buchungen KEINE Kundenmail
+              // (nur Admin). Fehlt die Bestaetigung noch im email_log, hier
+              // nachholen — sonst bekommt der Kunde nie eine Bestaetigung.
+              await ensureBookingConfirmationSent(supabase, bookingIds[gi], contractPdfBuffer);
               continue;
             }
 

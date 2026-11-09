@@ -1577,6 +1577,26 @@ Tablet über `/admin/buchungen/[id]/vertrag-unterschreiben`.
 
 **Keine Migration.** Reiner Reihenfolge-Fix + zwei zusätzlich persistierte Felder.
 
+### Buchungsbestätigung fehlte bei Webhook-Race — gefixt (Stand 2026-11-09)
+**Symptom:** C2R-2645-019 bekam keine Buchungsbestätigung (Admin-Mail ja).
+**Ursache:** Webhook (`handleCartBooking`) schickt bei Warenkorb-Buchungen
+bewusst NUR die Admin-Mail („Kundenmail macht confirm-cart"), `confirm-cart`
+übersprang die Kundenmail aber für jede Buchung, die es nicht selbst angelegt
+hat („hat der Webhook schon"). Gewann der Webhook das Rennen, schickte
+**niemand** die Bestätigung. (Die Aussage im Abschnitt „Vertrag fehlte bei
+EINER von mehreren Cart-Buchungen", der Webhook habe die Mail verschickt, war
+falsch.)
+**Fix:** neuer Helper `lib/booking-confirmation-fallback.ts` →
+`ensureBookingConfirmationSent(supabase, bookingId, pdf?)`: verschickt die
+Bestätigung (Daten aus der gespeicherten Buchungszeile, Vertrag als Anhang wenn
+vorhanden) nur, wenn im `email_log` noch keine `booking_confirmation`
+(status `sent`) steht. Eingehängt in `confirm-cart` an drei Stellen:
+Normalpfad bei nicht selbst angelegten Gruppen, Idempotenz-Pfad mit Signatur
+(statt der reinen Vertrags-Folgemail) und Idempotenz-Pfad ohne Signatur.
+⚠️ **Bleibt offen:** Schließt der Kunde den Tab vor `/buchung-bestaetigt`,
+läuft `confirm-cart` nie → keine Bestätigung. Dann manuell über
+`/admin/buchungen/[id]` → „E-Mail senden". Keine Migration.
+
 ### Kunde konnte im Konto nicht unterschreiben — Canvas ersetzt + Tipp-Option (Stand 2026-09-07)
 **Kundenmeldung:** „Ich kann den Vertrag nicht unterschreiben, egal ob von Hand
 oder mit dem Namen tippen." (Buchung C2R-2635-001, `confirmed`,
