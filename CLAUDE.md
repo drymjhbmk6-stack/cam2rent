@@ -2936,6 +2936,20 @@ Zahlungsweg ab, auch Bar/Überweisung über den Bezahlt-Haken der Buchhaltung un
 einen verlorenen Webhook. Gilt für die ganze Position (auch bei Teilzahlung
 gibt es keine Teil-Erledigung). Keine Migration.
 
+**„Alles erledigt"-Mail an den Kunden (Stand 2026-11-25):** Sobald die
+letzte offene Position einer Buchung abgeschlossen ist (eingetroffen, Ersatz
+bezahlt oder „Erledigt"), bekommt der Kunde automatisch die Mail „Alles
+erledigt — Buchung abgeschlossen" mit allen Positionen und ihrem Ergebnis
+(`sendReturnItemsCompleted`, emailType `return_items_completed`, im
+Vorlagen-Katalog + `/admin/emails`). Helper
+`lib/return-open-items-complete.ts` → `notifyReturnItemsCompleted()` prüft
+„keine `open`-Zeile mehr" + Dedup über `email_log` (einmal pro Buchung).
+Eingehängt im `POST /api/admin/return-open-items` (Antwort um
+`completion_mail_sent` erweitert) und in `closePaidReplacementItems`
+(dynamischer Import gegen Zirkel) → greift auch bei Zahlung per Webhook,
+„Als bezahlt markieren" und Selbstheilung. Ohne Kunden-E-Mail keine Mail.
+Keine Migration.
+
 **Rückmelde-Buttons („Lesebestätigung") in der Nachsende-Mail (Stand 2026-09-25):**
 Jede Nachsende-Mail (erste Mail aus `return-booking` UND Erinnerung) enthält zwei
 Buttons: **„✓ Gelesen – ich schicke es zurück"** und **„Habe ich nicht mehr"**.

@@ -35,6 +35,7 @@ import {
   sendReviewRequest,
   sendReturnChecklist,
   sendReturnFollowUpRequest,
+  sendReturnItemsCompleted,
   sendCompletionConfirmation,
   sendAbandonedCartReminder,
   sendVerificationRejected,
@@ -959,6 +960,21 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       items: [{ label: 'Brusthalterung', qty: 1 }],
       dueDate: '2026-06-12',
       reminder: true,
+    }),
+  },
+  {
+    id: 'return_items_completed',
+    name: 'Offene Rückgabe erledigt',
+    description: 'Automatisch, sobald alle bei der Rückgabe offen gebliebenen Positionen erledigt sind (eingetroffen, Ersatz bezahlt oder abgehakt) — schließt den Vorgang für den Kunden ab.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendReturnItemsCompleted, {
+      bookingId: DUMMY_BOOKING_ID,
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      items: [
+        { label: 'Brusthalterung', qty: 1, outcome: 'received' },
+        { label: 'Speicherkarte 128 GB', qty: 1, outcome: 'charged' },
+      ],
     }),
   },
   {

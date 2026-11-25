@@ -338,6 +338,18 @@ export async function closePaidReplacementItems(
         });
       }
     }
+    // Letzte offene Position erledigt? → Kunde bekommt „Alles erledigt".
+    // Dynamischer Import gegen einen Zirkel-Import (email → … → hier).
+    if (closed.length > 0) {
+      try {
+        const { notifyReturnItemsCompleted } = await import('@/lib/return-open-items-complete');
+        for (const bid of new Set(closed.map((c) => c.booking_id))) {
+          await notifyReturnItemsCompleted(supabase, bid);
+        }
+      } catch (e) {
+        console.error('[return-open-items] completion mail failed:', e);
+      }
+    }
     return closed;
   } catch (err) {
     console.error('[return-open-items] closePaidReplacementItems failed:', err);

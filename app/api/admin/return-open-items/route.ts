@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { notifyReturnItemsCompleted } from '@/lib/return-open-items-complete';
 import { createServiceClient } from '@/lib/supabase';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { logAudit } from '@/lib/audit';
@@ -293,5 +294,8 @@ export async function POST(req: NextRequest) {
     request: req,
   });
 
-  return NextResponse.json({ success: true });
+  // War das die letzte offene Position der Buchung? → Abschluss-Mail an den Kunden.
+  const completionMailSent = await notifyReturnItemsCompleted(supabase, row.booking_id as string);
+
+  return NextResponse.json({ success: true, completion_mail_sent: completionMailSent });
 }

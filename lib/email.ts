@@ -2397,6 +2397,88 @@ export async function sendReturnFollowUpRequest(data: ReturnFollowUpEmailData) {
   });
 }
 
+// ─── Offene Rückgabe vollständig erledigt ────────────────────────────────────
+
+export interface ReturnItemsCompletedEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  /** Alle ehemals offenen Positionen mit ihrem Ergebnis. */
+  items: { label: string; qty: number; outcome: 'received' | 'charged' | 'waived' }[];
+}
+
+/**
+ * Abschluss-Mail, sobald ALLE bei der Rückgabe offen gebliebenen Positionen
+ * erledigt sind (eingetroffen, Ersatz bezahlt oder abgehakt). Gegenstück zur
+ * Nachsende-Bitte — die normale Abschluss-Bestätigung entfällt bei offenen
+ * Positionen, diese Mail schließt den Vorgang für den Kunden ab.
+ */
+export async function sendReturnItemsCompleted(data: ReturnItemsCompletedEmailData) {
+  const BASE_URL = await getSiteUrl();
+  const url = `${BASE_URL}/konto/buchungen`;
+  const subject = stripSubject(`Alles erledigt — Buchung ${data.bookingId} abgeschlossen`);
+
+  const outcomeLabel = (o: 'received' | 'charged' | 'waived') =>
+    o === 'received' ? '✓ eingetroffen' : o === 'charged' ? '✓ Ersatz bezahlt' : '✓ erledigt';
+
+  const rows = data.items.map((it) => `
+            <tr>
+              <td style="padding:8px 0;border-bottom:1px solid #bbf7d0;font-size:14px;color:#14532d;">
+                ${it.qty}&times; ${h(it.label)}
+              </td>
+              <td style="padding:8px 0;border-bottom:1px solid #bbf7d0;font-size:14px;color:#15803d;text-align:right;white-space:nowrap;font-weight:600;">
+                ${outcomeLabel(it.outcome)}
+              </td>
+            </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Alles erledigt ✅</h1>
+          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            gute Nachrichten: Die bei deiner Rückgabe noch offenen Punkte sind jetzt alle geklärt.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;">
+            <tr><td style="padding:18px 22px;">
+              <table width="100%" cellpadding="0" cellspacing="0">${rows}
+              </table>
+            </td></tr>
+          </table>
+          <p style="margin:20px 0;font-size:14px;color:#6b7280;line-height:1.6;">
+            Deine Buchung ist damit vollständig abgeschlossen — von deiner Seite ist nichts mehr zu tun.
+            Vielen Dank, dass du bei cam2rent gemietet hast. Wir freuen uns, wenn du wieder vorbeischaust!
+          </p>
+          <a href="${url}" style="display:inline-block;margin-top:8px;padding:14px 28px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+            Meine Buchungen ansehen
+          </a>
+          <p style="margin:22px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+            Buchung: ${h(data.bookingId)}
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; Action-Cam Verleih &middot; <a href="${h(BUSINESS.url)}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'return_items_completed',
+  });
+}
+
 // ─── Abschluss-Bestätigung ───────────────────────────────────────────────────
 
 export interface CompletionEmailData {
